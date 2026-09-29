@@ -41,50 +41,58 @@ or an AI endpoint.
 Rule: dependencies point inward. `domain` never imports FastAPI, SQL, or a file path.
 An import-linter check enforces this in CI.
 
-## 3. Data model (first cut)
+## 3. Data model
+
+Built in M1 + M2 (migrations `0001`–`0012`, numbered SQL files; see TECH_DECISIONS):
 
 ```
-user(id, name, password_hash, role[admin|member|guest], created_at)
+user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
+     disabled, created_at)
+session(token_hash PK sha256, user_id, created_at, last_seen_at)      -- 30 days idle
+login_failure(username, ip, at)                                       -- 10 per 15 min → 429
+
+source(id, kind, label, root, enabled, owner_id, created_at)
+source_access(source_id, user_id NULL=everyone, level 1 view|2 download|3 edit)
+asset(id, content_hash UNIQUE, kind, mime_type, byte_size, width, height,
+      taken_at, tz_offset_min, date_source[exif|exif_create|xmp|filename|file_mtime|manual],
+      latitude, longitude, camera_make, camera_model, orientation,
+      library_path, thumb_path, thumb_w, thumb_h, preview_path, variant_of, imported_at,
+      first_source_id  -- owner of the photo = owner of this source
+      private, place_id, phash, group_id, edit_version, trashed_at, trashed_by)
+asset_source(asset_id, source_id, relative_path, seen_at, byte_size, mtime_ns, ctime_ns)
+user_asset(user_id, asset_id, favourite, hidden)                      -- per-user state
+place(id, country, region, city)                                      -- offline geocoding
+album(id, owner_id, title, description, cover_asset_id, created_at, updated_at)
+album_member(album_id, user_id, role[viewer|editor])                  -- owner is album.owner_id
+album_item(album_id, asset_id, position)
+edit_recipe(asset_id PK, recipe_json, updated_by, updated_at)         -- one per photo, shared
+date_change(id, asset_id, old_taken_at, old_tz_offset_min, old_date_source, new_taken_at,
+            changed_by, changed_at)
+purged_hash(content_hash PK, purged_at)                               -- never re-imported
+import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …)
+```
+
+Still planned (later milestones, first cut):
+
+```
 user_group(id, name);  user_group_member(group_id, user_id)
-source_access(source_id, user_id NULL, group_id NULL, everyone BOOL, level[view|download|edit])
 device(id, user_id, name, platform, last_sync_at, sync_cursor)   -- phone app installs
-
-asset(id, blake3 UNIQUE, kind[photo|live|raw], mime, width, height, bytes,
-      taken_at, taken_at_source[exif|xmp|filename|mtime], tz_offset,
-      lat, lon, place_id, camera, lens, orientation, phash,
-      library_path, imported_at, hidden_globally)
-
-asset_source(asset_id, source_id, original_path, seen_at)       -- all places a file came from
-source(id, kind[folder|rclone_remote|mega|proton|iphone|android], label, config_json,
-       enabled, last_scan_at, last_scan_status)                 -- many sources, one library
-
-edit_recipe(asset_id, user_id, recipe_json, updated_at)          -- rotate/crop/adjust; original untouched
 backup_target(id, kind[local|rclone], label, repo_url, schedule_cron, retention_json, enabled)
 backup_run(id, target_id, started_at, finished_at, status, snapshot_id, bytes_added, error)
 export_job(id, user_id, scope_json, options_json, status, bytes_done, bytes_total, path)
-
-derivative(asset_id, kind[thumb|preview], path, width, height)
-
-user_asset(user_id, asset_id, favourite, hidden, private)       -- per-user state
-
 tag(id, name, kind[auto|manual]);  asset_tag(asset_id, tag_id, score, by[user|model])
 person(id, name, cover_face_id);   face(id, asset_id, bbox, embedding_rowid, person_id, quality)
-place(id, country, region, city)
-
-album(id, owner_id, title, description, cover_asset_id, theme_id, created_at)
-album_member(album_id, user_id, role[owner|editor|viewer])
 album_page(id, album_id, position, layout_id, caption)
 album_slot(page_id, slot_index, asset_id, crop_json)            -- crop never alters the original
 theme(id, name, tokens_json);  layout(id, name, slots_json)     -- data, not code
-
-job(id, kind, payload_json, status, attempts, error, created_at, updated_at)
 ai_log(id, capability, request_json, response_json, model, created_at)
-
 vec_clip   USING vec0(embedding float[512])   -- rowid = asset.id
 vec_face   USING vec0(embedding float[512])   -- rowid = face.id
 ```
 
-Migrations: Alembic, one migration per PR that touches schema, always reversible in dev.
+The SQLite adapter is one `SqliteRepository` composed of per-area mixins
+(`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_albums`, `sqlite_edits`,
+`sqlite_enrich`, `sqlite_trash`) sharing one connection and lock (`sqlite_base`).
 
 ## 4. Key flows
 
@@ -106,15 +114,20 @@ three sources is one asset with three `asset_source` rows — aggregation is a c
 data model, not extra logic. "Rescan all" enqueues one scan job per enabled source.
 
 ### Download / convert
-`ExportPhotos(scope, options)` resolves the scope (ids, date range, album, filter) to assets →
-for each asset: original bytes, or `ImageRenderer.render(original, recipe, format, max_edge,
-strip_meta)` via libvips → written into a **streamed ZIP** response (`zipstream`), so a
-2 GB year export needs no temp space. Above a size threshold it becomes an `export_job` with
+`Downloads` (app/downloads.py) takes the scope (ids, album or filter) resolved through the
+visibility rule, keeps only photos with ≥ download → for each: the untouched library file, or
+`ImageRenderer.render_variant(original, RenderSpec(recipe, format, max_edge, quality,
+keep_metadata))` via libvips; location / all metadata are stripped by ExifTool on a temporary
+copy in `data/tmp` (never on the library file) → a **streamed, stored ZIP** (`zipstream-ng`),
+so a 2 GB year export needs no archive on disk. Skipped photos are counted in `X-Skipped`. Above a size threshold it becomes an `export_job` with
 progress. Naming and folder layout are pure domain functions (unit-tested).
 
 ### Edit recipe
-`EditRecipe` is a validated value object: `{rotate, flip, crop:{x,y,w,h in 0..1}, straighten,
-adjust:{…}}`. The browser previews it (CSS transforms / canvas); the server renders it with
+`Recipe` (domain/edit_recipe.py) is a validated value object: `{rotate, flip_horizontal,
+flip_vertical, crop:{x,y,w,h in 0..1 of the rotated image}, straighten ±15}`; order: rotate →
+flip → straighten (clockwise, keeping the largest same-aspect centre) → crop. Thumbnails and
+previews with a recipe are rendered on first request and cached as
+`derived/edited/<hh>/<hash>-<recipe key>-<kind>.webp`; image URLs carry `?v=<edit_version>`. The browser previews it (CSS transforms / canvas); the server renders it with
 libvips for loupe previews and downloads. Golden-image tests keep preview and export in step.
 
 ### Backup
@@ -196,8 +209,16 @@ The LLM never writes to the database directly.
 - Passwords: argon2id. Sessions: HTTP-only, SameSite=strict cookies.
 - Source credentials live in rclone's own encrypted config, never in `library.db`.
 - AI calls only go to the configured base URL; each request is logged in `ai_log`.
-- **Visibility is one function in the repository layer:** `visible_assets(user)` = assets with
-  at least one `asset_source` whose source grants the user access, ∪ assets in albums shared
-  with the user, minus other users' private items. Every query goes through it; the UI never
-  filters for security. Covered by a table-driven test of users × sources × albums.
+- **Visibility is one function in the repository layer:** `visible_assets_cte(viewer)` in
+  `adapters/sqlite_library.py` is a SQL CTE `vis(asset_id, level)` = assets with at least one
+  `asset_source` whose source grants the user (or everyone) a level or that the user owns, ∪
+  assets in albums the user owns (download) or that are shared with them (viewer: view,
+  editor: download), ∪ everything for admins (edit) — minus private items of other owners
+  (admins included) and trashed items; the level is the highest grant, capped at download for
+  guests. Timeline, facets, calendar, map, albums, detail, images and downloads all start from
+  it; the UI never filters for security. Covered by a table-driven API test
+  (`tests/api/test_visibility.py`: users × sources × albums × private × roles).
+- Sessions: random 256-bit token in the `pa_session` cookie (HttpOnly, SameSite=Strict, Secure
+  over HTTPS); only its SHA-256 is stored. Every `/api` route except health, setup and login
+  needs a session; source, scan, import, job and user routes are admin-only.
 - Download and edit endpoints check the access *level*, not just visibility.
