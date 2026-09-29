@@ -1,5 +1,6 @@
 """MetadataReader backed by one long-running ExifTool process (-stay_open)."""
 
+import re
 import threading
 from collections.abc import Sequence
 from pathlib import Path
@@ -30,6 +31,12 @@ _TAGS = [
     "MakerNotes:ContentIdentifier",
     "QuickTime:ContentIdentifier",
 ]
+
+
+_UNSAFE_NAME = re.compile(r"[\x00-\x1f\x7f]")
+UNSAFE_NAME_REASON = (
+    "unsupported file name: contains a line break or other control character; rename it"
+)
 
 
 def _first(record: dict[str, Any], *keys: str) -> Any:
@@ -107,21 +114,38 @@ class ExifToolReader:
         self._lock = threading.Lock()
 
     def read_many(self, paths: Sequence[Path]) -> list[PhotoMetadata]:
-        if not paths:
-            return []
+        """Read metadata; paths that could be misread as ExifTool options are refused.
+
+        ExifTool's -stay_open protocol takes one argument per line and cannot escape a
+        newline, so a file name containing one would inject options (QA M1: it rewrote other
+        photos). Control characters are refused outright; paths must be absolute so no
+        argument can start with "-".
+        """
+        for path in paths:
+            if not path.is_absolute():
+                raise ValueError(f"exiftool paths must be absolute: {path!s}")
+        safe = [p for p in paths if not _UNSAFE_NAME.search(str(p))]
+        records = self._read_safe(safe) if safe else []
+        by_path = {Path(str(r.get("SourceFile", ""))).resolve(): r for r in records}
+        results = []
+        for path in paths:
+            if _UNSAFE_NAME.search(str(path)):
+                results.append(PhotoMetadata(error=UNSAFE_NAME_REASON))
+                continue
+            record = by_path.get(path.resolve())
+            results.append(
+                to_metadata(record) if record else PhotoMetadata(error="unreadable by exiftool")
+            )
+        return results
+
+    def _read_safe(self, paths: list[Path]) -> list[dict[str, Any]]:
         with self._lock:
             if not self._helper.running:
                 self._helper.run()
-            records = self._helper.get_tags([str(p) for p in paths], tags=_TAGS)
-        by_path = {Path(r.get("SourceFile", "")).resolve(): r for r in records}
-        results = []
-        for path in paths:
-            record = by_path.get(path.resolve())
-            if record is None:
-                results.append(PhotoMetadata(error="unreadable by exiftool"))
-            else:
-                results.append(to_metadata(record))
-        return results
+            records: list[dict[str, Any]] = self._helper.get_tags(
+                [str(p) for p in paths], tags=_TAGS
+            )
+        return records
 
     def close(self) -> None:
         with self._lock:

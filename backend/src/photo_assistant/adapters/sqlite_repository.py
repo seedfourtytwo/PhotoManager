@@ -24,7 +24,9 @@ from photo_assistant.domain.model import (
     RunStatus,
     Source,
 )
-from photo_assistant.ports import Job, Page, RenderedImage
+from photo_assistant.ports import DuplicateAssetError, Job, Page, RenderedImage
+
+__all__ = ["DuplicateAssetError", "SqliteRepository", "open_database"]
 
 
 def _migrations() -> list[tuple[int, str]]:
@@ -164,6 +166,37 @@ class SqliteRepository:
         return int(row["id"]) if row else None
 
     def add_asset(self, asset: NewAsset, imported_at: datetime) -> int:
+        try:
+            return self._insert_asset(asset, imported_at)
+        except sqlite3.IntegrityError as exc:
+            existing = self.find_asset_id_by_hash(asset.content_hash)
+            if existing is None:
+                raise
+            raise DuplicateAssetError(existing) from exc
+
+    def record_import(
+        self,
+        asset: NewAsset,
+        imported_at: datetime,
+        source_id: int,
+        relative_path: str,
+        thumb: RenderedImage,
+        job_kind: str,
+    ) -> int:
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                asset_id = self.add_asset(asset, imported_at)
+                self.add_asset_source(asset_id, source_id, relative_path)
+                self.set_thumbnail(asset_id, thumb)
+                self.enqueue(job_kind, {"asset_id": asset_id})
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+            return asset_id
+
+    def _insert_asset(self, asset: NewAsset, imported_at: datetime) -> int:
         return self._write(
             """INSERT INTO asset (content_hash, kind, mime_type, byte_size, width, height,
                    taken_at, tz_offset_min, date_source, latitude, longitude, camera_make,
@@ -232,9 +265,6 @@ class SqliteRepository:
 
     # --- asset sources ---------------------------------------------------------------------
 
-    def has_asset_source(self, source_id: int, relative_path: str) -> bool:
-        return self.asset_id_for_source_path(source_id, relative_path) is not None
-
     def add_asset_source(self, asset_id: int, source_id: int, relative_path: str) -> None:
         self._write(
             """INSERT INTO asset_source (asset_id, source_id, relative_path) VALUES (?, ?, ?)
@@ -264,7 +294,7 @@ class SqliteRepository:
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int:
         with self._lock:
-            self._conn.execute("BEGIN")
+            self._conn.execute("BEGIN IMMEDIATE")
             try:
                 run_id = self._write(
                     """INSERT INTO import_run (source_id, status, started_at, finished_at,
@@ -288,7 +318,7 @@ class SqliteRepository:
                     ],
                 )
                 self._conn.execute("COMMIT")
-            except Exception:
+            except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
         return run_id
@@ -337,18 +367,16 @@ class SqliteRepository:
         )
 
     def claim_next_job(self, now: datetime) -> Job | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM job WHERE status = 'queued' ORDER BY id LIMIT 1"
-            ).fetchone()
-            if row is None:
-                return None
-            self._conn.execute(
-                """UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
-                   WHERE id = ?""",
-                (_iso(now), row["id"]),
-            )
-            return Job(row["id"], row["kind"], json.loads(row["payload_json"]), row["attempts"] + 1)
+        """Atomic across processes: one statement picks and marks the job."""
+        row = self._one(
+            """UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
+               WHERE id = (SELECT id FROM job WHERE status = 'queued' ORDER BY id LIMIT 1)
+               RETURNING id, kind, payload_json, attempts""",
+            (_iso(now),),
+        )
+        if row is None:
+            return None
+        return Job(row["id"], row["kind"], json.loads(row["payload_json"]), row["attempts"])
 
     def complete_job(self, job_id: int) -> None:
         self._write("UPDATE job SET status = 'done', error = NULL WHERE id = ?", (job_id,))

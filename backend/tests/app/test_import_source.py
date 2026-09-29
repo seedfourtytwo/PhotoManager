@@ -19,6 +19,7 @@ from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.app.import_source import ImportSettings, ImportSource, SourceUnavailableError
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.model import Outcome, RunStatus
+from photo_assistant.ports import ImportBusyError
 from tests.factories import NOW
 from tests.fixtures.expected import DUPLICATE, FAILED, IGNORED, IMPORTED, SKIPPED, TOTAL_FILES
 
@@ -238,3 +239,73 @@ def test_a_file_changed_in_place_is_imported_again_and_relinked(
     second = world.repo.asset_id_for_source_path(source.id, "photo.jpg")
     assert second not in (None, first)
     assert world.repo.get_asset(first or 0) is not None, "the earlier version is kept"
+
+
+@pytest.mark.parametrize(
+    "evil_name",
+    ["x\n-overwrite_original\n-all=\ny.jpg", "tab\there.jpg", "cr\r-all=.jpg"],
+)
+def test_file_names_with_control_characters_never_reach_exiftool(
+    world: World, tmp_path: Path, evil_name: str
+) -> None:
+    """Regression (QA M1): a newline in a name became extra ExifTool options that
+    rewrote other photos in the source folder."""
+    from tests.conftest import snapshot_tree
+
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "a.jpg")
+    shutil.copy2(fixtures / "IMG_1002.JPG", folder / evil_name)
+    before = snapshot_tree(folder)
+
+    _, report = world.importer.run(world.repo.add_source("s", str(folder)).id)
+
+    assert snapshot_tree(folder) == before, "source folder must be untouched"
+    by_path = {i.relative_path: i for i in report.items}
+    assert by_path["a.jpg"].outcome is Outcome.IMPORTED
+    assert by_path[evil_name].outcome is Outcome.FAILED
+    assert "file name" in (by_path[evil_name].reason or "")
+
+
+def test_rerun_repairs_a_photo_left_without_thumbnail_by_a_crash(
+    world: World, source_guard: Path
+) -> None:
+    """Regression (QA M1): a crash between DB writes left photos broken forever."""
+    source = world.repo.add_source("Fixtures", str(source_guard))
+    world.importer.run(source.id)
+    asset_id = world.repo.asset_id_for_source_path(source.id, "IMG_1001.JPG")
+    assert asset_id is not None
+    world.repo._conn.execute("UPDATE asset SET thumb_path = NULL WHERE id = ?", (asset_id,))
+    world.repo._conn.execute("DELETE FROM job")
+
+    world.importer.run(source.id)
+
+    asset = world.repo.get_asset(asset_id)
+    assert asset is not None and asset.thumb_path is not None
+    assert world.store.absolute(asset.thumb_path).is_file()
+    assert {j["payload"]["asset_id"] for j in world.repo.list_jobs("queued")} == {asset_id}
+
+
+def test_only_one_import_runs_at_a_time_per_library(world: World, source_guard: Path) -> None:
+    source = world.repo.add_source("Fixtures", str(source_guard))
+    with world.store.exclusive_import(), pytest.raises(ImportBusyError, match="already running"):
+        world.importer.run(source.id)
+    world.importer.run(source.id)  # lock released
+
+
+def test_a_crash_mid_run_still_saves_what_happened(
+    tmp_path: Path, source_guard: Path, exiftool: ExifToolReader
+) -> None:
+    class DyingMetadata:
+        def read_many(self, paths: list[Path]) -> list[object]:
+            raise RuntimeError("exiftool died")
+
+    world = make_world(tmp_path / "data", exiftool, min_free_bytes=0)
+    world.importer._metadata = DyingMetadata()  # type: ignore[assignment]
+    source = world.repo.add_source("Fixtures", str(source_guard))
+    with pytest.raises(RuntimeError, match="exiftool died"):
+        world.importer.run(source.id)
+    (run,) = world.repo.list_import_runs(source.id)
+    assert run["status"] == "failed"
+    assert "exiftool died" in str(run["message"])

@@ -39,7 +39,6 @@ def build_services(settings: Settings) -> Services:
     root = settings.data_root.expanduser()
     root.mkdir(parents=True, exist_ok=True)
     repo = SqliteRepository(open_database(root / "library.db", backup_dir=root / "db-backups"))
-    repo.recover_interrupted_jobs()
     store = DiskLibraryStore(root)
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)
     exiftool = ExifToolReader()

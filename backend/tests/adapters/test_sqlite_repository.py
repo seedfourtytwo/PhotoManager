@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import (
+    DuplicateAssetError,
+    SqliteRepository,
+    open_database,
+)
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
 from photo_assistant.ports import RenderedImage
 from tests.factories import NOW, new_asset
@@ -121,8 +125,8 @@ def test_asset_sources_track_every_origin(repo: SqliteRepository) -> None:
     repo.add_asset_source(asset_id, s1.id, "x.jpg")
     repo.add_asset_source(asset_id, s2.id, "copy/x.jpg")
     repo.add_asset_source(asset_id, s2.id, "copy/x.jpg")  # idempotent
-    assert repo.has_asset_source(s1.id, "x.jpg")
-    assert not repo.has_asset_source(s1.id, "y.jpg")
+    assert repo.asset_id_for_source_path(s1.id, "x.jpg") == asset_id
+    assert repo.asset_id_for_source_path(s1.id, "y.jpg") is None
     assert repo.asset_id_for_source_path(s2.id, "copy/x.jpg") == asset_id
     assert repo.asset_id_for_source_path(s2.id, "nope.jpg") is None
     assert repo.origins_of(asset_id) == [(s1, "x.jpg"), (s2, "copy/x.jpg")]
@@ -187,3 +191,47 @@ def test_jobs_left_running_by_a_crash_are_requeued_on_open(tmp_path: Path) -> No
     reopened = SqliteRepository(open_database(db))
     reopened.recover_interrupted_jobs()
     assert reopened.claim_next_job(NOW) is not None
+
+
+# --- QA M1: atomic import record, cross-process job claims ---------------------------------
+
+
+def test_record_import_writes_everything_in_one_go(repo: SqliteRepository) -> None:
+    source = repo.add_source("s", "/s")
+    asset_id = repo.record_import(
+        new_asset(1),
+        NOW,
+        source.id,
+        "a.jpg",
+        RenderedImage("derived/thumb/x.webp", 64, 48),
+        "preview",
+    )
+    asset = repo.get_asset(asset_id)
+    assert asset is not None and asset.thumb_path == "derived/thumb/x.webp"
+    assert repo.asset_id_for_source_path(source.id, "a.jpg") == asset_id
+    assert repo.list_jobs("queued")[0]["payload"] == {"asset_id": asset_id}
+
+
+def test_record_import_of_known_content_changes_nothing_and_says_which(
+    repo: SqliteRepository,
+) -> None:
+    source = repo.add_source("s", "/s")
+    thumb = RenderedImage("derived/thumb/x.webp", 64, 48)
+    first = repo.record_import(new_asset(1), NOW, source.id, "a.jpg", thumb, "preview")
+    with pytest.raises(DuplicateAssetError) as caught:
+        repo.record_import(new_asset(1), NOW, source.id, "b.jpg", thumb, "preview")
+    assert caught.value.asset_id == first
+    assert repo.asset_id_for_source_path(source.id, "b.jpg") is None
+    assert len(repo.list_jobs("queued")) == 1, "rolled back: no second job"
+
+
+def test_two_processes_never_claim_the_same_job(tmp_path: Path) -> None:
+    db = tmp_path / "library.db"
+    a = SqliteRepository(open_database(db))
+    b = SqliteRepository(open_database(db))
+    for n in range(4):
+        a.enqueue("x", {"n": n})
+    claimed = [r.claim_next_job(NOW) for r in (a, b, a, b, a)]
+    ids = [j.id for j in claimed if j is not None]
+    assert len(ids) == 4 == len(set(ids))
+    assert claimed[-1] is None

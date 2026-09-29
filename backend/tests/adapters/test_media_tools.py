@@ -86,3 +86,20 @@ def test_renderer_raises_on_undecodable_files(tmp_path: Path, source_guard: Path
     with pytest.raises(Exception):  # noqa: B017 - pyvips raises its own Error type
         VipsRenderer().render(source_guard / "truncated.jpg", tmp_path / "t.webp", 64)
     assert list(tmp_path.glob("*.webp")) == [], "no half-written files left behind"
+
+
+def test_reader_refuses_control_characters_without_calling_exiftool(tmp_path: Path) -> None:
+    class Exploding(ExifToolReader):
+        def __init__(self) -> None:  # no process at all
+            pass
+
+        def _read_safe(self, paths: list[Path]) -> list[dict[str, object]]:
+            raise AssertionError("exiftool must not be called")
+
+    (meta,) = Exploding().read_many([tmp_path / "a\nb.jpg"])
+    assert meta.error is not None and "file name" in meta.error
+
+
+def test_reader_requires_absolute_paths(reader: ExifToolReader) -> None:
+    with pytest.raises(ValueError, match="absolute"):
+        reader.read_many([Path("-all=.jpg")])

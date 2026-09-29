@@ -26,6 +26,7 @@ from photo_assistant.domain.model import (
 )
 from photo_assistant.ports import (
     Clock,
+    DuplicateAssetError,
     Hasher,
     ImageRenderer,
     LibraryStore,
@@ -108,22 +109,33 @@ class ImportSource:
     # --- public ----------------------------------------------------------------------------
 
     def run(self, source_id: int) -> tuple[int, ImportReport]:
+        """Import one source. Raises SourceUnavailableError or ImportBusyError up front;
+        any other failure still saves a report (status "failed") before re-raising."""
         source = self._require_source(source_id)
-        started = self._clock.now()
-        files = self._list_files(source)
-        log.info("import started", extra={"source_id": source.id, "files": len(files)})
+        with self._store.exclusive_import():
+            started = self._clock.now()
+            files = self._list_files(source)
+            log.info("import started", extra={"source_id": source.id, "files": len(files)})
+            report = ImportReport(source_id=source.id)
+            try:
+                self._run_steps(source, files, report)
+            except Exception as exc:
+                report.status = RunStatus.FAILED
+                report.message = f"import stopped by an unexpected error: {_first_line(exc)}"
+                self._repo.save_import_report(report, started, self._clock.now())
+                log.exception("import failed", extra={"source_id": source.id})
+                raise
+            run_id = self._repo.save_import_report(report, started, self._clock.now())
+        log.info("import finished", extra={"source_id": source.id, **report.summary()})
+        return run_id, report
 
-        report = ImportReport(source_id=source.id)
+    def _run_steps(self, source: Source, files: list[SourceFile], report: ImportReport) -> None:
         new, deferred = self._triage(source, files, report)
         self._import_new(source, new, report)
         self._resolve_deferred(source, deferred, report)
         self._link_edits(source, report)
         if report.status is RunStatus.RUNNING:
             report.status = RunStatus.DONE
-
-        run_id = self._repo.save_import_report(report, started, self._clock.now())
-        log.info("import finished", extra={"source_id": source.id, **report.summary()})
-        return run_id, report
 
     # --- steps -----------------------------------------------------------------------------
 
@@ -199,12 +211,27 @@ class ImportSource:
         asset_id = self._repo.find_asset_id_by_hash(digest)
         if asset_id is None:
             return None
+        self._repair_if_needed(asset_id, f)
         if self._repo.asset_id_for_source_path(source.id, f.relative_path) == asset_id:
             return ItemResult(f.relative_path, Outcome.ALREADY_KNOWN, asset_id=asset_id)
         self._repo.add_asset_source(asset_id, source.id, f.relative_path)
         return ItemResult(
             f.relative_path, Outcome.DUPLICATE, "same photo already in the library", asset_id
         )
+
+    def _repair_if_needed(self, asset_id: int, f: SourceFile) -> None:
+        """A photo recorded without its thumbnail (e.g. by an older version or a crash) gets
+        one now, plus its preview job."""
+        asset = self._repo.get_asset(asset_id)
+        if asset is None or asset.thumb_path is not None:
+            return
+        thumb_path = str(derived_relpath("thumb", asset.content_hash))
+        size = self._renderer.render(
+            f.absolute_path, self._store.absolute(thumb_path), self._settings.thumb_edge
+        )
+        self._repo.set_thumbnail(asset_id, RenderedImage(thumb_path, *size))
+        self._repo.enqueue(PREVIEW_JOB, {"asset_id": asset_id})
+        log.info("repaired missing thumbnail", extra={"asset_id": asset_id})
 
     def _import_new(self, source: Source, new: list[_Candidate], report: ImportReport) -> None:
         batch_size = self._settings.metadata_batch
@@ -235,14 +262,7 @@ class ImportSource:
         path = c.file.relative_path
         if meta.error:
             return ItemResult(path, Outcome.FAILED, meta.error)
-        now = self._clock.now()
-        taken = pick_capture_time(
-            meta.dates, filename=PurePosixPath(path).name, file_mtime=c.file.mtime, now=now
-        )
-        extension = PurePosixPath(path).suffix
-        library_path = str(
-            original_relpath(c.content_hash, taken.value.year, taken.value.month, extension)
-        )
+        new_asset = self._describe(c, meta)
         thumb_path = str(derived_relpath("thumb", c.content_hash))
         try:
             thumb_size = self._renderer.render(
@@ -251,36 +271,47 @@ class ImportSource:
         except Exception as exc:
             return ItemResult(path, Outcome.FAILED, f"cannot decode image: {_first_line(exc)}")
         try:
-            self._store.store_original(c.file.absolute_path, library_path, c.content_hash)
+            self._store.store_original(c.file.absolute_path, new_asset.library_path, c.content_hash)
         except (OSError, RuntimeError) as exc:
             self._store.absolute(thumb_path).unlink(missing_ok=True)
             return ItemResult(path, Outcome.FAILED, f"copy into library failed: {exc}")
-
-        width, height = meta.display_size or (None, None)
-        asset_id = self._repo.add_asset(
-            NewAsset(
-                content_hash=c.content_hash,
-                kind=c.kind,
-                mime_type=meta.mime_type,
-                byte_size=c.file.byte_size,
-                width=width,
-                height=height,
-                taken_at=taken.value,
-                tz_offset_minutes=taken.tz_offset_minutes,
-                date_source=taken.source,
-                latitude=meta.latitude,
-                longitude=meta.longitude,
-                camera_make=meta.camera_make,
-                camera_model=meta.camera_model,
-                orientation=meta.orientation,
-                library_path=library_path,
-            ),
-            imported_at=now,
-        )
-        self._repo.add_asset_source(asset_id, source.id, path)
-        self._repo.set_thumbnail(asset_id, RenderedImage(thumb_path, *thumb_size))
-        self._repo.enqueue(PREVIEW_JOB, {"asset_id": asset_id})
+        thumb = RenderedImage(thumb_path, *thumb_size)
+        try:
+            asset_id = self._repo.record_import(
+                new_asset, self._clock.now(), source.id, path, thumb, PREVIEW_JOB
+            )
+        except DuplicateAssetError as dup:  # imported concurrently from elsewhere
+            self._repo.add_asset_source(dup.asset_id, source.id, path)
+            return ItemResult(
+                path, Outcome.DUPLICATE, "same photo already in the library", dup.asset_id
+            )
         return ItemResult(path, Outcome.IMPORTED, asset_id=asset_id)
+
+    def _describe(self, c: _Candidate, meta: PhotoMetadata) -> NewAsset:
+        name = PurePosixPath(c.file.relative_path)
+        taken = pick_capture_time(
+            meta.dates, filename=name.name, file_mtime=c.file.mtime, now=self._clock.now()
+        )
+        width, height = meta.display_size or (None, None)
+        return NewAsset(
+            content_hash=c.content_hash,
+            kind=c.kind,
+            mime_type=meta.mime_type,
+            byte_size=c.file.byte_size,
+            width=width,
+            height=height,
+            taken_at=taken.value,
+            tz_offset_minutes=taken.tz_offset_minutes,
+            date_source=taken.source,
+            latitude=meta.latitude,
+            longitude=meta.longitude,
+            camera_make=meta.camera_make,
+            camera_model=meta.camera_model,
+            orientation=meta.orientation,
+            library_path=str(
+                original_relpath(c.content_hash, taken.value.year, taken.value.month, name.suffix)
+            ),
+        )
 
     def _resolve_deferred(
         self, source: Source, deferred: list[_Deferred], report: ImportReport

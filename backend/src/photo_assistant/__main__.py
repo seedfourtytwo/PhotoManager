@@ -17,6 +17,7 @@ from photo_assistant.api.services import build_services, overlaps
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.import_source import SourceUnavailableError
 from photo_assistant.domain.model import ImportReport, Outcome
+from photo_assistant.ports import ImportBusyError
 
 
 def _serve() -> int:
@@ -51,7 +52,10 @@ def _print_report(run_id: int, report: ImportReport, show: int) -> None:
     for outcome in (Outcome.FAILED, Outcome.SKIPPED):
         items = [i for i in report.items if i.outcome is outcome]
         for item in items[:show]:
-            print(f"  {outcome.value:<8} {item.relative_path}: {item.reason}")
+            name = (
+                item.relative_path if item.relative_path.isprintable() else repr(item.relative_path)
+            )
+            print(f"  {outcome.value:<8} {name}: {item.reason}")
         if len(items) > show:
             print(f"  … and {len(items) - show} more {outcome.value} (see report #{run_id})")
     if report.message:
@@ -76,7 +80,7 @@ def _import(folder: Path, label: str | None, show: int) -> int:
         print(f"Importing '{source.label}' from {folder} into {data_root} (source is read-only) …")
         try:
             run_id, report = services.importer.run(source.id)
-        except SourceUnavailableError as exc:
+        except (SourceUnavailableError, ImportBusyError) as exc:
             print(exc, file=sys.stderr)
             return 1
         _print_report(run_id, report, show)

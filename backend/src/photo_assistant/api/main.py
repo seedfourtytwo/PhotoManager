@@ -42,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         configure_logging(settings.data_root.expanduser(), settings.log_level)
         services = build_services(settings)
         app.state.services = services
+        services.repo.recover_interrupted_jobs()  # only the server owns the job queue
         if settings.worker_enabled:
             services.worker.start()
         try:

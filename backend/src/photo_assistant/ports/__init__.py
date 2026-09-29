@@ -1,6 +1,7 @@
 """Protocol interfaces the app layer depends on. Adapters implement them; tests fake them."""
 
 from collections.abc import Iterator, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,18 @@ from photo_assistant.domain.model import (
     PhotoMetadata,
     Source,
 )
+
+
+class ImportBusyError(RuntimeError):
+    """Another import into the same library is running (another process or thread)."""
+
+
+class DuplicateAssetError(ValueError):
+    """Content already in the library; ``asset_id`` is the existing photo."""
+
+    def __init__(self, asset_id: int) -> None:
+        super().__init__(f"content already in the library as asset {asset_id}")
+        self.asset_id = asset_id
 
 
 class Clock(Protocol):
@@ -71,6 +84,10 @@ class LibraryStore(Protocol):
 
     def free_bytes(self) -> int: ...
 
+    def exclusive_import(self) -> AbstractContextManager[None]:
+        """Hold the library's import lock; raise ImportBusyError if someone else has it."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class Page:
@@ -96,6 +113,20 @@ class Repository(Protocol):
     # assets
     def find_asset_id_by_hash(self, content_hash: str) -> int | None: ...
     def add_asset(self, asset: NewAsset, imported_at: datetime) -> int: ...
+    def record_import(
+        self,
+        asset: NewAsset,
+        imported_at: datetime,
+        source_id: int,
+        relative_path: str,
+        thumb: RenderedImage,
+        job_kind: str,
+    ) -> int:
+        """Asset + origin + thumbnail + follow-up job, all or nothing.
+
+        Raises DuplicateAssetError if the content is already in the library."""
+        ...
+
     def get_asset(self, asset_id: int) -> Asset | None: ...
     def list_assets(self, limit: int, cursor: str | None = None) -> Page: ...
     def count_assets(self) -> int: ...
@@ -104,7 +135,6 @@ class Repository(Protocol):
     def set_variant_of(self, asset_id: int, original_id: int) -> None: ...
 
     # where each asset came from (one asset, many source files)
-    def has_asset_source(self, source_id: int, relative_path: str) -> bool: ...
     def add_asset_source(self, asset_id: int, source_id: int, relative_path: str) -> None: ...
     def asset_id_for_source_path(self, source_id: int, relative_path: str) -> int | None: ...
     def origins_of(self, asset_id: int) -> list[tuple[Source, str]]: ...

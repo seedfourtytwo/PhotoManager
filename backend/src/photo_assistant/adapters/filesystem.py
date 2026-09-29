@@ -1,9 +1,12 @@
 """Hashing, walking source folders (read-only) and the library store on disk."""
 
+import fcntl
+import logging
 import os
 import shutil
 import uuid
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,7 +14,9 @@ from blake3 import blake3
 
 from photo_assistant.domain.library_paths import ensure_relative
 from photo_assistant.domain.model import Source
-from photo_assistant.ports import SourceFile
+from photo_assistant.ports import ImportBusyError, SourceFile
+
+log = logging.getLogger(__name__)
 
 _CHUNK = 1024 * 1024
 
@@ -69,8 +74,10 @@ class DiskLibraryStore:
 
     def store_original(self, source_file: Path, relative_path: str, content_hash: str) -> None:
         target = self.absolute(relative_path)
-        if target.exists() and self._hasher.hash_file(target) == content_hash:
-            return  # already there from an interrupted earlier run
+        if target.exists():
+            if self._hasher.hash_file(target) == content_hash:
+                return  # already there from an interrupted earlier run
+            log.warning("replacing a corrupt library original", extra={"path": relative_path})
         target.parent.mkdir(parents=True, exist_ok=True)
         self._tmp.mkdir(parents=True, exist_ok=True)
         partial = self._tmp / f"{uuid.uuid4().hex}.partial"
@@ -89,3 +96,17 @@ class DiskLibraryStore:
     def free_bytes(self) -> int:
         self.root.mkdir(parents=True, exist_ok=True)
         return shutil.disk_usage(self.root).free
+
+    @contextmanager
+    def exclusive_import(self) -> Iterator[None]:
+        """An OS file lock: works across the server, its worker and CLI imports."""
+        self.root.mkdir(parents=True, exist_ok=True)
+        with (self.root / "import.lock").open("a") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise ImportBusyError("an import into this library is already running") from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
