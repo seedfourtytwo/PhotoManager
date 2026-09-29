@@ -21,7 +21,9 @@ from photo_assistant.adapters.sqlite_base import (
     encode_cursor,
 )
 from photo_assistant.adapters.sqlite_edits import EditsMixin
+from photo_assistant.adapters.sqlite_enrich import EnrichMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
+from photo_assistant.adapters.sqlite_trash import TrashMixin
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -78,7 +80,14 @@ def _iso(value: datetime) -> str:
 
 
 class SqliteRepository(
-    AccountsMixin, AccessMixin, LibraryMixin, AlbumsMixin, EditsMixin, SqliteBase
+    AccountsMixin,
+    AccessMixin,
+    LibraryMixin,
+    AlbumsMixin,
+    EditsMixin,
+    EnrichMixin,
+    TrashMixin,
+    SqliteBase,
 ):
     """Thread-safe enough for one API process plus a worker thread (one lock, WAL mode)."""
 
@@ -373,6 +382,15 @@ class SqliteRepository(
         return self._write(
             "INSERT INTO job (kind, payload_json) VALUES (?, ?)", (kind, json.dumps(payload))
         )
+
+    def enqueue_once(self, kind: str) -> int | None:
+        with self._transaction():
+            waiting = self._conn.execute(
+                "SELECT 1 FROM job WHERE kind = ? AND status = 'queued'", (kind,)
+            ).fetchone()
+            if waiting:
+                return None
+            return self._write("INSERT INTO job (kind, payload_json) VALUES (?, '{}')", (kind,))
 
     def claim_next_job(self, now: datetime) -> Job | None:
         """Atomic across processes: one statement picks and marks the job."""

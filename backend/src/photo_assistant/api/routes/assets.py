@@ -5,7 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 
-from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep, require_view
+from photo_assistant.api.deps import (
+    LOGGED_IN,
+    ServicesDep,
+    ViewerDep,
+    require_view,
+    require_views,
+)
 from photo_assistant.api.filters import FilterDep
 from photo_assistant.api.schemas import (
     AlbumRef,
@@ -13,6 +19,7 @@ from photo_assistant.api.schemas import (
     AssetOut,
     AssetPage,
     BulkState,
+    DatesIn,
     FacetsOut,
     NameCount,
     Origin,
@@ -23,6 +30,7 @@ from photo_assistant.api.schemas import (
 )
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.date_fix import DateFixError, new_capture_times
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api/assets", tags=["assets"], dependencies=LOGGED_IN)
@@ -95,6 +103,23 @@ def detail_of(services: Services, viewer: Viewer, view: AssetView) -> AssetDetai
         albums=albums,
         level=view.level.label,  # type: ignore[arg-type]  # a LevelName by construction
     )
+
+
+@router.post("/dates")
+def fix_dates(services: ServicesDep, viewer: ViewerDep, body: DatesIn) -> Updated:
+    """Set or shift capture times (needs edit on every photo); previous values are kept."""
+    if (body.set is None) == (body.shift_minutes is None):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "give exactly one of 'set' or 'shift_minutes'"
+        )
+    views = require_views(services, viewer, body.ids, Level.EDIT)
+    old = [(v.id, v.asset.taken_at) for v in views]
+    try:
+        changes = new_capture_times(old, body.set, body.shift_minutes)
+    except DateFixError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    updated = services.repo.change_dates(changes, viewer.user_id, services.clock.now())
+    return Updated(updated=updated)
 
 
 @router.get("/{asset_id}")

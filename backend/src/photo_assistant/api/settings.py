@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     allowed_hosts: list[str] = ["127.0.0.1", "localhost"]
     web_dir: Path | None = None  # built web app to serve at "/" (just run sets it)
     # argon2id cost (RFC 9106 low-memory profile). Tests lower it; never lower it in use.
+    trash_purge_every_hours: float = 6.0  # how often the 30-day trash expiry runs
     argon2_time_cost: int = 3
     argon2_memory_kib: int = 65536
 

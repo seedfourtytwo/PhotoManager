@@ -92,6 +92,7 @@ def _import(folder: Path, label: str | None, show: int) -> int:
             print(exc, file=sys.stderr)
             return 1
         _print_report(run_id, report, show)
+        services.enqueue_enrichment()
         pending = services.repo.job_counts()["queued"]
         if pending:
             print(f"\nMaking {pending} full-size previews …")

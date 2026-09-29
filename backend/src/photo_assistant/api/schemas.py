@@ -394,6 +394,39 @@ class Estimate(BaseModel):
     bytes: int
 
 
+# --- dates and trash -------------------------------------------------------------------------
+
+
+class DatesIn(BaseModel):
+    ids: Ids
+    set: datetime | None = None  # local wall-clock, no zone
+    shift_minutes: int | None = Field(default=None, ge=-60 * 24 * 365 * 200, le=60 * 24 * 365 * 200)
+
+
+class IdsIn(BaseModel):
+    ids: Ids
+
+
+class OptionalIds(BaseModel):
+    ids: list[int] | None = Field(default=None, max_length=100_000)
+
+
+class TrashedOut(AssetOut):
+    trashed_at: datetime
+
+
+class Trashed(BaseModel):
+    trashed: int
+
+
+class Restored(BaseModel):
+    restored: int
+
+
+class Purged(BaseModel):
+    purged: int
+
+
 class Updated(BaseModel):
     updated: int
 

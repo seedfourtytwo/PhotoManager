@@ -248,6 +248,15 @@ class LibraryMixin(SqliteBase):
         found = self.views_by_ids(viewer, [asset_id], trashed=trashed)
         return found[0] if found else None
 
+    def group_views(self, viewer: Viewer, group_id: int) -> list[AssetView]:
+        cte, params = visible_assets_cte(viewer)
+        rows = self._all(
+            f"""{cte} SELECT {ASSET_COLUMNS} {ASSET_FROM} WHERE a.group_id = :group
+                ORDER BY a.taken_at, a.id""",
+            params | {"group": group_id},
+        )
+        return [view_from_row(r) for r in rows]
+
     def trashed_views(self, viewer: Viewer) -> list[AssetView]:
         cte, params = visible_assets_cte(viewer, trashed=True)
         rows = self._all(

@@ -23,6 +23,7 @@ from photo_assistant.api.routes import (
     library,
     sources,
     system,
+    trash,
     users,
 )
 from photo_assistant.api.security import CrossSiteGuard
@@ -77,6 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         library,
         albums,
         downloads,
+        trash,
     ):
         app.include_router(module.router)
     _mount_web(app, settings.web_dir)

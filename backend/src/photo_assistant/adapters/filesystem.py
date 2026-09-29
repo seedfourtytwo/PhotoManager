@@ -19,6 +19,7 @@ from photo_assistant.ports import ImportBusyError, SourceFile
 log = logging.getLogger(__name__)
 
 _CHUNK = 1024 * 1024
+_REMOVABLE = {"originals", "derived"}
 
 
 class Blake3Hasher:
@@ -95,6 +96,19 @@ class DiskLibraryStore:
             partial.replace(target)
         finally:
             partial.unlink(missing_ok=True)
+
+    def remove(self, relative_path: str) -> None:
+        """Delete one library original or derivative (trash purge only). Originals are
+        read-only files; removing them needs write access to their folder, not the file."""
+        path = ensure_relative(relative_path)
+        if path.parts[0] not in _REMOVABLE:
+            raise ValueError(f"only library originals and derivatives can be removed: {path}")
+        self.absolute(relative_path).unlink(missing_ok=True)
+
+    def remove_edited(self, content_hash: str) -> None:
+        folder = self.root / "derived" / "edited" / content_hash[:2]
+        for cached in folder.glob(f"{content_hash}-*.webp"):
+            cached.unlink(missing_ok=True)
 
     def sweep_tmp(self) -> int:
         """Remove half-written copies left by a crash (only ever in data/tmp)."""

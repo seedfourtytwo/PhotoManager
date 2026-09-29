@@ -135,5 +135,5 @@ def test_stats_and_jobs(client: TestClient, source_guard: Path) -> None:
     assert stats["jobs"]["failed"] == 0
     assert stats["free_bytes"] > 0
     jobs = client.get("/api/jobs", params={"status": "done"}).json()
-    assert {j["kind"] for j in jobs} == {"scan_source", "preview"}
+    assert {j["kind"] for j in jobs} == {"scan_source", "preview", "geocode", "group"}
     assert client.post("/api/jobs/999/retry").status_code == 404

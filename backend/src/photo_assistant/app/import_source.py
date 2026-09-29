@@ -41,6 +41,7 @@ from photo_assistant.ports import (
 log = logging.getLogger(__name__)
 
 PREVIEW_JOB = "preview"
+PURGED_REASON = "deleted from the library earlier"
 PAUSED_REASON = "not processed: import paused because free disk space is low"
 
 
@@ -207,7 +208,7 @@ class ImportSource:
             except OSError as exc:
                 report.add(ItemResult(f.relative_path, Outcome.FAILED, f"cannot read: {exc}"))
                 continue
-            known = self._known_outcome(source, f, digest)
+            known = self._purged_outcome(f, digest) or self._known_outcome(source, f, digest)
             if known is not None:
                 report.add(known)
             elif digest in first_seen:
@@ -249,6 +250,13 @@ class ImportSource:
         if asset is None or asset.thumb_path is None:
             return None  # let the slow path repair it
         return ItemResult(f.relative_path, Outcome.ALREADY_KNOWN, asset_id=asset.id)
+
+    def _purged_outcome(self, f: SourceFile, digest: str) -> ItemResult | None:
+        """FEATURES 11.3: a photo purged from the library stays out, even if a source
+        still has it."""
+        if self._repo.is_purged_hash(digest):
+            return ItemResult(f.relative_path, Outcome.SKIPPED, PURGED_REASON)
+        return None
 
     def _known_outcome(self, source: Source, f: SourceFile, digest: str) -> ItemResult | None:
         asset_id = self._repo.find_asset_id_by_hash(digest)
