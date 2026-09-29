@@ -111,7 +111,7 @@ def test_changed_remote_files_are_refreshed_and_deleted_ones_kept(tmp_path: Path
 def test_a_missing_folder_on_the_remote_is_reported_as_not_found(
     remote: tuple[RcloneSync, RemoteConfig, Path], tmp_path: Path
 ) -> None:
-    sync, config, folder = remote
+    sync, _, folder = remote
     with pytest.raises(SyncNotFoundError, match="not found"):
         sync.pull(RemoteConfig("familycloud", str(folder / "nope")), tmp_path / "s", FAST)
 
