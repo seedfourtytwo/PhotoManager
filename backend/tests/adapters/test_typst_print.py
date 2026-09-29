@@ -18,7 +18,7 @@ from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.app.print_album import PrintOptions, PrintPhoto, plan_print
 from photo_assistant.domain.print_layout import BLEED_MM, MM_PER_INCH, Page
 from photo_assistant.domain.print_theme import BUNDLED_FONTS, THEMES
-from photo_assistant.ports.printing import PrintJob, PrintRenderError, PrintRenderer
+from photo_assistant.ports.printing import PrintJob, PrintRenderer, PrintRenderError
 
 pytestmark = pytest.mark.integration
 
@@ -47,8 +47,7 @@ def photos(tmp_path_factory: pytest.TempPathFactory) -> list[PrintPhoto]:
     sizes = [(1600, 1200), (1200, 1600), (1600, 1067), (1200, 1600), (1600, 1600), (1600, 900)]
     tints = [(200, 90, 40), (40, 120, 200), (90, 160, 80), (180, 60, 140), (220, 180, 40)]
     return [
-        draw(folder / f"img-{i}.jpg", w, h, tints[i % len(tints)])
-        for i, (w, h) in enumerate(sizes)
+        draw(folder / f"img-{i}.jpg", w, h, tints[i % len(tints)]) for i, (w, h) in enumerate(sizes)
     ]
 
 
@@ -80,7 +79,7 @@ def test_satisfies_the_port(renderer: TypstPrintRenderer) -> None:
 
 def test_every_theme_font_is_bundled_with_typst() -> None:
     families = set(typst.Fonts(include_system_fonts=False).families())
-    assert BUNDLED_FONTS <= families
+    assert families >= BUNDLED_FONTS
     assert {t.font for t in THEMES.values()} <= families
 
 
@@ -169,7 +168,7 @@ def test_preview_page_out_of_range(renderer: TypstPrintRenderer, photos: list[Pr
 
 def test_unreadable_image_is_a_render_error(renderer: TypstPrintRenderer, tmp_path: Path) -> None:
     missing = PrintPhoto(tmp_path / "gone.jpg", 1600, 1200)
-    with pytest.raises(PrintRenderError, match="gone.jpg"):
+    with pytest.raises(PrintRenderError, match=r"gone\.jpg"):
         renderer.render_pdf(job_for([missing]))
 
 
