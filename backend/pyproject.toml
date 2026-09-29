@@ -10,6 +10,7 @@ dependencies = [
     "blake3>=1.0.10",
     "pyvips>=3.2.0",
     "pyexiftool>=0.5.6",
+    "typst>=0.15.0",
 ]
 
 [dependency-groups]
@@ -82,4 +83,6 @@ layers = [
 name = "Domain stays pure (no frameworks, no I/O libraries)"
 type = "forbidden"
 source_modules = ["photo_assistant.domain"]
-forbidden_modules = ["fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn"]
+forbidden_modules = [
+    "fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn", "typst", "pyvips",
+]
