@@ -6,7 +6,8 @@ what it expected and what it found.
 """
 
 import logging
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -88,3 +89,24 @@ class Session:
 def _info(arg: object) -> TensorInfo:
     shape = tuple(d if isinstance(d, int | str) else None for d in arg.shape)  # type: ignore[attr-defined]
     return TensorInfo(arg.name, shape, arg.type)  # type: ignore[attr-defined]
+
+
+class Lazy[T]:
+    """Load a model part on first use, once; remember why loading failed (for ``status()``)."""
+
+    def __init__(self, factory: Callable[[], T]) -> None:
+        self._factory = factory
+        self._lock = threading.Lock()
+        self.value: T | None = None
+        self.error: str | None = None
+
+    def get(self) -> T:
+        with self._lock:
+            if self.value is None:
+                try:
+                    self.value = self._factory()
+                except ModelUnavailableError as exc:
+                    self.error = str(exc)
+                    raise
+                self.error = None
+            return self.value

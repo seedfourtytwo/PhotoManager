@@ -15,7 +15,6 @@ Preprocessing follows Immich: resize the short side to S (bicubic), centre-crop 
 """
 
 import json
-import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +26,7 @@ from numpy.typing import NDArray
 from tokenizers import Tokenizer
 
 from photo_assistant.adapters.image_io import RgbImage, load_rgb
-from photo_assistant.adapters.onnx_common import DOWNLOAD_HINT, Session, choose_providers
+from photo_assistant.adapters.onnx_common import DOWNLOAD_HINT, Lazy, Session, choose_providers
 from photo_assistant.domain.vectors import Vector
 from photo_assistant.ports.ml import (
     ModelFormatError,
@@ -242,10 +241,8 @@ class OnnxClip:
         self._provider = provider
         self._batch = batch_size
         self._loader = loader
-        self._lock = threading.Lock()
-        self._visual: _Visual | None = None
-        self._textual: _Textual | None = None
-        self._error: str | None = None
+        self._visual = Lazy(self._make_visual)
+        self._textual = Lazy(self._make_textual)
 
     @property
     def name(self) -> str:
@@ -260,49 +257,32 @@ class OnnxClip:
             raise ModelFormatError(f"{self._folder / 'config.json'}: {exc!r}") from exc
         return dim, context
 
-    def _remember(self, exc: ModelUnavailableError) -> ModelUnavailableError:
-        self._error = str(exc)
-        return exc
+    def _make_visual(self) -> _Visual:
+        dim, _ = self._config()
+        return _Visual(self._folder, choose_providers(self._provider), dim, self._batch)
 
-    def _load_visual(self) -> _Visual:
-        with self._lock:
-            if self._visual is None:
-                try:
-                    dim, _ = self._config()
-                    providers = choose_providers(self._provider)
-                    self._visual = _Visual(self._folder, providers, dim, self._batch)
-                except ModelUnavailableError as exc:
-                    raise self._remember(exc) from None
-            return self._visual
-
-    def _load_textual(self) -> _Textual:
-        with self._lock:
-            if self._textual is None:
-                try:
-                    dim, context = self._config()
-                    providers = choose_providers(self._provider)
-                    self._textual = _Textual(self._folder, providers, dim, context)
-                except ModelUnavailableError as exc:
-                    raise self._remember(exc) from None
-            return self._textual
+    def _make_textual(self) -> _Textual:
+        dim, context = self._config()
+        return _Textual(self._folder, choose_providers(self._provider), dim, context)
 
     def info(self) -> ModelInfo:
         return ModelInfo(self._name, self._config()[0])
 
     def status(self) -> ModelStatus:
-        if self._error is not None:
-            return ModelStatus(False, self._error)
+        error = self._visual.error or self._textual.error
+        if error is not None:
+            return ModelStatus(False, error)
         if not (self._folder / "visual" / "model.onnx").is_file():
             return ModelStatus(False, f"CLIP model {self._name} not found: {DOWNLOAD_HINT}")
-        loaded = self._visual or self._textual
+        loaded = self._visual.value or self._textual.value
         where = ", ".join(loaded.session.providers) if loaded else "not loaded yet"
         return ModelStatus(True, f"{self._name} ({where})")
 
     def embed_images(self, paths: Sequence[Path]) -> list[Vector]:
         if not paths:
             return []
-        visual = self._load_visual()
+        visual = self._visual.get()
         return visual.embed([self._loader(path) for path in paths])
 
     def embed_text(self, text: str) -> Vector:
-        return self._load_textual().embed(text)
+        return self._textual.get().embed(text)
