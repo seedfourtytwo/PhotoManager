@@ -85,9 +85,7 @@ WIRE = {
 
 def test_plan_from_json_reads_the_wire_shape() -> None:
     plan = plan_from_json(WIRE)
-    assert plan == AlbumPlan(
-        "Summer", (PlanSection("Beach", (1, 2), "grid-4", {1: "Waves"}),)
-    )
+    assert plan == AlbumPlan("Summer", (PlanSection("Beach", (1, 2), "grid-4", {1: "Waves"}),))
 
 
 def test_captions_are_optional_on_the_wire() -> None:
