@@ -72,6 +72,8 @@ benchmarks show large quality spreads between models on labelling, so we test on
 the bigger ones wait for the server GPU (planned RTX 3060 12 GB).
 **Design:** provider-agnostic port; an OpenAI-compatible adapter can be added later (LM Studio,
 llama.cpp server) with no domain change.
+**Client library:** `httpx` (sync client; its `MockTransport` lets the adapter be tested with
+no network and no model). Added 2026-09-29.
 
 ## Sources
 
@@ -136,6 +138,9 @@ on iOS, so this is the only free automatic route without our own app.
 **Rejected for now:** PhotoSync Premium (paid); own iOS app (needs the $99/yr Apple Developer
 Program, or re-signing every 7 days with a free Apple ID). If built later: Capacitor around the
 same SvelteKit UI, so it has every web feature.
+**Upload parsing:** `python-multipart` (the parser FastAPI itself uses), driven as a *streaming*
+parser so each file goes straight to `data/tmp`, hashed as it arrives and cut off at the size
+limit, instead of being spooled whole to the system temp folder first. Added 2026-09-29.
 
 ## Tooling
 
