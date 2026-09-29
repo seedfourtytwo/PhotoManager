@@ -65,5 +65,7 @@ def test_an_abandoned_upload_is_discarded(tmp_path: Path) -> None:
 
 def test_leftovers_from_a_crash_are_swept_by_the_library_store(tmp_path: Path) -> None:
     spool = DiskUploadSpool(tmp_path / "data" / "tmp")
-    spool.open(100).write(b"interrupted")
+    writer = spool.open(100)
+    writer.write(b"received, but the server stopped before moving it")
+    writer.finish()
     assert DiskLibraryStore(tmp_path / "data").sweep_tmp() == 1

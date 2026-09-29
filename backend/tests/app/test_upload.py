@@ -81,7 +81,9 @@ def test_a_photo_lands_in_the_users_inbox_under_the_month(world: World) -> None:
 
 
 def test_finishing_a_batch_enqueues_one_import_of_the_inbox(world: World) -> None:
-    results = [world.use_case.accept(7, f"{n}.jpg", _spooled(world, JPEG + bytes([n]))) for n in (1, 2)]
+    results = [
+        world.use_case.accept(7, f"{n}.jpg", _spooled(world, JPEG + bytes([n]))) for n in (1, 2)
+    ]
     job = world.use_case.finish_batch(7, results)
     assert job == 1
     assert world.library.jobs == [("scan_source", {"source_id": 107})]
@@ -147,7 +149,9 @@ class FakeDevices:
         return [d for d, _ in self.rows if d.user_id == user_id]
 
     def revoke_device(self, user_id: int, device_id: int, now: datetime) -> bool:
-        self.rows = [(d, h) for d, h in self.rows if not (d.id == device_id and d.user_id == user_id)]
+        self.rows = [
+            (d, h) for d, h in self.rows if not (d.id == device_id and d.user_id == user_id)
+        ]
         return True
 
     def user_for_token_hash(self, token_hash: str, now: datetime) -> int | None:

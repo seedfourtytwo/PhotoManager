@@ -178,10 +178,14 @@ def test_form_fields_without_a_file_are_ignored(world: World) -> None:
 def test_a_file_part_without_a_plain_filename_still_counts(world: World) -> None:
     boundary = "b0undary"
     body = (
-        f"--{boundary}\r\n"
-        "Content-Disposition: form-data; name=\"file\"; filename*=UTF-8''caf%C3%A9.jpg\r\n"
-        "Content-Type: image/jpeg\r\n\r\n"
-    ).encode() + JPEG + f"\r\n--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            "Content-Disposition: form-data; name=\"file\"; filename*=UTF-8''caf%C3%A9.jpg\r\n"
+            "Content-Type: image/jpeg\r\n\r\n"
+        ).encode()
+        + JPEG
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
     response = world.client.post(
         "/api/upload",
         content=body,
@@ -196,7 +200,7 @@ def test_not_multipart_is_refused(world: World) -> None:
 
 
 def test_broken_multipart_is_a_bad_request_and_leaves_nothing(world: World) -> None:
-    body = b"--x\r\nContent-Disposition: form-data; name=\"f\"; filename=\"a.jpg\"\r\n\r\n" + JPEG
+    body = b'--x\r\nContent-Disposition: form-data; name="f"; filename="a.jpg"\r\n\r\n' + JPEG
     response = world.client.post(
         "/api/upload",
         content=body + b"garbage-without-closing-boundary\r\n--y--",
@@ -310,3 +314,36 @@ def test_without_a_session_hook_only_tokens_work(tmp_path: Path, world: World) -
         "/api/upload/check", json={"hashes": []}, headers={"Authorization": f"Bearer {token}"}
     )
     assert ok.status_code == 200
+
+
+def test_a_multipart_type_without_boundary_is_a_bad_request(world: World) -> None:
+    headers = {**_as(1), "Content-Type": "multipart/form-data"}
+    assert world.client.post("/api/upload", content=b"x", headers=headers).status_code == 400
+
+
+def test_garbled_part_headers_are_a_bad_request(world: World) -> None:
+    body = b"--x\r\nBad Header Without Colon\r\n\r\ndata\r\n--x--\r\n"
+    headers = {**_as(1), "Content-Type": "multipart/form-data; boundary=x"}
+    response = world.client.post("/api/upload", content=body, headers=headers)
+    assert response.status_code == 400
+    assert "broken upload" in response.json()["detail"]
+
+
+def test_photos_stored_before_a_failure_are_still_queued_for_import(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_accept = world.integrations.upload.accept
+    calls = []
+
+    def accept_then_fail(user_id: int, name: str, spooled):  # type: ignore[no-untyped-def]
+        calls.append(name)
+        if len(calls) > 1:
+            raise OSError("disk full")
+        return real_accept(user_id, name, spooled)
+
+    monkeypatch.setattr(world.integrations.upload, "accept", accept_then_fail)
+    files = [("file", ("a.jpg", JPEG)), ("file", ("b.png", PNG))]
+    with pytest.raises(OSError, match="disk full"):
+        world.client.post("/api/upload", files=files, headers=_as(1))
+    assert _inbox_files(world, 1) == {f"{MONTH}/a.jpg"}
+    assert len(world.repo.list_jobs()) == 1
