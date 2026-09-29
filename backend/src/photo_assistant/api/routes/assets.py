@@ -4,11 +4,11 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 
-from photo_assistant.api.deps import ServicesDep, require_asset
+from photo_assistant.api.deps import LOGGED_IN, ServicesDep, require_asset
 from photo_assistant.api.schemas import AssetDetail, AssetOut, AssetPage, Origin
 from photo_assistant.api.services import Services
 
-router = APIRouter(prefix="/api/assets", tags=["assets"])
+router = APIRouter(prefix="/api/assets", tags=["assets"], dependencies=LOGGED_IN)
 
 IMMUTABLE = "public, max-age=31536000, immutable"  # derivatives are named by content hash
 

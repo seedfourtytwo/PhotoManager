@@ -1,24 +1,19 @@
 """API tests: the HTTP surface M1 exposes (the web UI builds on these in M2)."""
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from photo_assistant.api.main import create_app
 from photo_assistant.api.services import Services
-from photo_assistant.api.settings import Settings
 from tests.fixtures.expected import DUPLICATE, FAILED, IMPORTED, SKIPPED
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> Iterator[TestClient]:
-    settings = Settings(data_root=tmp_path / "data", worker_enabled=False, min_free_gb=0)
-    with TestClient(create_app(settings), base_url="http://127.0.0.1") as c:
-        yield c
+def client(admin: TestClient) -> TestClient:
+    return admin
 
 
 def services(client: TestClient) -> Services:

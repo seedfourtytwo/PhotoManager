@@ -4,7 +4,56 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.model import Asset, Source
+
+# --- accounts --------------------------------------------------------------------------------
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    role: Role
+    disabled: bool
+
+    @classmethod
+    def of(cls, u: User) -> "UserOut":
+        return cls(
+            id=u.id,
+            username=u.username,
+            display_name=u.display_name,
+            role=u.role,
+            disabled=u.disabled,
+        )
+
+
+class Credentials(BaseModel):
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=1024)
+
+
+class SetupIn(Credentials):
+    display_name: str = Field(default="", max_length=100)
+
+
+class NewUser(SetupIn):
+    role: Role
+
+
+class UserPatchIn(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
+    role: Role | None = None
+    disabled: bool | None = None
+    password: str | None = Field(default=None, max_length=1024)
+
+
+class NewPassword(BaseModel):
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(max_length=1024)
+
+
+# --- sources ---------------------------------------------------------------------------------
 
 
 class SourceIn(BaseModel):

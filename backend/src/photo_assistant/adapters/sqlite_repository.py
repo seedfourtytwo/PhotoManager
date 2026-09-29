@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 
+from photo_assistant.adapters.sqlite_accounts import AccountsMixin
 from photo_assistant.adapters.sqlite_base import SqliteBase
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.media_types import MediaKind
@@ -82,14 +83,21 @@ def _decode_cursor(cursor: str) -> tuple[str, int]:
         raise ValueError(f"invalid cursor: {cursor!r}") from exc
 
 
-class SqliteRepository(SqliteBase):
+class SqliteRepository(AccountsMixin, SqliteBase):
     """Thread-safe enough for one API process plus a worker thread (one lock, WAL mode)."""
 
     # --- sources ---------------------------------------------------------------------------
 
     @staticmethod
     def _source(row: sqlite3.Row) -> Source:
-        return Source(row["id"], row["label"], row["root"], bool(row["enabled"]), row["kind"])
+        return Source(
+            row["id"],
+            row["label"],
+            row["root"],
+            bool(row["enabled"]),
+            row["kind"],
+            row["owner_id"],
+        )
 
     def add_source(self, label: str, root: str) -> Source:
         try:
@@ -109,6 +117,10 @@ class SqliteRepository(SqliteBase):
 
     def set_source_enabled(self, source_id: int, enabled: bool) -> None:
         self._write("UPDATE source SET enabled = ? WHERE id = ?", (int(enabled), source_id))
+
+    def source_owner(self, source_id: int) -> int | None:
+        source = self.get_source(source_id)
+        return source.owner_id if source else None
 
     # --- assets ----------------------------------------------------------------------------
 

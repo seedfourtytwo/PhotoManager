@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, status
 
-from photo_assistant.api.deps import ServicesDep
+from photo_assistant.api.deps import ADMIN_ONLY, ServicesDep
 from photo_assistant.domain.model import Outcome
 
-router = APIRouter(prefix="/api/imports", tags=["imports"])
+router = APIRouter(prefix="/api/imports", tags=["imports"], dependencies=ADMIN_ONLY)
 
 
 @router.get("")

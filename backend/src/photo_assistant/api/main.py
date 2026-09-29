@@ -13,7 +13,7 @@ from starlette.types import Scope
 
 from photo_assistant import __version__
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
-from photo_assistant.api.routes import assets, imports, sources, system
+from photo_assistant.api.routes import assets, auth, imports, sources, system, users
 from photo_assistant.api.security import CrossSiteGuard
 from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import Settings, get_settings
@@ -55,7 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Photo Assistant", version=__version__, lifespan=lifespan)
     app.state.settings = settings
-    for module in (system, sources, imports, assets):
+    for module in (system, auth, users, sources, imports, assets):
         app.include_router(module.router)
     _mount_web(app, settings.web_dir)
     app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)

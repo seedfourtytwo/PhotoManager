@@ -8,12 +8,16 @@ from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
 from photo_assistant.api.settings import Settings
+from tests.api.conftest import PASSWORD, make_settings
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    settings = Settings(data_root=tmp_path / "data", worker_enabled=False)
-    with TestClient(create_app(settings), base_url="http://127.0.0.1:8420") as c:
+    with TestClient(
+        create_app(make_settings(tmp_path / "data")), base_url="http://127.0.0.1:8420"
+    ) as c:
+        body = {"username": "admin", "display_name": "C", "password": PASSWORD}
+        assert c.post("/api/setup", json=body).status_code == 201
         yield c
 
 

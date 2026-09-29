@@ -2,19 +2,19 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
 
-from photo_assistant.api.deps import ServicesDep, require_source
+from photo_assistant.api.deps import ADMIN_ONLY, LOGGED_IN, ServicesDep, require_source
 from photo_assistant.api.schemas import Queued, SourceIn, SourceOut, SourcePatch
 from photo_assistant.api.services import SCAN_JOB
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
 
-@router.get("")
+@router.get("", dependencies=LOGGED_IN)
 def list_sources(services: ServicesDep) -> list[SourceOut]:
     return [SourceOut.of(s) for s in services.repo.list_sources()]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=ADMIN_ONLY)
 def add_source(services: ServicesDep, body: SourceIn) -> SourceOut:
     folder = Path(body.path).expanduser()
     if not folder.is_dir():
@@ -28,7 +28,7 @@ def add_source(services: ServicesDep, body: SourceIn) -> SourceOut:
     return SourceOut.of(source)
 
 
-@router.patch("/{source_id}")
+@router.patch("/{source_id}", dependencies=ADMIN_ONLY)
 def patch_source(services: ServicesDep, source_id: int, body: SourcePatch) -> SourceOut:
     require_source(services, source_id)
     if body.enabled is not None:
@@ -36,7 +36,7 @@ def patch_source(services: ServicesDep, source_id: int, body: SourcePatch) -> So
     return SourceOut.of(require_source(services, source_id))
 
 
-@router.post("/scan-all", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/scan-all", status_code=status.HTTP_202_ACCEPTED, dependencies=ADMIN_ONLY)
 def scan_all(services: ServicesDep) -> list[Queued]:
     repo = services.repo
     return [
@@ -46,7 +46,7 @@ def scan_all(services: ServicesDep) -> list[Queued]:
     ]
 
 
-@router.post("/{source_id}/scan", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{source_id}/scan", status_code=status.HTTP_202_ACCEPTED, dependencies=ADMIN_ONLY)
 def scan_source(services: ServicesDep, source_id: int) -> Queued:
     require_source(services, source_id)
     job_id = services.repo.enqueue(SCAN_JOB, {"source_id": source_id})
