@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 from photo_assistant.domain.print_layout import (
     BLEED_MM,
     COVER_LAYOUT,
+    FULL,
     LAYOUTS,
     SAFE_MARGIN_MM,
     TEXT_LAYOUT_ID,
@@ -27,7 +28,7 @@ from photo_assistant.domain.print_layout import (
     cover_crop,
     effective_ppi,
     layout,
-    place_photo,
+    place_page,
     trim_size,
 )
 
@@ -193,14 +194,55 @@ def test_contain_frame_centres_the_photo_in_its_slot() -> None:
     assert contain_frame(4.0, slot) == Rect(0, 25, 200, 50)
 
 
-def test_place_photo_uses_the_layout_fit() -> None:
-    slot = Rect(10, 10, 100, 100)
-    contained = place_photo(layout("single"), slot, 2.0)
-    assert contained.crop == Rect(0, 0, 1, 1)
-    assert contained.frame == Rect(10, 35, 100, 50)
-    covered = place_photo(layout("four-grid"), slot, 2.0, focal=(0.5, 0.5))
-    assert covered.frame == slot
-    assert covered.crop == Rect(0.25, 0, 0.5, 1)
+def test_cover_layouts_fill_each_slot_and_crop_around_the_focal_point() -> None:
+    g = geometry()
+    lay = layout("four-grid")
+    placed = place_page(lay, g, [2.0] * 4, [(0.0, 0.5)] * 4)
+    assert [p.frame for p in placed] == list(g.slot_frames(lay))
+    assert all(
+        p.crop.x == 0 and p.crop.aspect * 2.0 == pytest.approx(p.frame.aspect) for p in placed
+    )
+
+
+def test_single_contains_the_photo_in_the_photo_area() -> None:
+    g = geometry()
+    (placed,) = place_page(layout("single"), g, [1.0])
+    assert placed.crop == FULL
+    assert placed.frame == contain_frame(1.0, g.photo_area)
+
+
+def test_two_side_is_a_justified_row_centred_on_the_page() -> None:
+    g = geometry()
+    left, right = place_page(layout("two-side"), g, [LANDSCAPE, PORTRAIT])
+    area = g.photo_area
+    assert left.frame.h == pytest.approx(right.frame.h)
+    assert right.frame.x - left.frame.right == pytest.approx(g.gutter_mm)
+    assert left.frame.x == pytest.approx(area.x) and right.frame.right == pytest.approx(area.right)
+    assert left.frame.y - area.y == pytest.approx(area.bottom - left.frame.bottom)
+    assert left.crop == right.crop == FULL
+
+
+def test_a_row_too_tall_for_the_page_is_centred_across() -> None:
+    g = geometry()
+    left, right = place_page(layout("two-side"), g, [0.5, 0.5])
+    area = g.photo_area
+    assert left.frame.h == pytest.approx(area.h)
+    assert left.frame.x - area.x == pytest.approx(area.right - right.frame.right)
+
+
+def test_two_stacked_is_a_justified_column() -> None:
+    g = geometry("a4-portrait")
+    top, bottom = place_page(layout("two-stacked"), g, [LANDSCAPE, 1.0])
+    area = g.photo_area
+    assert top.frame.w == pytest.approx(bottom.frame.w)
+    assert bottom.frame.y - top.frame.bottom == pytest.approx(g.gutter_mm)
+    assert top.frame.w <= area.w + 1e-9
+    assert top.frame.x - area.x == pytest.approx(area.right - top.frame.right)
+
+
+def test_place_page_needs_one_aspect_per_slot() -> None:
+    with pytest.raises(ValueError, match="2 photo"):
+        place_page(layout("two-side"), geometry(), [1.0])
 
 
 # --- resolution --------------------------------------------------------------------------------
@@ -265,10 +307,8 @@ def test_auto_layout_keeps_crops_small_for_ordinary_photos() -> None:
     g = geometry("a4-landscape")
     mixed = [LANDSCAPE, 4 / 3, PORTRAIT, PORTRAIT, LANDSCAPE, 1.0, 4 / 3, 2 / 3, LANDSCAPE]
     for page in auto_layout(mixed, g):
-        frames = g.slot_frames(layout(page.layout_id))
-        for index, frame in zip(page.photos, frames, strict=True):
-            crop = place_photo(layout(page.layout_id), frame, mixed[index]).crop
-            assert crop.w * crop.h > 0.6
+        placed = place_page(layout(page.layout_id), g, [mixed[i] for i in page.photos])
+        assert all(p.crop.w * p.crop.h > 0.6 for p in placed)
 
 
 @settings(max_examples=60, deadline=None)

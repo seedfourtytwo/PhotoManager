@@ -99,7 +99,12 @@ def trim_size(trim_id: str) -> TrimSize:
 
 class Fit(StrEnum):
     COVER = "cover"  # fill the slot, crop the overflow (album frames)
-    CONTAIN = "contain"  # shrink the frame to the photo: never crops
+    CONTAIN = "contain"  # justify the photos along an axis inside the slots: never crops
+
+
+class Axis(StrEnum):
+    ROW = "row"  # contained photos share one height
+    COLUMN = "column"  # contained photos share one width
 
 
 @dataclass(frozen=True)
@@ -110,6 +115,7 @@ class Layout:
     label: str
     slots: tuple[Rect, ...]
     fit: Fit = Fit.COVER
+    axis: Axis = Axis.ROW
     bleed: bool = False  # the single slot covers the whole page up to the bleed edge
 
     @property
@@ -137,6 +143,7 @@ LAYOUTS: dict[str, Layout] = {
             "Two stacked",
             (Rect(0, 0, 1, 0.5), Rect(0, 0.5, 1, 0.5)),
             fit=Fit.CONTAIN,
+            axis=Axis.COLUMN,
         ),
         Layout(
             "three-grid",
@@ -273,12 +280,55 @@ class Placement:
     crop: Rect  # fractions of the image
 
 
-def place_photo(
-    lay: Layout, slot_frame: Rect, image_aspect: float, focal: tuple[float, float] = (0.5, 0.5)
-) -> Placement:
+def _bounds(frames: Sequence[Rect]) -> Rect:
+    x0, y0 = min(f.x for f in frames), min(f.y for f in frames)
+    x1, y1 = max(f.right for f in frames), max(f.bottom for f in frames)
+    return Rect(x0, y0, x1 - x0, y1 - y0)
+
+
+def _justify_row(area: Rect, aspects: Sequence[float], gutter: float) -> list[Rect]:
+    """Photos side by side at one shared height, as large as fits, centred in the area."""
+    gaps = gutter * (len(aspects) - 1)
+    height = min(area.h, (area.w - gaps) / sum(aspects))
+    x = area.x + (area.w - height * sum(aspects) - gaps) / 2
+    y = area.y + (area.h - height) / 2
+    frames = []
+    for aspect in aspects:
+        frames.append(Rect(x, y, height * aspect, height))
+        x += height * aspect + gutter
+    return frames
+
+
+def _transpose(r: Rect) -> Rect:
+    return Rect(r.y, r.x, r.h, r.w)
+
+
+def _justify(lay: Layout, area: Rect, aspects: Sequence[float], gutter: float) -> list[Rect]:
+    if lay.axis is Axis.ROW:
+        return _justify_row(area, aspects, gutter)
+    # A column is a row of the transposed page.
+    flipped = _justify_row(_transpose(area), [1 / a for a in aspects], gutter)
+    return [_transpose(f) for f in flipped]
+
+
+def place_page(
+    lay: Layout,
+    geometry: PageGeometry,
+    aspects: Sequence[float],
+    focals: Sequence[tuple[float, float]] | None = None,
+) -> tuple[Placement, ...]:
+    """Frames (mm) and crops for the photos of one page, in slot order."""
+    if len(aspects) != lay.capacity:
+        raise ValueError(f"layout {lay.id!r} holds {lay.capacity} photo(s), got {len(aspects)}")
+    slots = geometry.slot_frames(lay)
     if lay.fit is Fit.CONTAIN:
-        return Placement(contain_frame(image_aspect, slot_frame), FULL)
-    return Placement(slot_frame, cover_crop(image_aspect, slot_frame.aspect, focal))
+        frames = _justify(lay, _bounds(slots), aspects, geometry.gutter_mm)
+        return tuple(Placement(f, FULL) for f in frames)
+    focal_points = focals or [(0.5, 0.5)] * len(aspects)
+    return tuple(
+        Placement(slot, cover_crop(aspect, slot.aspect, focal))
+        for slot, aspect, focal in zip(slots, aspects, focal_points, strict=True)
+    )
 
 
 # --- resolution --------------------------------------------------------------------------------
@@ -323,49 +373,36 @@ _CROP_WEIGHT = 4.0
 _SPACE_WEIGHT = 1.0  # empty paper around a contained photo is cheaper than a lost edge
 _REPEAT_PENALTY = 1.5  # the same layout twice in a row reads monotonous
 _MAX_CROP_LOSS = 0.3  # never cut away more than this in an automatic layout
-_Candidate = tuple[Layout, tuple[float, ...]]
 _Best = tuple[float, int, str]  # cost, start of last page, layout before it
+_PHOTO_LAYOUTS = tuple(lay for lay in LAYOUTS.values() if lay.capacity > 0)
 
 
-def _loss(image_aspect: float, frame_aspect: float) -> float:
-    ratio = image_aspect / frame_aspect
-    return 1.0 - min(ratio, 1.0 / ratio)
-
-
-def _page_cost(lay: Layout, frame_aspects: Sequence[float], photos: Sequence[float]) -> float:
-    cost = _PAGE_COST
-    for image, frame in zip(photos, frame_aspects, strict=True):
-        loss = _loss(image, frame)
-        if lay.fit is Fit.CONTAIN:
-            cost += _SPACE_WEIGHT * loss
-        elif loss > _MAX_CROP_LOSS:
-            return math.inf
-        else:
-            cost += _CROP_WEIGHT * loss
-    return cost
-
-
-def _candidates(geometry: PageGeometry) -> list[_Candidate]:
-    return [
-        (lay, tuple(f.aspect for f in geometry.slot_frames(lay)))
-        for lay in LAYOUTS.values()
-        if lay.capacity > 0
-    ]
+def _page_cost(lay: Layout, geometry: PageGeometry, photos: Sequence[float]) -> float:
+    placed = place_page(lay, geometry, photos)
+    if lay.fit is Fit.CONTAIN:
+        used = sum(p.frame.w * p.frame.h for p in placed)
+        bounds = _bounds(geometry.slot_frames(lay))
+        waste = 1.0 - used / (bounds.w * bounds.h)
+        return _PAGE_COST + _SPACE_WEIGHT * waste * len(photos)
+    losses = [1.0 - p.crop.w * p.crop.h for p in placed]
+    if max(losses) > _MAX_CROP_LOSS:
+        return math.inf
+    return _PAGE_COST + _CROP_WEIGHT * sum(losses)
 
 
 def _extend(
     best: list[dict[str, _Best]],
     start: int,
     aspects: Sequence[float],
-    candidates: list[_Candidate],
+    geometry: PageGeometry,
 ) -> None:
     for last, (cost, _, _) in best[start].items():
-        for lay, frames in candidates:
+        for lay in _PHOTO_LAYOUTS:
             end = start + lay.capacity
             if end > len(aspects):
                 continue
             repeat = _REPEAT_PENALTY if lay.id == last else 0.0
-            total = cost + repeat + _page_cost(lay, frames, aspects[start:end])
+            total = cost + repeat + _page_cost(lay, geometry, aspects[start:end])
             if total < best[end].get(lay.id, (math.inf, 0, ""))[0]:
                 best[end][lay.id] = (total, start, last)
 
@@ -389,9 +426,8 @@ def auto_layout(aspects: Sequence[float], geometry: PageGeometry) -> list[Page]:
     """
     if not aspects:
         return []
-    candidates = _candidates(geometry)
     best: list[dict[str, _Best]] = [{} for _ in range(len(aspects) + 1)]
     best[0][""] = (0.0, 0, "")
     for start in range(len(aspects)):
-        _extend(best, start, aspects, candidates)
+        _extend(best, start, aspects, geometry)
     return _backtrack(best)

@@ -19,7 +19,7 @@ from photo_assistant.domain.print_layout import (
     check_resolution,
     effective_ppi,
     layout,
-    place_photo,
+    place_page,
     trim_size,
 )
 from photo_assistant.domain.print_theme import page_geometry, theme
@@ -101,10 +101,14 @@ class PrintResult:
     page_count: int
 
 
-def _place(photo: PrintPhoto, lay: Layout, geometry: PageGeometry, index: int) -> PrintSlot:
-    placement = place_photo(lay, geometry.slot_frames(lay)[index], photo.aspect, photo.focal)
-    return PrintSlot(
-        photo.image_path, photo.pixel_w, photo.pixel_h, placement.crop, placement.frame
+def _place(
+    photos: Sequence[PrintPhoto], lay: Layout, geometry: PageGeometry
+) -> tuple[PrintSlot, ...]:
+    aspects = [p.aspect for p in photos]
+    placed = place_page(lay, geometry, aspects, [p.focal for p in photos])
+    return tuple(
+        PrintSlot(p.image_path, p.pixel_w, p.pixel_h, where.crop, where.frame)
+        for p, where in zip(photos, placed, strict=True)
     )
 
 
@@ -120,7 +124,7 @@ def _validate(pages: Sequence[Page], photo_count: int) -> None:
 
 def _print_page(page: Page, photos: Sequence[PrintPhoto], geometry: PageGeometry) -> PrintPage:
     lay = layout(page.layout_id)
-    slots = tuple(_place(photos[i], lay, geometry, n) for n, i in enumerate(page.photos))
+    slots = _place([photos[i] for i in page.photos], lay, geometry)
     captions = [photos[i].caption for i in page.photos if photos[i].caption]
     return PrintPage(lay.id, slots, CAPTION_SEPARATOR.join(captions), page.text)
 
@@ -130,7 +134,7 @@ def _cover(options: PrintOptions, geometry: PageGeometry) -> PrintCover | None:
         return None
     if options.cover_photo is None:
         return PrintCover()
-    return PrintCover(_place(options.cover_photo, COVER_LAYOUT, geometry, 0))
+    return PrintCover(_place([options.cover_photo], COVER_LAYOUT, geometry)[0])
 
 
 def _issue(photo: int | None, slot: PrintSlot) -> ResolutionIssue:
