@@ -80,7 +80,7 @@ def _provider(
 
 
 def _synthetic_jpeg(width: int = 3000, height: int = 2000) -> bytes:
-    image = pyvips.Image.black(width, height, bands=3) + [40, 120, 200]
+    image = pyvips.Image.black(width, height, bands=3).linear([1, 1, 1], [40, 120, 200])
     data: bytes = image.cast("uchar").jpegsave_buffer(Q=80)
     return data
 
@@ -158,7 +158,7 @@ def test_build_ai_provider_defaults_to_null() -> None:
 
 def test_caption_sends_a_downscaled_image_and_returns_the_text() -> None:
     fake = FakeOllama([json.dumps({"caption": "  A blue sky.  "})])
-    provider, log = _provider(fake)
+    provider, _ = _provider(fake)
     assert provider.caption(_synthetic_jpeg(), "fr") == "A blue sky."
     (body,) = fake.chat_bodies()
     assert body["model"] == "vision:4b"
