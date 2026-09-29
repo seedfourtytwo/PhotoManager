@@ -72,8 +72,15 @@ function withQuery(path: string, params: URLSearchParams): string {
 async function readDetail(response: Response): Promise<string> {
 	try {
 		const body: unknown = await response.json();
-		if (body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string')
-			return body.detail;
+		const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
+		if (typeof detail === 'string') return detail;
+		// FastAPI validation errors: detail is a list of {loc, msg}.
+		if (Array.isArray(detail)) {
+			const messages = detail
+				.map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
+				.filter(Boolean);
+			if (messages.length) return messages.join(' ');
+		}
 	} catch {
 		// Not JSON (a proxy error page, say): fall through to a generic sentence.
 	}

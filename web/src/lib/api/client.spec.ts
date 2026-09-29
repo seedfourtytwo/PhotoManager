@@ -84,6 +84,20 @@ describe('createApi', () => {
 		expect(error.message).toBe('The library server answered 502.');
 	});
 
+	it('joins validation messages from a 422 list', async () => {
+		const { fetcher } = fakeServer([
+			json(
+				{
+					detail: [{ loc: ['body', 'password'], msg: 'String should have at least 10 characters' }]
+				},
+				422
+			)
+		]);
+		await expect(createApi({ fetch: fetcher }).me()).rejects.toThrow(
+			'String should have at least 10 characters'
+		);
+	});
+
 	it('calls onUnauthorized on 401, except for the login attempt itself', async () => {
 		let lost = 0;
 		const { fetcher } = fakeServer([
