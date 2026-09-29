@@ -1,0 +1,52 @@
+/* Design tokens — see docs/DESIGN_PRINCIPLES.md §2. Dark is the default for viewing photos. */
+:root {
+	--bg: #111111;
+	--ink: #ededed;
+	--ink-2: #9a9a9a;
+	--hairline: #262626;
+	--accent: #e0674f; /* selection and focus only */
+	--gutter: 3px;
+	--font-ui: 'Inter', system-ui, sans-serif;
+	--font-text: 'Source Serif 4', Georgia, serif;
+	color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+	:root:not([data-theme='dark']) {
+		--bg: #fafaf8;
+		--ink: #1a1a1a;
+		--ink-2: #6b6b6b;
+		--hairline: #e4e2dd;
+		--accent: #b3261e;
+		color-scheme: light;
+	}
+}
+
+:root[data-theme='light'] {
+	--bg: #fafaf8;
+	--ink: #1a1a1a;
+	--ink-2: #6b6b6b;
+	--hairline: #e4e2dd;
+	--accent: #b3261e;
+	color-scheme: light;
+}
+
+html,
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--ink);
+	font-family: var(--font-ui);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		transition: none !important;
+		animation: none !important;
+	}
+}

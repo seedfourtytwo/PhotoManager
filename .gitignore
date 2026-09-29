@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+
+# Node / web
+node_modules/
+web/build/
+web/.svelte-kit/
+
+# Local config and data — the library NEVER lives in the repo
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Editors / OS
+.DS_Store
+.idea/
+*.whl
+*.tar.gz
