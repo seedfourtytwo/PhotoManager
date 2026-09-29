@@ -23,6 +23,9 @@ Answered decisions move into `TECH_DECISIONS.md` with a date.
 - **Faces:** InsightFace (more accurate; private use only).
 - **Partner's phone:** iPhone.
 - **Money:** no paid tools or services.
+- **Where code lives:** GitHub `seedfourtytwo/PhotoManager`; development happens in Claude's
+  cloud workspace against that repo.
+- **Privacy:** real photos never go to the cloud or GitHub; real-data checks run on the laptop.
 
 ## Still open (none block M0/M1)
 
