@@ -2,18 +2,12 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import JustifiedGrid from './JustifiedGrid.svelte';
+import { makeAsset } from '$lib/testing/fixtures';
 
-const item = (id: number, width: number, height: number) => ({
-	id,
-	taken_at: '2019-07-04T18:30:00',
-	tz_offset_minutes: null,
-	date_source: 'exif' as const,
-	width,
-	height,
-	kind: 'photo',
-	thumb: { url: `data:image/gif;base64,R0lGODlhAQABAAAAACw=` },
-	preview_ready: false
-});
+const item = (id: number, width: number, height: number) =>
+	makeAsset(id, '2019-07-04T18:30:00', width, height, {
+		thumb: { url: `data:image/gif;base64,R0lGODlhAQABAAAAACw=` }
+	});
 
 describe('JustifiedGrid', () => {
 	it('gives every photo a tile that grows with its aspect ratio', async () => {

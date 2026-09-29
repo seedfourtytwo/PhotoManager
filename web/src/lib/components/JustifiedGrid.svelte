@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { AssetSummary } from '$lib/api';
+	import type { AssetOut as AssetSummary } from '$lib/api';
 	import { aspect } from '$lib/timeline';
 
 	let { items, rowHeight = 180 }: { items: AssetSummary[]; rowHeight?: number } = $props();

@@ -1,18 +1,22 @@
-import type { AssetSummary } from './api';
+import type { AssetOut } from './api/types';
 
-export type MonthGroup = { key: string; label: string; items: AssetSummary[] };
+export type MonthGroup = { key: string; label: string; items: AssetOut[] };
 
 const MONTH = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
+export function monthLabel(key: string): string {
+	const [year, month] = key.split('-').map(Number);
+	return MONTH.format(Date.UTC(year, month - 1, 1));
+}
+
 /** Group assets (already newest first) into calendar months, keeping order. */
-export function groupByMonth(assets: AssetSummary[]): MonthGroup[] {
+export function groupByMonth(assets: AssetOut[]): MonthGroup[] {
 	const groups: MonthGroup[] = [];
 	for (const asset of assets) {
 		const key = asset.taken_at.slice(0, 7); // YYYY-MM of the local wall-clock time
 		let group = groups.at(-1);
 		if (!group || group.key !== key) {
-			const [year, month] = key.split('-').map(Number);
-			group = { key, label: MONTH.format(Date.UTC(year, month - 1, 1)), items: [] };
+			group = { key, label: monthLabel(key), items: [] };
 			groups.push(group);
 		}
 		group.items.push(asset);
@@ -21,7 +25,62 @@ export function groupByMonth(assets: AssetSummary[]): MonthGroup[] {
 }
 
 /** Width ÷ height, falling back to 3:2 when the size is unknown. Clamped so panoramas stay sane. */
-export function aspect(asset: Pick<AssetSummary, 'width' | 'height'>): number {
+export function aspect(asset: Pick<AssetOut, 'width' | 'height'>): number {
 	if (!asset.width || !asset.height) return 1.5;
 	return Math.min(Math.max(asset.width / asset.height, 0.4), 4);
+}
+
+export type Box = { x: number; y: number; w: number; h: number };
+export type Layout = { boxes: Box[]; height: number };
+
+/**
+ * Justified rows: every photo keeps its true aspect ratio (never cropped); full rows exactly
+ * fill `width`; row heights stay close to `target`. The last row keeps the target height
+ * instead of stretching. Greedy, O(n): a row closes when adding the next photo would take it
+ * further from the target height than stopping now.
+ */
+export function justify(aspects: number[], width: number, target: number, gap: number): Layout {
+	const boxes: Box[] = [];
+	if (width <= 0 || aspects.length === 0) return { boxes, height: 0 };
+	let y = 0;
+	let start = 0;
+	let sum = 0;
+
+	const place = (end: number, height: number) => {
+		let x = 0;
+		for (let i = start; i < end; i++) {
+			const w = aspects[i] * height;
+			boxes.push({ x, y, w, h: height });
+			x += w + gap;
+		}
+		y += height + gap;
+		start = end;
+		sum = 0;
+	};
+
+	for (let i = 0; i < aspects.length; i++) {
+		const n = i - start + 1;
+		const widthAtTarget = (sum + aspects[i]) * target + gap * (n - 1);
+		if (widthAtTarget < width) {
+			sum += aspects[i];
+			continue;
+		}
+		const withHeight = (width - gap * (n - 1)) / (sum + aspects[i]);
+		const withoutHeight = n > 1 ? (width - gap * (n - 2)) / sum : Infinity;
+		if (Math.abs(withHeight - target) <= Math.abs(withoutHeight - target)) {
+			place(i + 1, withHeight);
+		} else {
+			place(i, withoutHeight);
+			sum = aspects[i];
+			if (aspects[i] * target >= width) place(i + 1, width / aspects[i]);
+		}
+	}
+	if (start < aspects.length) place(aspects.length, target);
+	return { boxes, height: Math.max(0, y - gap) };
+}
+
+/** Target row height for a container width and a density setting (DESIGN_PRINCIPLES §3). */
+export function rowHeightFor(width: number, density: 'compact' | 'comfortable' | 'large'): number {
+	const base = width < 640 ? 110 : 220;
+	return Math.round(base * { compact: 0.75, comfortable: 1, large: 1.4 }[density]);
 }

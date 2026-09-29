@@ -1,24 +1,27 @@
 <script lang="ts">
 	import ApiStatus from '$lib/components/ApiStatus.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
-	import { fetchHealth, fetchStats, streamAssets, type AssetSummary } from '$lib/api';
+	import { createApi, type AssetOut as AssetSummary } from '$lib/api';
 	import { groupByMonth } from '$lib/timeline';
 
 	let assets: AssetSummary[] = $state([]);
 	let loading = $state(true);
 	let failed = $state(false);
 	const groups = $derived(groupByMonth(assets));
-	const stats = fetchStats();
+	const api = createApi();
+	const stats = api.stats();
 	const count = new Intl.NumberFormat('en-GB');
 
-	streamAssets((items) => (assets = [...assets, ...items]))
+	api
+		.assets({})
+		.then((page) => (assets = page.items))
 		.catch(() => (failed = true))
 		.finally(() => (loading = false));
 </script>
 
 <header>
 	<h1>Photo Assistant</h1>
-	<ApiStatus load={() => fetchHealth()} />
+	<ApiStatus load={() => api.health()} />
 </header>
 
 <main>
