@@ -1,5 +1,6 @@
 """Print layout rules (FEATURES §5.4, §6): trim sizes, templates, crop math, auto layout."""
 
+import itertools
 import math
 
 import pytest
@@ -99,7 +100,7 @@ def test_unknown_layout_is_a_typed_error() -> None:
 def test_slots_are_unit_fractions_that_do_not_overlap(layout_id: str) -> None:
     slots = LAYOUTS[layout_id].slots
     for s in slots:
-        assert 0 <= s.x and 0 <= s.y and s.right <= 1 + 1e-9 and s.bottom <= 1 + 1e-9
+        assert s.x >= 0 and s.y >= 0 and s.right <= 1 + 1e-9 and s.bottom <= 1 + 1e-9
     for i, a in enumerate(slots):
         for b in slots[i + 1 :]:
             assert not a.overlaps(b)
@@ -180,7 +181,7 @@ def test_cover_crop_keeps_frame_aspect_and_stays_inside(
     image: float, frame: float, fx: float, fy: float
 ) -> None:
     crop = cover_crop(image, frame, focal=(fx, fy))
-    assert 0 <= crop.x and 0 <= crop.y
+    assert crop.x >= 0 and crop.y >= 0
     assert crop.right <= 1 + 1e-9 and crop.bottom <= 1 + 1e-9
     assert max(crop.w, crop.h) == pytest.approx(1)
     assert (crop.w * image) / crop.h == pytest.approx(frame, rel=1e-6)
@@ -257,7 +258,7 @@ def test_a_long_run_of_similar_photos_varies_the_rhythm() -> None:
     pages = auto_layout([LANDSCAPE] * 24, geometry("a4-landscape"))
     ids = [p.layout_id for p in pages]
     assert len(set(ids)) >= 2
-    assert all(a != b for a, b in zip(ids, ids[1:], strict=False))
+    assert all(a != b for a, b in itertools.pairwise(ids))
 
 
 def test_auto_layout_keeps_crops_small_for_ordinary_photos() -> None:
