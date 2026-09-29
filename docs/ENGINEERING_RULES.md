@@ -12,6 +12,9 @@ blocks you, raise it in the PR; don't quietly break it.
    commit (or the test is clearly written against the spec, not the implementation).
 3. **Main is always releasable.** CI green, app starts, migrations apply.
 4. **No secrets in the repo.** gitleaks runs in pre-commit and CI.
+5. **Real photos stay home.** They never go to a cloud workspace, GitHub or any other service;
+   development and CI use synthetic fixtures only. Real-data dry runs (QA step 2) run on the
+   laptop itself and report only counts, timings and reasons.
 
 ## 2. TDD in practice
 
@@ -80,7 +83,7 @@ Never commit real family photos.
 A deliberate pass, not "CI is green":
 
 1. **Clean-machine run:** fresh clone → `just setup` → `just dev` on the laptop. Note every friction.
-2. **Real-data dry run:** import a copy of ~1,000 real photos from the laptop test set. Compare
+2. **Real-data dry run (on the laptop, never uploaded):** import ~1,000 real photos there. Compare
    counts: files seen = imported + duplicates + skipped + failed. Explain every failure.
 3. **Exploratory testing** (45 min, timeboxed) against the milestone's charter; log bugs as issues.
 4. **Phone check:** open over LAN on the iPhone; install PWA; scroll, loupe, filter, album.

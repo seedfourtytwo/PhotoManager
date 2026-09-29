@@ -25,6 +25,10 @@ the issue you are working on, and the relevant section of `docs/ARCHITECTURE.md`
   (`ingest`, `ui`, `print`, `ai`); if you must touch another area, say so in the PR.
 - `domain/` stays pure: no I/O, no framework imports.
 - Real family photos never enter the repo, logs, screenshots or test fixtures.
+- **Real photos never leave C's machines** (laptop, home server): don't copy, stage or upload
+  them to a cloud workspace, GitHub, or any other service. Tests use the synthetic fixtures.
+  Real-data checks run *on the laptop* against its own folders, and only aggregate results
+  (counts, timings, error reasons) come back.
 
 ## Commands
 
