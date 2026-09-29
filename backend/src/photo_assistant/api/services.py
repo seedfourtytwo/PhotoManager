@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from photo_assistant.adapters.exiftool_reader import ExifToolReader
+from photo_assistant.adapters.exiftool_reader import ExifToolReader, ExifToolStripper
 from photo_assistant.adapters.filesystem import (
     Blake3Hasher,
     DiskLibraryStore,
@@ -15,6 +15,8 @@ from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.api.settings import Settings
 from photo_assistant.app.accounts import Accounts
 from photo_assistant.app.derivatives import GeneratePreview
+from photo_assistant.app.downloads import Downloads
+from photo_assistant.app.editing import Editor
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.worker import Worker
 
@@ -30,6 +32,9 @@ class Services:
     worker: Worker
     exiftool: ExifToolReader
     accounts: Accounts
+    editor: Editor
+    clock: SystemClock
+    downloads: Downloads
 
     def close(self) -> None:
         self.worker.stop()
@@ -69,4 +74,14 @@ def build_services(settings: Settings) -> Services:
     )
     hasher = Argon2Hasher(settings.argon2_time_cost, settings.argon2_memory_kib)
     accounts = Accounts(repo, hasher, clock)
-    return Services(settings, repo, store, importer, worker, exiftool, accounts)
+    editor = Editor(
+        repo,
+        store,
+        renderer,
+        thumb_edge=settings.thumb_edge,
+        preview_edge=settings.preview_edge,
+    )
+    downloads = Downloads(store, renderer, ExifToolStripper(), root / "tmp")
+    return Services(
+        settings, repo, store, importer, worker, exiftool, accounts, editor, clock, downloads
+    )

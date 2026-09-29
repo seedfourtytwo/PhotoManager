@@ -1,5 +1,5 @@
--- 0005: who may see what. A source has an owner and an access list; an asset belongs to the
--- owner of the source it was first imported from and may be marked private by that owner.
+-- 0005: who may see what. A source has an owner and an access list; an asset may be marked
+-- private by its owner.
 
 ALTER TABLE source ADD COLUMN owner_id INTEGER REFERENCES user(id);
 
@@ -14,6 +14,9 @@ CREATE INDEX source_access_by_user ON source_access (user_id);
 -- Sources from M1 keep working for everyone, like new ones (contract default: download).
 INSERT INTO source_access (source_id, user_id, level) SELECT id, NULL, 2 FROM source;
 
-ALTER TABLE asset ADD COLUMN owner_id INTEGER REFERENCES user(id);
+-- The owner of an asset is the owner of the source it was first imported from.
+ALTER TABLE asset ADD COLUMN first_source_id INTEGER REFERENCES source(id);
 ALTER TABLE asset ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
-CREATE INDEX asset_by_owner ON asset (owner_id);
+UPDATE asset SET first_source_id = (
+    SELECT x.source_id FROM asset_source x WHERE x.asset_id = asset.id ORDER BY x.rowid LIMIT 1
+);

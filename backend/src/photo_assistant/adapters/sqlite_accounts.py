@@ -80,9 +80,7 @@ class AccountsMixin(SqliteBase):
         return self._scalar("SELECT COUNT(*) FROM user WHERE role = 'admin' AND disabled = 0")
 
     def claim_ownerless(self, user_id: int) -> None:
-        with self._transaction():
-            self._conn.execute("UPDATE source SET owner_id = ? WHERE owner_id IS NULL", (user_id,))
-            self._conn.execute("UPDATE asset SET owner_id = ? WHERE owner_id IS NULL", (user_id,))
+        self._write("UPDATE source SET owner_id = ? WHERE owner_id IS NULL", (user_id,))
 
     # --- sessions --------------------------------------------------------------------------
 

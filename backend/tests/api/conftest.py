@@ -72,3 +72,24 @@ def admin(anon: TestClient) -> TestClient:
     )
     assert response.status_code == 201, response.text
     return anon
+
+
+def import_folder(admin: TestClient, folder: Path, label: str) -> int:
+    """Register a folder as a source (as the admin), scan it and run every follow-up job."""
+    created = admin.post("/api/sources", json={"label": label, "path": str(folder)})
+    assert created.status_code == 201, created.text
+    source_id: int = created.json()["id"]
+    assert admin.post(f"/api/sources/{source_id}/scan").status_code == 202
+    services_of(admin).worker.run_until_idle()
+    return source_id
+
+
+def asset_id_of(client: TestClient, source_id: int, relative_path: str) -> int:
+    found = services_of(client).repo.asset_id_for_source_path(source_id, relative_path)
+    assert found is not None, relative_path
+    return found
+
+
+def user_id_of(admin: TestClient, username: str) -> int:
+    users = admin.get("/api/users").json()
+    return next(u["id"] for u in users if u["username"] == username)

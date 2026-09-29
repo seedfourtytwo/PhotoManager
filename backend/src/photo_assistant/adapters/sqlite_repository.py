@@ -5,17 +5,23 @@ last one applied. Before migrating an existing database, a consistent snapshot i
 SQLite's online backup API (FEATURES 11.6).
 """
 
-import base64
 import json
 import sqlite3
 from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 
+from photo_assistant.adapters.sqlite_access import AccessMixin
 from photo_assistant.adapters.sqlite_accounts import AccountsMixin
-from photo_assistant.adapters.sqlite_base import SqliteBase
-from photo_assistant.domain.capture_time import DateSource
-from photo_assistant.domain.media_types import MediaKind
+from photo_assistant.adapters.sqlite_albums import AlbumsMixin
+from photo_assistant.adapters.sqlite_base import (
+    SqliteBase,
+    asset_from_row,
+    decode_cursor,
+    encode_cursor,
+)
+from photo_assistant.adapters.sqlite_edits import EditsMixin
+from photo_assistant.adapters.sqlite_library import LibraryMixin
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -71,19 +77,9 @@ def _iso(value: datetime) -> str:
     return value.isoformat()
 
 
-def _encode_cursor(taken_at: str, asset_id: int) -> str:
-    return base64.urlsafe_b64encode(json.dumps([taken_at, asset_id]).encode()).decode()
-
-
-def _decode_cursor(cursor: str) -> tuple[str, int]:
-    try:
-        taken_at, asset_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-        return str(taken_at), int(asset_id)
-    except (ValueError, TypeError) as exc:
-        raise ValueError(f"invalid cursor: {cursor!r}") from exc
-
-
-class SqliteRepository(AccountsMixin, SqliteBase):
+class SqliteRepository(
+    AccountsMixin, AccessMixin, LibraryMixin, AlbumsMixin, EditsMixin, SqliteBase
+):
     """Thread-safe enough for one API process plus a worker thread (one lock, WAL mode)."""
 
     # --- sources ---------------------------------------------------------------------------
@@ -99,9 +95,15 @@ class SqliteRepository(AccountsMixin, SqliteBase):
             row["owner_id"],
         )
 
-    def add_source(self, label: str, root: str) -> Source:
+    def add_source(self, label: str, root: str, owner_id: int | None = None) -> Source:
+        """New sources are open to everyone at download level (contract default)."""
         try:
-            source_id = self._write("INSERT INTO source (label, root) VALUES (?, ?)", (label, root))
+            with self._transaction():
+                source_id = self._write(
+                    "INSERT INTO source (label, root, owner_id) VALUES (?, ?, ?)",
+                    (label, root, owner_id),
+                )
+                self.grant_default_access(source_id)
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"folder is already a source: {root}") from exc
         source = self.get_source(source_id)
@@ -124,30 +126,7 @@ class SqliteRepository(AccountsMixin, SqliteBase):
 
     # --- assets ----------------------------------------------------------------------------
 
-    @staticmethod
-    def _asset(row: sqlite3.Row) -> Asset:
-        return Asset(
-            content_hash=row["content_hash"],
-            kind=MediaKind(row["kind"]),
-            mime_type=row["mime_type"],
-            byte_size=row["byte_size"],
-            width=row["width"],
-            height=row["height"],
-            taken_at=datetime.fromisoformat(row["taken_at"]),
-            tz_offset_minutes=row["tz_offset_min"],
-            date_source=DateSource(row["date_source"]),
-            latitude=row["latitude"],
-            longitude=row["longitude"],
-            camera_make=row["camera_make"],
-            camera_model=row["camera_model"],
-            orientation=row["orientation"],
-            library_path=row["library_path"],
-            id=row["id"],
-            imported_at=datetime.fromisoformat(row["imported_at"]),
-            thumb_path=row["thumb_path"],
-            preview_path=row["preview_path"],
-            variant_of=row["variant_of"],
-        )
+    _asset = staticmethod(asset_from_row)
 
     def find_asset_id_by_hash(self, content_hash: str) -> int | None:
         row = self._one("SELECT id FROM asset WHERE content_hash = ?", (content_hash,))
@@ -221,7 +200,7 @@ class SqliteRepository(AccountsMixin, SqliteBase):
                 "SELECT * FROM asset ORDER BY taken_at DESC, id DESC LIMIT ?", (limit + 1,)
             )
         else:
-            taken_at, asset_id = _decode_cursor(cursor)
+            taken_at, asset_id = decode_cursor(cursor)
             rows = self._all(
                 """SELECT * FROM asset WHERE (taken_at, id) < (?, ?)
                    ORDER BY taken_at DESC, id DESC LIMIT ?""",
@@ -231,7 +210,7 @@ class SqliteRepository(AccountsMixin, SqliteBase):
         next_cursor = None
         if len(rows) > limit:
             last = rows[limit - 1]
-            next_cursor = _encode_cursor(last["taken_at"], last["id"])
+            next_cursor = encode_cursor(last["taken_at"], last["id"])
         return Page(items, next_cursor)
 
     def count_assets(self) -> int:
@@ -273,6 +252,10 @@ class SqliteRepository(AccountsMixin, SqliteBase):
                    byte_size = excluded.byte_size, mtime_ns = excluded.mtime_ns,
                    ctime_ns = excluded.ctime_ns""",
             (asset_id, source_id, relative_path, size, mtime, ctime),
+        )
+        self._write(
+            "UPDATE asset SET first_source_id = ? WHERE id = ? AND first_source_id IS NULL",
+            (source_id, asset_id),
         )
 
     def fingerprint_of(

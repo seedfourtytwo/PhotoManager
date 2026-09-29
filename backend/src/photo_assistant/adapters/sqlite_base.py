@@ -4,12 +4,56 @@ The repository is split by area into mixins (accounts, library queries, albums, 
 inherit this base, so they share the connection and the lock and compose into one object.
 """
 
+import base64
+import json
 import sqlite3
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from datetime import datetime
+
+from photo_assistant.domain.capture_time import DateSource
+from photo_assistant.domain.media_types import MediaKind
+from photo_assistant.domain.model import Asset
 
 Params = Sequence[object] | Mapping[str, object]
+
+
+def asset_from_row(row: sqlite3.Row) -> Asset:
+    return Asset(
+        content_hash=row["content_hash"],
+        kind=MediaKind(row["kind"]),
+        mime_type=row["mime_type"],
+        byte_size=row["byte_size"],
+        width=row["width"],
+        height=row["height"],
+        taken_at=datetime.fromisoformat(row["taken_at"]),
+        tz_offset_minutes=row["tz_offset_min"],
+        date_source=DateSource(row["date_source"]),
+        latitude=row["latitude"],
+        longitude=row["longitude"],
+        camera_make=row["camera_make"],
+        camera_model=row["camera_model"],
+        orientation=row["orientation"],
+        library_path=row["library_path"],
+        id=row["id"],
+        imported_at=datetime.fromisoformat(row["imported_at"]),
+        thumb_path=row["thumb_path"],
+        preview_path=row["preview_path"],
+        variant_of=row["variant_of"],
+    )
+
+
+def encode_cursor(taken_at: str, asset_id: int) -> str:
+    return base64.urlsafe_b64encode(json.dumps([taken_at, asset_id]).encode()).decode()
+
+
+def decode_cursor(cursor: str) -> tuple[str, int]:
+    try:
+        taken_at, asset_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return str(taken_at), int(asset_id)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"invalid cursor: {cursor!r}") from exc
 
 
 class SqliteBase:

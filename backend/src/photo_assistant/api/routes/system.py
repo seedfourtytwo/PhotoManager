@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 
 from photo_assistant import __version__
-from photo_assistant.api.deps import ADMIN_ONLY, LOGGED_IN, ServicesDep
+from photo_assistant.api.deps import ADMIN_ONLY, LOGGED_IN, ServicesDep, ViewerDep
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -14,10 +14,10 @@ def health() -> dict[str, str]:
 
 
 @router.get("/stats", dependencies=LOGGED_IN)
-def stats(services: ServicesDep) -> dict[str, object]:
+def stats(services: ServicesDep, viewer: ViewerDep) -> dict[str, object]:
     return {
-        "assets": services.repo.count_assets(),
-        "sources": len(services.repo.list_sources()),
+        "assets": services.repo.count_visible(viewer),
+        "sources": len(services.repo.sources_for(viewer)),
         "jobs": services.repo.job_counts(),
         "free_bytes": services.store.free_bytes(),
     }

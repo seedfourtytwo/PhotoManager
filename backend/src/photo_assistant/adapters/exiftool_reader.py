@@ -1,6 +1,7 @@
 """MetadataReader backed by one long-running ExifTool process (-stay_open)."""
 
 import re
+import subprocess
 import threading
 from collections.abc import Sequence
 from pathlib import Path
@@ -151,3 +152,40 @@ class ExifToolReader:
         with self._lock:
             if self._helper.running:
                 self._helper.terminate()
+
+
+# Location tags in EXIF, XMP and IPTC. Wildcards are ExifTool's own.
+_LOCATION_TAGS = [
+    "-gps:all=",
+    "-xmp-exif:gps*=",
+    "-xmp-iptcExt:Location*=",
+    "-xmp-photoshop:City=",
+    "-xmp-photoshop:State=",
+    "-xmp-photoshop:Country=",
+    "-iptc:City=",
+    "-iptc:Province-State=",
+    "-iptc:Country-PrimaryLocationName=",
+    "-iptc:Sub-location=",
+]
+# Everything, but keep what changes how the photo looks (colour profile, orientation).
+_ALL_TAGS = ["-all=", "-tagsfromfile", "@", "-icc_profile", "-orientation"]
+
+
+class ExifToolStripper:
+    """MetadataStripper: rewrites a *temporary copy* in place (never a library original)."""
+
+    def __init__(self, executable: str = "exiftool") -> None:
+        self._executable = executable
+
+    def strip(self, path: Path, *, location_only: bool) -> None:
+        if not path.is_absolute() or _UNSAFE_NAME.search(str(path)):
+            raise ValueError(f"refusing to run exiftool on {path!r}")
+        tags = _LOCATION_TAGS if location_only else _ALL_TAGS
+        result = subprocess.run(
+            [self._executable, "-q", "-q", "-overwrite_original", *tags, str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"exiftool could not strip metadata: {result.stderr.strip()}")

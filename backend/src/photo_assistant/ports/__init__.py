@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -53,9 +54,31 @@ class RenderedImage:
     height: int
 
 
+@dataclass(frozen=True, slots=True)
+class RenderSpec:
+    """How to render a photo: its edit recipe, size, format and metadata."""
+
+    recipe: Recipe | None = None
+    max_edge: int | None = None  # fit the long edge; never upscale
+    format: str = "webp"  # webp | jpeg | png
+    quality: int = 80
+    keep_metadata: bool = False  # EXIF/XMP carried over (orientation reset); else stripped
+
+
 class ImageRenderer(Protocol):
     def render(self, source: Path, destination: Path, max_edge: int) -> tuple[int, int]:
         """Write an orientation-corrected WebP fitting a square box. Returns its size."""
+        ...
+
+    def render_variant(self, source: Path, destination: Path, spec: RenderSpec) -> tuple[int, int]:
+        """Orientation-corrected, recipe applied, resized, encoded as asked. Returns its size."""
+        ...
+
+
+class MetadataStripper(Protocol):
+    def strip(self, path: Path, *, location_only: bool) -> None:
+        """Remove location (GPS) tags, or all metadata, from a file *in place*. Only ever
+        called on temporary copies, never on library originals or source files."""
         ...
 
 
@@ -124,7 +147,7 @@ class Job:
 
 class Repository(Protocol):
     # sources
-    def add_source(self, label: str, root: str) -> Source: ...
+    def add_source(self, label: str, root: str, owner_id: int | None = None) -> Source: ...
     def get_source(self, source_id: int) -> Source | None: ...
     def list_sources(self) -> list[Source]: ...
     def set_source_enabled(self, source_id: int, enabled: bool) -> None: ...

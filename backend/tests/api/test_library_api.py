@@ -87,7 +87,7 @@ def test_timeline_pages_through_everything_newest_first(
     assert dates == sorted(dates, reverse=True)
     first = seen[0]
     assert set(first) >= {"id", "taken_at", "date_source", "width", "height", "thumb"}
-    assert first["thumb"]["url"].endswith("/thumb")
+    assert first["thumb"]["url"] == f"/api/assets/{first['id']}/thumb?v=0"
     assert client.get("/api/assets", params={"cursor": "junk"}).status_code == 400
 
 
