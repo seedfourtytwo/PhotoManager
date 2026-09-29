@@ -5,6 +5,7 @@ folder must leave it byte-identical. Import tests (M1) take this fixture.
 """
 
 import hashlib
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,11 +26,7 @@ def snapshot_tree(root: Path) -> dict[str, tuple[str, int]]:
 def source_guard(tmp_path: Path) -> Iterator[Path]:
     """A source folder that must be unchanged when the test finishes."""
     source = tmp_path / "source"
-    source.mkdir()
-    fixtures = Path(__file__).parent / "fixtures" / "photos"
-    for item in fixtures.glob("*"):
-        if item.is_file():
-            (source / item.name).write_bytes(item.read_bytes())
+    shutil.copytree(Path(__file__).parent / "fixtures" / "photos", source)
     before = snapshot_tree(source)
     yield source
     after = snapshot_tree(source)

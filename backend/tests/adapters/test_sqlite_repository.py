@@ -1,0 +1,189 @@
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
+from photo_assistant.ports import RenderedImage
+from tests.factories import NOW, new_asset
+
+
+@pytest.fixture
+def repo() -> SqliteRepository:
+    return SqliteRepository(open_database(":memory:"))
+
+
+# --- migrations ----------------------------------------------------------------------------
+
+
+def test_fresh_database_is_migrated_to_latest(tmp_path: Path) -> None:
+    conn = open_database(tmp_path / "library.db", backup_dir=tmp_path / "backups")
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    assert version >= 1
+    assert not (tmp_path / "backups").exists(), "a brand-new database needs no snapshot"
+
+
+def test_existing_database_is_snapshotted_before_migrating(tmp_path: Path) -> None:
+    db = tmp_path / "library.db"
+    sqlite3.connect(db).execute("CREATE TABLE legacy (x)").connection.commit()
+    open_database(db, backup_dir=tmp_path / "backups")
+    snapshots = list((tmp_path / "backups").glob("library-v0-*.db"))
+    assert len(snapshots) == 1
+    tables = sqlite3.connect(snapshots[0]).execute("SELECT name FROM sqlite_master").fetchall()
+    assert ("legacy",) in tables
+
+
+def test_reopening_a_current_database_changes_nothing(tmp_path: Path) -> None:
+    db = tmp_path / "library.db"
+    open_database(db, backup_dir=tmp_path / "backups").close()
+    open_database(db, backup_dir=tmp_path / "backups").close()
+    assert not (tmp_path / "backups").exists()
+
+
+# --- sources -------------------------------------------------------------------------------
+
+
+def test_sources_round_trip(repo: SqliteRepository) -> None:
+    a = repo.add_source("Laptop Pictures", "/home/c/Pictures")
+    b = repo.add_source("Old HDD", "/media/old")
+    assert [s.label for s in repo.list_sources()] == ["Laptop Pictures", "Old HDD"]
+    repo.set_source_enabled(b.id, False)
+    got = repo.get_source(b.id)
+    assert got is not None and not got.enabled
+    assert repo.get_source(a.id) == a
+    assert repo.get_source(999) is None
+
+
+def test_the_same_folder_cannot_be_added_twice(repo: SqliteRepository) -> None:
+    repo.add_source("one", "/x")
+    with pytest.raises(ValueError, match="already"):
+        repo.add_source("two", "/x")
+
+
+# --- assets --------------------------------------------------------------------------------
+
+
+def test_asset_round_trip_keeps_every_field(repo: SqliteRepository) -> None:
+    new = new_asset(7, latitude=48.85, longitude=2.35, tz_offset_minutes=120)
+    asset_id = repo.add_asset(new, imported_at=NOW)
+    got = repo.get_asset(asset_id)
+    assert got is not None
+    for field in new.__slots__:  # type: ignore[attr-defined]
+        assert getattr(got, field) == getattr(new, field), field
+    assert repo.find_asset_id_by_hash(new.content_hash) == asset_id
+    assert repo.find_asset_id_by_hash("f" * 64) is None
+    assert repo.count_assets() == 1
+
+
+def test_timeline_is_newest_first_with_stable_cursor_paging(repo: SqliteRepository) -> None:
+    base = datetime(2020, 1, 1)
+    for n in range(1, 8):
+        repo.add_asset(new_asset(n, taken_at=base + timedelta(days=n % 4)), imported_at=NOW)
+    seen: list[int] = []
+    cursor = None
+    while True:
+        page = repo.list_assets(limit=3, cursor=cursor)
+        seen += [a.id for a in page.items]
+        if page.next_cursor is None:
+            break
+        cursor = page.next_cursor
+    assert len(seen) == len(set(seen)) == 7
+    everything = repo.list_assets(limit=100).items
+    keys = [(a.taken_at, a.id) for a in everything]
+    assert keys == sorted(keys, reverse=True)
+    assert seen == [a.id for a in everything]
+
+
+def test_bad_cursor_is_rejected(repo: SqliteRepository) -> None:
+    with pytest.raises(ValueError, match="cursor"):
+        repo.list_assets(limit=3, cursor="not-a-cursor")
+
+
+def test_derivatives_and_variants_are_recorded(repo: SqliteRepository) -> None:
+    original = repo.add_asset(new_asset(1), imported_at=NOW)
+    edit = repo.add_asset(new_asset(2), imported_at=NOW)
+    repo.set_thumbnail(original, RenderedImage("derived/thumb/aa/x.webp", 640, 480))
+    repo.set_preview(original, RenderedImage("derived/preview/aa/x.webp", 2048, 1536))
+    repo.set_variant_of(edit, original)
+    got = repo.get_asset(original)
+    assert got is not None and got.thumb_path == "derived/thumb/aa/x.webp"
+    assert got.preview_path == "derived/preview/aa/x.webp"
+    edited = repo.get_asset(edit)
+    assert edited is not None and edited.variant_of == original
+
+
+def test_asset_sources_track_every_origin(repo: SqliteRepository) -> None:
+    s1 = repo.add_source("a", "/a")
+    s2 = repo.add_source("b", "/b")
+    asset_id = repo.add_asset(new_asset(1), imported_at=NOW)
+    repo.add_asset_source(asset_id, s1.id, "x.jpg")
+    repo.add_asset_source(asset_id, s2.id, "copy/x.jpg")
+    repo.add_asset_source(asset_id, s2.id, "copy/x.jpg")  # idempotent
+    assert repo.has_asset_source(s1.id, "x.jpg")
+    assert not repo.has_asset_source(s1.id, "y.jpg")
+    assert repo.asset_id_for_source_path(s2.id, "copy/x.jpg") == asset_id
+    assert repo.asset_id_for_source_path(s2.id, "nope.jpg") is None
+    assert repo.origins_of(asset_id) == [(s1, "x.jpg"), (s2, "copy/x.jpg")]
+
+
+# --- import runs ---------------------------------------------------------------------------
+
+
+def test_import_report_round_trip(repo: SqliteRepository) -> None:
+    source = repo.add_source("a", "/a")
+    report = ImportReport(source_id=source.id, status=RunStatus.DONE, ignored=2)
+    report.add(ItemResult("a.jpg", Outcome.IMPORTED, asset_id=1))
+    report.add(ItemResult("France.pdf", Outcome.SKIPPED, "not a photo (pdf)"))
+    run_id = repo.save_import_report(report, NOW, NOW + timedelta(seconds=5))
+    got = repo.get_import_report(run_id)
+    assert got is not None
+    assert got.items == report.items
+    assert got.ignored == 2 and got.status is RunStatus.DONE
+    runs = repo.list_import_runs(source.id)
+    assert runs[0]["id"] == run_id
+    assert runs[0]["summary"] == report.summary()
+    assert repo.get_import_report(999) is None
+
+
+# --- job queue -----------------------------------------------------------------------------
+
+
+def test_jobs_are_claimed_in_order_once(repo: SqliteRepository) -> None:
+    first = repo.enqueue("derive", {"asset_id": 1})
+    second = repo.enqueue("derive", {"asset_id": 2})
+    job = repo.claim_next_job(NOW)
+    assert job is not None and job.id == first and job.payload == {"asset_id": 1}
+    assert job.attempts == 1
+    job2 = repo.claim_next_job(NOW)
+    assert job2 is not None and job2.id == second
+    assert repo.claim_next_job(NOW) is None
+    repo.complete_job(first)
+    assert [j["id"] for j in repo.list_jobs("done")] == [first]
+    assert repo.job_counts() == {"queued": 0, "running": 1, "done": 1, "failed": 0}
+
+
+def test_failed_job_can_retry_then_gives_up(repo: SqliteRepository) -> None:
+    job_id = repo.enqueue("derive", {"asset_id": 1})
+    claimed = repo.claim_next_job(NOW)
+    assert claimed is not None
+    repo.fail_job(job_id, "boom", retry=True)
+    again = repo.claim_next_job(NOW)
+    assert again is not None and again.attempts == 2
+    repo.fail_job(job_id, "boom again", retry=False)
+    failed = repo.list_jobs("failed")
+    assert failed[0]["error"] == "boom again"
+    assert repo.retry_job(job_id) is True
+    assert repo.list_jobs("queued")[0]["id"] == job_id
+    assert repo.retry_job(12345) is False
+
+
+def test_jobs_left_running_by_a_crash_are_requeued_on_open(tmp_path: Path) -> None:
+    db = tmp_path / "library.db"
+    repo = SqliteRepository(open_database(db))
+    repo.enqueue("derive", {"asset_id": 1})
+    assert repo.claim_next_job(NOW) is not None  # now "running"; process "crashes" here
+    reopened = SqliteRepository(open_database(db))
+    reopened.recover_interrupted_jobs()
+    assert reopened.claim_next_job(NOW) is not None
