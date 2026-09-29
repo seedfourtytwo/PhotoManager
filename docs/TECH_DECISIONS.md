@@ -106,6 +106,9 @@ Pin a reproducible `timestamp` so the same album produces a byte-identical PDF â
 LaTeX (heavy toolchain).
 **Open:** CMYK/PDF-X for professional print labs â€” Typst targets PDF/A and PDF/UA today; most
 consumer photo-book services accept sRGB PDFs. Confirm with the lab we pick (OPEN_QUESTIONS).
+**Fonts:** only the families compiled into Typst (Libertinus Serif, New Computer Modern,
+DejaVu Sans Mono), system fonts ignored: no downloads, identical output on laptop and server.
+Wiring: `docs/wiring/print.md`.
 
 ## Download, convert and edit
 
