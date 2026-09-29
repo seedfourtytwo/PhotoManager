@@ -82,9 +82,7 @@ def test_frames_and_crops_agree() -> None:
 
 def test_focal_point_steers_the_crop() -> None:
     pages = (Page("four-grid", (0, 1, 2, 3)),)
-    wide = [
-        PrintPhoto(Path(f"/p/{i}.jpg"), 6000, 2000, focal=(0.0, 0.5)) for i in range(4)
-    ]
+    wide = [PrintPhoto(Path(f"/p/{i}.jpg"), 6000, 2000, focal=(0.0, 0.5)) for i in range(4)]
     job = plan_print(wide, PrintOptions(title="T", pages=pages, allow_low_resolution=True)).job
     assert all(s.crop.x == 0 for s in job.pages[0].slots)
 
@@ -147,7 +145,7 @@ def test_resolution_issues_name_the_photo_and_level() -> None:
 def test_soft_photos_warn_but_still_print() -> None:
     pages = (Page("single", (0,)),)
     renderer = FakeRenderer()
-    result = print_album([photo(0, 1800, 1350)], PrintOptions(title="T", pages=pages), renderer)
+    result = print_album([photo(0, 1500, 1125)], PrintOptions(title="T", pages=pages), renderer)
     assert [i.level for i in result.issues] == [Resolution.WARN]
     assert result.pdf == b"%PDF-fake"
     assert result.page_count == 2
