@@ -81,3 +81,20 @@ def test_preview_for_a_missing_asset_is_an_error(repo: SqliteRepository, tmp_pat
     job = GeneratePreview(repo, DiskLibraryStore(tmp_path), VipsRenderer())
     with pytest.raises(LookupError, match="no asset"):
         job({"asset_id": 42})
+
+
+def test_busy_library_requeues_without_using_up_attempts(repo: SqliteRepository) -> None:
+    from photo_assistant.ports import ImportBusyError
+
+    calls = []
+
+    def busy(payload: dict[str, object]) -> None:
+        calls.append(1)
+        if len(calls) < 5:
+            raise ImportBusyError("an import into this library is already running")
+
+    repo.enqueue("scan", {})
+    worker = Worker(repo, {"scan": busy}, FixedClock(), max_attempts=3)
+    for _ in range(5):
+        worker.run_once()
+    assert repo.list_jobs("done"), "succeeded on the 5th try although max_attempts is 3"

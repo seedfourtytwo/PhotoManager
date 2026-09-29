@@ -8,6 +8,7 @@ Guarantees (tested in tests/app/test_import_source.py):
 """
 
 import logging
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -68,6 +69,26 @@ class _Deferred:
     file: SourceFile
     content_hash: str
     first_path: str
+
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+NOT_UTF8_REASON = (
+    "file name is not valid UTF-8 (often from an old Windows or USB disk); rename the file"
+)
+CONTROL_REASON = "file name contains a line break or other control character; rename the file"
+
+
+def printable_name(name: str) -> str:
+    """A version of a file name that is always valid, printable text (for reports/DB)."""
+    return name.encode("utf-8", "surrogateescape").decode("utf-8", "backslashreplace")
+
+
+def _name_problem(name: str) -> str | None:
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return NOT_UTF8_REASON
+    return CONTROL_REASON if _CONTROL.search(name) else None
 
 
 def _first_line(exc: BaseException) -> str:
@@ -203,6 +224,9 @@ class ImportSource:
         path = PurePosixPath(f.relative_path)
         if kind is MediaKind.IGNORED:
             return "ignored"
+        problem = _name_problem(f.relative_path)
+        if problem is not None:
+            return ItemResult(printable_name(f.relative_path), Outcome.FAILED, problem)
         if kind is MediaKind.VIDEO:
             is_live = (str(path.parent), path.stem.lower()) in photo_stems
             reason = "Live Photo video half" if is_live else "video"
@@ -250,9 +274,13 @@ class ImportSource:
         if asset is None or asset.thumb_path is not None:
             return
         thumb_path = str(derived_relpath("thumb", asset.content_hash))
-        size = self._renderer.render(
-            f.absolute_path, self._store.absolute(thumb_path), self._settings.thumb_edge
-        )
+        try:
+            size = self._renderer.render(
+                f.absolute_path, self._store.absolute(thumb_path), self._settings.thumb_edge
+            )
+        except Exception:
+            log.warning("thumbnail repair failed", extra={"asset_id": asset_id}, exc_info=True)
+            return
         self._repo.set_thumbnail(asset_id, RenderedImage(thumb_path, *size))
         self._repo.enqueue(PREVIEW_JOB, {"asset_id": asset_id})
         log.info("repaired missing thumbnail", extra={"asset_id": asset_id})

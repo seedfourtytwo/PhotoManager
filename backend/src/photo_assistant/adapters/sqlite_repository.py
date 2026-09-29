@@ -275,27 +275,30 @@ class SqliteRepository:
     ) -> None:
         size = fingerprint.byte_size if fingerprint else None
         mtime = fingerprint.mtime_ns if fingerprint else None
+        ctime = fingerprint.ctime_ns if fingerprint else None
         self._write(
-            """INSERT INTO asset_source (asset_id, source_id, relative_path, byte_size, mtime_ns)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO asset_source
+                   (asset_id, source_id, relative_path, byte_size, mtime_ns, ctime_ns)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT (source_id, relative_path) DO UPDATE SET
                    asset_id = excluded.asset_id, seen_at = excluded.seen_at,
-                   byte_size = excluded.byte_size, mtime_ns = excluded.mtime_ns""",
-            (asset_id, source_id, relative_path, size, mtime),
+                   byte_size = excluded.byte_size, mtime_ns = excluded.mtime_ns,
+                   ctime_ns = excluded.ctime_ns""",
+            (asset_id, source_id, relative_path, size, mtime, ctime),
         )
 
     def fingerprint_of(
         self, source_id: int, relative_path: str
     ) -> tuple[int, Fingerprint | None] | None:
         row = self._one(
-            """SELECT asset_id, byte_size, mtime_ns FROM asset_source
+            """SELECT asset_id, byte_size, mtime_ns, ctime_ns FROM asset_source
                WHERE source_id = ? AND relative_path = ?""",
             (source_id, relative_path),
         )
         if row is None:
             return None
-        known = row["byte_size"] is not None and row["mtime_ns"] is not None
-        fingerprint = Fingerprint(row["byte_size"], row["mtime_ns"]) if known else None
+        parts = (row["byte_size"], row["mtime_ns"], row["ctime_ns"])
+        fingerprint = Fingerprint(*parts) if None not in parts else None
         return int(row["asset_id"]), fingerprint
 
     def previous_path_in_source(self, asset_id: int, source_id: int, exclude: str) -> str | None:
@@ -444,6 +447,13 @@ class SqliteRepository:
                 (job_id,),
             )
             return cur.rowcount > 0
+
+    def release_job(self, job_id: int) -> None:
+        self._write(
+            """UPDATE job SET status = 'queued', attempts = MAX(attempts - 1, 0)
+               WHERE id = ? AND status = 'running'""",
+            (job_id,),
+        )
 
     def recover_interrupted_jobs(self) -> int:
         """Jobs still 'running' at startup were cut off by a crash; queue them again."""

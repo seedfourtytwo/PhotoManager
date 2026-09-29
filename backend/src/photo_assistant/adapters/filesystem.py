@@ -56,6 +56,7 @@ class FolderSourceReader:
                     # local wall-clock time with its offset: what the user saw when saving
                     mtime=datetime.fromtimestamp(stat.st_mtime).astimezone(),
                     mtime_ns=stat.st_mtime_ns,
+                    ctime_ns=stat.st_ctime_ns,
                 )
 
 
@@ -94,6 +95,15 @@ class DiskLibraryStore:
             partial.replace(target)
         finally:
             partial.unlink(missing_ok=True)
+
+    def sweep_tmp(self) -> int:
+        """Remove half-written copies left by a crash (only ever in data/tmp)."""
+        if not self._tmp.is_dir():
+            return 0
+        leftovers = list(self._tmp.glob("*.partial"))
+        for partial in leftovers:
+            partial.unlink(missing_ok=True)
+        return len(leftovers)
 
     def overlaps(self, folder: Path) -> bool:
         a, b = folder.resolve(), self.root.resolve()

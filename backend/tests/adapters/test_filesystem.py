@@ -85,3 +85,12 @@ def test_free_bytes_and_clock(tmp_path: Path) -> None:
     assert DiskLibraryStore(tmp_path / "d").free_bytes() > 0
     assert SystemClock().now().tzinfo is UTC
     assert SystemClock().now() > datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def test_leftover_partial_copies_are_swept(tmp_path: Path) -> None:
+    store = DiskLibraryStore(tmp_path / "data")
+    (tmp_path / "data" / "tmp").mkdir(parents=True)
+    (tmp_path / "data" / "tmp" / "abc.partial").write_bytes(b"half a photo")
+    assert store.sweep_tmp() == 1
+    assert list((tmp_path / "data" / "tmp").iterdir()) == []
+    assert DiskLibraryStore(tmp_path / "fresh").sweep_tmp() == 0

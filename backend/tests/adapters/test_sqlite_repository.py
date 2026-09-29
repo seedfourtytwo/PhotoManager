@@ -258,7 +258,7 @@ def test_upgrading_a_v1_library_keeps_its_data_and_snapshots_first(tmp_path: Pat
 def test_source_fingerprint_round_trip(repo: SqliteRepository) -> None:
     source = repo.add_source("s", "/s")
     asset_id = repo.add_asset(new_asset(1), imported_at=NOW)
-    repo.add_asset_source(asset_id, source.id, "a.jpg", Fingerprint(123, 456))
-    assert repo.fingerprint_of(source.id, "a.jpg") == (asset_id, Fingerprint(123, 456))
+    repo.add_asset_source(asset_id, source.id, "a.jpg", Fingerprint(123, 456, 789))
+    assert repo.fingerprint_of(source.id, "a.jpg") == (asset_id, Fingerprint(123, 456, 789))
     assert repo.fingerprint_of(source.id, "b.jpg") is None
     assert repo.previous_path_in_source(asset_id, source.id, exclude="x.jpg") == "a.jpg"

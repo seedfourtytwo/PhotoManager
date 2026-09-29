@@ -38,8 +38,9 @@ Goal: all photos from several folders in one de-duplicated, browsable-by-API lib
 | ✅ `AIProvider` port + `NullAIProvider` | S |
 | ✅ Cross-cutting M1 items (FEATURES §11: disk guard, logs, pre-migration snapshot, worker limits, iPhone file quirks, video skip report) | M |
 
-**Status: done 2026-09-29**, after an independent review (3 critical, 3 major findings, all fixed
-with regression tests — see the fix commit). Real-data run on 200 of C's photos: every file
+**Status: done 2026-09-29**, after two independent review rounds (first: 3 critical and 3
+major findings; second, attacking the fixes: 1 major and 3 minor), all fixed with regression
+tests. Real-data run on 200 of C's photos: every file
 accounted for; import 84 ms/photo (≈ 14 min per 10k, budget 30); previews ≈ 0.2 s/photo in the
 background; rescan of unchanged files 0.7 s.
 

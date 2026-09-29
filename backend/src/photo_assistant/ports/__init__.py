@@ -65,6 +65,7 @@ class Fingerprint:
 
     byte_size: int
     mtime_ns: int
+    ctime_ns: int = 0  # inode change time: tools can restore mtime, never ctime
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,10 +75,11 @@ class SourceFile:
     byte_size: int
     mtime: datetime  # timezone-aware, local wall-clock zone
     mtime_ns: int = 0
+    ctime_ns: int = 0
 
     @property
     def fingerprint(self) -> Fingerprint:
-        return Fingerprint(self.byte_size, self.mtime_ns)
+        return Fingerprint(self.byte_size, self.mtime_ns, self.ctime_ns)
 
 
 class SourceReader(Protocol):
@@ -183,4 +185,8 @@ class Repository(Protocol):
     def fail_job(self, job_id: int, error: str, retry: bool) -> None: ...
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]: ...
     def retry_job(self, job_id: int) -> bool: ...
+    def release_job(self, job_id: int) -> None:
+        """Put a claimed job back in the queue without counting the attempt."""
+        ...
+
     def job_counts(self) -> dict[str, int]: ...

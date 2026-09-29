@@ -64,8 +64,9 @@ _FILENAME_DATETIMES = [
 _FILENAME_EPOCH_MS = re.compile(r"(?:FB_IMG_|mmexport)(\d{13})(?!\d)")
 _FILENAME_DATES = [
     re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"),  # scan_2019-07-04
-    # DSC_20190704 · VID-20200101-WA0001; years limited to avoid reading ids as dates
-    re.compile(r"(?<!\d)((?:19[9]|20\d)\d)(\d{2})(\d{2})(?!\d)"),
+    # DSC_20190704 · VID-20200101-WA0001. Years limited and a following long number ruled out,
+    # so Facebook ids like 20151012_903634589713690_n are not read as dates.
+    re.compile(r"(?<!\d)((?:19[9]|20\d)\d)(\d{2})(\d{2})(?!\d)(?![_\-]\d{6})"),
 ]
 
 
@@ -112,15 +113,24 @@ def _first_valid(patterns: list[re.Pattern[str]], text: str) -> datetime | None:
     return None
 
 
+def _epoch_from_filename(name: str) -> datetime | None:
+    """Timezone-aware (UTC) moment for names that carry a Unix timestamp in milliseconds."""
+    match = _FILENAME_EPOCH_MS.search(name)
+    if not match:
+        return None
+    seconds = int(match.group(1)) // 1000  # whole seconds, like every other source
+    return datetime.fromtimestamp(seconds, UTC)
+
+
 def date_from_filename(filename: str) -> datetime | None:
+    """Local wall-clock date from a file name (timestamps in names are given as UTC)."""
     name = PurePath(filename).stem
     found = _first_valid(_FILENAME_DATETIMES, name)
     if found is not None:
         return found
-    epoch = _FILENAME_EPOCH_MS.search(name)
-    if epoch:
-        seconds = int(epoch.group(1)) // 1000  # whole seconds, like every other source
-        return datetime.fromtimestamp(seconds, UTC).replace(tzinfo=None)
+    epoch = _epoch_from_filename(name)
+    if epoch is not None:
+        return epoch.replace(tzinfo=None)
     return _first_valid(_FILENAME_DATES, name)
 
 
@@ -149,6 +159,9 @@ def pick_capture_time(
                 offset = parse_offset(dates.offset_time)
             return CaptureTime(value, offset, source)
 
+    epoch = _epoch_from_filename(PurePath(filename).stem)
+    if epoch is not None and _plausible(epoch.replace(tzinfo=None), now):
+        return _in_zone_of(epoch, file_mtime, DateSource.FILENAME)
     from_name = date_from_filename(filename)
     if from_name and _plausible(from_name, now):
         return CaptureTime(from_name, None, DateSource.FILENAME)
@@ -156,11 +169,15 @@ def pick_capture_time(
     return _from_mtime(file_mtime, now)
 
 
-def _from_mtime(file_mtime: datetime, now: datetime) -> CaptureTime:
-    """The file's own local wall-clock time and offset (never converted to UTC: a photo saved
-    at 00:30 on 1 January must not land in December)."""
-    local = min(file_mtime, now).astimezone(file_mtime.tzinfo)
+def _in_zone_of(moment: datetime, reference: datetime, source: DateSource) -> CaptureTime:
+    """Express an absolute moment as wall-clock time in the reference's zone (the machine's
+    local zone): a photo saved at 00:30 on 1 January must not land in December."""
+    local = moment.astimezone(reference.tzinfo)
     offset = local.utcoffset()
     minutes = int(offset.total_seconds() // 60) if offset is not None else None
     wall = max(local.replace(tzinfo=None), EARLIEST_PLAUSIBLE)
-    return CaptureTime(wall, minutes, DateSource.FILE_MTIME)
+    return CaptureTime(wall, minutes, source)
+
+
+def _from_mtime(file_mtime: datetime, now: datetime) -> CaptureTime:
+    return _in_zone_of(min(file_mtime, now), file_mtime, DateSource.FILE_MTIME)

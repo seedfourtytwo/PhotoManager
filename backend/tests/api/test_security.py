@@ -48,3 +48,31 @@ def test_extra_host_names_can_be_allowed_for_tailscale(tmp_path: Path) -> None:
     )
     with TestClient(create_app(settings)) as c:
         assert c.get("/api/health", headers={"Host": "photos.example.ts.net"}).status_code == 200
+
+
+def test_origin_must_match_scheme_host_and_port(client: TestClient) -> None:
+    other_port = {"Origin": "http://127.0.0.1:9999"}
+    assert client.post("/api/sources/scan-all", headers=other_port).status_code == 403
+    assert (
+        client.post(
+            "/api/sources/scan-all", headers={"Origin": "http://127.0.0.1:8420"}
+        ).status_code
+        == 202
+    )
+
+
+def test_odd_header_bytes_do_not_crash_the_guard() -> None:
+    """Header bytes are latin-1; a raw 0xE9 must not raise (test clients can't send it)."""
+    import asyncio
+
+    from photo_assistant.api.security import CrossSiteGuard
+
+    reached = []
+
+    async def app(scope: object, receive: object, send: object) -> None:
+        reached.append(True)
+
+    guard = CrossSiteGuard(app, ["127.0.0.1"])  # type: ignore[arg-type]
+    scope = {"type": "http", "method": "GET", "headers": [(b"x-name", b"caf\xe9")]}
+    asyncio.run(guard(scope, None, None))  # type: ignore[arg-type]
+    assert reached == [True]

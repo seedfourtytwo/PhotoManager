@@ -4,7 +4,7 @@ import logging
 import threading
 from collections.abc import Callable, Mapping
 
-from photo_assistant.ports import Clock, Repository
+from photo_assistant.ports import Clock, ImportBusyError, Repository
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +40,10 @@ class Worker:
             return True
         try:
             handler(job.payload)
+        except ImportBusyError:
+            # Another import holds the library; try again later without using up attempts.
+            self._repo.release_job(job.id)
+            return False
         except Exception as exc:
             retry = job.attempts < self._max_attempts
             log.warning("job failed", extra={"job_id": job.id, "kind": job.kind, "retry": retry})

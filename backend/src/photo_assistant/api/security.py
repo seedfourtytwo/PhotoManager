@@ -29,12 +29,19 @@ class CrossSiteGuard:
         await self.app(scope, receive, send)
 
     def _refuse(self, scope: Scope) -> bool:
-        headers = {k.decode().lower(): v.decode() for k, v in scope["headers"]}
+        # HTTP header bytes are latin-1 by definition; decoding as UTF-8 could crash.
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
         fetch_site = headers.get("sec-fetch-site")
         if fetch_site is not None and fetch_site.lower() not in _ALLOWED_FETCH_SITES:
             return True
         origin = headers.get("origin")
         if scope["method"] in _SAFE_METHODS or origin is None:
             return False
-        origin_host = (urlsplit(origin).hostname or "").lower()
-        return origin_host not in self.allowed_hosts
+        return not self._same_origin(origin, headers.get("host", ""), scope.get("scheme", "http"))
+
+    def _same_origin(self, origin: str, host: str, scheme: str) -> bool:
+        """Origin must be exactly this server: same scheme, host (allowed) and port."""
+        parts = urlsplit(origin)
+        if (parts.hostname or "").lower() not in self.allowed_hosts:
+            return False
+        return parts.scheme == scheme and parts.netloc.lower() == host.lower()

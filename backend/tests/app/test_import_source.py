@@ -4,7 +4,9 @@ Real ExifTool + libvips + SQLite against the synthetic fixture set. The ``source
 fixture fails any test that changes a single byte or timestamp in a source folder.
 """
 
+import os
 import shutil
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -403,3 +405,85 @@ def test_changed_file_reports_that_the_old_version_is_kept(world: World, tmp_pat
     (item,) = report.items
     assert item.outcome is Outcome.IMPORTED
     assert "previous version kept" in (item.reason or "")
+
+
+# --- QA M1, second review ------------------------------------------------------------------
+
+
+def test_non_utf8_file_name_fails_alone_and_the_rest_imports(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "good.jpg")
+    bad = Path(os.fsdecode(os.fsencode(folder) + b"/bad-\xff\xfe.jpg"))  # not valid UTF-8
+    bad.write_bytes((fixtures / "IMG_1002.JPG").read_bytes())
+
+    _, report = world.importer.run(world.repo.add_source("old usb disk", str(folder)).id)
+
+    outcomes = {i.relative_path: (i.outcome, i.reason) for i in report.items}
+    assert outcomes["good.jpg"][0] is Outcome.IMPORTED
+    (bad_name,) = [p for p in outcomes if p != "good.jpg"]
+    assert outcomes[bad_name][0] is Outcome.FAILED
+    assert "UTF-8" in (outcomes[bad_name][1] or "")
+    bad_name.encode("utf-8")  # stored name is printable and valid
+
+
+def test_safe_copy_of_an_unsafe_named_file_still_imports(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "A\ttab.jpg")  # sorts first, fails
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "b-fine.jpg")
+    _, report = world.importer.run(world.repo.add_source("s", str(folder)).id)
+    outcomes = {i.relative_path: i.outcome for i in report.items}
+    assert outcomes["b-fine.jpg"] is Outcome.IMPORTED
+    assert outcomes["A\ttab.jpg"] is Outcome.FAILED
+
+
+def test_replaced_file_with_same_size_and_restored_mtime_is_noticed(
+    world: World, tmp_path: Path
+) -> None:
+    """cp -p / rsync -t can restore mtime; the change time (ctime) can't be restored."""
+    folder = tmp_path / "src"
+    folder.mkdir()
+    photo = folder / "p.jpg"
+    photo.write_bytes(b"A" * 1000)
+    source = world.repo.add_source("s", str(folder))
+    world.importer._metadata = _FakeMeta()  # type: ignore[assignment]
+    world.importer._renderer = _FakeRenderer()  # type: ignore[assignment]
+    world.importer.run(source.id)
+    stat = photo.stat()
+    time.sleep(0.01)
+    photo.write_bytes(b"B" * 1000)
+    os.utime(photo, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    _, report = world.importer.run(source.id)
+    assert report.items[0].outcome is Outcome.IMPORTED
+
+
+def test_repair_that_fails_does_not_stop_the_import(world: World, source_guard: Path) -> None:
+    source = world.repo.add_source("Fixtures", str(source_guard))
+    world.importer.run(source.id)
+    asset_id = world.repo.asset_id_for_source_path(source.id, "IMG_1001.JPG")
+    world.repo._conn.execute("UPDATE asset SET thumb_path = NULL WHERE id = ?", (asset_id,))
+    world.importer._renderer = _FakeRenderer(fail=True)  # type: ignore[assignment]
+    _, report = world.importer.run(source.id)
+    assert report.status is RunStatus.DONE
+
+
+class _FakeMeta:
+    def read_many(self, paths: list[Path]) -> list[object]:
+        from photo_assistant.domain.model import PhotoMetadata
+
+        return [PhotoMetadata(width=1, height=1, mime_type="image/jpeg") for _ in paths]
+
+
+class _FakeRenderer:
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+
+    def render(self, source: Path, destination: Path, max_edge: int) -> tuple[int, int]:
+        if self.fail:
+            raise RuntimeError("decoder broke")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"x")
+        return 1, 1

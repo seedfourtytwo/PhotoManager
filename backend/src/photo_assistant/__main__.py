@@ -35,6 +35,11 @@ def _check_folder(folder: Path, data_root: Path) -> str | None:
     return None
 
 
+def _safe(text: str) -> str:
+    """Never let a file name put control codes on the terminal."""
+    return text if text.isprintable() else repr(text)
+
+
 def _print_report(run_id: int, report: ImportReport, show: int) -> None:
     s = report.summary()
     rows = [
@@ -53,10 +58,7 @@ def _print_report(run_id: int, report: ImportReport, show: int) -> None:
     for outcome in (Outcome.FAILED, Outcome.SKIPPED):
         items = [i for i in report.items if i.outcome is outcome]
         for item in items[:show]:
-            name = (
-                item.relative_path if item.relative_path.isprintable() else repr(item.relative_path)
-            )
-            print(f"  {outcome.value:<8} {name}: {item.reason}")
+            print(f"  {outcome.value:<8} {_safe(item.relative_path)}: {_safe(item.reason or '')}")
         if len(items) > show:
             print(f"  … and {len(items) - show} more {outcome.value} (see report #{run_id})")
     if report.message:

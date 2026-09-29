@@ -201,3 +201,20 @@ def test_more_real_world_file_name_dates(name: str, expected: datetime) -> None:
 )
 def test_still_no_false_positives(name: str) -> None:
     assert date_from_filename(name) is None
+
+
+def test_facebook_id_that_looks_like_a_date_is_not_a_date() -> None:
+    """Second review: 20151012_903634589713690_n.jpg is a Facebook id, not 12 Oct 2015."""
+    assert date_from_filename("20151012_903634589713690_n.jpg") is None
+
+
+def test_epoch_names_become_local_wall_clock_time() -> None:
+    """FB_IMG_1577835000000 = 2019-12-31 23:30 UTC = 2020-01-01 00:30 in Paris (winter)."""
+    from datetime import timezone
+
+    paris = timezone(timedelta(hours=1))
+    mtime = datetime(2024, 1, 1, tzinfo=paris)
+    result = pick_capture_time(
+        MetadataDates(), filename="FB_IMG_1577835000000.jpg", file_mtime=mtime, now=NOW
+    )
+    assert result == CaptureTime(datetime(2020, 1, 1, 0, 30), 60, DateSource.FILENAME)
