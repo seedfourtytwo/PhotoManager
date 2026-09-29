@@ -1,11 +1,19 @@
 <script lang="ts">
 	import ApiStatus from '$lib/components/ApiStatus.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
-	import { fetchAllAssets, fetchHealth, fetchStats } from '$lib/api';
+	import { fetchHealth, fetchStats, streamAssets, type AssetSummary } from '$lib/api';
 	import { groupByMonth } from '$lib/timeline';
 
-	const library = Promise.all([fetchAllAssets(), fetchStats()]);
+	let assets: AssetSummary[] = $state([]);
+	let loading = $state(true);
+	let failed = $state(false);
+	const groups = $derived(groupByMonth(assets));
+	const stats = fetchStats();
 	const count = new Intl.NumberFormat('en-GB');
+
+	streamAssets((items) => (assets = [...assets, ...items]))
+		.catch(() => (failed = true))
+		.finally(() => (loading = false));
 </script>
 
 <header>
@@ -14,30 +22,27 @@
 </header>
 
 <main>
-	{#await library}
-		<p class="quiet">Loading library…</p>
-	{:then [assets, stats]}
-		{#if assets.length === 0}
-			<p class="quiet">
-				The library is empty. Import a folder with <code>just import ~/Pictures</code>.
-			</p>
-		{:else}
-			<p class="quiet">
-				{count.format(stats.assets)} photos{#if stats.jobs.queued + stats.jobs.running > 0}
-					· preparing {count.format(stats.jobs.queued + stats.jobs.running)} previews{/if}
-			</p>
-			{#each groupByMonth(assets) as group (group.key)}
-				<section aria-labelledby={`m-${group.key}`}>
-					<h2 id={`m-${group.key}`}>
-						{group.label} <span class="quiet">{group.items.length}</span>
-					</h2>
-					<JustifiedGrid items={group.items} />
-				</section>
-			{/each}
-		{/if}
-	{:catch}
-		<p class="quiet">Could not load the library.</p>
+	{#await stats then s}
+		<p class="quiet">
+			{count.format(s.assets)} photos{#if s.jobs.queued + s.jobs.running > 0}
+				· preparing {count.format(s.jobs.queued + s.jobs.running)} previews{/if}
+		</p>
 	{/await}
+	{#if failed}
+		<p class="quiet">Could not load the library.</p>
+	{:else if !loading && assets.length === 0}
+		<p class="quiet">
+			The library is empty. Import a folder with <code>just import ~/Pictures</code>.
+		</p>
+	{/if}
+	{#each groups as group (group.key)}
+		<section aria-labelledby={`m-${group.key}`}>
+			<h2 id={`m-${group.key}`}>
+				{group.label} <span class="quiet">{group.items.length}</span>
+			</h2>
+			<JustifiedGrid items={group.items} />
+		</section>
+	{/each}
 </main>
 
 <style>

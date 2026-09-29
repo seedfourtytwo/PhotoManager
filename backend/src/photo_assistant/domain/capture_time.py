@@ -44,22 +44,28 @@ class CaptureTime:
 
 
 _EXIF = re.compile(
-    r"^\s*(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?"
-    r"(?:\.\d+)?\s*(Z|[+\-]\d{2}:?\d{2})?\s*$"
+    r"^\s*(\d{4})[:\-](\d{2})[:\-](\d{2})"
+    r"(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?"
+    r"\s*(Z|[+\-]\d{2}:?\d{2})?\s*$"
 )
 _OFFSET = re.compile(r"^\s*(Z|([+\-])(\d{2}):?(\d{2}))\s*$")
 
-# Most specific first. Each captures year, month, day and optionally hour, minute, second.
-_FILENAME_PATTERNS = [
+# Tried in order; within a pattern every match is tried until one is a real date.
+_FILENAME_DATETIMES = [
     # 20251108_100559 · IMG_20190704_183000 · PXL_20230101_120000123 · Screenshot_20200101-123456
     re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})[_\-](\d{2})(\d{2})(\d{2})(?!\d{0,2}\d{4})"),
-    # 2015-02-02 15.53.11 · Screenshot from 2026-07-03 15-21-27
+    # 2015-02-02 15.53.11 · Screenshot from 2026-07-03 15-21-27 · signal-2021-05-01-12-34-56-789
     # WhatsApp Image 2020-10-26 at 12.34.56
     re.compile(
-        r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?:[ _T]|\sat\s)(\d{2})[.\-:](\d{2})[.\-:](\d{2})(?!\d)"
+        r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?:[ _T\-]|\sat\s)(\d{2})[.\-:](\d{2})[.\-:](\d{2})(?!\d)"
     ),
-    # VID-20200101-WA0001 (date only)
-    re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})-WA\d+"),
+]
+# FB_IMG_1591234567890 · mmexport1591234567890 (milliseconds since 1970, UTC)
+_FILENAME_EPOCH_MS = re.compile(r"(?:FB_IMG_|mmexport)(\d{13})(?!\d)")
+_FILENAME_DATES = [
+    re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"),  # scan_2019-07-04
+    # DSC_20190704 · VID-20200101-WA0001; years limited to avoid reading ids as dates
+    re.compile(r"(?<!\d)((?:19[9]|20\d)\d)(\d{2})(\d{2})(?!\d)"),
 ]
 
 
@@ -97,15 +103,25 @@ def parse_exif_datetime(raw: str | None) -> tuple[datetime, int | None] | None:
     return value, parse_offset(match.group(7))
 
 
-def date_from_filename(filename: str) -> datetime | None:
-    name = PurePath(filename).stem
-    for pattern in _FILENAME_PATTERNS:
-        match = pattern.search(name)
-        if match:
+def _first_valid(patterns: list[re.Pattern[str]], text: str) -> datetime | None:
+    for pattern in patterns:
+        for match in pattern.finditer(text):
             value = _build(match.groups())
             if value is not None:
                 return value
     return None
+
+
+def date_from_filename(filename: str) -> datetime | None:
+    name = PurePath(filename).stem
+    found = _first_valid(_FILENAME_DATETIMES, name)
+    if found is not None:
+        return found
+    epoch = _FILENAME_EPOCH_MS.search(name)
+    if epoch:
+        seconds = int(epoch.group(1)) // 1000  # whole seconds, like every other source
+        return datetime.fromtimestamp(seconds, UTC).replace(tzinfo=None)
+    return _first_valid(_FILENAME_DATES, name)
 
 
 def _plausible(value: datetime, now: datetime) -> bool:
@@ -115,7 +131,10 @@ def _plausible(value: datetime, now: datetime) -> bool:
 def pick_capture_time(
     dates: MetadataDates, *, filename: str, file_mtime: datetime, now: datetime
 ) -> CaptureTime:
-    """Apply the fallback chain. ``file_mtime`` and ``now`` must be timezone-aware."""
+    """Apply the fallback chain.
+
+    ``file_mtime`` must be timezone-aware *in the zone the file was saved in* (the adapter
+    gives the machine's local zone); ``now`` must be timezone-aware."""
     candidates = [
         (dates.date_time_original, DateSource.EXIF),
         (dates.create_date, DateSource.EXIF_CREATE),
@@ -134,6 +153,14 @@ def pick_capture_time(
     if from_name and _plausible(from_name, now):
         return CaptureTime(from_name, None, DateSource.FILENAME)
 
-    utc = file_mtime.astimezone(UTC).replace(tzinfo=None)
-    clamped = min(max(utc, EARLIEST_PLAUSIBLE), now.astimezone(UTC).replace(tzinfo=None))
-    return CaptureTime(clamped, 0, DateSource.FILE_MTIME)
+    return _from_mtime(file_mtime, now)
+
+
+def _from_mtime(file_mtime: datetime, now: datetime) -> CaptureTime:
+    """The file's own local wall-clock time and offset (never converted to UTC: a photo saved
+    at 00:30 on 1 January must not land in December)."""
+    local = min(file_mtime, now).astimezone(file_mtime.tzinfo)
+    offset = local.utcoffset()
+    minutes = int(offset.total_seconds() // 60) if offset is not None else None
+    wall = max(local.replace(tzinfo=None), EARLIEST_PLAUSIBLE)
+    return CaptureTime(wall, minutes, DateSource.FILE_MTIME)

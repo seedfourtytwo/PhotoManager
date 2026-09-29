@@ -7,12 +7,14 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 from starlette.types import Scope
 
 from photo_assistant import __version__
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.routes import assets, imports, sources, system
+from photo_assistant.api.security import CrossSiteGuard
 from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import Settings, get_settings
 
@@ -56,4 +58,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     for module in (system, sources, imports, assets):
         app.include_router(module.router)
     _mount_web(app, settings.web_dir)
+    app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     return app

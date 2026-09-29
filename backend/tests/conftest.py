@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 
 
-def snapshot_tree(root: Path) -> dict[str, tuple[str, int]]:
-    """Map every file under root to (sha256, mtime_ns). Directories are implied by their files."""
-    result: dict[str, tuple[str, int]] = {}
+def snapshot_tree(root: Path) -> dict[str, tuple[str, int, int]]:
+    """Every file and folder under root → (sha256 or "dir", mtime_ns, permission bits)."""
+    result: dict[str, tuple[str, int, int]] = {}
     for path in sorted(root.rglob("*")):
-        if path.is_file():
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            result[str(path.relative_to(root))] = (digest, path.stat().st_mtime_ns)
+        stat = path.lstat()
+        digest = "dir" if path.is_dir() else hashlib.sha256(path.read_bytes()).hexdigest()
+        result[str(path.relative_to(root))] = (digest, stat.st_mtime_ns, stat.st_mode)
     return result
 
 

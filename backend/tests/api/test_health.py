@@ -9,7 +9,7 @@ from photo_assistant.api.settings import Settings, get_settings
 
 
 def test_health_reports_ok_and_version(tmp_path: Path) -> None:
-    client = TestClient(create_app(Settings(data_root=tmp_path)))
+    client = TestClient(create_app(Settings(data_root=tmp_path)), base_url="http://127.0.0.1")
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "version": __version__}

@@ -72,8 +72,11 @@ def original(services: ServicesDep, asset_id: int) -> Response:
     a = require_asset(services, asset_id)
     origins = services.repo.origins_of(asset_id)
     name = PurePosixPath(origins[0][1] if origins else a.library_path).name
+    path = services.store.absolute(a.library_path)
+    if not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "original missing from the library")
     return FileResponse(
-        services.store.absolute(a.library_path),
+        path,
         media_type=a.mime_type or "application/octet-stream",
         filename=name,
     )

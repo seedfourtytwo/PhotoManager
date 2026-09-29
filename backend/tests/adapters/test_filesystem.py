@@ -33,7 +33,7 @@ def test_walk_lists_every_file_with_relative_posix_paths(source_guard: Path) -> 
     assert paths == [
         f.relative_path for f in FolderSourceReader().walk(Source(1, "f", str(source_guard)))
     ], "stable order"
-    assert all(f.mtime.tzinfo is UTC for f in files)
+    assert all(f.mtime.utcoffset() is not None for f in files), "local, timezone-aware"
 
 
 def test_walk_does_not_follow_symlinks_out_of_the_source(tmp_path: Path) -> None:

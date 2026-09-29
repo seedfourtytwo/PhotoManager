@@ -60,11 +60,24 @@ class ImageRenderer(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class Fingerprint:
+    """Cheap change detector for a source file: if both match, the content is unchanged."""
+
+    byte_size: int
+    mtime_ns: int
+
+
+@dataclass(frozen=True, slots=True)
 class SourceFile:
     relative_path: str  # posix, relative to the source root
     absolute_path: Path
     byte_size: int
-    mtime: datetime  # timezone-aware
+    mtime: datetime  # timezone-aware, local wall-clock zone
+    mtime_ns: int = 0
+
+    @property
+    def fingerprint(self) -> Fingerprint:
+        return Fingerprint(self.byte_size, self.mtime_ns)
 
 
 class SourceReader(Protocol):
@@ -83,6 +96,10 @@ class LibraryStore(Protocol):
     def absolute(self, relative_path: str) -> Path: ...
 
     def free_bytes(self) -> int: ...
+
+    def overlaps(self, folder: Path) -> bool:
+        """True if the folder contains the library or is inside it."""
+        ...
 
     def exclusive_import(self) -> AbstractContextManager[None]:
         """Hold the library's import lock; raise ImportBusyError if someone else has it."""
@@ -121,6 +138,7 @@ class Repository(Protocol):
         relative_path: str,
         thumb: RenderedImage,
         job_kind: str,
+        fingerprint: Fingerprint | None = None,
     ) -> int:
         """Asset + origin + thumbnail + follow-up job, all or nothing.
 
@@ -135,7 +153,19 @@ class Repository(Protocol):
     def set_variant_of(self, asset_id: int, original_id: int) -> None: ...
 
     # where each asset came from (one asset, many source files)
-    def add_asset_source(self, asset_id: int, source_id: int, relative_path: str) -> None: ...
+    def add_asset_source(
+        self,
+        asset_id: int,
+        source_id: int,
+        relative_path: str,
+        fingerprint: Fingerprint | None = None,
+    ) -> None: ...
+    def fingerprint_of(
+        self, source_id: int, relative_path: str
+    ) -> tuple[int, Fingerprint | None] | None: ...
+    def previous_path_in_source(
+        self, asset_id: int, source_id: int, exclude: str
+    ) -> str | None: ...
     def asset_id_for_source_path(self, source_id: int, relative_path: str) -> int | None: ...
     def origins_of(self, asset_id: int) -> list[tuple[Source, str]]: ...
 

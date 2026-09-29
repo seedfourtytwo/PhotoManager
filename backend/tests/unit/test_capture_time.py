@@ -143,3 +143,61 @@ def test_always_returns_a_plausible_date_whatever_the_input(
 )
 def test_offsets(raw: str, minutes: int | None) -> None:
     assert parse_offset(raw) == minutes
+
+
+# --- QA M1 --------------------------------------------------------------------------------
+
+
+def test_mtime_fallback_keeps_the_local_wall_clock_and_offset() -> None:
+    """Regression: 00:30 on 1 Jan in France was stored as 22:30 on 31 Dec (UTC)."""
+    from datetime import timezone
+
+    paris_winter = timezone(timedelta(hours=1))
+    mtime = datetime(2020, 1, 1, 0, 30, tzinfo=paris_winter)
+    result = pick_capture_time(MetadataDates(), filename="x.jpg", file_mtime=mtime, now=NOW)
+    assert result == CaptureTime(datetime(2020, 1, 1, 0, 30), 60, DateSource.FILE_MTIME)
+
+
+def test_future_mtime_is_clamped_to_now() -> None:
+    later = NOW + timedelta(days=30)
+    result = pick_capture_time(MetadataDates(), filename="x.jpg", file_mtime=later, now=NOW)
+    assert result.value == NOW.replace(tzinfo=None)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("2019:07:04", datetime(2019, 7, 4)), ("2019-07-04", datetime(2019, 7, 4))],
+)
+def test_date_only_metadata_is_accepted_as_midnight(raw: str, expected: datetime) -> None:
+    assert parse_exif_datetime(raw) == (expected, None)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("signal-2021-05-01-12-34-56-789.jpg", datetime(2021, 5, 1, 12, 34, 56)),
+        ("FB_IMG_1591234567890.jpg", datetime(2020, 6, 4, 1, 36, 7)),
+        ("mmexport1591234567890.jpg", datetime(2020, 6, 4, 1, 36, 7)),
+        ("scan_2019-07-04.jpg", datetime(2019, 7, 4)),
+        ("DSC_20190704.JPG", datetime(2019, 7, 4)),
+        ("holiday 2019-07-04 beach.jpg", datetime(2019, 7, 4)),
+        ("IMG_20191340_2019-07-04.jpg", datetime(2019, 7, 4)),  # first match impossible
+    ],
+)
+def test_more_real_world_file_name_dates(name: str, expected: datetime) -> None:
+    assert date_from_filename(name) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "IMG_5215 - Copy.JPG",
+        "IMG_0027(1).HEIC",
+        "12524245_10208913554978036_5455922839164665818_n.jpg",
+        "15602_10206188729539103_7594325285226378834_n.jpg",
+        "122687643_4494779827260372_3856678087240746241_n.jpg",
+        "20190704123.jpg",  # digits run on: not a date
+    ],
+)
+def test_still_no_false_positives(name: str) -> None:
+    assert date_from_filename(name) is None

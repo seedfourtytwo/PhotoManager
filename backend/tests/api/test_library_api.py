@@ -17,7 +17,7 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
     settings = Settings(data_root=tmp_path / "data", worker_enabled=False, min_free_gb=0)
-    with TestClient(create_app(settings)) as c:
+    with TestClient(create_app(settings), base_url="http://127.0.0.1") as c:
         yield c
 
 
@@ -110,6 +110,13 @@ def test_asset_detail_images_and_original_download(client: TestClient, source_gu
     assert original.status_code == 200
     assert "attachment" in original.headers["content-disposition"]
     assert client.get("/api/assets/999").status_code == 404
+    library_file = services(client).store.absolute(
+        services(client).repo.get_asset(asset["id"]).library_path  # type: ignore[union-attr]
+    )
+    library_file.chmod(0o644)
+    library_file.unlink()
+    missing = client.get(f"/api/assets/{asset['id']}/original")
+    assert missing.status_code == 404 and "missing" in missing.json()["detail"]
     assert client.get("/api/assets/999/thumb").status_code == 404
 
 

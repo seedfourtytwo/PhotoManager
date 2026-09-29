@@ -1,7 +1,6 @@
 """Composition root: the one place that picks real adapters and wires them together."""
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader
 from photo_assistant.adapters.filesystem import (
@@ -65,9 +64,3 @@ def build_services(settings: Settings) -> Services:
         poll_seconds=settings.worker_poll_seconds,
     )
     return Services(settings, repo, store, importer, worker, exiftool)
-
-
-def overlaps(a: Path, b: Path) -> bool:
-    """True if either folder contains the other (or they are the same)."""
-    a, b = a.resolve(), b.resolve()
-    return a == b or a in b.parents or b in a.parents

@@ -24,7 +24,7 @@ from photo_assistant.domain.model import (
     RunStatus,
     Source,
 )
-from photo_assistant.ports import DuplicateAssetError, Job, Page, RenderedImage
+from photo_assistant.ports import DuplicateAssetError, Fingerprint, Job, Page, RenderedImage
 
 __all__ = ["DuplicateAssetError", "SqliteRepository", "open_database"]
 
@@ -182,12 +182,13 @@ class SqliteRepository:
         relative_path: str,
         thumb: RenderedImage,
         job_kind: str,
+        fingerprint: Fingerprint | None = None,
     ) -> int:
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
                 asset_id = self.add_asset(asset, imported_at)
-                self.add_asset_source(asset_id, source_id, relative_path)
+                self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
                 self.set_thumbnail(asset_id, thumb)
                 self.enqueue(job_kind, {"asset_id": asset_id})
             except BaseException:
@@ -265,13 +266,46 @@ class SqliteRepository:
 
     # --- asset sources ---------------------------------------------------------------------
 
-    def add_asset_source(self, asset_id: int, source_id: int, relative_path: str) -> None:
+    def add_asset_source(
+        self,
+        asset_id: int,
+        source_id: int,
+        relative_path: str,
+        fingerprint: Fingerprint | None = None,
+    ) -> None:
+        size = fingerprint.byte_size if fingerprint else None
+        mtime = fingerprint.mtime_ns if fingerprint else None
         self._write(
-            """INSERT INTO asset_source (asset_id, source_id, relative_path) VALUES (?, ?, ?)
-               ON CONFLICT (source_id, relative_path)
-               DO UPDATE SET asset_id = excluded.asset_id, seen_at = excluded.seen_at""",
-            (asset_id, source_id, relative_path),
+            """INSERT INTO asset_source (asset_id, source_id, relative_path, byte_size, mtime_ns)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (source_id, relative_path) DO UPDATE SET
+                   asset_id = excluded.asset_id, seen_at = excluded.seen_at,
+                   byte_size = excluded.byte_size, mtime_ns = excluded.mtime_ns""",
+            (asset_id, source_id, relative_path, size, mtime),
         )
+
+    def fingerprint_of(
+        self, source_id: int, relative_path: str
+    ) -> tuple[int, Fingerprint | None] | None:
+        row = self._one(
+            """SELECT asset_id, byte_size, mtime_ns FROM asset_source
+               WHERE source_id = ? AND relative_path = ?""",
+            (source_id, relative_path),
+        )
+        if row is None:
+            return None
+        known = row["byte_size"] is not None and row["mtime_ns"] is not None
+        fingerprint = Fingerprint(row["byte_size"], row["mtime_ns"]) if known else None
+        return int(row["asset_id"]), fingerprint
+
+    def previous_path_in_source(self, asset_id: int, source_id: int, exclude: str) -> str | None:
+        row = self._one(
+            """SELECT relative_path FROM asset_source
+               WHERE asset_id = ? AND source_id = ? AND relative_path != ?
+               ORDER BY seen_at LIMIT 1""",
+            (asset_id, source_id, exclude),
+        )
+        return str(row["relative_path"]) if row else None
 
     def asset_id_for_source_path(self, source_id: int, relative_path: str) -> int | None:
         row = self._one(

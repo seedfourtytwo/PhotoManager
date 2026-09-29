@@ -100,6 +100,7 @@ def test_every_failure_and_skip_explains_itself(world: World, source_guard: Path
     assert all(reasons.values()), reasons
     assert "empty" in (reasons["empty.jpg"] or "")
     assert "video" in (reasons["IMG_1003.MOV"] or "")
+    assert "Live Photo" in (reasons["IMG_1004.MOV"] or "")
     assert "pdf" in (reasons["Trip.pdf"] or "")
 
 
@@ -166,6 +167,9 @@ def test_capture_time_sources_follow_the_fallback_chain(world: World, source_gua
         DateSource.EXIF,
     )
     assert asset_for("IMG_20180312_091500.jpg").date_source is DateSource.FILENAME
+    heic = asset_for("IMG_1004.HEIC")
+    assert (heic.taken_at, heic.camera_model) == (datetime(2021, 8, 15, 9, 5), "iPhone 12")
+    assert heic.thumb_path is not None and (heic.width, heic.height) == (96, 64)
     assert asset_for("Screenshot from 2026-07-03 15-21-27.png").date_source is DateSource.FILENAME
     assert asset_for("nested/no-exif.jpg").date_source is DateSource.FILE_MTIME
     rotated = asset_for("IMG_1002.JPG")
@@ -201,6 +205,30 @@ def test_low_disk_pauses_before_copying_anything(
     assert report.message and "free" in report.message
     assert world.repo.count_assets() == 0
     assert not (tmp_path / "data" / "originals").exists()
+
+
+def test_a_source_that_contains_the_library_is_refused_at_scan_time(
+    world: World, tmp_path: Path
+) -> None:
+    """The library folder may be configured after the source was added."""
+    outer = world.repo.add_source("Everything", str(tmp_path))
+    with pytest.raises(SourceUnavailableError, match="library"):
+        world.importer.run(outer.id)
+
+
+def test_edit_pairing_ignores_extension_case(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "IMG_2001.JPG")
+    shutil.copy2(fixtures / "IMG_E1001.JPG", folder / "IMG_E2001.jpg")
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    edit = world.repo.get_asset(
+        world.repo.asset_id_for_source_path(source.id, "IMG_E2001.jpg") or 0
+    )
+    assert edit is not None
+    assert edit.variant_of == world.repo.asset_id_for_source_path(source.id, "IMG_2001.JPG")
 
 
 def test_missing_or_disabled_source_is_refused(world: World, tmp_path: Path) -> None:
@@ -309,3 +337,69 @@ def test_a_crash_mid_run_still_saves_what_happened(
     (run,) = world.repo.list_import_runs(source.id)
     assert run["status"] == "failed"
     assert "exiftool died" in str(run["message"])
+
+
+class CountingHasher(Blake3Hasher):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def hash_file(self, path: Path) -> str:
+        self.calls += 1
+        return super().hash_file(path)
+
+
+def test_rescan_skips_hashing_files_that_have_not_changed(world: World, source_guard: Path) -> None:
+    source = world.repo.add_source("Fixtures", str(source_guard))
+    world.importer.run(source.id)
+    counting = CountingHasher()
+    world.importer._hasher = counting
+
+    _, report = world.importer.run(source.id)
+
+    assert report.count(Outcome.ALREADY_KNOWN) == len(IMPORTED) + len(DUPLICATE)
+    assert counting.calls == len(FAILED) - 1, (
+        "only never-imported files are hashed (empty.jpg isn't)"
+    )
+
+
+def test_touched_file_is_rehashed_but_still_known(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    photo = folder / "a.jpg"
+    shutil.copy2(Path(__file__).parent.parent / "fixtures" / "photos" / "IMG_1001.JPG", photo)
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    photo.touch()  # mtime changes, content does not
+    counting = CountingHasher()
+    world.importer._hasher = counting
+    _, report = world.importer.run(source.id)
+    assert counting.calls == 1
+    assert report.items[0].outcome is Outcome.ALREADY_KNOWN
+
+
+def test_renamed_file_says_where_it_was_before(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "old name.jpg")
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    (folder / "old name.jpg").rename(folder / "new name.jpg")
+    _, report = world.importer.run(source.id)
+    (item,) = report.items
+    assert item.outcome is Outcome.DUPLICATE
+    assert "old name.jpg" in (item.reason or "")
+
+
+def test_changed_file_reports_that_the_old_version_is_kept(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "p.jpg")
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    shutil.copy2(fixtures / "IMG_1002.JPG", folder / "p.jpg")
+    _, report = world.importer.run(source.id)
+    (item,) = report.items
+    assert item.outcome is Outcome.IMPORTED
+    assert "previous version kept" in (item.reason or "")

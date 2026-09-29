@@ -53,7 +53,9 @@ class FolderSourceReader:
                     relative_path=path.relative_to(root).as_posix(),
                     absolute_path=path,
                     byte_size=stat.st_size,
-                    mtime=datetime.fromtimestamp(stat.st_mtime, UTC),
+                    # local wall-clock time with its offset: what the user saw when saving
+                    mtime=datetime.fromtimestamp(stat.st_mtime).astimezone(),
+                    mtime_ns=stat.st_mtime_ns,
                 )
 
 
@@ -92,6 +94,10 @@ class DiskLibraryStore:
             partial.replace(target)
         finally:
             partial.unlink(missing_ok=True)
+
+    def overlaps(self, folder: Path) -> bool:
+        a, b = folder.resolve(), self.root.resolve()
+        return a == b or a in b.parents or b in a.parents
 
     def free_bytes(self) -> int:
         self.root.mkdir(parents=True, exist_ok=True)

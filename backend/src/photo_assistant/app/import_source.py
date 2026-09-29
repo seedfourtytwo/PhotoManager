@@ -10,7 +10,7 @@ Guarantees (tested in tests/app/test_import_source.py):
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from photo_assistant.domain.capture_time import pick_capture_time
 from photo_assistant.domain.library_paths import derived_relpath, original_relpath
@@ -145,6 +145,11 @@ class ImportSource:
             raise SourceUnavailableError(f"no source with id {source_id}")
         if not source.enabled:
             raise SourceUnavailableError(f"source '{source.label}' is disabled")
+        if self._store.overlaps(Path(source.root)):
+            raise SourceUnavailableError(
+                f"source '{source.label}' contains the photo library itself; "
+                "point it at a folder outside the library"
+            )
         return source
 
     def _list_files(self, source: Source) -> list[SourceFile]:
@@ -171,6 +176,10 @@ class ImportSource:
                 continue
             if isinstance(early, ItemResult):
                 report.add(early)
+                continue
+            unchanged = self._unchanged(source, f)
+            if unchanged is not None:
+                report.add(unchanged)
                 continue
             try:
                 digest = self._hasher.hash_file(f.absolute_path)
@@ -207,17 +216,32 @@ class ImportSource:
             return ItemResult(f.relative_path, Outcome.FAILED, "empty file (0 bytes)")
         return None
 
+    def _unchanged(self, source: Source, f: SourceFile) -> ItemResult | None:
+        """Same path, size and modification time as last import: skip hashing."""
+        known = self._repo.fingerprint_of(source.id, f.relative_path)
+        if known is None or known[1] != f.fingerprint:
+            return None
+        asset = self._repo.get_asset(known[0])
+        if asset is None or asset.thumb_path is None:
+            return None  # let the slow path repair it
+        return ItemResult(f.relative_path, Outcome.ALREADY_KNOWN, asset_id=asset.id)
+
     def _known_outcome(self, source: Source, f: SourceFile, digest: str) -> ItemResult | None:
         asset_id = self._repo.find_asset_id_by_hash(digest)
         if asset_id is None:
             return None
         self._repair_if_needed(asset_id, f)
-        if self._repo.asset_id_for_source_path(source.id, f.relative_path) == asset_id:
+        already_linked = self._repo.asset_id_for_source_path(source.id, f.relative_path) == asset_id
+        earlier = self._repo.previous_path_in_source(asset_id, source.id, exclude=f.relative_path)
+        self._repo.add_asset_source(asset_id, source.id, f.relative_path, f.fingerprint)
+        if already_linked:
             return ItemResult(f.relative_path, Outcome.ALREADY_KNOWN, asset_id=asset_id)
-        self._repo.add_asset_source(asset_id, source.id, f.relative_path)
-        return ItemResult(
-            f.relative_path, Outcome.DUPLICATE, "same photo already in the library", asset_id
+        reason = (
+            f"same photo as {earlier} (renamed, moved or copied)"
+            if earlier
+            else "same photo already in the library"
         )
+        return ItemResult(f.relative_path, Outcome.DUPLICATE, reason, asset_id)
 
     def _repair_if_needed(self, asset_id: int, f: SourceFile) -> None:
         """A photo recorded without its thumbnail (e.g. by an older version or a crash) gets
@@ -276,16 +300,23 @@ class ImportSource:
             self._store.absolute(thumb_path).unlink(missing_ok=True)
             return ItemResult(path, Outcome.FAILED, f"copy into library failed: {exc}")
         thumb = RenderedImage(thumb_path, *thumb_size)
+        replaced = self._repo.asset_id_for_source_path(source.id, path)
         try:
             asset_id = self._repo.record_import(
-                new_asset, self._clock.now(), source.id, path, thumb, PREVIEW_JOB
+                new_asset,
+                self._clock.now(),
+                source.id,
+                path,
+                thumb,
+                PREVIEW_JOB,
+                c.file.fingerprint,
             )
         except DuplicateAssetError as dup:  # imported concurrently from elsewhere
-            self._repo.add_asset_source(dup.asset_id, source.id, path)
-            return ItemResult(
-                path, Outcome.DUPLICATE, "same photo already in the library", dup.asset_id
-            )
-        return ItemResult(path, Outcome.IMPORTED, asset_id=asset_id)
+            self._repo.add_asset_source(dup.asset_id, source.id, path, c.file.fingerprint)
+            reason = "same photo already in the library"
+            return ItemResult(path, Outcome.DUPLICATE, reason, dup.asset_id)
+        note = "file changed since the last import; previous version kept" if replaced else None
+        return ItemResult(path, Outcome.IMPORTED, note, asset_id)
 
     def _describe(self, c: _Candidate, meta: PhotoMetadata) -> NewAsset:
         name = PurePosixPath(c.file.relative_path)
@@ -320,7 +351,9 @@ class ImportSource:
         for d in deferred:
             asset_id = self._repo.find_asset_id_by_hash(d.content_hash)
             if asset_id is not None:
-                self._repo.add_asset_source(asset_id, source.id, d.file.relative_path)
+                self._repo.add_asset_source(
+                    asset_id, source.id, d.file.relative_path, d.file.fingerprint
+                )
                 reason = f"same photo as {d.first_path}"
                 report.add(ItemResult(d.file.relative_path, Outcome.DUPLICATE, reason, asset_id))
             elif paused:
@@ -331,6 +364,9 @@ class ImportSource:
 
     def _link_edits(self, source: Source, report: ImportReport) -> None:
         """FEATURES 11.8: an iPhone ``IMG_E1234`` edit points at ``IMG_1234``."""
+        known = {
+            i.relative_path.lower(): i.asset_id for i in report.items if i.asset_id is not None
+        }
         for item in report.items:
             if item.outcome is not Outcome.IMPORTED or item.asset_id is None:
                 continue
@@ -338,8 +374,9 @@ class ImportSource:
             original_name = edited_original_name(path.name)
             if original_name is None:
                 continue
-            original_id = self._repo.asset_id_for_source_path(
-                source.id, str(path.parent / original_name).removeprefix("./")
+            original_path = str(path.parent / original_name).removeprefix("./")
+            original_id = known.get(original_path.lower()) or self._repo.asset_id_for_source_path(
+                source.id, original_path
             )
             if original_id is not None and original_id != item.asset_id:
                 self._repo.set_variant_of(item.asset_id, original_id)

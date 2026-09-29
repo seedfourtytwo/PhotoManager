@@ -85,7 +85,14 @@ def main() -> None:
     (OUT / "IMG_1001.AAE").write_text("<plist/>")
     (OUT / ".DS_Store").write_bytes(b"\x00")
 
-    # 10. Smallest possible photo: 1x1 PNG.
+    # 10. iPhone HEIC with EXIF date, plus its Live Photo video half (needs an HEVC encoder:
+    #     apt install libheif-plugin-x265 — only for regenerating fixtures).
+    p = OUT / "IMG_1004.HEIC"
+    canvas(96, 64, (30, 120, 200)).heifsave(str(p), compression="hevc", Q=60)
+    exif(p, "-DateTimeOriginal=2021:08:15 09:05:00", "-Make=Apple", "-Model=iPhone 12")
+    (OUT / "IMG_1004.MOV").write_bytes(b"\x00\x00\x00\x14ftypqt  synthetic live photo")
+
+    # 11. Smallest possible photo: 1x1 PNG.
     canvas(1, 1, (128, 128, 128)).pngsave(str(OUT / "grey-1x1.png"))
 
     for leftover in OUT.rglob("*_original"):

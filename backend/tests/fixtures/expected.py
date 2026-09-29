@@ -5,13 +5,14 @@ IMPORTED = {
     "IMG_1002.JPG",
     "IMG_E1001.JPG",
     "IMG_20180312_091500.jpg",
+    "IMG_1004.HEIC",
     "Screenshot from 2026-07-03 15-21-27.png",
     "beach day 🌊.jpg",
     "grey-1x1.png",
     "nested/no-exif.jpg",
 }
 DUPLICATE = {"nested/deeper/IMG_1001 (Copy).JPG"}
-SKIPPED = {"Trip.pdf", "IMG_1003.MOV"}
+SKIPPED = {"Trip.pdf", "IMG_1003.MOV", "IMG_1004.MOV"}
 FAILED = {"empty.jpg", "not-an-image.jpg", "truncated.jpg"}
 IGNORED = 2  # IMG_1001.AAE, .DS_Store
 TOTAL_FILES = len(IMPORTED) + len(DUPLICATE) + len(SKIPPED) + len(FAILED) + IGNORED

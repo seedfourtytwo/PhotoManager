@@ -10,7 +10,7 @@ from photo_assistant.adapters.sqlite_repository import (
     open_database,
 )
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
-from photo_assistant.ports import RenderedImage
+from photo_assistant.ports import Fingerprint, RenderedImage
 from tests.factories import NOW, new_asset
 
 
@@ -235,3 +235,30 @@ def test_two_processes_never_claim_the_same_job(tmp_path: Path) -> None:
     ids = [j.id for j in claimed if j is not None]
     assert len(ids) == 4 == len(set(ids))
     assert claimed[-1] is None
+
+
+def test_upgrading_a_v1_library_keeps_its_data_and_snapshots_first(tmp_path: Path) -> None:
+    from photo_assistant.adapters.sqlite_repository import _migrations
+
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    number, sql = _migrations()[0]
+    assert number == 1
+    conn.executescript(f"BEGIN;{sql};PRAGMA user_version = 1;COMMIT;")
+    conn.execute("INSERT INTO source (label, root) VALUES ('old', '/old')")
+    conn.commit()
+    conn.close()
+
+    repo = SqliteRepository(open_database(db, backup_dir=tmp_path / "backups"))
+
+    assert [s.label for s in repo.list_sources()] == ["old"]
+    assert len(list((tmp_path / "backups").glob("library-v1-*.db"))) == 1
+
+
+def test_source_fingerprint_round_trip(repo: SqliteRepository) -> None:
+    source = repo.add_source("s", "/s")
+    asset_id = repo.add_asset(new_asset(1), imported_at=NOW)
+    repo.add_asset_source(asset_id, source.id, "a.jpg", Fingerprint(123, 456))
+    assert repo.fingerprint_of(source.id, "a.jpg") == (asset_id, Fingerprint(123, 456))
+    assert repo.fingerprint_of(source.id, "b.jpg") is None
+    assert repo.previous_path_in_source(asset_id, source.id, exclude="x.jpg") == "a.jpg"

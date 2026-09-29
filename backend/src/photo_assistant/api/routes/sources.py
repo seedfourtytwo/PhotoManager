@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from photo_assistant.api.deps import ServicesDep, require_source
 from photo_assistant.api.schemas import Queued, SourceIn, SourceOut, SourcePatch
-from photo_assistant.api.services import SCAN_JOB, overlaps
+from photo_assistant.api.services import SCAN_JOB
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
@@ -19,7 +19,7 @@ def add_source(services: ServicesDep, body: SourceIn) -> SourceOut:
     folder = Path(body.path).expanduser()
     if not folder.is_dir():
         raise HTTPException(422, f"not a folder on this machine: {folder}")
-    if overlaps(folder, services.settings.data_root.expanduser()):
+    if services.store.overlaps(folder):
         raise HTTPException(422, "that folder contains, or is inside, the photo library itself")
     try:
         source = services.repo.add_source(body.label, str(folder.resolve()))

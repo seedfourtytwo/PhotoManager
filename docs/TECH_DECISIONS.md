@@ -49,6 +49,8 @@ in this codebase, and plain SQL keeps the schema readable.
   only reads the small embedded preview; found by the real-data run, now checked by `just setup`
   and installed in CI.
 - Python libraries: `pyvips`, `pyexiftool` (one long-running ExifTool process), `blake3`.
+- Rescans skip files whose size and modification time are unchanged (stored per source file,
+  migration 0002); changed files are re-hashed, so an edit is never missed.
 
 ## Local ML: ONNX Runtime (CUDA on the RTX 2070, CPU fallback)
 

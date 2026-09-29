@@ -11,9 +11,10 @@ from pathlib import Path
 
 import uvicorn
 
+from photo_assistant.adapters.filesystem import DiskLibraryStore
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.main import create_app
-from photo_assistant.api.services import build_services, overlaps
+from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.import_source import SourceUnavailableError
 from photo_assistant.domain.model import ImportReport, Outcome
@@ -29,7 +30,7 @@ def _serve() -> int:
 def _check_folder(folder: Path, data_root: Path) -> str | None:
     if not folder.is_dir():
         return f"Not a folder: {folder}"
-    if overlaps(folder, data_root):
+    if DiskLibraryStore(data_root).overlaps(folder):
         return "That folder contains, or is inside, the photo library itself."
     return None
 

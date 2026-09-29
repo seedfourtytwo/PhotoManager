@@ -34,14 +34,23 @@ async function getJson<T>(url: string, fetcher: Fetch): Promise<T> {
 export const fetchHealth = (fetcher: Fetch = fetch) => getJson<Health>('/api/health', fetcher);
 export const fetchStats = (fetcher: Fetch = fetch) => getJson<Stats>('/api/stats', fetcher);
 
-export async function fetchAllAssets(fetcher: Fetch = fetch): Promise<AssetSummary[]> {
-	const all: AssetSummary[] = [];
+/**
+ * Page through the whole timeline, handing each page over as soon as it arrives so the first
+ * photos appear immediately (the virtualised grid in M2 will load pages on scroll instead).
+ */
+export async function streamAssets(
+	onPage: (items: AssetSummary[]) => void,
+	fetcher: Fetch = fetch,
+	pageSize = 200
+): Promise<void> {
 	let cursor: string | null = null;
 	do {
 		const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-		const page: AssetPage = await getJson<AssetPage>(`/api/assets?limit=500${query}`, fetcher);
-		all.push(...page.items);
+		const page: AssetPage = await getJson<AssetPage>(
+			`/api/assets?limit=${pageSize}${query}`,
+			fetcher
+		);
+		onPage(page.items);
 		cursor = page.next_cursor;
 	} while (cursor);
-	return all;
 }

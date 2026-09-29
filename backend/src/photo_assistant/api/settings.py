@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = 1.0
     vips_concurrency: int = 2  # the laptop does other work too (FEATURES 11.7)
     log_level: str = "INFO"
+    # Host names the server answers to. Add the Tailscale name when remote access arrives (M6).
+    allowed_hosts: list[str] = ["127.0.0.1", "localhost"]
     web_dir: Path | None = None  # built web app to serve at "/" (just run sets it)
 
     @property

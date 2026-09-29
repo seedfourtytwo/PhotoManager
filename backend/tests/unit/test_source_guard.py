@@ -19,6 +19,17 @@ def test_snapshot_detects_deletion_and_addition(tmp_path: Path) -> None:
     assert snapshot_tree(tmp_path) != before
 
 
+def test_snapshot_detects_permission_changes_and_new_folders(tmp_path: Path) -> None:
+    photo = tmp_path / "a.jpg"
+    photo.write_bytes(b"x")
+    before = snapshot_tree(tmp_path)
+    photo.chmod(0o400)
+    assert snapshot_tree(tmp_path) != before
+    before = snapshot_tree(tmp_path)
+    (tmp_path / "new-folder").mkdir()
+    assert snapshot_tree(tmp_path) != before
+
+
 def test_guard_passes_when_source_is_only_read(source_guard: Path) -> None:
     for f in source_guard.rglob("*"):
         if f.is_file():

@@ -35,7 +35,7 @@ or an AI endpoint.
 | `app/` | Use cases (`ImportFolder`, `BuildAlbum`, `ExportPdf`, `SearchPhotos`) orchestrating ports | `domain` | unit tests with in-memory fakes |
 | `ports/` | `Protocol` interfaces: `MetadataReader`, `ImageRenderer`, `Embedder`, `FaceAnalyzer`, `SourceSync`, `PrintRenderer`, `AIProvider`, `Repository`, `Clock` | `domain` | — |
 | `adapters/` | Real implementations of ports | anything | contract tests + integration tests against real tools |
-| `api/` | HTTP routes, auth, DTOs | `app` | API tests (httpx) |
+| `api/` | HTTP routes, auth, DTOs, CLI; **composition root** (`services.py` picks the real adapters) | `app`, `adapters` (wiring only) | API tests (httpx) |
 | `web/` | UI | generated API client | component tests (Vitest), E2E (Playwright) |
 
 Rule: dependencies point inward. `domain` never imports FastAPI, SQL, or a file path.
@@ -186,7 +186,13 @@ The LLM never writes to the database directly.
 
 ## 7. Security & privacy
 
-- Bound to LAN interface only; no public exposure; Tailscale for remote.
+- Bound to 127.0.0.1 until login exists (M2); later LAN/Tailscale only, never public.
+- Host allow-list (defeats DNS rebinding) and a cross-site guard (Sec-Fetch-Site / Origin)
+  in front of every route; extra host names (Tailscale) are a setting.
+- File names with control characters never reach ExifTool (its argument protocol can't escape
+  a newline; found in the M1 review). Only absolute paths are passed, so no name reads as an option.
+- One import at a time per library (OS file lock), each photo recorded in one transaction,
+  jobs claimed atomically, so CLI + server can't corrupt each other.
 - Passwords: argon2id. Sessions: HTTP-only, SameSite=strict cookies.
 - Source credentials live in rclone's own encrypted config, never in `library.db`.
 - AI calls only go to the configured base URL; each request is logged in `ai_log`.
