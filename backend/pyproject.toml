@@ -10,6 +10,11 @@ dependencies = [
     "blake3>=1.0.10",
     "pyvips>=3.2.0",
     "pyexiftool>=0.5.6",
+    "onnxruntime>=1.30.0",
+    "sqlite-vec>=0.1.9",
+    "tokenizers>=0.23.2",
+    "numpy>=2.5.3",
+    "opencv-python-headless>=5.0.0.93",
 ]
 
 [dependency-groups]
@@ -21,6 +26,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "import-linter>=2.1",
+    "onnx>=1.23.1",
 ]
 
 [build-system]
@@ -35,7 +41,10 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q --strict-markers"
 filterwarnings = ["error"]
-markers = ["integration: needs external tools (exiftool, libvips)"]
+markers = [
+    "integration: needs external tools (exiftool, libvips)",
+    "models: needs the real ML model files (set PA_MODELS_DIR; run on the laptop)",
+]
 
 [tool.coverage.run]
 source = ["photo_assistant"]
@@ -82,4 +91,7 @@ layers = [
 name = "Domain stays pure (no frameworks, no I/O libraries)"
 type = "forbidden"
 source_modules = ["photo_assistant.domain"]
-forbidden_modules = ["fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn"]
+forbidden_modules = [
+    "fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn",
+    "numpy", "onnxruntime", "cv2", "sqlite_vec", "tokenizers",
+]
