@@ -26,16 +26,19 @@ Goal: all photos from several folders in one de-duplicated, browsable-by-API lib
 
 | Issue | Size |
 |---|---|
-| Domain: capture-time fallback chain (property tests) | M |
-| Domain: dedup decision by BLAKE3; `asset_source` bookkeeping | S |
-| Adapter: ExifTool reader (+ contract tests) | M |
-| Adapter: libvips thumb/preview renderer incl. HEIC & orientation | M |
-| SQLite schema v1 + Alembic + repository | M |
-| Job queue table + worker + progress endpoint | M |
-| **Multiple sources**: register/label/enable folders; rescan all | M |
-| `ImportFolder` use case: idempotent, resumable, report | L |
-| API: list assets (cursor pagination), asset detail, thumbnails | M |
-| `AIProvider` port + `NullAIProvider` | S |
+| ✅ Domain: capture-time fallback chain (property tests) | M |
+| ✅ Domain: dedup decision by BLAKE3; `asset_source` bookkeeping | S |
+| ✅ Adapter: ExifTool reader (+ contract tests) | M |
+| ✅ Adapter: libvips thumb/preview renderer incl. HEIC & orientation | M |
+| ✅ SQLite schema v1 + Alembic + repository | M |
+| ✅ Job queue table + worker + progress endpoint | M |
+| ✅ **Multiple sources**: register/label/enable folders; rescan all | M |
+| ✅ `ImportFolder` use case: idempotent, resumable, report | L |
+| ✅ API: list assets (cursor pagination), asset detail, thumbnails | M |
+| ✅ `AIProvider` port + `NullAIProvider` | S |
+| ✅ Cross-cutting M1 items (FEATURES §11: disk guard, logs, pre-migration snapshot, worker limits, iPhone file quirks, video skip report) | M |
+
+**Status: done 2026-09-29.** 161 backend + 15 web tests, 98 % backend coverage; real-data run on 200 of C's photos: all accounted for, rescan 3.5 s, nothing re-imported.
 
 **Acceptance:** import two overlapping test folders twice; second run adds 0 assets; source
 folders byte-identical; report numbers add up; 10k-photo import within budget.
@@ -52,11 +55,13 @@ Goal: C and partner use it on laptop and phone over LAN.
 | Virtualised justified grid with date scrubber | L |
 | **Loupe**: fullscreen, keyboard ← → Esc F I, swipe, two fading edge buttons, neighbour preload | M |
 | Facet filters + keyword search | L |
+| **Fix dates** for one or many photos (FEATURES 2.12) | M |
 | Calendar heat map view | M |
 | Manual albums, shared between users, drag reorder | L |
 | **Download**: single, multi-select, day/month/year/album/filter scope → streamed ZIP (originals) | M |
 | Near-duplicate/burst grouping; offline geocoding | M |
 | Per-source overview page | S |
+| **HTTPS via Tailscale certificates** (needed for iPhone web-app install, full screen, share sheet); trash; account safety (FEATURES §11) | M |
 | PWA install; phone E2E; web upload (phone Photos picker, laptop files/folder) into the user's inbox | M |
 
 **Acceptance:** 6 golden journeys pass on desktop + phone viewport; partner can log in on her phone and upload a photo from it.

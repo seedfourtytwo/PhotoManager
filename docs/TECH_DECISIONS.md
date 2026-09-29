@@ -29,6 +29,9 @@ sqlite-vec adds vector KNN inside the same DB for CLIP and face embeddings.
 **Risk:** sqlite-vec is pre-v1 and warns of breaking changes; pin the version and keep all
 vector access behind the `Repository` port. At 10k × 512-d, brute-force KNN is milliseconds,
 so we don't depend on its newer ANN indexes.
+**Migrations:** numbered SQL files + `PRAGMA user_version`, with an automatic snapshot of the
+database before any migration (FEATURES 11.6). Chosen over Alembic (built 2026-09-29): no ORM
+in this codebase, and plain SQL keeps the schema readable.
 **Rejected:** Postgres + pgvector (Immich's choice — more ops than we need now).
 **Revisit if:** > 200k assets or many concurrent writers.
 
@@ -38,7 +41,14 @@ so we don't depend on its newer ANN indexes.
 - **ExifTool** (via `pyexiftool`, one persistent process) — the reference for EXIF/XMP/
   QuickTime/maker notes, timezone fields, Live Photo pairing IDs.
 - **BLAKE3** for content hashes (fast, streaming); **imagehash** pHash for near-duplicates.
-- Derivatives as WebP (thumb 256 px, preview 1600 px).
+- Derivatives as WebP: thumbnail fits 640 px (sharp on retina rows), preview fits 2048 px.
+- The thumbnail is rendered **during import, from the source file, before copying**: it proves
+  the file really decodes (a truncated JPEG still looks like a JPEG to ExifTool) and the photo
+  appears in the library immediately. Previews follow in the background.
+- **HEIC needs the HEVC decoder plugin** (`libheif-plugin-libde265` on Ubuntu). Without it libvips
+  only reads the small embedded preview; found by the real-data run, now checked by `just setup`
+  and installed in CI.
+- Python libraries: `pyvips`, `pyexiftool` (one long-running ExifTool process), `blake3`.
 
 ## Local ML: ONNX Runtime (CUDA on the RTX 2070, CPU fallback)
 

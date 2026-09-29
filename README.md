@@ -7,7 +7,7 @@ format and size we need, make simple non-destructive edits, and turn selections 
 print-ready photo books. AI (a local LLM) is optional and
 plugs in through one well-defined socket.
 
-> Status: **M0 (foundations)**: repo skeleton, CI and rules in place; features start in M1. Start with [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Status: **M1 done**: import from any number of folders into one de-duplicated library, with a simple browse page. Next: M2 (browse, share, download). Start with [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Principles in one breath
 
@@ -30,19 +30,19 @@ plugs in through one well-defined socket.
 | [`docs/OPEN_QUESTIONS.md`](docs/OPEN_QUESTIONS.md) | Decisions still waiting on C |
 | [`AGENTS.md`](AGENTS.md) | How AI agents (and humans) work in this repo |
 
-## Quick start
-
-Needs: `uv`, Node 22 + `pnpm`, `just`. From M1 also `exiftool` and `libvips`.
+## Quick start (laptop, Ubuntu)
 
 ```bash
+sudo apt install libimage-exiftool-perl libvips42 libheif-plugin-libde265   # once
 git clone git@github.com:<you>/photo-assistant.git && cd photo-assistant
-cp .env.example .env    # set PA_DATA_ROOT if you want the library somewhere else
-just setup              # installs backend + web deps, reports missing system tools
-just dev                # API on :8420, web on :5173
-just check              # lint, layer contracts, types, all tests: what CI runs
+just setup                       # backend + web deps; reports anything missing
+just import ~/Pictures           # read-only on ~/Pictures; copies into ~/PhotoAssistant/data
+just run                         # open http://127.0.0.1:8420
 ```
 
-Coming in M1: `just import <folder>`. Coming later: `just e2e`, `just qa`.
+Other recipes: `just dev` (live-reload development), `just check` (everything CI runs),
+`just sources` (list imported folders). Settings live in `.env` (see `.env.example`); the only
+machine-specific one is `PA_DATA_ROOT`.
 
 ## Stack (short)
 

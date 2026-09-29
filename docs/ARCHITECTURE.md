@@ -92,9 +92,11 @@ Migrations: Alembic, one migration per PR that touches schema, always reversible
 1. `SourceSync` (rclone / libimobiledevice / adb / none) mirrors the source into `staging/`.
    Remote sources are only ever *read* (`rclone copy`, never `sync` or `move`).
 2. `ImportFolder` walks staging or a local folder → for each file: hash (BLAKE3, streamed).
-3. Hash known? → add an `asset_source` row, done. Unknown? → copy (not move) into
-   `originals/`, verify hash after copy, read metadata, create `asset`.
-4. Enqueue `derive` (thumb, preview), then `embed`, `faces`, `geocode`, `phash` jobs.
+3. Hash known? → add an `asset_source` row, done. Unknown? → read metadata (ExifTool, in
+   batches) → pick the capture time → render the thumbnail from the source (proves it decodes)
+   → check free disk → copy (not move) into `originals/`, verify the hash, make it read-only →
+   create the `asset`.
+4. Enqueue `preview` (M1); later `embed`, `faces`, `geocode`, `phash` jobs.
 5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun.
 
 ### Multiple sources

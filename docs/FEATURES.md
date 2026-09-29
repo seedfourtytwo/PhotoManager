@@ -1,6 +1,6 @@
 # Features
 
-Priorities: **M1–M6** refer to milestones in [`ROADMAP.md`](ROADMAP.md).
+Priorities: **M1–M6** refer to milestones. **✅** = built and tested. in [`ROADMAP.md`](ROADMAP.md).
 **Must** = the milestone fails without it. **Should** = planned, can slip one milestone.
 **Could** = nice, only if cheap. **Later** = explicitly out of scope for v1.
 
@@ -13,14 +13,14 @@ RTX 2070 Max-Q 8 GB). Every design choice must also hold at 100k so the home-ser
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
-| 1.1 | Import a local folder (recursive), **read-only** on the source | Must | M1 |
-| 1.1a | **Multiple source folders**, each registered once with a label (e.g. "Laptop Pictures", "Old HDD", "Partner's export"); all aggregated into the one de-duplicated library; "rescan all" picks up new files from every source | Must | M1 |
+| 1.1 | Import a local folder (recursive), **read-only** on the source | Must | M1 ✅ |
+| 1.1a | **Multiple source folders**, each registered once with a label (e.g. "Laptop Pictures", "Old HDD", "Partner's export"); all aggregated into the one de-duplicated library; "rescan all" picks up new files from every source | Must | M1 ✅ |
 | 1.1b | **Remote folders** as sources: anything rclone can reach read-only — SFTP/SSH (e.g. the home server), SMB/NAS share, WebDAV, plus MEGA/Proton (1.6). Same staging → import path | Should | M4 |
 | 1.1c | Per-source view: how many photos came from each source, overlap between sources, last scan, errors | Should | M2 |
-| 1.2 | Supported formats: JPEG, PNG, HEIC/HEIF, WebP, TIFF, common RAW (preview via embedded JPEG), Live Photo pairs detected | Must | M1 |
-| 1.3 | Content hash (BLAKE3) → exact duplicates are stored once, all source paths remembered | Must | M1 |
-| 1.4 | Resumable, idempotent import: re-running an import changes nothing | Must | M1 |
-| 1.5 | Import report: new / duplicate / skipped / failed, with reasons | Must | M1 |
+| 1.2 | Supported formats: JPEG, PNG, HEIC/HEIF, WebP, TIFF, GIF, AVIF ✅; common RAW recognised, decoding to verify in M2 with real RAW files; Live Photo video halves detected and reported ✅ | Must | M1 |
+| 1.3 | Content hash (BLAKE3) → exact duplicates are stored once, all source paths remembered | Must | M1 ✅ |
+| 1.4 | Resumable, idempotent import: re-running an import changes nothing | Must | M1 ✅ |
+| 1.5 | Import report: new / duplicate / skipped / failed, with reasons | Must | M1 ✅ |
 | 1.6 | Cloud sources via rclone: **MEGA** and **Proton Drive** pulled into a staging folder, then imported like 1.1 | Should | M4 |
 | 1.7 | iPhone source: USB/Wi-Fi pull with libimobiledevice, or iCloud export folder | Should | M4 |
 | 1.8 | Android source: pull over wireless ADB | Could | M4 |
@@ -42,9 +42,9 @@ separate, explicit "purge from library copy" that never touches the source.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
-| 2.1 | EXIF/XMP/QuickTime metadata via ExifTool: capture time (with timezone repair), camera, lens, GPS, orientation | Must | M1 |
-| 2.2 | Date fallback chain: EXIF → XMP → filename pattern (`IMG_20190704_…`) → file mtime; each photo records *which* source won | Must | M1 |
-| 2.3 | Thumbnails (256 px), previews (1600 px), all orientation-corrected, via libvips | Must | M1 |
+| 2.1 | EXIF/XMP/QuickTime metadata via ExifTool: capture time (with timezone repair), camera, lens, GPS, orientation | Must | M1 ✅ |
+| 2.2 | Date fallback chain: EXIF → XMP → filename pattern (`IMG_20190704_…`) → file mtime; each photo records *which* source won | Must | M1 ✅ |
+| 2.3 | Thumbnails (fit 640 px, made during import from the source file, which also proves the file decodes) and previews (fit 2048 px, background job), orientation-corrected WebP via libvips | Must | M1 ✅ |
 | 2.4 | Offline reverse geocoding (country / region / city) — no network call | Should | M2 |
 | 2.5 | Near-duplicate & burst detection (perceptual hash + time window), "pick the best" helper | Should | M2 |
 | 2.6 | Quality signals: blur, exposure, eyes-closed (from face landmarks) → used for "best of" picks | Could | M3 |
@@ -53,6 +53,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | 2.9 | Auto-tags from embeddings against a fixed vocabulary (beach, snow, food, document, screenshot…) | Should | M3 |
 | 2.10 | Screenshot / document / meme detection → filtered out of "memories" by default | Should | M3 |
 | 2.11 | Captions from local vision LLM (via AI socket) | Could | M5 |
+| 2.12 | **Fix dates**: set or shift the date of one or many photos (e.g. Facebook downloads whose only date is the download day); the photo shows "date guessed from file" until fixed; corrections are kept in the library and exported with XMP (11.2) | Should | M2 |
 
 ## 3. Find (organise, filter, search)
 
@@ -145,7 +146,7 @@ needs its own golden-image tests. Park them for M5 and decide then.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
-| 7.1 | A single `AIProvider` port with a **Null** implementation shipped by default — the app is complete without AI | Must | M1 |
+| 7.1 | A single `AIProvider` port with a **Null** implementation shipped by default — the app is complete without AI | Must | M1 ✅ |
 | 7.2 | Ollama adapter (base URL + model names in settings; works against laptop or home server) | Should | M5 |
 | 7.3 | Capabilities: `caption(photo)`, `plan_album(prompt, library_summary) → AlbumPlan (JSON schema)`, `explain_search(query)` | Should | M5 |
 | 7.4 | Every AI output is a **proposal**: shown as a diff the user accepts, edits or discards | Must | M5 |
@@ -171,8 +172,8 @@ folder can be shared with everyone, with a few people, or kept to one person.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
-| 9.1 | One-command dev start; one-command production start | Must | M1 |
-| 9.2 | Background job queue with visible progress (import, thumbnails, embeddings) | Must | M1 |
+| 9.1 | One-command dev start; one-command production start | Must | M1 ✅ |
+| 9.2 | Background job queue (survives restarts, retries, failed jobs keep their reason) ✅; visible progress in the UI in M2 | Must | M1 |
 | 9.3 | Backup — see §9b | Must | M6 |
 | 9.4 | Docker Compose deployment for the home server, same code | Should | M6 |
 | 9.5 | Integrity check: re-hash originals, report bit-rot or missing files | Could | M6 |
@@ -222,3 +223,19 @@ itself. The phone has to push, and only an installed app can do that on its own.
 
 **Laptop:** no app and no sync. Once the server exists, the laptop is just a browser. New
 photos from the laptop go in by web upload (10.2) or by adding a folder as a source.
+
+## 11. Cross-cutting (added by the gap check, 2026-09-29)
+
+| # | Feature | Prio | Milestone |
+|---|---|---|---|
+| 11.1 | **HTTPS on the home network.** iPhones only allow installing the web app, full screen, the share sheet and offline caching over HTTPS. Use Tailscale's free HTTPS certificates (MagicDNS name like `photos.<tailnet>.ts.net`); fallback: Caddy with a local certificate authority | Must | M2 |
+| 11.2 | **No lock-in:** everything we know about a photo (date fixes, tags, people, favourites, albums, captions) can be exported as XMP sidecar files next to the originals plus one JSON dump; downloads can include XMP | Should | M3 |
+| 11.3 | **Trash:** deleting from the library moves to a 30-day trash (per user for hidden/private, admin for library copies); never touches sources | Must | M2 |
+| 11.4 | **Disk guard:** import pauses with a clear message when free space on the data disk drops below a threshold (default 10 GB) | Must | M1 ✅ |
+| 11.5 | **Logs and errors you can read:** structured logs to `data/logs/`, rotated; failed jobs visible in the UI with the reason and a retry button | Must | M1 ✅ |
+| 11.6 | **Safe upgrades:** the database is snapshotted automatically before every schema migration | Must | M1 ✅ |
+| 11.7 | **Laptop-friendly:** image-processing concurrency is a setting (default 2 threads) ✅; ML jobs run niced (M3) | Must | M1 |
+| 11.8 | **iPhone file quirks:** `IMG_E1234` (edited copies) grouped with their original, `.AAE` edit files ignored, Live Photo `.MOV` halves paired and hidden until video support | Must | M1 ✅ |
+| 11.9 | **Videos in sources:** counted and reported as "skipped: video (not supported yet)" instead of silently ignored | Must | M1 ✅ |
+| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting, session expiry, password change | Must | M2 |
+| 11.11 | Share link for someone without an account (expiring, view-only, one album) — only over Tailscale Funnel or similar; decide when needed | Later | — |
