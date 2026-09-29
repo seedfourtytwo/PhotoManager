@@ -26,3 +26,6 @@ data/
 .idea/
 *.whl
 *.tar.gz
+
+# Test fixtures are committed as-is, even files the rules above would ignore
+!backend/tests/fixtures/photos/**
