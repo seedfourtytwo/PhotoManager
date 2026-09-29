@@ -36,3 +36,15 @@ def ensure_relative(path: str) -> PurePosixPath:
         msg = f"library paths must be relative and inside the root: {path!r}"
         raise InvalidLibraryPathError(msg)
     return candidate
+
+
+DERIVATIVE_KINDS = ("thumb", "preview")
+
+
+def derived_relpath(kind: str, content_hash: str) -> PurePosixPath:
+    """``derived/<kind>/<first two hex chars>/<hash>.webp``; sharded to keep folders small."""
+    if kind not in DERIVATIVE_KINDS:
+        raise InvalidLibraryPathError(f"unknown derivative kind: {kind!r}")
+    if len(content_hash) != _BLAKE3_HEX_LENGTH or not set(content_hash) <= _HASH_ALPHABET:
+        raise InvalidLibraryPathError(f"not a lowercase BLAKE3 hex digest: {content_hash!r}")
+    return PurePosixPath("derived", kind, content_hash[:2], f"{content_hash}.webp")

@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from tests.conftest import snapshot_tree
 
 
@@ -22,11 +20,10 @@ def test_snapshot_detects_deletion_and_addition(tmp_path: Path) -> None:
 
 
 def test_guard_passes_when_source_is_only_read(source_guard: Path) -> None:
-    for f in source_guard.iterdir():
-        f.read_bytes()
+    for f in source_guard.rglob("*"):
+        if f.is_file():
+            f.read_bytes()
 
 
-@pytest.mark.parametrize("name", ["new.jpg"])
-def test_guard_sees_the_fixture_folder(source_guard: Path, name: str) -> None:
-    assert source_guard.is_dir()
-    assert not (source_guard / name).exists()
+def test_guard_copies_the_whole_fixture_tree(source_guard: Path) -> None:
+    assert (source_guard / "nested" / "deeper" / "IMG_1001 (Copy).JPG").is_file()

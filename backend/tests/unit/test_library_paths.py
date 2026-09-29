@@ -4,6 +4,7 @@ from hypothesis import strategies as st
 
 from photo_assistant.domain.library_paths import (
     InvalidLibraryPathError,
+    derived_relpath,
     ensure_relative,
     original_relpath,
 )
@@ -52,3 +53,14 @@ def test_every_generated_original_path_is_a_valid_stored_path(
 ) -> None:
     path = original_relpath(digest, year, month, "jpg")
     assert ensure_relative(str(path)) == path
+
+
+def test_derivatives_are_sharded_by_hash_prefix() -> None:
+    digest = "ab" + "c" * 62
+    assert str(derived_relpath("thumb", digest)) == f"derived/thumb/ab/{digest}.webp"
+
+
+@pytest.mark.parametrize(("kind", "digest"), [("poster", HASH), ("thumb", "xyz")])
+def test_derivative_paths_reject_unknown_kinds_and_bad_hashes(kind: str, digest: str) -> None:
+    with pytest.raises(InvalidLibraryPathError):
+        derived_relpath(kind, digest)
