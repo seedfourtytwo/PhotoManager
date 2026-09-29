@@ -139,7 +139,9 @@ def test_disabled_or_unknown_sources_are_not_pulled(world: World, source_id: int
 @pytest.mark.parametrize(
     "error", [SyncAuthError("login refused"), SyncRateLimitedError("slow down")]
 )
-def test_errors_retrying_cannot_fix_are_recorded_not_retried(world: World, error: SyncError) -> None:
+def test_errors_retrying_cannot_fix_are_recorded_not_retried(
+    world: World, error: SyncError
+) -> None:
     world.sync.fail = error
     outcome = world.use_case.run(1)
     assert world.library.imports == []
