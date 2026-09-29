@@ -8,11 +8,11 @@ SQLite's online backup API (FEATURES 11.6).
 import base64
 import json
 import sqlite3
-import threading
 from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 
+from photo_assistant.adapters.sqlite_base import SqliteBase
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.media_types import MediaKind
 from photo_assistant.domain.model import (
@@ -82,32 +82,8 @@ def _decode_cursor(cursor: str) -> tuple[str, int]:
         raise ValueError(f"invalid cursor: {cursor!r}") from exc
 
 
-class SqliteRepository:
+class SqliteRepository(SqliteBase):
     """Thread-safe enough for one API process plus a worker thread (one lock, WAL mode)."""
-
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
-        self._lock = threading.RLock()
-
-    def close(self) -> None:
-        with self._lock:
-            self._conn.close()
-
-    # --- helpers ---------------------------------------------------------------------------
-
-    def _one(self, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row | None:
-        with self._lock:
-            row: sqlite3.Row | None = self._conn.execute(sql, params).fetchone()
-            return row
-
-    def _all(self, sql: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with self._lock:
-            return self._conn.execute(sql, params).fetchall()
-
-    def _write(self, sql: str, params: tuple[object, ...] = ()) -> int:
-        with self._lock:
-            cur = self._conn.execute(sql, params)
-            return int(cur.lastrowid or 0)
 
     # --- sources ---------------------------------------------------------------------------
 
