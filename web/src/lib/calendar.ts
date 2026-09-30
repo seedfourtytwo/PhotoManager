@@ -37,15 +37,20 @@ export function yearCells(year: number, counts: ReadonlyMap<string, number>): He
 	return cells;
 }
 
-/** Years newest first, only those with photos. */
+/**
+ * Every year from the newest to the oldest photo, newest first — empty years included, so
+ * the small multiples keep an honest time axis.
+ */
 export function buildHeatmap(days: readonly CalendarDay[]): Heatmap {
 	const counts = new Map(days.map((d) => [d.day, d.count]));
-	const years = [...new Set(days.filter((d) => d.count > 0).map((d) => Number(d.day.slice(0, 4))))]
-		.sort((a, b) => b - a)
-		.map((year) => {
-			const cells = yearCells(year, counts);
-			return { year, cells, total: cells.reduce((sum, c) => sum + c.count, 0) };
-		});
+	const withPhotos = days.filter((d) => d.count > 0).map((d) => Number(d.day.slice(0, 4)));
+	const newest = Math.max(...withPhotos);
+	const oldest = Math.min(...withPhotos);
+	const span = withPhotos.length ? newest - oldest + 1 : 0;
+	const years = Array.from({ length: span }, (_, i) => newest - i).map((year) => {
+		const cells = yearCells(year, counts);
+		return { year, cells, total: cells.reduce((sum, c) => sum + c.count, 0) };
+	});
 	const max = Math.max(0, ...days.map((d) => d.count));
 	return { years, max };
 }
@@ -77,4 +82,16 @@ export function monthStarts(year: number): { label: string; week: number }[] {
 		const dayIndex = (Date.UTC(year, m, 1) - Date.UTC(year, 0, 1)) / MS_DAY;
 		return { label, week: Math.floor((dayIndex + offset) / 7) };
 	});
+}
+
+/** Photos per month (YYYY-MM), newest first — the date scrubber's track. */
+export function monthTotals(days: readonly CalendarDay[]): { key: string; count: number }[] {
+	const totals: Record<string, number> = {};
+	for (const d of days) {
+		const key = d.day.slice(0, 7);
+		totals[key] = (totals[key] ?? 0) + d.count;
+	}
+	return Object.entries(totals)
+		.sort((a, b) => (a[0] < b[0] ? 1 : -1))
+		.map(([key, count]) => ({ key, count }));
 }

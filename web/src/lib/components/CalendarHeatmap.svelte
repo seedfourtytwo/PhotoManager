@@ -50,10 +50,10 @@
 						</a>
 					{:else}
 						<rect
-							x={LEFT + c.week * STEP + CELL / 2 - 0.5}
-							y={TOP + c.weekday * STEP + CELL / 2 - 0.5}
-							width="1"
-							height="1"
+							x={LEFT + c.week * STEP}
+							y={TOP + c.weekday * STEP}
+							width={CELL}
+							height={CELL}
 							class="empty"
 						/>
 					{/if}
@@ -108,8 +108,8 @@
 		outline: none;
 	}
 	.empty {
-		fill: var(--ink-2);
-		opacity: 0.5;
+		fill: var(--hairline);
+		opacity: 0.6;
 	}
 	.legend {
 		margin-top: 1.5rem;

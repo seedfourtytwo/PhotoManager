@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHeatmap, ink, monthStarts, yearCells } from './calendar';
+import { buildHeatmap, ink, monthStarts, monthTotals, yearCells } from './calendar';
 
 describe('yearCells', () => {
 	it('places every day of a leap year in Monday-first week columns', () => {
@@ -18,7 +18,7 @@ describe('yearCells', () => {
 });
 
 describe('buildHeatmap', () => {
-	it('keeps only years with photos, newest first, with totals and the global max', () => {
+	it('lists every year from newest to oldest, empty ones too, with totals and the global max', () => {
 		const map = buildHeatmap([
 			{ day: '2018-01-02', count: 3 },
 			{ day: '2020-05-05', count: 7 },
@@ -26,6 +26,7 @@ describe('buildHeatmap', () => {
 		]);
 		expect(map.years.map((y) => [y.year, y.total])).toEqual([
 			[2020, 8],
+			[2019, 0],
 			[2018, 3]
 		]);
 		expect(map.max).toBe(7);
@@ -51,5 +52,20 @@ describe('monthStarts', () => {
 		expect(starts).toHaveLength(12);
 		expect(starts[0]).toEqual({ label: 'Jan', week: 0 });
 		expect(starts[1].week).toBe(4); // 1 Feb 2020 (Saturday) is in week 4
+	});
+});
+
+describe('monthTotals', () => {
+	it('sums days into months, newest first', () => {
+		expect(
+			monthTotals([
+				{ day: '2019-01-02', count: 1 },
+				{ day: '2020-03-01', count: 2 },
+				{ day: '2020-03-31', count: 3 }
+			])
+		).toEqual([
+			{ key: '2020-03', count: 5 },
+			{ key: '2019-01', count: 1 }
+		]);
 	});
 });

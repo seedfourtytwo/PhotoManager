@@ -31,19 +31,36 @@ const arcPoints = (i: number) => (i >= 0 ? decoded[i] : [...decoded[~i]].reverse
 const round = (v: number) => Math.round(v * 10) / 10;
 
 const rings: string[] = [];
+const toPath = (points: [number, number][], shift: number) => {
+	let last = '';
+	const parts: string[] = [];
+	for (const [x, y] of points) {
+		const p = `${round(x + shift)} ${round(y)}`;
+		if (p !== last) parts.push(p);
+		last = p;
+	}
+	return parts.length > 2 ? `M${parts.join('L')}Z` : '';
+};
 for (const geometry of topo.objects.land.geometries) {
-	const polygons = geometry.type === 'Polygon' ? [geometry.arcs] : (geometry.arcs as unknown as number[][][][]);
+	const polygons =
+		geometry.type === 'Polygon' ? [geometry.arcs] : (geometry.arcs as unknown as number[][][][]);
 	for (const polygon of polygons)
 		for (const ring of polygon) {
-			const points = ring.flatMap((i, n) => arcPoints(i).slice(n === 0 ? 0 : 1));
-			let last = '';
-			const parts: string[] = [];
-			for (const [lon, lat] of points) {
-				const p = `${round(lon + 180)} ${round(90 - lat)}`;
-				if (p !== last) parts.push(p);
-				last = p;
+			const lonLat = ring.flatMap((i, n) => arcPoints(i).slice(n === 0 ? 0 : 1));
+			// Unwrap longitudes so rings crossing the antimeridian stay continuous (x may leave
+			// 0..360), then draw a shifted copy; the SVG viewBox clips what falls outside.
+			const points: [number, number][] = [];
+			let offset = 0;
+			let prev: number | null = null;
+			for (const [lon, lat] of lonLat) {
+				if (prev !== null && Math.abs(lon - prev) > 180) offset += lon < prev ? 360 : -360;
+				prev = lon;
+				points.push([lon + offset + 180, 90 - lat]);
 			}
-			if (parts.length > 2) rings.push(`M${parts.join('L')}Z`);
+			const xs = points.map((p) => p[0]);
+			rings.push(toPath(points, 0));
+			if (Math.max(...xs) > 360) rings.push(toPath(points, -360));
+			if (Math.min(...xs) < 0) rings.push(toPath(points, 360));
 		}
 }
 
