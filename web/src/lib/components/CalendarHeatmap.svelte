@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import type { CalendarDay } from '$lib/api';
 	import { buildHeatmap, ink, monthStarts } from '$lib/calendar';
 	import { formatDay } from '$lib/filters';
@@ -19,11 +18,16 @@
 </script>
 
 <!-- Small multiples: one identically scaled panel per year; ink = photos that day, zero-based. -->
+<!-- One sideways scroller for all years on narrow screens, so the panels stay aligned. -->
 <div class="years">
 	{#each map.years as y (y.year)}
 		<section aria-label={`${y.year}: ${count.format(y.total)} photos`}>
 			<h2>{y.year} <span class="quiet">{count.format(y.total)}</span></h2>
-			<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Photos per day in ${y.year}`}>
+			<svg
+				viewBox={`0 0 ${width} ${height}`}
+				role="group"
+				aria-label={`Photos per day in ${y.year}`}
+			>
 				{#each monthStarts(y.year) as m (m.label)}
 					<text x={LEFT + m.week * STEP} y="9" class="month">{m.label}</text>
 				{/each}
@@ -32,10 +36,6 @@
 						<a
 							href={hrefFor(c.day)}
 							aria-label={`${formatDay(c.day)}: ${c.count} photo${c.count === 1 ? '' : 's'}`}
-							onclick={(e) => {
-								e.preventDefault();
-								void goto(hrefFor(c.day));
-							}}
 						>
 							<rect
 								x={LEFT + c.week * STEP}
@@ -73,6 +73,7 @@
 <style>
 	.years {
 		max-width: 60rem;
+		overflow-x: auto;
 	}
 	section {
 		margin: 0.75rem 0 1.25rem;
@@ -88,9 +89,11 @@
 	svg {
 		display: block;
 		width: 100%;
+		min-width: 40rem; /* phones scroll sideways rather than shrink days below a tap target */
 		height: auto;
 		overflow: visible;
 	}
+
 	.month {
 		font-size: 9px;
 		fill: var(--ink-2);

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto, pushState } from '$app/navigation';
+	import { goto, pushState, replaceState } from '$app/navigation';
 	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
@@ -201,7 +201,7 @@
 	<Loupe
 		{items}
 		index={loupeIndex}
-		onindex={(i) => pushState('', { loupe: items[i].id })}
+		onindex={(i) => replaceState('', { loupe: items[i].id })}
 		onclose={() => history.back()}
 		onchanged={(a) => (items = items.map((x) => (x.id === a.id ? { ...x, ...a } : x)))}
 		ondates={load}

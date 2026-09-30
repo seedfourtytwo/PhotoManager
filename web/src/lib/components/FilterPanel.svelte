@@ -114,7 +114,7 @@
 		<p class="quiet total">{count.format(facets.total)} photos</p>
 	{/if}
 
-	<section aria-labelledby="f-year">
+	<section>
 		<h3 id="f-year">Year</h3>
 		<ul class="bars">
 			{#each facets?.years ?? [] as y (y.year)}
@@ -145,7 +145,7 @@
 		{/if}
 	</section>
 
-	<section aria-labelledby="f-dates">
+	<section>
 		<h3 id="f-dates">Dates</h3>
 		<label class="row">
 			From
@@ -165,10 +165,10 @@
 		</label>
 	</section>
 
-	<section aria-labelledby="f-place">
+	<section>
 		<h3 id="f-place">Place</h3>
 		<select
-			aria-labelledby="f-place"
+			aria-label="Place"
 			value={filters.place ?? ''}
 			onchange={(e) => set('place', e.currentTarget.value || undefined)}
 		>
@@ -197,10 +197,10 @@
 		</label>
 	</section>
 
-	<section aria-labelledby="f-camera">
+	<section>
 		<h3 id="f-camera">Camera</h3>
 		<select
-			aria-labelledby="f-camera"
+			aria-label="Camera"
 			value={filters.camera ?? ''}
 			onchange={(e) => set('camera', e.currentTarget.value || undefined)}
 		>
@@ -214,7 +214,7 @@
 		</select>
 	</section>
 
-	<section aria-labelledby="f-source">
+	<section>
 		<h3 id="f-source">Source</h3>
 		{#each facets?.sources ?? [] as s (s.id)}
 			<label class="check">
@@ -228,7 +228,7 @@
 		{/each}
 	</section>
 
-	<section aria-labelledby="f-only">
+	<section>
 		<h3 id="f-only">Only</h3>
 		<label class="check">
 			<input

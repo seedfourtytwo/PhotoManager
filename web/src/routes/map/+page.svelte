@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto, pushState } from '$app/navigation';
+	import { goto, pushState, replaceState } from '$app/navigation';
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
@@ -221,7 +221,7 @@
 	<Loupe
 		items={chosenItems}
 		index={loupeIndex}
-		onindex={(i) => pushState('', { loupe: chosenItems[i].id })}
+		onindex={(i) => replaceState('', { loupe: chosenItems[i].id })}
 		onclose={() => history.back()}
 		onchanged={(a) => (located = copyWith(located, a))}
 	/>

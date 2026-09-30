@@ -101,7 +101,6 @@
 					type="password"
 					bind:value={next}
 					autocomplete="new-password"
-					minlength={MIN_PASSWORD}
 					required
 				/></label
 			>

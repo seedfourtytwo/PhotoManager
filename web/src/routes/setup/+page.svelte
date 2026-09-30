@@ -55,7 +55,6 @@
 			bind:value={password}
 			type="password"
 			autocomplete="new-password"
-			minlength={MIN_PASSWORD}
 			required
 			aria-describedby="pw-hint"
 		/>

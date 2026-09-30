@@ -37,14 +37,14 @@
 	const LONG_PRESS_MS = 450;
 	let pressTimer: ReturnType<typeof setTimeout> | undefined;
 	let pressStart: { x: number; y: number } | null = null;
-	let swallowClick = false;
+	// A long press already toggled; the click some browsers send right after must not undo it.
+	let longPressAt = -Infinity;
+	let longPressId: Id | null = null;
+	let pressFired = false;
 	let dragged: Id | null = null;
 
 	function onclick(event: MouseEvent, id: Id) {
-		if (swallowClick) {
-			swallowClick = false;
-			return;
-		}
+		if (id === longPressId && performance.now() - longPressAt < 500) return;
 		const onCheck = (event.target as HTMLElement).closest('.check');
 		if (onCheck || selecting || event.shiftKey || event.metaKey || event.ctrlKey)
 			ontoggle(id, event.shiftKey);
@@ -56,7 +56,8 @@
 		pressStart = { x: event.clientX, y: event.clientY };
 		clearTimeout(pressTimer);
 		pressTimer = setTimeout(() => {
-			swallowClick = true;
+			pressFired = true;
+			longPressId = id;
 			navigator.vibrate?.(10);
 			ontoggle(id, false);
 		}, LONG_PRESS_MS);
@@ -70,6 +71,8 @@
 	function cancelPress() {
 		clearTimeout(pressTimer);
 		pressStart = null;
+		if (pressFired) longPressAt = performance.now();
+		pressFired = false;
 	}
 
 	function onkeydown(event: KeyboardEvent, id: Id, index: number) {

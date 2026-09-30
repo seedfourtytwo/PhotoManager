@@ -67,6 +67,8 @@ function png(size: number, safe = 1): Buffer {
 	]);
 }
 
+// Browsers ask for /favicon.ico before reading the page; a PNG inside is accepted.
+writeFileSync('static/favicon.ico', png(32));
 writeFileSync('static/icon-192.png', png(192));
 writeFileSync('static/icon-512.png', png(512));
 writeFileSync('static/icon-maskable-512.png', png(512, 0.75));

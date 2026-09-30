@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { pushState } from '$app/navigation';
+	import { pushState, replaceState } from '$app/navigation';
 	import type { AssetFilters, Id } from '$lib/api';
 	import { api, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
@@ -126,7 +126,7 @@
 	<Loupe
 		items={loader.items}
 		index={loupeIndex}
-		onindex={(i) => pushState('', { loupe: loader.items[i].id })}
+		onindex={(i) => replaceState('', { loupe: loader.items[i].id })}
 		onclose={() => history.back()}
 		onneedmore={() => void loader.loadMore()}
 		onchanged={(a) => loader.update(a.id, a)}
