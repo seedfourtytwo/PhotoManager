@@ -5,6 +5,7 @@ integrator wires it in. The CLI (``api/cli_ops.py``) uses the same builders on i
 """
 
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 from photo_assistant.adapters.filesystem import Blake3Hasher, SystemClock
@@ -15,6 +16,7 @@ from photo_assistant.adapters.sqlite_repository import open_database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
 from photo_assistant.api.ops_settings import OpsSettings
 from photo_assistant.app.backup import BackupConfig, BackupService
+from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer
 from photo_assistant.app.periodic import Periodic, PeriodicTask
 from photo_assistant.ports.backup import JobQueue
@@ -67,6 +69,15 @@ def build_ops_services(
     backup, store = build_backup_service(data_root, ops, queue)
     tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, backup.run_due)]
     return OpsServices(backup, store, Periodic(tasks if ops.backup_enabled else []))
+
+
+def doctor_sample() -> Path:
+    """A tiny synthetic iPhone HEIC (the IMG_1004 test fixture), shipped with the package."""
+    return Path(str(resources.files("photo_assistant.adapters") / "samples" / "doctor-check.heic"))
+
+
+def build_doctor_config(data_root: Path, min_free_gb: float) -> DoctorConfig:
+    return DoctorConfig(data_root, doctor_sample(), int(min_free_gb * 1000**3))
 
 
 def build_library_transfer() -> LibraryTransfer:
