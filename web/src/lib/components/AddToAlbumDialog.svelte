@@ -25,7 +25,9 @@
 			if (choice === 'new') {
 				const album = await api.createAlbum({ title: title.trim(), asset_ids: ids });
 				albumId = album.id;
-				notice.show(`Created “${album.title}” with ${ids.length} photo${ids.length === 1 ? '' : 's'}.`);
+				notice.show(
+					`Created “${album.title}” with ${ids.length} photo${ids.length === 1 ? '' : 's'}.`
+				);
 			} else {
 				albumId = choice;
 				const { count } = await api.addToAlbum(choice, ids);
@@ -48,12 +50,7 @@
 			New album
 		</label>
 		{#if choice === 'new'}
-			<input
-				class="title"
-				bind:value={title}
-				placeholder="Title"
-				aria-label="New album title"
-			/>
+			<input class="title" bind:value={title} placeholder="Title" aria-label="New album title" />
 		{/if}
 		{#each albums as album (album.id)}
 			<label>
