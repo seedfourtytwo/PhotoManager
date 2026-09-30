@@ -114,7 +114,8 @@
 		touch = null;
 		if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
 		else if (dy < -60) info = true;
-		else if (dy > 80) (info ? (info = false) : onclose());
+		else if (dy > 80 && info) info = false;
+		else if (dy > 80) onclose();
 	}
 
 	let previous: Element | null = null;
@@ -187,7 +188,7 @@
 			{/if}
 			<button type="button" aria-pressed={info} onclick={() => (info = !info)}>Info</button>
 			{#if canFullscreen}
-				<button type="button" onclick={toggleFullscreen}>Full screen</button>
+				<button type="button" class="fullscreen" onclick={toggleFullscreen}>Full screen</button>
 			{/if}
 		</div>
 
@@ -195,9 +196,10 @@
 			<aside class="sidenote" aria-label="About this photo">
 				<p class="date">{formatTaken(asset.taken_at)}</p>
 				<p class="quiet small">
-					{dateSourceLabel(asset.date_source)}{#if asset.tz_offset_minutes !== null}
-						· UTC{asset.tz_offset_minutes >= 0 ? '+' : '−'}{Math.abs(asset.tz_offset_minutes) /
-							60}{/if}
+					{dateSourceLabel(asset.date_source)}{#if asset.tz_offset_minutes !== null}&nbsp;· UTC{asset.tz_offset_minutes >=
+						0
+							? '+'
+							: '−'}{Math.abs(asset.tz_offset_minutes) / 60}{/if}
 				</p>
 				{#if placeLabel(asset.place)}<p>{placeLabel(asset.place)}</p>{/if}
 				{#if detail}
@@ -210,8 +212,9 @@
 						<p>{detail.camera_make ? `${detail.camera_make} · ` : ''}{detail.camera_model}</p>
 					{/if}
 					<p class="quiet small">
-						{detail.width} × {detail.height} · {formatBytes(detail.byte_size)}{#if asset.edited}
-							· edited{/if}
+						{detail.width} × {detail.height} · {formatBytes(
+							detail.byte_size
+						)}{#if asset.edited}&nbsp;· edited{/if}
 					</p>
 					<h3>Sources</h3>
 					<ul>
@@ -328,9 +331,13 @@
 	.info .top {
 		right: var(--margin);
 	}
-	.top button {
-		color: var(--ink);
-		background: color-mix(in srgb, var(--bg) 70%, transparent);
+	/* Words over the photo stay legible without a box around them. */
+	.top button,
+	.edge {
+		color: #fff;
+		text-shadow:
+			0 0 2px rgb(0 0 0 / 0.8),
+			0 0 8px rgb(0 0 0 / 0.5);
 	}
 	.spacer {
 		flex: 1;
@@ -396,7 +403,8 @@
 			font-size: 2rem;
 			padding: 1rem 0.4rem;
 		}
-		.keys {
+		.keys,
+		.fullscreen {
 			display: none;
 		}
 	}

@@ -208,10 +208,14 @@
 			/>
 		</label>
 		<div class="group end">
-			<button type="button" disabled={!changed} onclick={() => {
-				recipe = { ...IDENTITY_RECIPE };
-				ratio = null;
-			}}>Reset</button>
+			<button
+				type="button"
+				disabled={!changed}
+				onclick={() => {
+					recipe = { ...IDENTITY_RECIPE };
+					ratio = null;
+				}}>Reset</button
+			>
 			{#if asset.edited}
 				<button type="button" disabled={busy} onclick={revert}>Revert to original</button>
 			{/if}

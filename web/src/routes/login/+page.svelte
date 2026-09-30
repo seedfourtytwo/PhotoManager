@@ -35,7 +35,12 @@
 <form onsubmit={submit}>
 	<label>User name <input bind:value={username} autocomplete="username" required /></label>
 	<label>
-		Password <input bind:value={password} type="password" autocomplete="current-password" required />
+		Password <input
+			bind:value={password}
+			type="password"
+			autocomplete="current-password"
+			required
+		/>
 	</label>
 	{#if error}<p role="alert">{error}</p>{/if}
 	<button class="primary" type="submit" disabled={busy}>Sign in</button>

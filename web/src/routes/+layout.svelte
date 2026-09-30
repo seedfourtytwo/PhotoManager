@@ -15,8 +15,6 @@
 	onMount(() => {
 		applyTheme(settings.theme);
 		if (!bare) session.load().catch((e: unknown) => notice.error(e));
-		if ('serviceWorker' in navigator && import.meta.env.PROD)
-			navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch(() => {});
 	});
 </script>
 

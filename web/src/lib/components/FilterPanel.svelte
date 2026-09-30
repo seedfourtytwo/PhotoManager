@@ -3,24 +3,29 @@
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
 	import { api, settings, ui } from '$lib/app.svelte';
-	import {
-		activeFilterCount,
-		filtersFromParams,
-		filtersToQuery,
-		withFilter
-	} from '$lib/filters';
+	import { activeFilterCount, filtersFromParams, filtersToQuery, withFilter } from '$lib/filters';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let facets = $state<Facets | null>(null);
 	let search: HTMLInputElement | undefined = $state();
-	let q = $state('');
+	// Follows the URL, and is overwritten while typing (debounced back into the URL).
+	let q = $derived(filters.q ?? '');
 	let typing: ReturnType<typeof setTimeout> | undefined;
 	const count = new Intl.NumberFormat('en-GB');
-	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-	$effect(() => {
-		q = filters.q ?? '';
-	});
+	const MONTHS = [
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
+		'May',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec'
+	];
 
 	$effect(() => {
 		const current = filters;
@@ -56,10 +61,8 @@
 	}
 
 	function toggleSource(id: number, on: boolean) {
-		const current = new Set(filters.source_id ?? []);
-		if (on) current.add(id);
-		else current.delete(id);
-		set('source_id', [...current]);
+		const others = (filters.source_id ?? []).filter((s) => s !== id);
+		set('source_id', on ? [...others, id] : others);
 	}
 
 	const maxYear = $derived(Math.max(1, ...(facets?.years.map((y) => y.count) ?? [1])));
@@ -67,7 +70,11 @@
 </script>
 
 {#if ui.sheet}
-	<button class="backdrop" type="button" aria-label="Close filters" onclick={() => (ui.sheet = false)}
+	<button
+		class="backdrop"
+		type="button"
+		aria-label="Close filters"
+		onclick={() => (ui.sheet = false)}
 	></button>
 {/if}
 
@@ -79,7 +86,9 @@
 	id="filters"
 >
 	<header>
-		<h2>Filters {#if active}<span class="quiet">{active}</span>{/if}</h2>
+		<h2>
+			Filters {#if active}<span class="quiet">{active}</span>{/if}
+		</h2>
 		<span>
 			{#if active}<button type="button" onclick={() => apply({})}>Clear</button>{/if}
 			<button type="button" class="collapse" onclick={() => settings.setFiltersOpen(false)}

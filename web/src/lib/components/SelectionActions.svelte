@@ -42,16 +42,19 @@
 			await api.setStates({ ids: these, hidden });
 			onremove(new Set(these));
 			onclear();
-			notice.show(`${hidden ? 'Hid' : 'Unhid'} ${these.length} photo${these.length === 1 ? '' : 's'}.`, {
-				action: {
-					label: 'Undo',
-					run: () =>
-						void api
-							.setStates({ ids: these, hidden: !hidden })
-							.then(onreload)
-							.catch((e: unknown) => notice.error(e))
+			notice.show(
+				`${hidden ? 'Hid' : 'Unhid'} ${these.length} photo${these.length === 1 ? '' : 's'}.`,
+				{
+					action: {
+						label: 'Undo',
+						run: () =>
+							void api
+								.setStates({ ids: these, hidden: !hidden })
+								.then(onreload)
+								.catch((e: unknown) => notice.error(e))
+					}
 				}
-			});
+			);
 		} catch (e) {
 			notice.error(e);
 		}

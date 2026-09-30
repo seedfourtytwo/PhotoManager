@@ -84,7 +84,9 @@ function store(key: string, value: string) {
 
 class Settings {
 	theme = $state<Theme>(stored('pa.theme', ['system', 'dark', 'light'], 'system'));
-	density = $state<Density>(stored('pa.density', ['compact', 'comfortable', 'large'], 'comfortable'));
+	density = $state<Density>(
+		stored('pa.density', ['compact', 'comfortable', 'large'], 'comfortable')
+	);
 	filtersOpen = $state(stored('pa.filters', ['open', 'closed'], 'open') === 'open');
 
 	setTheme(theme: Theme) {

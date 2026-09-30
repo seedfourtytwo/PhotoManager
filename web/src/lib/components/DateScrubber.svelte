@@ -23,7 +23,12 @@
 	const years = $derived(
 		stops.filter((s, i) => i === 0 || s.key.slice(0, 4) !== stops[i - 1].key.slice(0, 4))
 	);
-	const currentIndex = $derived(Math.max(0, stops.findIndex((s) => s.key === current)));
+	const currentIndex = $derived(
+		Math.max(
+			0,
+			stops.findIndex((s) => s.key === current)
+		)
+	);
 
 	let track: HTMLElement | undefined = $state();
 	let hover = $state<{ index: number; y: number } | null>(null);

@@ -35,6 +35,9 @@ export default defineConfig(
 	},
 	{
 		rules: {
+			// The app is served at the root of its own origin (no `paths.base`), and most links
+			// carry filter queries, so resolve() would add nothing but noise.
+			'svelte/no-navigation-without-resolve': 'off',
 			// `{ dropped: _dropped, ...rest }` is how we omit fields from an object.
 			'@typescript-eslint/no-unused-vars': [
 				'error',

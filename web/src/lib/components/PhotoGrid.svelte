@@ -76,7 +76,11 @@
 		if (event.key === 'x' || (event.key === ' ' && selecting)) {
 			event.preventDefault();
 			ontoggle(id, event.shiftKey);
-		} else if (arrange && event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+		} else if (
+			arrange &&
+			event.altKey &&
+			(event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+		) {
 			event.preventDefault();
 			const to = index + (event.key === 'ArrowLeft' ? -1 : 1);
 			if (to >= 0 && to < items.length) onmove?.(id, to);
@@ -112,7 +116,7 @@
 				draggable={arrange}
 				onclick={(e) => onclick(e, item.id)}
 				onpointerdown={(e) => onpointerdown(e, item.id)}
-				onpointermove={onpointermove}
+				{onpointermove}
 				onpointerup={cancelPress}
 				onpointercancel={cancelPress}
 				oncontextmenu={(e) => {

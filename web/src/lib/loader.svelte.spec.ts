@@ -9,7 +9,10 @@ function pages(total: number, size: number) {
 		calls.push({ filters, cursor });
 		const start = cursor ? Number(cursor) : 0;
 		const items = Array.from({ length: Math.min(size, total - start) }, (_, i) =>
-			makeAsset(start + i + 1, `2020-${String(12 - Math.floor((start + i) / 10)).padStart(2, '0')}-01T00:00:00`)
+			makeAsset(
+				start + i + 1,
+				`2020-${String(12 - Math.floor((start + i) / 10)).padStart(2, '0')}-01T00:00:00`
+			)
 		);
 		return { items, next_cursor: start + size < total ? String(start + size) : null };
 	};

@@ -2,7 +2,13 @@
 	import { untrack } from 'svelte';
 	import type { AssetOut } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
-	import { formatShort, isValidLocal, previewDateChange, toMinutes, type DateChangeSpec } from '$lib/dates';
+	import {
+		formatShort,
+		isValidLocal,
+		previewDateChange,
+		toMinutes,
+		type DateChangeSpec
+	} from '$lib/dates';
 	import Dialog from './Dialog.svelte';
 
 	type Props = { items: AssetOut[]; onclose: () => void; ondone: () => void };
@@ -23,10 +29,7 @@
 			const value = exact.length === 16 ? `${exact}:00` : exact;
 			return isValidLocal(value) ? { set: value } : null;
 		}
-		const shift = toMinutes(
-			{ days: days || 0, hours: hours || 0, minutes: minutes || 0 },
-			sign
-		);
+		const shift = toMinutes({ days: days || 0, hours: hours || 0, minutes: minutes || 0 }, sign);
 		return shift === 0 ? null : { shift_minutes: shift };
 	});
 	const preview = $derived(change ? previewDateChange(items, change) : []);

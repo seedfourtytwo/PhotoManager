@@ -4,6 +4,7 @@
 	import type { AssetFilters, Id } from '$lib/api';
 	import { api, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { monthTotals } from '$lib/calendar';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
 	import DateScrubber from '$lib/components/DateScrubber.svelte';
@@ -37,15 +38,9 @@
 		api
 			.calendar(f)
 			.then((days) => {
-				const byMonth = new Map<string, number>();
-				for (const d of days) {
-					const key = d.day.slice(0, 7);
-					byMonth.set(key, (byMonth.get(key) ?? 0) + d.count);
-				}
-				months = [...byMonth.entries()]
-					.sort((a, b) => (a[0] < b[0] ? 1 : -1))
-					.map(([key, n]) => ({ key, count: n }));
+				months = monthTotals(days);
 				total = days.reduce((n, d) => n + d.count, 0);
+				currentMonth ??= months[0]?.key ?? null;
 			})
 			.catch(() => undefined);
 	}

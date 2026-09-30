@@ -193,7 +193,11 @@
 	<fieldset>
 		<legend>Metadata</legend>
 		<label class="choice">
-			<input type="checkbox" bind:checked={options.strip_location} disabled={options.strip_all_metadata} />
+			<input
+				type="checkbox"
+				bind:checked={options.strip_location}
+				disabled={options.strip_all_metadata}
+			/>
 			Remove location
 		</label>
 		<label class="choice">
