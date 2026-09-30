@@ -1,4 +1,14 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Miscellaneous
+/static/
+
+# Test output and generated data
 test-results
 playwright-report
 src/lib/world.ts
-pnpm-lock.yaml
