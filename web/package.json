@@ -13,7 +13,9 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run"
+		"test": "npm run test:unit -- --run",
+		"mock": "node mock-api/server.ts",
+		"dev:mock": "PA_API=http://127.0.0.1:8421 vite dev"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",

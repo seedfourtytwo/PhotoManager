@@ -15,7 +15,8 @@ export default defineConfig({
 		})
 	],
 	server: {
-		proxy: { '/api': 'http://127.0.0.1:8420' }
+		// PA_API points the dev server at another API, e.g. the mock (pnpm mock) on :8421.
+		proxy: { '/api': process.env.PA_API ?? 'http://127.0.0.1:8420' }
 	},
 	test: {
 		expect: { requireAssertions: true },
