@@ -27,7 +27,7 @@ from photo_assistant.ports.library_files import CopyVerificationError, LibraryUn
 
 COMMANDS = ("export-library", "verify-library", "doctor", "backup")
 # argparse has no public name for the object add_subparsers() returns
-SubParsers = argparse._SubParsersAction[argparse.ArgumentParser]
+type SubParsers = argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def human_bytes(size: int | None) -> str:
