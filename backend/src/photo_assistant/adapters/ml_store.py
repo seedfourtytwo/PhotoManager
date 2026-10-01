@@ -361,3 +361,23 @@ class SqliteMlStore:
             "SELECT screen_or_document FROM asset_ml_flag WHERE asset_id = ?", (asset_id,)
         )
         return None if value is None else bool(value)
+
+    def asset_ids_with_tag(self, name: str, visible: Collection[int]) -> list[int]:
+        """For the ``tag:`` search facet; tag names match case-insensitively."""
+        sql = (
+            "SELECT a.asset_id FROM asset_tag a JOIN tag t ON t.id = a.tag_id "
+            "JOIN temp.ml_candidates c ON c.asset_id = a.asset_id "
+            "WHERE t.name = ? COLLATE NOCASE ORDER BY a.asset_id"
+        )
+        with self._candidates(visible):
+            return [r[0] for r in self._all(sql, (name,))]
+
+    def screen_or_document_ids(self, visible: Collection[int]) -> list[int]:
+        """Screenshots, documents, receipts, memes: left out of "memories" by default."""
+        sql = (
+            "SELECT f.asset_id FROM asset_ml_flag f "
+            "JOIN temp.ml_candidates c ON c.asset_id = f.asset_id "
+            "WHERE f.screen_or_document = 1 ORDER BY f.asset_id"
+        )
+        with self._candidates(visible):
+            return [r[0] for r in self._all(sql)]

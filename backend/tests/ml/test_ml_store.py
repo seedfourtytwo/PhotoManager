@@ -224,3 +224,14 @@ def test_screen_flag_is_unknown_before_tagging(
     (a,) = assets(repo, 1)
     assert store.is_screen_or_document(a) is None
     assert store.tags_of(a) == []
+
+
+def test_assets_with_a_tag_within_the_visible_set(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    (a, b, c) = assets(repo, 3)
+    for asset in (a, b, c):
+        store.replace_model_tags(asset, M, [TagScore("Beach", 0.2)], asset == c)
+    assert store.asset_ids_with_tag("beach", visible={a, c}) == [a, c]
+    assert store.asset_ids_with_tag("snow", visible={a, b, c}) == []
+    assert store.screen_or_document_ids(visible={a, b, c}) == [c]
