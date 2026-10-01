@@ -55,7 +55,6 @@
 	let busy = $state(false);
 	const lossy = $derived(options.format === 'jpeg' || options.format === 'webp');
 	const request = $derived(buildDownloadRequest(scope, options));
-	const count = new Intl.NumberFormat('en-GB');
 
 	$effect(() => {
 		const body = request;
