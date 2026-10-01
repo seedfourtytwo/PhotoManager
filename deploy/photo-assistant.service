@@ -1,0 +1,47 @@
+# Photo Assistant as a systemd *user* service (the laptop setup, docs/guides/deploy-laptop.md).
+#
+# Don't copy this file by hand: `just install-service` fills in @REPO@ (this checkout) and
+# installs it to ~/.config/systemd/user/. It runs the API, the job worker and scheduled
+# backups in one process, as you, with your files and your restic password file.
+#
+# Logs:   journalctl --user -u photo-assistant -f      (and data/logs/ inside the library)
+# Stop:   systemctl --user stop photo-assistant
+
+[Unit]
+Description=Photo Assistant (private family photo library)
+Documentation=file://@REPO@/docs/guides/deploy-laptop.md
+# Wait for local disks to be mounted (an external library disk, a backup disk).
+After=local-fs.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@/backend
+# Settings come from the same .env as `just run`. PA_HOST stays 127.0.0.1 until login exists.
+EnvironmentFile=@REPO@/.env
+# The built web app (`just build`), served from the same port as the API.
+Environment=PA_WEB_DIR=@REPO@/web/build
+Environment=PYTHONUNBUFFERED=1
+# The project's virtualenv (made by `just setup`); no `uv run` here, so a start never
+# re-syncs or downloads anything.
+ExecStart=@REPO@/backend/.venv/bin/python -m photo_assistant
+Restart=on-failure
+RestartSec=10
+# Give an import or backup in progress time to finish its current file.
+TimeoutStopSec=60
+
+# Be a good neighbour on a laptop that does other work (FEATURES 11.7).
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# Guard against a runaway process (a huge panorama, a leak): killed and restarted instead of
+# freezing the laptop. Raise it if previews of very large images fail.
+MemoryHigh=1536M
+MemoryMax=2G
+
+# Hardening that does not get in the way of reading your folders.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

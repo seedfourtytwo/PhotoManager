@@ -1,0 +1,69 @@
+# Photo Assistant on the home server (docs/guides/move-to-server.md).
+#
+# !! UNTESTED until built on the server (no Docker daemon where this was written).
+#
+#   cp deploy/server.env.example deploy/server.env     # then edit it
+#   docker compose -f deploy/compose.yml up -d --build
+#   docker compose -f deploy/compose.yml logs -f
+#
+# The port is published on the server's loopback only; other devices reach it through
+# Tailscale (`tailscale serve`, docs/guides/remote-access.md). Never publish it publicly.
+
+name: photo-assistant
+
+services:
+  photo-assistant:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: photo-assistant:0.0.1
+    restart: unless-stopped
+    env_file:
+      - server.env
+    ports:
+      - "127.0.0.1:8420:8420"
+    volumes:
+      # The library: the folder you copied with `just export-library` (stays on the host disk).
+      - ${PA_HOST_DATA_ROOT:-/srv/photo-assistant/data}:/data
+      # restic password file(s) and rclone config: outside the library, read-only.
+      - ${PA_HOST_SECRETS:-/srv/photo-assistant/secrets}:/secrets:ro
+      # Backup disk(s) on the server, if you back up to one.
+      - ${PA_HOST_BACKUP_DISK:-/srv/photo-assistant/backup}:/backup
+      # restic's cache makes incremental backups fast; keep it between restarts.
+      - restic-cache:/home/app/.cache
+    stop_grace_period: 60s
+    mem_limit: 4g
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # --- Optional: Tailscale as a sidecar --------------------------------------------------
+  # Simplest is Tailscale installed on the server itself (docs/guides/remote-access.md) and
+  # `tailscale serve --bg 8420` there. Use this sidecar only if you want the app to appear
+  # as its own machine ("photos") on your tailnet. Then also: remove `ports:` above, add
+  # `network_mode: service:tailscale` to photo-assistant, put
+  # PA_ALLOWED_HOSTS=["photos.<tailnet>.ts.net"] in server.env, and create an auth key in the
+  # Tailscale admin console (Settings → Keys), stored in /srv/photo-assistant/secrets/ts-authkey.
+  #
+  # tailscale:
+  #   image: tailscale/tailscale:v1.88.3
+  #   hostname: photos
+  #   restart: unless-stopped
+  #   environment:
+  #     TS_AUTHKEY: file:/secrets/ts-authkey
+  #     TS_STATE_DIR: /var/lib/tailscale
+  #     TS_SERVE_CONFIG: /config/serve.json   # HTTPS on :443 → http://127.0.0.1:8420
+  #   volumes:
+  #     - tailscale-state:/var/lib/tailscale
+  #     - ${PA_HOST_SECRETS:-/srv/photo-assistant/secrets}:/secrets:ro
+  #     - ./tailscale:/config:ro
+  #   devices:
+  #     - /dev/net/tun:/dev/net/tun
+  #   cap_add:
+  #     - NET_ADMIN
+
+volumes:
+  restic-cache:
+  # tailscale-state:

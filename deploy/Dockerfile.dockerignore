@@ -1,0 +1,20 @@
+# Used by BuildKit for deploy/Dockerfile (context = repository root). Keep the context small and
+# never send a library, secrets or local environments into an image.
+**
+!web/package.json
+!web/pnpm-lock.yaml
+!web/pnpm-workspace.yaml
+!web/vite.config.ts
+!web/tsconfig.json
+!web/src
+!web/static
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/.python-version
+!backend/src
+**/__pycache__
+**/node_modules
+**/.venv
+**/.env
+**/data
+**/*.db
