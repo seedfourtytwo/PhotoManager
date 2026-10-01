@@ -1,7 +1,12 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from photo_assistant.api.integration_settings import IntegrationSettings
+from photo_assistant.api.ml_settings import MlSettings
+from photo_assistant.api.ops_settings import OpsSettings
 
 
 class Settings(BaseSettings):
@@ -10,7 +15,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PA_", env_file=".env", extra="ignore")
 
     data_root: Path = Path.home() / "PhotoAssistant" / "data"
-    host: str = "127.0.0.1"  # M1 has no login yet: never listen beyond this machine
+    host: str = "127.0.0.1"  # set to a LAN/Tailscale address deliberately (login exists)
     port: int = 8420
     min_free_gb: float = 10.0
     thumb_edge: int = 640
@@ -26,6 +31,12 @@ class Settings(BaseSettings):
     trash_purge_every_hours: float = 6.0  # how often the 30-day trash expiry runs
     argon2_time_cost: int = 3
     argon2_memory_kib: int = 65536
+    # Each area keeps its own settings class (same .env; field names in docs/wiring/*.md):
+    # uploads, remote sources and AI (PA_*), local ML (PA_ML_*), backups (PA_*).
+    integrations: IntegrationSettings = Field(default_factory=IntegrationSettings)
+    ml: MlSettings = Field(default_factory=MlSettings)
+    ops: OpsSettings = Field(default_factory=OpsSettings)
+    face_cluster_every_hours: float = 24.0  # global face clustering (deferred faces get people)
 
     @property
     def database_path(self) -> Path:

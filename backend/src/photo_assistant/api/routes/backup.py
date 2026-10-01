@@ -1,11 +1,7 @@
 """Admin endpoints for backups (FEATURES 9b.7, 9b.8).
 
-Mounted by the integrator (docs/wiring/ops.md). Expects ``app.state.ops`` to be the
-``OpsServices`` built with the repository as job queue, so runs go through the worker.
-
-``require_admin`` is a PLACEHOLDER until login exists (M2): it lets every request through,
-which is only acceptable while the server listens on 127.0.0.1. Replace it with the real
-admin dependency (or ``app.dependency_overrides[require_admin] = real_admin``) when auth lands.
+Expects ``app.state.ops`` to be the ``OpsServices`` built with the repository as job queue,
+so runs go through the worker. Every route is admin-only (core's session auth and roles).
 """
 
 from datetime import datetime
@@ -14,14 +10,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from photo_assistant.api.deps import ADMIN_ONLY
 from photo_assistant.api.ops_services import OpsServices
 from photo_assistant.app.backup import BackupService, UnknownTargetError
 from photo_assistant.domain.backup import BackupRun, NewBackupTarget, Retention, TargetStatus
 from photo_assistant.domain.schedule import InvalidScheduleError
-
-
-def require_admin() -> None:
-    """PLACEHOLDER: no accounts yet (M1 binds to 127.0.0.1). Swap for the real check in M2."""
 
 
 def get_backup_service(request: Request) -> BackupService:
@@ -30,7 +23,7 @@ def get_backup_service(request: Request) -> BackupService:
 
 
 BackupDep = Annotated[BackupService, Depends(get_backup_service)]
-router = APIRouter(prefix="/api/backups", tags=["backups"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/api/backups", tags=["backups"], dependencies=ADMIN_ONLY)
 
 
 class RetentionIn(BaseModel):

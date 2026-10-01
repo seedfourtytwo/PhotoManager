@@ -28,14 +28,14 @@ class MlSettings(BaseSettings):
     # Immich Hugging Face repo name (immich-app/<name>). For French + English queries use
     # "XLM-Roberta-Large-Vit-B-32" (same 512-d image space as ViT-B-32__openai).
     clip_model: str = "ViT-B-32__openai"
-    clip_batch_size: int = Field(16, ge=1, le=256)
+    clip_batch_size: int = Field(default=16, ge=1, le=256)
     face_model: FaceModel = "buffalo_l"
-    face_det_size: int = Field(640, ge=160, le=1920)
-    face_min_score: float | None = Field(None, gt=0, lt=1)
-    face_max_distance: float | None = Field(None, gt=0, le=2)
-    face_min_faces: int = Field(3, ge=1)
+    face_det_size: int = Field(default=640, ge=160, le=1920)
+    face_min_score: float | None = Field(default=None, gt=0, lt=1)
+    face_max_distance: float | None = Field(default=None, gt=0, le=2)
+    face_min_faces: int = Field(default=3, ge=1)
     tag_margin: float = 0.03
-    tag_max_tags: int = Field(3, ge=1)
+    tag_max_tags: int = Field(default=3, ge=1)
     search_min_score: float | None = None
 
     def models_root(self, data_root: Path) -> Path:

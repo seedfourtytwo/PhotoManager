@@ -3,7 +3,8 @@
 Authentication (api-v1 conventions): the browser's session cookie, or
 ``Authorization: Bearer <device token>`` for clients like Apple Shortcuts. A device token may
 upload and check, never manage devices. Cookie sessions come from the core auth module through
-``app.state.session_user_hook`` (docs/wiring/ai-sources.md).
+``app.state.session_user_hook`` (docs/wiring/ai-sources.md); ``app.state.uploader_hook`` then
+says whether that account may upload at all (core roles: guests view and download only).
 """
 
 from collections.abc import Callable
@@ -23,6 +24,8 @@ from photo_assistant.ports.upload import Device
 router = APIRouter(prefix="/api", tags=["upload"])
 
 SessionHook = Callable[[Request], int | None]
+# user id -> None (no such active account), False (may not upload), True (may upload)
+UploaderHook = Callable[[int], bool | None]
 _BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
@@ -42,6 +45,16 @@ def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, detail, headers=_BEARER_CHALLENGE)
 
 
+def _may_upload(request: Request, user_id: int) -> int:
+    hook: UploaderHook | None = getattr(request.app.state, "uploader_hook", None)
+    allowed = True if hook is None else hook(user_id)
+    if allowed is None:
+        raise _unauthorized("this account is disabled")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "guests can view and download, not upload")
+    return user_id
+
+
 def current_user_id(request: Request, integrations: IntegrationsDep, session: SessionUser) -> int:
     """Device token if one is presented (and then it must be valid), else the session."""
     header = request.headers.get("authorization")
@@ -50,10 +63,10 @@ def current_user_id(request: Request, integrations: IntegrationsDep, session: Se
         user = integrations.devices.authenticate(token.strip())
         if scheme.lower() != "bearer" or user is None:
             raise _unauthorized("device token not valid (revoked or mistyped)")
-        return user
+        return _may_upload(request, user)
     if session is None:
         raise _unauthorized("sign in, or send a device token")
-    return session
+    return _may_upload(request, session)
 
 
 def session_user_required(request: Request, session: SessionUser) -> int:

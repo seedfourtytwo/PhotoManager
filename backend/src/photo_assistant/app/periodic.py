@@ -36,6 +36,10 @@ class Periodic:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
+    @property
+    def task_names(self) -> list[str]:
+        return [t.name for t in self._tasks]
+
     def tick(self) -> list[str]:
         """Run every task whose time has come; returns their names."""
         ran = []

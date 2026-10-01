@@ -13,6 +13,7 @@ from photo_assistant.adapters.sqlite_integrations import (
     SqliteRemoteSources,
 )
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.domain.access import Level
 from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
 from photo_assistant.ports.ai import AICall
 
@@ -22,6 +23,13 @@ NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 @pytest.fixture
 def conn() -> Iterator[sqlite3.Connection]:
     connection = open_database(":memory:")
+    # Inboxes and devices belong to accounts (core's user table, foreign keys on).
+    for user_id in (1, 2, 3, 7, 8):
+        connection.execute(
+            "INSERT INTO user (id, username, display_name, password_hash, role) "
+            "VALUES (?, ?, ?, 'x', 'member')",
+            (user_id, f"user{user_id}", f"User {user_id}"),
+        )
     yield connection
     connection.close()
 
@@ -85,6 +93,21 @@ def test_each_user_has_one_inbox_source(conn: sqlite3.Connection) -> None:
     assert first == again
     assert (first.kind, first.root) == ("inbox", "/data/inbox/7")
     assert other.id != first.id
+
+
+def test_a_new_inbox_is_owned_by_and_private_to_its_user(conn: sqlite3.Connection) -> None:
+    inbox = SqliteInboxes(conn).ensure_inbox_source(7, "/data/inbox/7")
+    repo = SqliteRepository(conn)
+    assert inbox.owner_id == 7
+    assert inbox.label == "Uploads (User 7)"
+    assert repo.get_access(inbox.id) == (None, [(7, Level.EDIT)])
+
+
+def test_remote_sources_are_open_to_everyone_like_any_new_source(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    source_id = SqliteRemoteSources(conn).add_remote_source("x", RemoteConfig("mega"), tmp_path)
+    assert SqliteRepository(conn).get_access(source_id) == (Level.DOWNLOAD, [])
 
 
 def test_an_inbox_follows_a_moved_data_root(conn: sqlite3.Connection) -> None:

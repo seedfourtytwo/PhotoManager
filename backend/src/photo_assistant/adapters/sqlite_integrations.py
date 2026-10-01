@@ -8,9 +8,12 @@ import json
 import sqlite3
 import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from photo_assistant.domain.access import Level
 from photo_assistant.domain.model import Source
 from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
 from photo_assistant.ports.ai import AICall
@@ -18,6 +21,9 @@ from photo_assistant.ports.upload import Device
 
 RCLONE_KIND = "rclone"
 INBOX_KIND = "inbox"
+# source_access levels (core's Level): remote sources get the contract default for new
+# sources (everyone may download); an inbox is private: only its owner, who may edit.
+_DOWNLOAD, _EDIT = int(Level.DOWNLOAD), int(Level.EDIT)
 
 
 class _Store:
@@ -42,9 +48,23 @@ class _Store:
         with self._lock:
             return self._conn.execute(sql, params)
 
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        """Several writes as one (the connection is in autocommit mode)."""
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+
 
 def _source(row: sqlite3.Row) -> Source:
-    return Source(row["id"], row["label"], row["root"], bool(row["enabled"]), row["kind"])
+    return Source(
+        row["id"], row["label"], row["root"], bool(row["enabled"]), row["kind"], row["owner_id"]
+    )
 
 
 def _time(value: str | None) -> datetime | None:
@@ -91,7 +111,7 @@ class SqliteAILog(_Store):
 class SqliteRemoteSources(_Store):
     def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
         # The root must be unique and depends on the id: insert a placeholder, then set it.
-        with self._lock:
+        with self._transaction():
             cur = self._write(
                 "INSERT INTO source (kind, label, root, config_json) VALUES (?, ?, ?, ?)",
                 (RCLONE_KIND, label, f"rclone-pending:{uuid.uuid4().hex}", "{}"),
@@ -100,6 +120,10 @@ class SqliteRemoteSources(_Store):
             self._write(
                 "UPDATE source SET root = ?, config_json = ? WHERE id = ?",
                 (str(staging_root / str(source_id)), json.dumps(config.to_mapping()), source_id),
+            )
+            self._write(
+                "INSERT INTO source_access (source_id, user_id, level) VALUES (?, NULL, ?)",
+                (source_id, _DOWNLOAD),
             )
         return source_id
 
@@ -124,7 +148,8 @@ class SqliteInboxes(_Store):
                 (user_id,),
             )
             if row is None:
-                return self._create(user_id, root)
+                with self._transaction():
+                    return self._create(user_id, root)
             if row["root"] != root:  # the data root was moved: follow it
                 self._write("UPDATE source SET root = ? WHERE id = ?", (root, row["id"]))
                 row = self._one("SELECT * FROM source WHERE id = ?", (row["id"],))
@@ -132,12 +157,18 @@ class SqliteInboxes(_Store):
             return _source(row)
 
     def _create(self, user_id: int, root: str) -> Source:
+        name = self._one("SELECT display_name FROM user WHERE id = ?", (user_id,))
+        label = f"Uploads ({name['display_name'] if name else f'user {user_id}'})"
         cur = self._write(
-            "INSERT INTO source (kind, label, root) VALUES (?, ?, ?)",
-            (INBOX_KIND, f"Uploads (user {user_id})", root),
+            "INSERT INTO source (kind, label, root, owner_id) VALUES (?, ?, ?, ?)",
+            (INBOX_KIND, label, root, user_id),
         )
         source_id = int(cur.lastrowid or 0)
         self._write("INSERT INTO inbox (user_id, source_id) VALUES (?, ?)", (user_id, source_id))
+        self._write(
+            "INSERT INTO source_access (source_id, user_id, level) VALUES (?, ?, ?)",
+            (source_id, user_id, _EDIT),
+        )
         row = self._one("SELECT * FROM source WHERE id = ?", (source_id,))
         assert row is not None
         return _source(row)

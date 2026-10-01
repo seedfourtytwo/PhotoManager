@@ -4,6 +4,7 @@
 integrator wires it in. The CLI (``api/cli_ops.py``) uses the same builders on its own.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -63,12 +64,18 @@ def build_backup_service(
 
 
 def build_ops_services(
-    data_root: Path, ops: OpsSettings | None = None, queue: JobQueue | None = None
+    data_root: Path,
+    ops: OpsSettings | None = None,
+    queue: JobQueue | None = None,
+    housekeeping: Sequence[PeriodicTask] = (),
 ) -> OpsServices:
+    """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering)."""
     ops = ops or OpsSettings()
     backup, store = build_backup_service(data_root, ops, queue)
     tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, backup.run_due)]
-    return OpsServices(backup, store, Periodic(tasks if ops.backup_enabled else []))
+    return OpsServices(
+        backup, store, Periodic([*(tasks if ops.backup_enabled else []), *housekeeping])
+    )
 
 
 def doctor_sample() -> Path:

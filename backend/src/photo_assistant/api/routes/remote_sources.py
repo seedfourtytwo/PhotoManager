@@ -1,19 +1,19 @@
 """Remote (rclone) sources: register one, list the remotes rclone knows, queue a pull.
 
 Listing, scanning, enabling and access use the ordinary /api/sources routes (a remote source
-is a source of kind "rclone"). Admin-only once roles exist (docs/wiring/ai-sources.md).
+is a source of kind "rclone"). Admin-only (core's admin check), like adding any source.
 """
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+from photo_assistant.api.deps import ADMIN_ONLY
 from photo_assistant.api.integrations import IntegrationsDep
-from photo_assistant.api.routes.upload import SessionOnlyUser
 from photo_assistant.app.sync_source import SCAN_JOB_KIND, add_remote_source
 from photo_assistant.domain.remote_source import RemoteConfigError
 from photo_assistant.ports.sync import SyncError
 
-router = APIRouter(prefix="/api/remote-sources", tags=["sources"])
+router = APIRouter(prefix="/api/remote-sources", tags=["sources"], dependencies=ADMIN_ONLY)
 
 
 class RemoteSourceIn(BaseModel):
@@ -43,7 +43,7 @@ def _no_rclone(exc: SyncError) -> HTTPException:
 
 
 @router.get("/remotes")
-def list_remotes(user_id: SessionOnlyUser, integrations: IntegrationsDep) -> RemotesOut:
+def list_remotes(integrations: IntegrationsDep) -> RemotesOut:
     try:
         return RemotesOut(remotes=integrations.rclone.list_remotes())
     except SyncError as exc:
@@ -51,9 +51,7 @@ def list_remotes(user_id: SessionOnlyUser, integrations: IntegrationsDep) -> Rem
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def add(
-    body: RemoteSourceIn, user_id: SessionOnlyUser, integrations: IntegrationsDep
-) -> RemoteSourceOut:
+def add(body: RemoteSourceIn, integrations: IntegrationsDep) -> RemoteSourceOut:
     try:
         source_id = add_remote_source(
             integrations.remote_sources,
@@ -70,7 +68,7 @@ def add(
 
 
 @router.post("/{source_id}/pull", status_code=status.HTTP_202_ACCEPTED)
-def pull(source_id: int, user_id: SessionOnlyUser, integrations: IntegrationsDep) -> PullQueued:
+def pull(source_id: int, integrations: IntegrationsDep) -> PullQueued:
     if integrations.remote_sources.remote_config(source_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no remote source with that id")
     job_id = integrations.repo.enqueue(SCAN_JOB_KIND, {"source_id": source_id})

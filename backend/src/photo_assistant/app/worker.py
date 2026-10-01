@@ -33,6 +33,11 @@ class Worker:
         self._periodic = dict(periodic or {})  # job kind -> seconds between runs
         self._last_queued: dict[str, float] = {}
 
+    @property
+    def kinds(self) -> set[str]:
+        """The job kinds this worker can run."""
+        return set(self._handlers)
+
     def enqueue_due(self, now: float) -> None:
         """Queue each periodic job whose interval has passed (``now``: monotonic seconds)."""
         for kind, every in self._periodic.items():

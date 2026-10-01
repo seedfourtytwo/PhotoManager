@@ -55,6 +55,12 @@ def world(tmp_path: Path) -> Iterator[World]:
     data = tmp_path / "data"
     conn = open_database(tmp_path / "library.db")
     repo = SqliteRepository(conn)
+    for user_id in (1, 2, 4):  # inboxes belong to accounts (core's user table)
+        conn.execute(
+            "INSERT INTO user (id, username, display_name, password_hash, role) "
+            "VALUES (?, ?, ?, 'x', 'member')",
+            (user_id, f"user{user_id}", f"User {user_id}"),
+        )
     integrations = build_integrations(
         data_root=data,
         settings=IntegrationSettings(upload_max_mb=0.01),

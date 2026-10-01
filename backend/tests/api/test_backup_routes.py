@@ -9,9 +9,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.api.deps import admin_user
 from photo_assistant.api.ops_services import OpsServices, build_ops_services
 from photo_assistant.api.ops_settings import OpsSettings
 from photo_assistant.api.routes import backup
+from photo_assistant.domain.access import Role, User
 
 pytestmark = [
     pytest.mark.integration,
@@ -33,6 +35,8 @@ class Env:
         self.disk = tmp_path / "disk"
         self.disk.mkdir()
         app = FastAPI()
+        # core's admin check (session + role) is covered in test_wiring.py
+        app.dependency_overrides[admin_user] = lambda: User(1, "c", "C", Role.ADMIN)
         app.state.ops = self.ops
         app.include_router(backup.router)
         self.client = TestClient(app)

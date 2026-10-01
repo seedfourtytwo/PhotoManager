@@ -6,13 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.api.deps import admin_user
 from photo_assistant.api.integration_settings import IntegrationSettings
 from photo_assistant.api.integrations import build_integrations
 from photo_assistant.api.routes import remote_sources
+from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.model import ImportReport, RunStatus
 
 pytestmark = pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone not installed")
@@ -31,9 +33,12 @@ class World:
     data: Path
 
 
-def _hook(request: Request) -> int | None:
+def _admin_from_header(request: Request) -> User:
+    """Stands in for core's admin check (session + role; covered in test_wiring.py)."""
     user = request.headers.get("x-test-user")
-    return int(user) if user else None
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "log in first")
+    return User(int(user), "admin", "Admin", Role.ADMIN)
 
 
 @pytest.fixture
@@ -51,7 +56,7 @@ def world(tmp_path: Path) -> Iterator[World]:
         repo=repo,
         importer=StubImporter(),
     )
-    app.state.session_user_hook = _hook
+    app.dependency_overrides[admin_user] = _admin_from_header
     yield World(TestClient(app, base_url="http://127.0.0.1"), repo, tmp_path / "data")
     conn.close()
 
