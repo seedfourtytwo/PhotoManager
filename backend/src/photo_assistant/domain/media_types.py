@@ -42,3 +42,7 @@ def edited_original_name(filename: str) -> str | None:
     """iPhone exports edits as ``IMG_E1234.JPG`` next to ``IMG_1234.JPG``; return the latter."""
     match = _EDITED.match(PurePath(filename).name)
     return f"IMG_{match.group(1)}{match.group(2)}" if match else None
+
+
+# What remote pulls fetch (rclone filter): photos and RAW only; videos aren't imported yet.
+IMPORTABLE_EXTENSIONS: frozenset[str] = frozenset(_PHOTO | _RAW)
