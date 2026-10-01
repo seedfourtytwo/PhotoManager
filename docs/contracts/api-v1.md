@@ -144,3 +144,102 @@ renders via libvips with the edit recipe applied.
 
 Items in the trash disappear from every listing; after 30 days a job purges them.
 A purged photo that still exists in a source is **not** re-imported on rescan (remembered by hash).
+
+---
+
+# v1.1 additions (M2 integration)
+
+Backwards compatible: nothing in v1 changed meaning. Same conventions (JSON, `{detail}` errors,
+session cookie, 401/403/404 rules). Every route below needs a session unless it says otherwise.
+
+## Contract gaps closed for the web app
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| POST | `/api/downloads` | `DownloadRequest` as JSON **or** a form (`application/x-www-form-urlencoded` / `multipart/form-data`) whose field `request` holds that JSON | streamed `application/zip` (as v1). A missing or invalid `request` field is `422`. The cross-site guard still applies, so only same-origin forms work. |
+| GET | `/api/assets/{id}/preview` | `?edit=none` | the preview **without** the edit recipe (the editor's base image); any other `edit` value is `422` |
+| GET | `/api/users/directory` | – | `[{id, display_name}]` to share albums with: members see active accounts, admins see every account, guests `403`. No usernames or roles. |
+
+**Edit geometry** (unchanged, now tested on both sides): rotate (quarter turns, clockwise) →
+flip (in the rotated frame) → straighten (clockwise, zoomed just enough to hide the empty
+corners) → crop (fractions of that frame). `web/src/lib/crop.ts` and the libvips renderer
+render the same pixels (`backend/tests/adapters/test_edit_parity.py`).
+
+## Upload and device tokens
+
+Auth: the session cookie **or** `Authorization: Bearer <device token>`. A presented bearer token
+must be valid (a bad one is `401`, never a fallback to the cookie). Disabled accounts `401`,
+guests `403`. Uploads land in the uploader's own inbox source (kind `inbox`, owned by them,
+access `{everyone: null, users: [{owner, edit}]}`: **private to the uploader** until shared).
+
+| Method | Path | Auth | Body | Response |
+|---|---|---|---|---|
+| POST | `/api/upload` | session or device | multipart, any field name, many files | `{files: [{name, outcome: "stored"\|"duplicate"\|"rejected", stored_as, content_hash, asset_id, reason}], import_job_id\|null}`; `400` broken multipart, `415` not multipart |
+| POST | `/api/upload/check` | session or device | `{hashes: [blake3 hex]}` (≤ 5000) | `{missing: [...]}` |
+| GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, revoked}]` |
+| POST | `/api/devices` | session | `{name, platform: "ios"\|"android"\|"desktop"\|"other"}` | `201 {device, token}` (the token is shown once) |
+| DELETE | `/api/devices/{id}` | session | – | `204`; `404` if not yours |
+
+Limits: `PA_UPLOAD_MAX_MB` per file (default 200), `PA_UPLOAD_MAX_FILES` per request (500).
+Photos only (sniffed by their bytes); videos are refused for now.
+
+## Remote sources (admin)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/remote-sources/remotes` | – | `{remotes: [name]}`; `503` without rclone |
+| POST | `/api/remote-sources` | `{label, remote, path}` | `201 {id, label, remote, path}`; `422` unknown/unsafe remote |
+| POST | `/api/remote-sources/{id}/pull` | – | `202 {job_id, source_id}` |
+
+A remote source is an ordinary source of kind `rclone` (default access, like any new source);
+`POST /api/sources/{id}/scan` pulls it read-only (`rclone copy`) into `staging/` and imports.
+
+## Local ML (search, similar photos, people)
+
+All results are limited to what you may see (the same visibility rule as the timeline).
+Without model files every route still answers; nothing fails because a model is missing.
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/api/search` | `q` (free text + facets `date:2023[-07[-04]]`, `person:Lea`, `tag:beach`, `place:"Le Havre"`, `camera:X100`), `limit` ≤ 200, plus any `/api/assets` filter | `{items: (AssetOut + {score})[], text, facets: [{name, value}], mode: "semantic"\|"text"\|"filter", detail}`. With the CLIP model, free text is ranked by meaning (`mode: semantic`, `score` = cosine). Without it, free text falls back to the v1 word search (`mode: text`, `detail: "models not installed: …"`). Facets only: `mode: filter`, newest first. `400` for an impossible date facet. |
+| GET | `/api/assets/{id}/similar` | `limit` ≤ 200 | `(AssetOut + {score})[]`; `503` models not installed; `409` not analysed yet |
+| GET | `/api/assets/{id}/faces` | – | `[{id, asset_id, box: {x, y, w, h}, score, person_id}]` (box in fractions of the displayed photo) |
+| GET | `/api/assets/{id}/tags` | – | `{tags: [{name, score}], screen_or_document: bool\|null}` |
+| GET | `/api/people` | – | `[{id, name, face_count, asset_count, cover: Face\|null}]` (counts over what you may see) |
+| GET | `/api/people/{id}` | – | `Person`; `404` |
+| PATCH | `/api/people/{id}` | `{name}` | `Person` (members/admins; guests `403`) |
+| POST | `/api/people/{id}/merge` | `{source_ids}` | `Person` (guests `403`) |
+| POST | `/api/people/split` | `{face_ids, person_id?, name?}` | `Person` (no `person_id` → a new person; guests `403`) |
+| GET | `/api/people/{id}/assets` | `limit`, `cursor` | `{items: AssetOut[], next_cursor}` newest first |
+| GET | `/api/ml/status` | – | `{clip: {ready, detail}, faces: {ready, detail}, models_installed, counts: {task: {status: n}}}` |
+| POST | `/api/ml/backfill` | – | `{queued, detail}` (admin) — run after `just models` |
+
+## Album → print
+
+Printing puts full-resolution pixels in a file, so it needs `download` on **every** photo of the
+album you can see (`403` otherwise); albums hidden from you are `404`.
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/api/print/options` | – | `{trims: [{id, label, width_mm, height_mm}], themes: [{id, label, paper, ink, font}], layouts: [{id, label, capacity}]}` |
+| POST | `/api/albums/{id}/print/plan` | `PrintRequest` | `{pages: [{layout_id, photos: [asset_id], text}], issues: [{asset_id, ppi, level: "warn"\|"block"}], page_count}` (cover included in `page_count`; nothing is rendered) |
+| POST | `/api/albums/{id}/print` | `PrintRequest` | `200 application/pdf` (`Content-Disposition: attachment; filename="<title>.pdf"`, `X-Print-Warnings: n`); `422 {detail, issues}` when a photo is too small and `allow_low_resolution` is false |
+| GET | `/api/albums/{id}/print/preview` | `page` (1-based; the cover is page 1), `trim`, `theme`, `cover`, `ppi` (24–300, default 96) | `200 image/png`; `422` for a page outside the album |
+
+```
+PrintRequest = {trim: "a4-landscape", theme: "quiet", cover: true, crop_marks: false,
+                pages?: [{layout_id, asset_ids: [id], text?}],   # manual layout; omit = automatic
+                allow_low_resolution?: false}
+```
+Unknown trim, theme or layout, or a page whose photo count doesn't fit its layout: `422`.
+Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop marks).
+
+## Backups (admin)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/backups` | – | `[Target]` with `last_run`, `next_run_at`, `overdue`, `needs_attention` (drives the banner) |
+| POST | `/api/backups` | `{label, repository, password_file, schedule?, quiet_window?, retention?: {daily, weekly, monthly}}` | `201 Target` |
+| PATCH | `/api/backups/{id}` | `{enabled}` | `Target` |
+| POST | `/api/backups/{id}/run` · `/restore-test` | – | `202 {job_id, target_id}` |
+| GET | `/api/backups/{id}/runs` | `limit` | `[Run]` |
