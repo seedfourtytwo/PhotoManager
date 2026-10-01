@@ -67,3 +67,63 @@ build:
 # Build the web app and serve everything from one process on http://127.0.0.1:8420
 run: build
     cd backend && PA_WEB_DIR="$(cd ../web/build && pwd)" uv run python -m photo_assistant
+
+# --- operations (docs/guides/) -----------------------------------------------------------------
+
+# Check this machine: tools, HEIC support, disk, data folder, database, backups.
+doctor:
+    cd backend && uv run python -m photo_assistant.api.cli_ops doctor
+
+# Copy the whole library to DEST with a consistent DB snapshot, verified (resumable).
+[positional-arguments]
+export-library dest *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dest="$(cd "{{invocation_directory()}}" && realpath -m -- "$1")"
+    shift
+    cd backend && uv run python -m photo_assistant.api.cli_ops export-library "$dest" "$@"
+
+# Check every photo's file and hash (default: the configured library).
+[positional-arguments]
+verify-library *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+        root="$(cd "{{invocation_directory()}}" && realpath -- "$1")"; shift; set -- "$root" "$@"
+    fi
+    cd backend && uv run python -m photo_assistant.api.cli_ops verify-library "$@"
+
+# Backups: just backup list | add | run ID | check ID | restore-test ID (docs/guides/backups.md)
+[positional-arguments]
+backup *args:
+    cd backend && uv run python -m photo_assistant.api.cli_ops backup "$@"
+
+# Install and start the systemd user service (laptop). Builds the web app first.
+install-service: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="$(pwd)"
+    [ -f "$repo/.env" ] || { echo "create $repo/.env first (cp .env.example .env)"; exit 1; }
+    [ -x "$repo/backend/.venv/bin/python" ] || { echo "run 'just setup' first"; exit 1; }
+    unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    mkdir -p "$unit_dir"
+    sed "s|@REPO@|$repo|g" deploy/photo-assistant.service > "$unit_dir/photo-assistant.service"
+    systemctl --user daemon-reload
+    systemctl --user enable --now photo-assistant.service
+    systemctl --user --no-pager status photo-assistant.service | head -5 || true
+    echo
+    echo "Running on http://127.0.0.1:8420 — logs: journalctl --user -u photo-assistant -f"
+    if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != "yes" ]; then
+        echo "To keep it running when you are logged out (and start at boot), run once:"
+        echo "    sudo loginctl enable-linger $USER"
+    fi
+
+# Stop and remove the systemd user service. The library is not touched.
+uninstall-service:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/photo-assistant.service"
+    systemctl --user disable --now photo-assistant.service 2>/dev/null || true
+    rm -f "$unit"
+    systemctl --user daemon-reload
+    echo "Service removed. Your library and settings are untouched."
