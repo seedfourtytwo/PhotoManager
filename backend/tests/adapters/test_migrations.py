@@ -1,0 +1,120 @@
+"""The merged migration chain (core 0004-0012, ai-sources 0013-0014, ml 0015, ops 0016).
+
+A fresh library must reach the latest version, and a real M1-era library (version 3, with
+photos in it) must upgrade in place without losing anything, after a snapshot.
+"""
+
+import sqlite3
+from pathlib import Path
+
+from photo_assistant.adapters.sqlite_repository import SqliteRepository, _migrations, open_database
+from photo_assistant.domain.access import Level
+
+EXPECTED_TABLES = {
+    # M1
+    "source", "asset", "asset_source", "import_run", "import_item", "job",
+    # core (M2)
+    "user", "session", "login_failure", "source_access", "album", "purged_hash",
+    # ai-sources
+    "ai_log", "inbox", "device",
+    # ml
+    "ml_task", "clip_embedding", "face", "person", "tag", "asset_tag", "asset_ml_flag",
+    # ops
+    "backup_target", "backup_run",
+}  # fmt: skip
+
+
+def _latest() -> int:
+    return max(n for n, _ in _migrations())
+
+
+def _tables(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    return {r[0] for r in rows}
+
+
+def _make_v3_library(db: Path) -> None:
+    """A library as M1 left it: migrations 1-3 and two photos from one folder."""
+    conn = sqlite3.connect(db)
+    for number, sql in _migrations():
+        if number <= 3:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.execute("INSERT INTO source (id, label, root) VALUES (1, 'Pictures', '/home/c/Pictures')")
+    for i in (1, 2):
+        conn.execute(
+            """INSERT INTO asset (id, content_hash, kind, mime_type, byte_size, width, height,
+                   taken_at, date_source, library_path, thumb_path, imported_at)
+               VALUES (?, ?, 'photo', 'image/jpeg', 1000, 800, 600, ?, 'exif', ?, ?,
+                       '2026-08-01T10:00:00')""",
+            (
+                i,
+                f"{i:064x}",
+                f"2019-07-0{i}T18:30:00",
+                f"originals/2019/07/{i:064x}.jpg",
+                f"derived/thumb/00/{i:064x}.webp",
+            ),
+        )
+        conn.execute(
+            """INSERT INTO asset_source (asset_id, source_id, relative_path, byte_size,
+                   mtime_ns, ctime_ns) VALUES (?, 1, ?, 1000, 1, 1)""",
+            (i, f"IMG_{i}.JPG"),
+        )
+    conn.execute(
+        """INSERT INTO import_run (source_id, status, started_at, finished_at, summary_json)
+           VALUES (1, 'done', '2026-08-01T10:00:00', '2026-08-01T10:01:00', '{}')"""
+    )
+    conn.execute("INSERT INTO job (kind, payload_json) VALUES ('preview', '{\"asset_id\": 1}')")
+    conn.commit()
+    conn.close()
+
+
+def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
+    numbers = [n for n, _ in _migrations()]
+    assert numbers == list(range(1, len(numbers) + 1))
+    assert _latest() == 16
+
+
+def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
+    conn = open_database(tmp_path / "library.db", backup_dir=tmp_path / "backups")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert _tables(conn) >= EXPECTED_TABLES
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert not (tmp_path / "backups").exists()
+
+
+def test_a_v3_library_with_photos_upgrades_cleanly_after_a_snapshot(tmp_path: Path) -> None:
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert _tables(conn) >= EXPECTED_TABLES
+    # the snapshot is the untouched v3 library
+    (snapshot,) = (tmp_path / "backups").glob("library-v3-*.db")
+    old = sqlite3.connect(snapshot)
+    assert old.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert old.execute("SELECT COUNT(*) FROM asset").fetchone()[0] == 2
+    # the photos, their origins and history are all still there
+    repo = SqliteRepository(conn)
+    assert [s.label for s in repo.list_sources()] == ["Pictures"]
+    assert repo.count_assets() == 2
+    assert repo.asset_id_for_source_path(1, "IMG_2.JPG") == 2
+    assert len(repo.list_jobs()) == 1
+    # M1 sources stay open to everyone at the contract default; owners are set by the M2 setup
+    assert repo.get_access(1) == (Level.DOWNLOAD, [])
+    first_sources = conn.execute("SELECT first_source_id FROM asset ORDER BY id").fetchall()
+    assert [r[0] for r in first_sources] == [1, 1]
+    # nothing new is attached to the old rows by accident
+    assert conn.execute("SELECT config_json FROM source").fetchone()[0] is None
+    assert conn.execute("SELECT COUNT(*) FROM inbox").fetchone()[0] == 0
+
+
+def test_an_upgraded_library_reopens_without_a_second_snapshot(tmp_path: Path) -> None:
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+    open_database(db, backup_dir=tmp_path / "backups").close()
+    open_database(db, backup_dir=tmp_path / "backups").close()
+    assert len(list((tmp_path / "backups").glob("*.db"))) == 1
