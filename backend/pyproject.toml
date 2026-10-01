@@ -16,6 +16,7 @@ dependencies = [
     "zipstream-ng>=1.9.3",
     "pillow>=12.3.0",
     "pycountry>=26.2.16",
+    "typst>=0.15.0",
 ]
 
 [dependency-groups]
@@ -88,4 +89,6 @@ layers = [
 name = "Domain stays pure (no frameworks, no I/O libraries)"
 type = "forbidden"
 source_modules = ["photo_assistant.domain"]
-forbidden_modules = ["fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn"]
+forbidden_modules = [
+    "fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn", "typst", "pyvips",
+]
