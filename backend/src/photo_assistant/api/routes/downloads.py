@@ -3,8 +3,9 @@
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 
 from photo_assistant.adapters.zip_stream import zip_stream
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep, require_view
@@ -17,6 +18,40 @@ from photo_assistant.domain.export_naming import ExportOptions, OptionsError
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api", tags=["downloads"], dependencies=LOGGED_IN)
+
+_FORMS = ("application/x-www-form-urlencoded", "multipart/form-data")
+
+
+async def download_request(request: Request) -> DownloadRequest:
+    """A JSON body, or (v1.1) a form whose field ``request`` holds that JSON: the web app posts
+    a real form into a hidden frame so the browser streams the ZIP straight to disk."""
+    if request.headers.get("content-type", "").startswith(_FORMS):
+        raw = (await request.form()).get("request")
+        if not isinstance(raw, str):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "the form needs a 'request' field (JSON)"
+            )
+    else:
+        raw = (await request.body()).decode("utf-8", "replace")
+    try:
+        return DownloadRequest.model_validate_json(raw)
+    except ValidationError as exc:
+        detail = "; ".join(e["msg"] for e in exc.errors(include_url=False))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail) from exc
+
+
+DownloadBody = Annotated[DownloadRequest, Depends(download_request)]
+_BODY_SCHEMA = {
+    "requestBody": {
+        "content": {
+            "application/json": {"schema": {"$ref": "#/components/schemas/DownloadRequest"}},
+            "application/x-www-form-urlencoded": {
+                "schema": {"type": "object", "properties": {"request": {"type": "string"}}}
+            },
+        },
+        "required": True,
+    }
+}
 
 
 def _scope(
@@ -57,10 +92,8 @@ def estimate(services: ServicesDep, viewer: ViewerDep, body: DownloadRequest) ->
     return Estimate(count=len(views), bytes=services.downloads.estimate(views, options))
 
 
-@router.post("/downloads")
-def download_zip(
-    services: ServicesDep, viewer: ViewerDep, body: DownloadRequest
-) -> StreamingResponse:
+@router.post("/downloads", openapi_extra=_BODY_SCHEMA)
+def download_zip(services: ServicesDep, viewer: ViewerDep, body: DownloadBody) -> StreamingResponse:
     entries, skipped, options = _entries(services, viewer, body)
     files = ((e.name, services.downloads.content(e.view, options)) for e in entries)
     return StreamingResponse(

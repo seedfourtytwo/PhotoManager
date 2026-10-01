@@ -1,6 +1,7 @@
 """The timeline, one photo, its images and per-user state (contract: Assets)."""
 
-from typing import Annotated
+from dataclasses import replace
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
@@ -158,8 +159,17 @@ def thumb(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
 
 
 @router.get("/{asset_id}/preview")
-def preview(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
-    return _serve_webp(services, require_view(services, viewer, asset_id), "preview")
+def preview(
+    services: ServicesDep,
+    viewer: ViewerDep,
+    asset_id: int,
+    edit: Annotated[Literal["none"] | None, Query()] = None,
+) -> Response:
+    """``?edit=none`` (v1.1): the photo without its recipe, the editor's base image."""
+    view = require_view(services, viewer, asset_id)
+    if edit == "none":
+        view = replace(view, recipe=None)
+    return _serve_webp(services, view, "preview")
 
 
 @router.get("/{asset_id}/original")

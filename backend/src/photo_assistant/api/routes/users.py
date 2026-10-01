@@ -1,9 +1,9 @@
-"""Account administration (admin only)."""
+"""Account administration (admin only), and the small directory every member may read."""
 
 from fastapi import APIRouter, HTTPException, status
 
-from photo_assistant.api.deps import ADMIN_ONLY, ServicesDep
-from photo_assistant.api.schemas import NewUser, UserOut, UserPatchIn
+from photo_assistant.api.deps import ADMIN_ONLY, CurrentUser, ServicesDep
+from photo_assistant.api.schemas import DirectoryEntry, NewUser, UserOut, UserPatchIn
 from photo_assistant.app.accounts import (
     AccountError,
     LastAdminError,
@@ -11,16 +11,28 @@ from photo_assistant.app.accounts import (
     NotFoundError,
     UserPatch,
 )
+from photo_assistant.domain.access import Role
 
-router = APIRouter(prefix="/api/users", tags=["users"], dependencies=ADMIN_ONLY)
+router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-@router.get("")
+@router.get("/directory")
+def directory(services: ServicesDep, user: CurrentUser) -> list[DirectoryEntry]:
+    """Names to share albums with (v1.1): any member sees the active accounts, an admin sees
+    every account. Ids and display names only; guests can't share, so they get none."""
+    if user.role is Role.GUEST:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "guests can't share albums")
+    everyone = services.accounts.list_users()
+    shown = everyone if user.role is Role.ADMIN else [u for u in everyone if not u.disabled]
+    return [DirectoryEntry(id=u.id, display_name=u.display_name) for u in shown]
+
+
+@router.get("", dependencies=ADMIN_ONLY)
 def list_users(services: ServicesDep) -> list[UserOut]:
     return [UserOut.of(u) for u in services.accounts.list_users()]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=ADMIN_ONLY)
 def create_user(services: ServicesDep, body: NewUser) -> UserOut:
     try:
         user = services.accounts.create_user(
@@ -33,7 +45,7 @@ def create_user(services: ServicesDep, body: NewUser) -> UserOut:
     return UserOut.of(user)
 
 
-@router.patch("/{user_id}")
+@router.patch("/{user_id}", dependencies=ADMIN_ONLY)
 def update_user(services: ServicesDep, user_id: int, body: UserPatchIn) -> UserOut:
     patch = UserPatch(
         display_name=body.display_name,

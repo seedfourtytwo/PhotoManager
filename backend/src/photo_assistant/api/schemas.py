@@ -434,3 +434,10 @@ class Updated(BaseModel):
 class Queued(BaseModel):
     job_id: int
     source_id: int
+
+
+class DirectoryEntry(BaseModel):
+    """v1.1: who you can share an album with (no usernames, roles or state)."""
+
+    id: int
+    display_name: str
