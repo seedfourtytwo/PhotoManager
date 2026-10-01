@@ -5,6 +5,10 @@ python -m photo_assistant import FOLDER      add FOLDER as a source (if new) and
 python -m photo_assistant sources            list sources
 python -m photo_assistant create-user NAME [--role admin|member|guest]
                                              create an account (prompts for the password)
+python -m photo_assistant doctor             check this machine is ready
+python -m photo_assistant export-library DEST / verify-library [ROOT]
+python -m photo_assistant backup list|add|run|check|restore-test …
+python -m photo_assistant ml-backfill        queue ML analysis of everything (after just models)
 """
 
 import argparse
@@ -15,6 +19,7 @@ from pathlib import Path
 import uvicorn
 
 from photo_assistant.adapters.filesystem import DiskLibraryStore
+from photo_assistant.api import cli_ops
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.main import create_app
 from photo_assistant.api.services import build_services
@@ -132,6 +137,19 @@ def _create_user(username: str, role: Role, display_name: str | None) -> int:
     return 0
 
 
+def _ml_backfill() -> int:
+    services = build_services(get_settings())
+    try:
+        queued = services.ml.backfill()
+        status = services.ml.status()
+    finally:
+        services.close()
+    print(f"Queued {queued} analysis jobs; the server's worker runs them.")
+    for name, model in status.items():
+        print(f"  {name:<6} {'ready' if model.ready else 'missing'}: {model.detail}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="photo_assistant")
     sub = parser.add_subparsers(dest="command")
@@ -144,7 +162,13 @@ def main(argv: list[str] | None = None) -> int:
     user.add_argument("username")
     user.add_argument("--role", type=Role, choices=list(Role), default=Role.MEMBER)
     user.add_argument("--display-name")
+    sub.add_parser("ml-backfill", help="queue ML analysis of every photo not analysed yet")
+    cli_ops.register(sub)
     args = parser.parse_args(argv)
+    if (code := cli_ops.dispatch(args)) is not None:
+        return code
+    if args.command == "ml-backfill":
+        return _ml_backfill()
     if args.command == "create-user":
         return _create_user(args.username, args.role, args.display_name)
     if args.command == "import":

@@ -1,8 +1,6 @@
 """Ops commands: export-library, verify-library, doctor, backup.
 
-Registered as subcommands of ``python -m photo_assistant`` by the integrator
-(docs/wiring/ops.md); until then, and from the justfile, run them as
-``python -m photo_assistant.api.cli_ops <command>``.
+Subcommands of ``python -m photo_assistant`` (the justfile calls them that way).
 """
 
 import argparse
@@ -16,7 +14,6 @@ from photo_assistant.api.ops_services import (
     build_doctor_config,
     build_library_transfer,
 )
-from photo_assistant.api.ops_settings import OpsSettings
 from photo_assistant.api.settings import Settings, get_settings
 from photo_assistant.app.backup import BackupService, UnknownTargetError
 from photo_assistant.app.doctor import exit_code, render, run_doctor
@@ -219,7 +216,7 @@ def _backup(args: argparse.Namespace, settings: Settings) -> int:
     if not (root / "library.db").is_file():
         print(f"No library at {root} yet: import some photos first.", file=sys.stderr)
         return 2
-    service, store = build_backup_service(root, OpsSettings())
+    service, store = build_backup_service(root, settings.ops)
     try:
         return _BACKUP[args.backup_command](service, args)
     finally:

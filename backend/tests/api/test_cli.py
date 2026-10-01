@@ -45,3 +45,55 @@ def test_create_user_refuses_mismatched_or_short_passwords(
     assert "do not match" in capsys.readouterr().err
     assert cli.main(["create-user", "c"]) == 2
     assert "10 characters" in capsys.readouterr().err
+
+
+# --- ops commands are subcommands of the main CLI (docs/wiring/ops.md) -----------------------
+
+
+def test_doctor_runs_from_the_main_cli(data_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    code = cli.main(["doctor"])
+    out = capsys.readouterr().out
+    assert code in (0, 1)  # 1 = something to fix on this machine (e.g. a missing tool)
+    assert "exiftool" in out.lower()
+
+
+def test_export_and_verify_library_from_the_main_cli(
+    data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tests.synthetic import write_photo
+
+    pics = tmp_path / "pics"
+    write_photo(pics / "a.jpg", seed=1)
+    assert cli.main(["import", str(pics)]) == 0
+    destination = tmp_path / "copy"
+    assert cli.main(["export-library", str(destination)]) == 0
+    assert cli.main(["verify-library", str(destination)]) == 0
+    assert "1" in capsys.readouterr().out
+
+
+def test_backup_list_from_the_main_cli(
+    data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["backup", "list"]) == 2
+    assert "import some photos first" in capsys.readouterr().err
+    from tests.synthetic import write_photo
+
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics")]) == 0
+    assert cli.main(["backup", "list"]) == 0
+
+
+def test_backup_settings_come_from_the_main_settings(
+    data_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PA_RESTIC_BINARY", "/nowhere/restic")
+    get_settings.cache_clear()
+    assert get_settings().ops.restic_binary == "/nowhere/restic"
+
+
+def test_ml_backfill_reports_missing_models(
+    data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["ml-backfill"]) == 0
+    out = capsys.readouterr().out
+    assert "Queued" in out and "missing" in out

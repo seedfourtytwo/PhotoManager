@@ -40,6 +40,10 @@ sources:
 models *args:
     cd backend && uv run python scripts/download_models.py {{args}}
 
+# After `just models`: queue CLIP, faces and tags for every photo not analysed yet.
+ml-backfill:
+    cd backend && uv run python -m photo_assistant ml-backfill
+
 # Everything CI runs, in the same order. Must pass before every push.
 check: lint types test
 
@@ -77,7 +81,7 @@ run: build
 
 # Check this machine: tools, HEIC support, disk, data folder, database, backups.
 doctor:
-    cd backend && uv run python -m photo_assistant.api.cli_ops doctor
+    cd backend && uv run python -m photo_assistant doctor
 
 # Copy the whole library to DEST with a consistent DB snapshot, verified (resumable).
 [positional-arguments]
@@ -86,7 +90,7 @@ export-library dest *args:
     set -euo pipefail
     dest="$(cd "{{invocation_directory()}}" && realpath -m -- "$1")"
     shift
-    cd backend && uv run python -m photo_assistant.api.cli_ops export-library "$dest" "$@"
+    cd backend && uv run python -m photo_assistant export-library "$dest" "$@"
 
 # Check every photo's file and hash (default: the configured library).
 [positional-arguments]
@@ -96,12 +100,12 @@ verify-library *args:
     if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
         root="$(cd "{{invocation_directory()}}" && realpath -- "$1")"; shift; set -- "$root" "$@"
     fi
-    cd backend && uv run python -m photo_assistant.api.cli_ops verify-library "$@"
+    cd backend && uv run python -m photo_assistant verify-library "$@"
 
 # Backups: just backup list | add | run ID | check ID | restore-test ID (docs/guides/backups.md)
 [positional-arguments]
 backup *args:
-    cd backend && uv run python -m photo_assistant.api.cli_ops backup "$@"
+    cd backend && uv run python -m photo_assistant backup "$@"
 
 # Install and start the systemd user service (laptop). Builds the web app first.
 install-service: build
