@@ -52,6 +52,18 @@ in this codebase, and plain SQL keeps the schema readable.
 - Rescans skip files whose size and modification time are unchanged (stored per source file,
   migration 0002); changed files are re-hashed, so an edit is never missed.
 
+## Accounts, places, groups, downloads (M2 dependencies)
+
+- **argon2-cffi** — argon2id password hashes (RFC 9106 low-memory profile: t=3, 64 MiB).
+- **reverse_geocoder** — used only for its bundled GeoNames cities file (population > 1000);
+  we build our own k-d tree over unit-sphere points with **scipy** (its dependency) and drop
+  places more than 50 km away. Fully offline. **pycountry** turns ISO codes into country
+  names (offline data).
+- **imagehash** + **Pillow** — 64-bit pHash of each thumbnail for near-duplicates
+  (≤ 6 bits within 10 min) next to bursts (same camera within 3 s).
+- **zipstream-ng** — ZIPs streamed while sent, entries stored (not deflated).
+- ExifTool (already installed) strips location/metadata from *temporary copies* for downloads.
+
 ## Local ML: ONNX Runtime (CUDA on the RTX 2070, CPU fallback)
 
 | Task | Model | Notes |

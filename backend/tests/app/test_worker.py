@@ -98,3 +98,20 @@ def test_busy_library_requeues_without_using_up_attempts(repo: SqliteRepository)
     for _ in range(5):
         worker.run_once()
     assert repo.list_jobs("done"), "succeeded on the 5th try although max_attempts is 3"
+
+
+def test_periodic_jobs_are_queued_once_per_interval(repo: SqliteRepository) -> None:
+    worker = Worker(repo, {"tidy": lambda payload: None}, FixedClock(), periodic={"tidy": 3600})
+    worker.enqueue_due(now=0.0)
+    worker.enqueue_due(now=10.0)
+    assert len(repo.list_jobs("queued")) == 1, "not due again yet"
+    worker.enqueue_due(now=3601.0)
+    assert len(repo.list_jobs("queued")) == 1, "never two of the same kind waiting"
+    worker.run_until_idle()
+    worker.enqueue_due(now=7300.0)
+    assert len(repo.list_jobs("queued")) == 1
+
+
+def test_enqueue_once_skips_a_waiting_duplicate(repo: SqliteRepository) -> None:
+    assert repo.enqueue_once("geocode") is not None
+    assert repo.enqueue_once("geocode") is None

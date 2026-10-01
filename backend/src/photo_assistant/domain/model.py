@@ -40,6 +40,7 @@ class Source:
     root: str  # absolute path on this machine; sources are external, the library is portable
     enabled: bool = True
     kind: str = "folder"
+    owner_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

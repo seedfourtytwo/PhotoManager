@@ -39,6 +39,7 @@ def ensure_relative(path: str) -> PurePosixPath:
 
 
 DERIVATIVE_KINDS = ("thumb", "preview")
+_RECIPE_KEY_LENGTH = 16
 
 
 def derived_relpath(kind: str, content_hash: str) -> PurePosixPath:
@@ -48,3 +49,14 @@ def derived_relpath(kind: str, content_hash: str) -> PurePosixPath:
     if len(content_hash) != _BLAKE3_HEX_LENGTH or not set(content_hash) <= _HASH_ALPHABET:
         raise InvalidLibraryPathError(f"not a lowercase BLAKE3 hex digest: {content_hash!r}")
     return PurePosixPath("derived", kind, content_hash[:2], f"{content_hash}.webp")
+
+
+def edited_relpath(kind: str, content_hash: str, recipe_key: str) -> PurePosixPath:
+    """``derived/edited/<hh>/<hash>-<recipe key>-<kind>.webp``: a cached render of an edit.
+    Keyed by content *and* recipe, so a changed recipe never serves a stale image."""
+    base = derived_relpath(kind, content_hash)
+    if len(recipe_key) != _RECIPE_KEY_LENGTH or not set(recipe_key) <= _HASH_ALPHABET:
+        raise InvalidLibraryPathError(f"not a recipe key: {recipe_key!r}")
+    return PurePosixPath(
+        "derived", "edited", content_hash[:2], f"{content_hash}-{recipe_key}-{base.parts[1]}.webp"
+    )

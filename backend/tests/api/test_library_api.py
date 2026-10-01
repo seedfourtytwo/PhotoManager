@@ -1,24 +1,19 @@
 """API tests: the HTTP surface M1 exposes (the web UI builds on these in M2)."""
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from photo_assistant.api.main import create_app
 from photo_assistant.api.services import Services
-from photo_assistant.api.settings import Settings
 from tests.fixtures.expected import DUPLICATE, FAILED, IMPORTED, SKIPPED
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> Iterator[TestClient]:
-    settings = Settings(data_root=tmp_path / "data", worker_enabled=False, min_free_gb=0)
-    with TestClient(create_app(settings), base_url="http://127.0.0.1") as c:
-        yield c
+def client(admin: TestClient) -> TestClient:
+    return admin
 
 
 def services(client: TestClient) -> Services:
@@ -92,7 +87,7 @@ def test_timeline_pages_through_everything_newest_first(
     assert dates == sorted(dates, reverse=True)
     first = seen[0]
     assert set(first) >= {"id", "taken_at", "date_source", "width", "height", "thumb"}
-    assert first["thumb"]["url"].endswith("/thumb")
+    assert first["thumb"]["url"] == f"/api/assets/{first['id']}/thumb?v=0"
     assert client.get("/api/assets", params={"cursor": "junk"}).status_code == 400
 
 
@@ -140,5 +135,5 @@ def test_stats_and_jobs(client: TestClient, source_guard: Path) -> None:
     assert stats["jobs"]["failed"] == 0
     assert stats["free_bytes"] > 0
     jobs = client.get("/api/jobs", params={"status": "done"}).json()
-    assert {j["kind"] for j in jobs} == {"scan_source", "preview"}
+    assert {j["kind"] for j in jobs} == {"scan_source", "preview", "geocode", "group"}
     assert client.post("/api/jobs/999/retry").status_code == 404

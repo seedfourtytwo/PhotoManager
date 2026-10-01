@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -53,9 +54,31 @@ class RenderedImage:
     height: int
 
 
+@dataclass(frozen=True, slots=True)
+class RenderSpec:
+    """How to render a photo: its edit recipe, size, format and metadata."""
+
+    recipe: Recipe | None = None
+    max_edge: int | None = None  # fit the long edge; never upscale
+    format: str = "webp"  # webp | jpeg | png
+    quality: int = 80
+    keep_metadata: bool = False  # EXIF/XMP carried over (orientation reset); else stripped
+
+
 class ImageRenderer(Protocol):
     def render(self, source: Path, destination: Path, max_edge: int) -> tuple[int, int]:
         """Write an orientation-corrected WebP fitting a square box. Returns its size."""
+        ...
+
+    def render_variant(self, source: Path, destination: Path, spec: RenderSpec) -> tuple[int, int]:
+        """Orientation-corrected, recipe applied, resized, encoded as asked. Returns its size."""
+        ...
+
+
+class MetadataStripper(Protocol):
+    def strip(self, path: Path, *, location_only: bool) -> None:
+        """Remove location (GPS) tags, or all metadata, from a file *in place*. Only ever
+        called on temporary copies, never on library originals or source files."""
         ...
 
 
@@ -124,13 +147,17 @@ class Job:
 
 class Repository(Protocol):
     # sources
-    def add_source(self, label: str, root: str) -> Source: ...
+    def add_source(self, label: str, root: str, owner_id: int | None = None) -> Source: ...
     def get_source(self, source_id: int) -> Source | None: ...
     def list_sources(self) -> list[Source]: ...
     def set_source_enabled(self, source_id: int, enabled: bool) -> None: ...
 
     # assets
     def find_asset_id_by_hash(self, content_hash: str) -> int | None: ...
+    def is_purged_hash(self, content_hash: str) -> bool:
+        """True if this content was purged from the library (it must not come back)."""
+        ...
+
     def add_asset(self, asset: NewAsset, imported_at: datetime) -> int: ...
     def record_import(
         self,
@@ -180,6 +207,10 @@ class Repository(Protocol):
 
     # job queue
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...
+    def enqueue_once(self, kind: str) -> int | None:
+        """Queue a payload-less job unless one of that kind is already waiting."""
+        ...
+
     def claim_next_job(self, now: datetime) -> Job | None: ...
     def complete_job(self, job_id: int) -> None: ...
     def fail_job(self, job_id: int, error: str, retry: bool) -> None: ...

@@ -24,6 +24,7 @@ class DateSource(StrEnum):
     XMP = "xmp"
     FILENAME = "filename"
     FILE_MTIME = "file_mtime"
+    MANUAL = "manual"  # fixed by a person (FEATURES 2.12)
 
 
 @dataclass(frozen=True, slots=True)
