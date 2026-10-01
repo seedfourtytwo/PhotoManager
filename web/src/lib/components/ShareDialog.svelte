@@ -1,6 +1,5 @@
 <script lang="ts">
-	import type { AlbumMember, User } from '$lib/api';
-	import { ApiError } from '$lib/api';
+	import type { AlbumMember, DirectoryEntry } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import Dialog from './Dialog.svelte';
 
@@ -8,7 +7,7 @@
 	let { albumId, ownerId, onclose }: Props = $props();
 
 	let members = $state<AlbumMember[]>([]);
-	let users = $state<User[] | null>(null);
+	let users = $state<DirectoryEntry[]>([]);
 	let adding = $state('');
 	let busy = $state(false);
 
@@ -17,21 +16,16 @@
 			.albumMembers(albumId)
 			.then((m) => (members = m))
 			.catch((e: unknown) => notice.error(e));
-		// The contract only lists users for admins; others add people by user id.
+		// v1.1: any member may read the directory (ids and names), so owners share by name.
 		api
-			.users()
+			.userDirectory()
 			.then((u) => (users = u))
-			.catch((e: unknown) => {
-				if (!(e instanceof ApiError && e.status === 403)) notice.error(e);
-			});
+			.catch((e: unknown) => notice.error(e));
 	});
 
-	const nameOf = (id: number) => {
-		const u = users?.find((x) => x.id === id);
-		return u ? `${u.display_name} (${u.username})` : `User ${id}`;
-	};
+	const nameOf = (id: number) => users.find((x) => x.id === id)?.display_name ?? `User ${id}`;
 	const candidates = $derived(
-		(users ?? []).filter(
+		users.filter(
 			(u) =>
 				u.id !== ownerId && u.id !== session.user?.id && !members.some((m) => m.user_id === u.id)
 		)
@@ -78,14 +72,10 @@
 		{/each}
 	</ul>
 	<div class="add">
-		{#if users}
-			<select bind:value={adding} aria-label="Person to add">
-				<option value="">Add a person…</option>
-				{#each candidates as u (u.id)}<option value={String(u.id)}>{u.display_name}</option>{/each}
-			</select>
-		{:else}
-			<input bind:value={adding} inputmode="numeric" placeholder="User id" aria-label="User id" />
-		{/if}
+		<select bind:value={adding} aria-label="Person to add">
+			<option value="">Add a person…</option>
+			{#each candidates as u (u.id)}<option value={String(u.id)}>{u.display_name}</option>{/each}
+		</select>
 		<button type="button" disabled={!adding} onclick={add}>Add</button>
 	</div>
 	{#snippet actions()}

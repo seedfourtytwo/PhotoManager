@@ -17,6 +17,7 @@ import type {
 	BulkState,
 	CalendarDay,
 	DateChange,
+	DirectoryEntry,
 	DownloadEstimate,
 	DownloadOptions,
 	DownloadRequest,
@@ -130,6 +131,9 @@ export function createApi(options: ApiOptions = {}) {
 		users: () => get<User[]>('/api/users'),
 		createUser: (body: NewUser) => request<User>('POST', '/api/users', body),
 		updateUser: (id: Id, body: UserPatch) => request<User>('PATCH', `/api/users/${id}`, body),
+		/** v1.1: names to share albums with, for any member (not only admins). */
+		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
+		uploadUrl: `${base}/api/upload`,
 
 		// sources, imports, jobs
 		sources: () => get<Source[]>('/api/sources'),
@@ -175,7 +179,9 @@ export function createApi(options: ApiOptions = {}) {
 			request<Recipe>('PUT', `/api/assets/${id}/edit`, recipe),
 		revertRecipe: (id: Id) => request<void>('DELETE', `/api/assets/${id}/edit`),
 		group: (groupId: Id) => get<AssetOut[]>(`/api/groups/${groupId}`),
-		previewUrl: (id: Id) => `${base}/api/assets/${id}/preview`,
+		/** `edit: 'none'` (v1.1) gives the photo without its recipe: the editor's base image. */
+		previewUrl: (id: Id, options: { edit?: 'none' } = {}) =>
+			`${base}/api/assets/${id}/preview${options.edit ? `?edit=${options.edit}` : ''}`,
 		originalUrl: (id: Id) => `${base}/api/assets/${id}/original`,
 
 		// downloads

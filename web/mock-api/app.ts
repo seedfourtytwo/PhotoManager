@@ -338,6 +338,43 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		});
 	}
 
+	function inboxFor(user: MockUser) {
+		let inbox = state.sources.find((s) => s.kind === 'inbox' && s.owner_id === user.id);
+		if (!inbox) {
+			inbox = {
+				id: state.nextId.source++,
+				label: `Uploads (${user.display_name})`,
+				path: `inbox/${user.id}`,
+				enabled: true,
+				kind: 'inbox',
+				owner_id: user.id,
+				asset_count: 0
+			};
+			state.sources.push(inbox);
+			state.access.set(inbox.id, { everyone: null, users: [{ user_id: user.id, level: 'edit' }] });
+		}
+		return inbox;
+	}
+
+	/** The files of a multipart body: enough parsing for a mock (no nested parts). */
+	function multipartFiles(raw: Buffer, type: string) {
+		const boundary = /boundary=("?)([^";]+)\1/.exec(type)?.[2];
+		if (!boundary) throw new HttpError(400, 'Multipart upload without a boundary.');
+		const files: { name: string; content: Buffer }[] = [];
+		const marker = Buffer.from(`--${boundary}`);
+		let start = raw.indexOf(marker);
+		while (start !== -1) {
+			const next = raw.indexOf(marker, start + marker.length);
+			if (next === -1) break;
+			const part = raw.subarray(start + marker.length + 2, next - 2);
+			const split = part.indexOf('\r\n\r\n');
+			const name = /filename="([^"]*)"/.exec(part.subarray(0, split).toString('utf8'))?.[1];
+			if (split !== -1 && name) files.push({ name, content: part.subarray(split + 4) });
+			start = next;
+		}
+		return files;
+	}
+
 	function queueScan(sourceId: number) {
 		const job = {
 			id: state.nextId.job++,
@@ -559,6 +596,55 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 
 		// users
 		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(publicUser)))],
+		[
+			'GET',
+			/^\/api\/users\/directory$/,
+			(ctx) => {
+				const user = me(ctx);
+				if (user.role === 'guest') throw new HttpError(403, "Guests can't share albums.");
+				const shown = state.users.filter((u) => user.role === 'admin' || !u.disabled);
+				return ok(shown.map((u) => ({ id: u.id, display_name: u.display_name })));
+			}
+		],
+
+		// upload (v1.1): into the caller's private inbox source
+		[
+			'POST',
+			/^\/api\/upload$/,
+			(ctx) => {
+				const user = me(ctx);
+				if (user.role === 'guest')
+					throw new HttpError(403, 'Guests can view and download, not upload.');
+				const body = ctx.body as { multipart?: Buffer; type?: string } | undefined;
+				if (!body?.multipart || !body.type)
+					throw new HttpError(415, 'Send the photos as multipart/form-data.');
+				const inbox = inboxFor(user);
+				const month = nowIso().slice(0, 7);
+				const files = multipartFiles(body.multipart, body.type).map(({ name, content }) => {
+					const isPhoto =
+						content.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])) ||
+						content.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+					if (!isPhoto)
+						return { name, outcome: 'rejected', stored_as: null, content_hash: null,
+							asset_id: null, reason: 'not a photo' }; // prettier-ignore
+					const asset = makeAsset(
+						state.nextId.asset++,
+						new Date(),
+						null,
+						'phone',
+						rng(content.length)
+					);
+					asset.sources = [{ source_id: inbox.id, relative_path: `${month}/${name}` }];
+					state.assets.push(asset);
+					return { name, outcome: 'stored', stored_as: `${month}/${name}`,
+						content_hash: null, asset_id: null, reason: null }; // prettier-ignore
+				});
+				const job = { id: state.nextId.job++, kind: 'import', payload: { source_id: inbox.id },
+					status: 'done' as const, attempts: 1, error: null, run_at: 0 }; // prettier-ignore
+				state.jobs.push(job);
+				return ok({ files, import_job_id: job.id });
+			}
+		],
 		[
 			'POST',
 			/^\/api\/users$/,
@@ -1200,6 +1286,9 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 	async function readBody(req: IncomingMessage): Promise<unknown> {
 		const chunks: Buffer[] = [];
 		for await (const chunk of req) chunks.push(chunk as Buffer);
+		const type0 = req.headers['content-type'] ?? '';
+		if (type0.startsWith('multipart/form-data'))
+			return { multipart: Buffer.concat(chunks), type: type0 };
 		const text = Buffer.concat(chunks).toString('utf8');
 		if (!text) return undefined;
 		const type = req.headers['content-type'] ?? '';

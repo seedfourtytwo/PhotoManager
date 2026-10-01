@@ -230,3 +230,20 @@ export type AlbumMember = { user_id: Id; role: 'viewer' | 'editor' };
 // --- trash ---------------------------------------------------------------------------------
 
 export type TrashItem = AssetOut & { trashed_at: string };
+
+// --- contract v1.1 -----------------------------------------------------------------------
+
+/** GET /api/users/directory: who an album can be shared with. */
+export type DirectoryEntry = { id: Id; display_name: string };
+
+export type UploadOutcome = 'stored' | 'duplicate' | 'rejected';
+export type UploadedFile = {
+	name: string;
+	outcome: UploadOutcome;
+	stored_as: string | null;
+	content_hash: string | null;
+	asset_id: Id | null;
+	reason: string | null;
+};
+/** POST /api/upload (multipart, any field name, many files). */
+export type UploadResult = { files: UploadedFile[]; import_job_id: Id | null };

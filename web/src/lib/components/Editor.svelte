@@ -154,7 +154,7 @@
 	<div class="area" bind:clientWidth={areaW} bind:clientHeight={areaH}>
 		<div class="stage" style:width={`${stage.w}px`} style:height={`${stage.h}px`}>
 			<img
-				src={`${api.previewUrl(asset.id)}?edit=none`}
+				src={api.previewUrl(asset.id, { edit: 'none' })}
 				alt={describePhoto(asset)}
 				draggable="false"
 				onload={(e) => {

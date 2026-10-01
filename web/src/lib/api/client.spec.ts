@@ -268,3 +268,17 @@ describe('createApi', () => {
 		]);
 	});
 });
+
+describe('contract v1.1', () => {
+	it('reads the user directory for sharing', async () => {
+		const { calls, fetcher } = fakeServer([json([{ id: 2, display_name: 'Lea' }])]);
+		const api = createApi({ fetch: fetcher });
+		expect(await api.userDirectory()).toEqual([{ id: 2, display_name: 'Lea' }]);
+		expect(calls[0].url).toBe('/api/users/directory');
+	});
+
+	it('asks for the un-edited preview as the editor base', () => {
+		const api = createApi({ fetch: fakeServer([]).fetcher });
+		expect(api.previewUrl(4, { edit: 'none' })).toBe('/api/assets/4/preview?edit=none');
+	});
+});

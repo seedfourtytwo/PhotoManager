@@ -247,3 +247,41 @@ describe('with seeded users', () => {
 		expect(await api.jobs('failed')).toEqual([]);
 	});
 });
+
+describe('contract v1.1 in the mock', () => {
+	beforeEach(() => start('seed'));
+
+	it('lists a user directory for members, not for guests', async () => {
+		const members = await (await signedIn()).userDirectory();
+		expect(members.length).toBeGreaterThan(1);
+		expect(Object.keys(members[0]).sort()).toEqual(['display_name', 'id']);
+	});
+
+	it('stores uploaded photos in a private inbox and refuses other files', async () => {
+		const api = await signedIn();
+		const form = new FormData();
+		form.append('file', new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2])]), 'a.jpg');
+		form.append('file', new Blob(['hello']), 'notes.txt');
+		const before = (await api.facets({})).total;
+		const response = await fetch(`${api.base}/api/upload`, {
+			method: 'POST',
+			body: form,
+			headers: { cookie: await sessionCookie() }
+		});
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.files.map((f: { outcome: string }) => f.outcome)).toEqual(['stored', 'rejected']);
+		expect((await api.facets({})).total).toBe(before + 1);
+		expect((await api.sources()).some((s) => s.kind === 'inbox')).toBe(true);
+	});
+});
+
+/** A fresh admin session cookie, for raw requests the typed client doesn't make. */
+async function sessionCookie(): Promise<string> {
+	const response = await fetch(`${base}/api/auth/login`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ username: 'admin', password: 'correct horse' })
+	});
+	return (response.headers.get('set-cookie') ?? '').split(';')[0];
+}

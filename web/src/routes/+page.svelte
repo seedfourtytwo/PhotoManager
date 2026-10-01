@@ -12,6 +12,7 @@
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
+	import UploadButton from '$lib/components/UploadButton.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
@@ -85,6 +86,7 @@
 		{#if order.length}
 			<button type="button" onclick={() => (selection = selectAll(order))}>Select all</button>
 		{/if}
+		<UploadButton onuploaded={reloadAll} />
 	</ViewHeader>
 
 	{#if !loader.loading && !loader.error && loader.items.length === 0}
@@ -92,7 +94,8 @@
 			{#if described}
 				No photos match these filters. <a href="/">Show everything</a>
 			{:else}
-				The library is empty. An admin can add a folder under <a href="/admin">Admin</a>.
+				The library is empty. Upload some photos, or an admin can add a folder under
+				<a href="/admin">Admin</a>.
 			{/if}
 		</p>
 	{/if}

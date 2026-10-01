@@ -64,3 +64,29 @@ describe('DownloadDialog', () => {
 		expect(sent.every((s) => s.url === '/api/downloads/estimate')).toBe(true);
 	});
 });
+
+describe('ShareDialog', () => {
+	it('lets a non-admin owner pick people by name from the directory', async () => {
+		const { default: ShareDialog } = await import('./ShareDialog.svelte');
+		const { session } = await import('$lib/app.svelte');
+		session.user = { id: 2, username: 'lea', display_name: 'Lea', role: 'member', disabled: false };
+		const sent = stubFetch((url) => {
+			if (url.endsWith('/members')) return [];
+			if (url === '/api/users/directory')
+				return [
+					{ id: 1, display_name: 'C' },
+					{ id: 2, display_name: 'Lea' },
+					{ id: 3, display_name: 'Tom' }
+				];
+			throw new Error(`unexpected ${url}`);
+		});
+		render(ShareDialog, { albumId: 9, ownerId: 2, onclose: () => {} });
+		const picker = page.getByRole('combobox', { name: 'Person to add' });
+		await expect.element(picker).toBeInTheDocument();
+		await picker.selectOptions('Tom');
+		await page.getByRole('button', { name: 'Add' }).click();
+		await expect.element(page.getByText('Tom', { exact: true })).toBeInTheDocument();
+		expect(sent.some((s) => s.url === '/api/users')).toBe(false);
+		session.user = null;
+	});
+});
