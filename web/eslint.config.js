@@ -34,8 +34,15 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		rules: {
+			// The app is served at the root of its own origin (no `paths.base`), and most links
+			// carry filter queries, so resolve() would add nothing but noise.
+			'svelte/no-navigation-without-resolve': 'off',
+			// `{ dropped: _dropped, ...rest }` is how we omit fields from an object.
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }
+			]
+		}
 	}
 );

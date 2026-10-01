@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest';
+import type { AssetFilters, AssetPage } from './api/types';
+import { TimelineLoader } from './loader.svelte';
+import { makeAsset } from './testing/fixtures';
+
+function pages(total: number, size: number) {
+	const calls: { filters: AssetFilters; cursor: string | null }[] = [];
+	const fetchPage = async (filters: AssetFilters, cursor: string | null): Promise<AssetPage> => {
+		calls.push({ filters, cursor });
+		const start = cursor ? Number(cursor) : 0;
+		const items = Array.from({ length: Math.min(size, total - start) }, (_, i) =>
+			makeAsset(
+				start + i + 1,
+				`2020-${String(12 - Math.floor((start + i) / 10)).padStart(2, '0')}-01T00:00:00`
+			)
+		);
+		return { items, next_cursor: start + size < total ? String(start + size) : null };
+	};
+	return { calls, fetchPage };
+}
+
+describe('TimelineLoader', () => {
+	it('loads page by page and stops at the end', async () => {
+		const { calls, fetchPage } = pages(25, 10);
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({ year: 2020 });
+		expect(loader.items).toHaveLength(10);
+		await loader.loadMore();
+		await loader.loadMore();
+		expect(loader.items).toHaveLength(25);
+		expect(loader.done).toBe(true);
+		await loader.loadMore();
+		expect(calls.map((c) => c.cursor)).toEqual([null, '10', '20']);
+		expect(calls[0].filters).toEqual({ year: 2020 });
+	});
+
+	it('shares one request when asked twice at once', async () => {
+		const { calls, fetchPage } = pages(25, 10);
+		const loader = new TimelineLoader(fetchPage);
+		await Promise.all([loader.reset({}), loader.loadMore()]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it('ignores late answers from before a reset', async () => {
+		let release: (page: AssetPage) => void = () => {};
+		const slow = new Promise<AssetPage>((resolve) => (release = resolve));
+		const { fetchPage } = pages(5, 10);
+		let first = true;
+		const loader = new TimelineLoader((f, c) => {
+			if (first) {
+				first = false;
+				return slow;
+			}
+			return fetchPage(f, c);
+		});
+		const stale = loader.reset({ year: 1999 });
+		await loader.reset({});
+		release({ items: [makeAsset(99)], next_cursor: null });
+		await stale;
+		expect(loader.items.map((a) => a.id)).toEqual([1, 2, 3, 4, 5]);
+	});
+
+	it('loads until a condition holds (jump to a month)', async () => {
+		const { fetchPage } = pages(60, 10);
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({});
+		await loader.until((items) => items.some((a) => a.taken_at.startsWith('2020-08')));
+		expect(loader.items).toHaveLength(50);
+	});
+
+	it('reports errors in words and stops paging', async () => {
+		const loader = new TimelineLoader(async () => {
+			throw new Error('The library server answered 500.');
+		});
+		await loader.reset({});
+		expect(loader.error).toBe('The library server answered 500.');
+		await loader.until(() => false);
+	});
+
+	it('updates and removes items without reloading', async () => {
+		const { fetchPage } = pages(3, 10);
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({});
+		loader.update(2, { favourite: true });
+		loader.remove(new Set([1]));
+		expect(loader.items.map((a) => [a.id, a.favourite])).toEqual([
+			[2, true],
+			[3, false]
+		]);
+	});
+});

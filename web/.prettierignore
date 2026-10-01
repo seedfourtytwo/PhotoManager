@@ -7,3 +7,8 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Test output and generated data
+test-results
+playwright-report
+src/lib/world.ts

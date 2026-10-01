@@ -5,9 +5,19 @@
 	--ink-2: #9a9a9a;
 	--hairline: #262626;
 	--accent: #e0674f; /* selection and focus only */
+	--scrim: rgb(0 0 0 / 0.6);
 	--gutter: 3px;
-	--font-ui: 'Inter', system-ui, sans-serif;
-	--font-text: 'Source Serif 4', Georgia, serif;
+	--font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--font-text: 'Source Serif 4', 'Iowan Old Style', Georgia, serif;
+	--fs-12: 0.75rem;
+	--fs-14: 0.875rem;
+	--fs-16: 1rem;
+	--fs-20: 1.25rem;
+	--fs-28: 1.75rem;
+	--rail: 5.5rem;
+	--margin: 16rem; /* right-margin notes and filters on desktop */
+	--bar: 3.5rem; /* phone bottom bar */
+	--motion: 120ms;
 	color-scheme: dark;
 }
 
@@ -18,6 +28,7 @@
 		--ink-2: #6b6b6b;
 		--hairline: #e4e2dd;
 		--accent: #b3261e;
+		--scrim: rgb(250 250 248 / 0.75);
 		color-scheme: light;
 	}
 }
@@ -28,6 +39,7 @@
 	--ink-2: #6b6b6b;
 	--hairline: #e4e2dd;
 	--accent: #b3261e;
+	--scrim: rgb(250 250 248 / 0.75);
 	color-scheme: light;
 }
 
@@ -37,6 +49,27 @@ body {
 	background: var(--bg);
 	color: var(--ink);
 	font-family: var(--font-ui);
+	font-size: var(--fs-14);
+	line-height: 1.45;
+	/* Dates and counts line up everywhere. */
+	font-variant-numeric: tabular-nums;
+	-webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3 {
+	font-weight: 400;
+	margin: 0;
+}
+
+h1 {
+	font-family: var(--font-text);
+	font-size: var(--fs-20);
+}
+
+a {
+	color: inherit;
 }
 
 :focus-visible {
@@ -44,9 +77,83 @@ body {
 	outline-offset: 2px;
 }
 
+/* Quiet controls: words, not boxes (DESIGN_PRINCIPLES rule 3). */
+button,
+.button {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 0.25rem 0.5rem;
+	margin: 0;
+	cursor: pointer;
+	border-radius: 0;
+	text-decoration: none;
+	min-height: 2rem;
+}
+
+button:disabled {
+	color: var(--ink-2);
+	cursor: default;
+}
+
+button.primary {
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	text-decoration-thickness: 1px;
+}
+
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	border-bottom: 1px solid var(--hairline);
+	padding: 0.35rem 0.1rem;
+	border-radius: 0;
+	min-width: 0;
+}
+
+select option {
+	background: var(--bg);
+	color: var(--ink);
+}
+
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+	accent-color: var(--ink-2);
+	width: 1rem;
+	height: 1rem;
+}
+
+label {
+	color: var(--ink-2);
+}
+
+.quiet {
+	color: var(--ink-2);
+}
+
+.small {
+	font-size: var(--fs-12);
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	* {
 		transition: none !important;
 		animation: none !important;
+		scroll-behavior: auto !important;
 	}
 }

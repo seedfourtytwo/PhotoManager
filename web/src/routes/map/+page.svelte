@@ -1,0 +1,294 @@
+<script lang="ts">
+	import { page } from '$app/state';
+	import { goto, pushState, replaceState } from '$app/navigation';
+	import type { AssetOut, Id, MapPoint } from '$lib/api';
+	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
+	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { clusterPoints, clusterRadius, dominantPlace, type Cluster } from '$lib/geo';
+	import { aspect, justify, rowHeightFor } from '$lib/timeline';
+	import { LAND_PATH } from '$lib/world';
+	import Loupe from '$lib/components/Loupe.svelte';
+	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
+
+	const filters = $derived(filtersFromParams(page.url.searchParams));
+	let points = $state<MapPoint[]>([]);
+	let located = $state.raw<Map<Id, AssetOut>>(new Map());
+	let chosen = $state<Cluster | null>(null);
+	let width = $state(0);
+	let gridWidth = $state(0);
+
+	// The map is 360 × 180 "degrees"; the view is a window onto it.
+	let view = $state({ x: 0, y: 0, w: 360 });
+	const aspectRatio = 2;
+	const vh = $derived(view.w / aspectRatio);
+	const pxPerUnit = $derived(width ? width / view.w : 1);
+	const clusters = $derived(
+		clusterPoints(points, { width: 360, height: 180 }, 22 / pxPerUnit).filter(
+			(c) =>
+				c.x >= view.x - 5 &&
+				c.x <= view.x + view.w + 5 &&
+				c.y >= view.y - 5 &&
+				c.y <= view.y + vh + 5
+		)
+	);
+
+	$effect(() => {
+		const f = filters;
+		let stale = false;
+		chosen = null;
+		api
+			.map(f)
+			.then((p) => !stale && (points = p))
+			.catch((e: unknown) => notice.error(e));
+		void loadLocated(f, () => stale);
+		return () => (stale = true);
+	});
+
+	/** List items (with place names) for every located photo, for cluster names and grids. */
+	async function loadLocated(f: typeof filters, isStale: () => boolean) {
+		// Built here, then swapped in whole as $state.raw: no need for a reactive map.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const next = new Map<Id, AssetOut>();
+		let cursor: string | null = null;
+		do {
+			const res: Awaited<ReturnType<typeof api.assets>> = await api.assets(
+				{ ...f, has_location: true },
+				cursor,
+				500
+			);
+			if (isStale()) return;
+			for (const a of res.items) next.set(a.id, a);
+			cursor = res.next_cursor;
+		} while (cursor);
+		located = next;
+	}
+
+	function copyWith(map: Map<Id, AssetOut>, asset: AssetOut) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- replaced whole, see above
+		return new Map(map).set(asset.id, asset);
+	}
+
+	function clamp(v: { x: number; y: number; w: number }) {
+		const w = Math.min(360, Math.max(6, v.w));
+		return {
+			w,
+			x: Math.min(Math.max(v.x, 0), 360 - w),
+			y: Math.min(Math.max(v.y, 0), 180 - w / aspectRatio)
+		};
+	}
+
+	function zoom(factor: number, cx = view.x + view.w / 2, cy = view.y + vh / 2) {
+		const w = view.w * factor;
+		view = clamp({ w, x: cx - (cx - view.x) * factor, y: cy - (cy - view.y) * factor });
+	}
+
+	function toMap(event: MouseEvent, svg: SVGSVGElement) {
+		const r = svg.getBoundingClientRect();
+		return {
+			x: view.x + ((event.clientX - r.left) / r.width) * view.w,
+			y: view.y + ((event.clientY - r.top) / r.height) * vh
+		};
+	}
+
+	let pan: { x: number; y: number; view: typeof view; moved: boolean } | null = null;
+	function onwheel(event: WheelEvent) {
+		event.preventDefault();
+		const p = toMap(event, event.currentTarget as SVGSVGElement);
+		zoom(event.deltaY > 0 ? 1.25 : 0.8, p.x, p.y);
+	}
+
+	const chosenItems = $derived(
+		chosen ? chosen.ids.map((id) => located.get(id)).filter((a): a is AssetOut => !!a) : []
+	);
+	const chosenPlace = $derived(dominantPlace(chosenItems.map((a) => a.place)));
+	const layout = $derived(
+		justify(
+			chosenItems.map((a) => aspect(a)),
+			gridWidth,
+			rowHeightFor(viewport.width, settings.density),
+			3
+		)
+	);
+	const loupeIndex = $derived(
+		page.state.loupe === undefined ? -1 : chosenItems.findIndex((a) => a.id === page.state.loupe)
+	);
+
+	function choose(c: Cluster) {
+		chosen = c;
+		// Zoom towards dense clusters so they split; single places stay put.
+		if (c.ids.length > 1 && view.w > 20) zoom(0.35, c.x, c.y);
+	}
+</script>
+
+<svelte:head><title>Map · Photos</title></svelte:head>
+
+<div class="page">
+	<header>
+		<h1>Map</h1>
+		<p class="quiet">
+			{points.length} photos with a location{#if describeFilters(filters)}&ensp;·&ensp;{describeFilters(
+					filters
+				)}{/if}
+		</p>
+		<span class="tools">
+			{#if !viewport.desktop}<button type="button" onclick={() => (ui.sheet = true)}>Filter</button
+				>{/if}
+			<button type="button" onclick={() => zoom(0.5)} aria-label="Zoom in">Zoom in</button>
+			<button type="button" onclick={() => zoom(2)} aria-label="Zoom out">Zoom out</button>
+			<button type="button" onclick={() => (view = { x: 0, y: 0, w: 360 })}>World</button>
+		</span>
+	</header>
+
+	<div class="map" bind:clientWidth={width}>
+		<svg
+			viewBox={`${view.x} ${view.y} ${view.w} ${vh}`}
+			role="group"
+			aria-label="World map of photo locations; drag to pan, wheel to zoom"
+			{onwheel}
+			onpointerdown={(e) => {
+				pan = { x: e.clientX, y: e.clientY, view, moved: false };
+			}}
+			onpointermove={(e) => {
+				if (!pan || !width) return;
+				const dx = ((e.clientX - pan.x) / width) * pan.view.w;
+				const dy = ((e.clientY - pan.y) / width) * pan.view.w;
+				if (Math.abs(dx) + Math.abs(dy) > 0.5) pan.moved = true;
+				if (pan.moved) view = clamp({ ...pan.view, x: pan.view.x - dx, y: pan.view.y - dy });
+			}}
+			onpointerup={() => (pan = null)}
+			onpointerleave={() => (pan = null)}
+		>
+			<rect x="0" y="0" width="360" height="180" class="sea" />
+			<path d={LAND_PATH} class="land" />
+			{#each clusters as c (c.ids[0])}
+				{@const r = clusterRadius(c.ids.length, 2) / pxPerUnit}
+				<a
+					href={`/${filtersToQuery(filters)}`}
+					aria-label={`${c.ids.length} photo${c.ids.length === 1 ? '' : 's'} here`}
+					onclick={(e) => {
+						e.preventDefault();
+						if (!pan?.moved) choose(c);
+					}}
+				>
+					<circle
+						cx={c.x}
+						cy={c.y}
+						r={Math.max(r, 3 / pxPerUnit)}
+						class="dot"
+						class:chosen={chosen?.ids[0] === c.ids[0]}
+						stroke-width={1 / pxPerUnit}
+					/>
+					{#if c.ids.length > 1}
+						<text x={c.x + r + 3 / pxPerUnit} y={c.y} font-size={11 / pxPerUnit} class="n"
+							>{c.ids.length}</text
+						>
+					{/if}
+				</a>
+			{/each}
+		</svg>
+	</div>
+
+	{#if chosen}
+		<section class="chosen" aria-live="polite">
+			<h2>
+				{chosenPlace ?? 'Here'} <span class="quiet">{chosen.ids.length}</span>
+				{#if chosenPlace}
+					<button
+						type="button"
+						onclick={() =>
+							goto(`/${filtersToQuery({ ...filters, place: chosenPlace ?? undefined })}`)}
+						>Open in library</button
+					>
+				{/if}
+			</h2>
+			<div bind:clientWidth={gridWidth}>
+				<PhotoGrid
+					items={chosenItems}
+					{layout}
+					selected={new Set()}
+					selecting={false}
+					onopen={(id) => pushState('', { loupe: id })}
+					ontoggle={() => {}}
+				/>
+			</div>
+		</section>
+	{:else if points.length}
+		<p class="quiet small">Choose a dot to see its photos.</p>
+	{/if}
+</div>
+
+{#if loupeIndex >= 0}
+	<Loupe
+		items={chosenItems}
+		index={loupeIndex}
+		onindex={(i) => replaceState('', { loupe: chosenItems[i].id })}
+		onclose={() => history.back()}
+		onchanged={(a) => (located = copyWith(located, a))}
+	/>
+{/if}
+
+<style>
+	.page {
+		padding: 0 0.75rem 2rem;
+	}
+	header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.25rem 1rem;
+		padding: 1rem 0 0.5rem;
+	}
+	header p {
+		margin: 0;
+		flex: 1;
+	}
+	.tools {
+		display: flex;
+		flex-wrap: wrap;
+	}
+	.tools button {
+		color: var(--ink-2);
+	}
+	.map {
+		border: 1px solid var(--hairline);
+	}
+	svg {
+		display: block;
+		width: 100%;
+		height: auto;
+		touch-action: none;
+		cursor: grab;
+	}
+	.sea {
+		fill: var(--bg);
+	}
+	.land {
+		fill: var(--hairline);
+	}
+	.dot {
+		fill: var(--ink);
+		fill-opacity: 0.75;
+		stroke: var(--bg);
+	}
+	.dot.chosen,
+	a:focus-visible .dot {
+		fill: var(--accent);
+		fill-opacity: 1;
+	}
+	a:focus {
+		outline: none;
+	}
+	.n {
+		fill: var(--ink-2);
+		dominant-baseline: middle;
+		font-family: var(--font-ui);
+	}
+	.chosen h2 {
+		font-size: var(--fs-14);
+		margin: 1rem 0 0.5rem;
+	}
+	.chosen h2 button {
+		color: var(--ink-2);
+		font-size: var(--fs-14);
+	}
+</style>

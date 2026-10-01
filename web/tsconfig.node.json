@@ -1,0 +1,18 @@
+{
+	// Type-checks code that runs in Node rather than the browser: the mock API and E2E tests.
+	"compilerOptions": {
+		"target": "es2023",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"lib": ["es2023", "dom", "dom.iterable"],
+		"types": ["node"],
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"erasableSyntaxOnly": true,
+		"verbatimModuleSyntax": true,
+		"resolveJsonModule": true
+	},
+	"include": ["mock-api/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"]
+}
