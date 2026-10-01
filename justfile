@@ -35,6 +35,11 @@ import folder *args:
 sources:
     cd backend && uv run python -m photo_assistant sources
 
+# Examples: just models · just models --clip XLM-Roberta-Large-Vit-B-32 · just models --faces yunet_sface
+# Download the local ML models into <data_root>/models (run on the laptop; needs internet).
+models *args:
+    cd backend && uv run python scripts/download_models.py {{args}}
+
 # Everything CI runs, in the same order. Must pass before every push.
 check: lint types test
 
