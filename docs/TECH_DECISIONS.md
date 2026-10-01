@@ -73,6 +73,14 @@ in this codebase, and plain SQL keeps the schema readable.
 | Clustering | DBSCAN-style incremental clustering (as Immich does) | Pure-Python domain logic, unit tested |
 | Geocoding | `reverse_geocoder` / GeoNames offline dump | No network |
 
+Python dependencies for local ML (added 2026-09-30, branch `feat/ml`): `onnxruntime` (runs
+CLIP, SCRFD and ArcFace directly — no `insightface` package, which pulls in a large build
+chain), `numpy`, `tokenizers` (CLIP tokenizer.json), `sqlite-vec` (pinned; vector distance
+in SQL), `opencv-python-headless` (resize/warp for preprocessing and alignment, and the
+YuNet/SFace fallback); `onnx` as a dev dependency to build tiny synthetic models in tests.
+Models are fetched by `just models` into `<data_root>/models/`, never committed. Wiring and
+model-format assumptions: `docs/wiring/ml.md`.
+
 ## AI socket: Ollama adapter (optional)
 
 **Why:** C already plans Ollama on a separate server, reached over Tailscale. Ollama's
