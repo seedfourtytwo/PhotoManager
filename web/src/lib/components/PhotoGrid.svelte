@@ -192,9 +192,14 @@
 		opacity: 0;
 		transition: opacity var(--motion);
 	}
-	.tile:hover .check,
-	.tile:focus-visible .check,
-	.tile[aria-pressed] .check {
+	/* The circle appears where it helps — under the mouse or keyboard focus — and stays on
+	   selected photos; unselected photos stay clean while selecting. */
+	@media (hover: hover) {
+		.tile:hover .check {
+			opacity: 1;
+		}
+	}
+	.tile:focus-visible .check {
 		opacity: 1;
 	}
 	.tile.selected .check {
