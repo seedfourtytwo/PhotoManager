@@ -51,6 +51,13 @@ def derived_relpath(kind: str, content_hash: str) -> PurePosixPath:
     return PurePosixPath("derived", kind, content_hash[:2], f"{content_hash}.webp")
 
 
+def print_relpath(content_hash: str, recipe_key: str) -> PurePosixPath:
+    """``derived/print/<hh>/<hash>-<recipe key>.jpg``: a full-resolution print rendition
+    (oriented, edited, sRGB JPEG); cached per content and recipe like edited previews."""
+    edited_relpath("preview", content_hash, recipe_key)  # validates the hash and the key
+    return PurePosixPath("derived", "print", content_hash[:2], f"{content_hash}-{recipe_key}.jpg")
+
+
 def edited_relpath(kind: str, content_hash: str, recipe_key: str) -> PurePosixPath:
     """``derived/edited/<hh>/<hash>-<recipe key>-<kind>.webp``: a cached render of an edit.
     Keyed by content *and* recipe, so a changed recipe never serves a stale image."""

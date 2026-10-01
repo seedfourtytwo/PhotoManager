@@ -202,3 +202,12 @@ def test_page_matches_its_golden_render(
     expected = pyvips.Image.new_from_file(str(golden))
     assert (actual.width, actual.height) == (expected.width, expected.height)
     assert (actual - expected).abs().avg() < 1.0
+
+
+def test_a_timestamp_with_microseconds_is_accepted(tmp_path: Path) -> None:
+    """Album update times carry microseconds; Typst's creation date can't."""
+    stamp = datetime(2026, 7, 1, 10, 0, 0, 123456, tzinfo=UTC)
+    job = job_for([], cover=True)
+    first = TypstPrintRenderer(timestamp=stamp).render_pdf(job)
+    second = TypstPrintRenderer(timestamp=stamp.replace(microsecond=0)).render_pdf(job)
+    assert first == second

@@ -130,3 +130,14 @@ def test_exiftool_strips_location_or_everything_from_a_copy(tmp_path: Path) -> N
     assert meta_a.latitude is None and meta_a.camera_model == "Test Cam"
     assert meta_b.latitude is None and meta_b.camera_model is None
     assert meta_b.width == 200, "still a valid image"
+
+
+def test_an_edit_of_a_photo_larger_than_the_preview_renders(
+    renderer: VipsRenderer, tmp_path: Path
+) -> None:
+    """thumbnail() streams the file top to bottom; a quarter turn reads it out of order."""
+    source = write_photo(tmp_path / "big.jpg", seed=3, size=(2400, 1600))
+    out = tmp_path / "out.webp"
+    for recipe in (Recipe(rotate=90), Recipe(straighten=5.0), Recipe(flip_vertical=True)):
+        size = renderer.render_variant(source, out, RenderSpec(recipe=recipe, max_edge=2048))
+        assert max(size) == 2048

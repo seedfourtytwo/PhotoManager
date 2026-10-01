@@ -93,6 +93,10 @@ class VipsRenderer:
             raise ValueError(f"unsupported output format: {spec.format!r}")
         image = self._load(source, spec)
         if spec.recipe is not None:
+            if spec.max_edge is not None:
+                # thumbnail() decodes top to bottom; turns and flips read rows out of order,
+                # so hold the (already reduced) image in memory first.
+                image = image.copy_memory()
             image = apply_recipe(image, spec.recipe)
         if spec.max_edge is not None and max(image.width, image.height) > spec.max_edge:
             image = image.resize(spec.max_edge / max(image.width, image.height))

@@ -64,3 +64,16 @@ def test_derivatives_are_sharded_by_hash_prefix() -> None:
 def test_derivative_paths_reject_unknown_kinds_and_bad_hashes(kind: str, digest: str) -> None:
     with pytest.raises(InvalidLibraryPathError):
         derived_relpath(kind, digest)
+
+
+def test_print_renditions_are_keyed_by_content_and_recipe() -> None:
+    from photo_assistant.domain.library_paths import InvalidLibraryPathError, print_relpath
+
+    digest = "ab" + "0" * 62
+    assert print_relpath(digest, "0123456789abcdef").as_posix() == (
+        f"derived/print/ab/{digest}-0123456789abcdef.jpg"
+    )
+    with pytest.raises(InvalidLibraryPathError):
+        print_relpath(digest, "../x")
+    with pytest.raises(InvalidLibraryPathError):
+        print_relpath("nothex", "0123456789abcdef")

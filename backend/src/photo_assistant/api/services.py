@@ -15,12 +15,14 @@ from photo_assistant.adapters.ollama_ai import OllamaProvider
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.api.integrations import Integrations, build_integrations, with_source_areas
 from photo_assistant.api.ml_services import MlServices, build_ml_services
 from photo_assistant.api.ops_services import OpsServices, build_ops_services
 from photo_assistant.api.settings import Settings
 from photo_assistant.app.accounts import Accounts
+from photo_assistant.app.album_print import AlbumPrinter, PrintRenditions
 from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import Editor
@@ -53,6 +55,7 @@ class Services:
     ml: MlServices
     ops: OpsServices
     integrations_conn: sqlite3.Connection
+    printer: AlbumPrinter
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -162,6 +165,8 @@ def build_services(settings: Settings) -> Services:
         preview_edge=settings.preview_edge,
     )
     downloads = Downloads(store, renderer, ExifToolStripper(), root / "tmp")
+    renditions = PrintRenditions(store, renderer, lambda view: editor.image_for(view, "preview"))
+    printer = AlbumPrinter(renditions, lambda stamp: TypstPrintRenderer(timestamp=stamp))
     return Services(
         settings,
         repo,
@@ -178,4 +183,5 @@ def build_services(settings: Settings) -> Services:
         ml,
         ops,
         integrations_conn,
+        printer,
     )

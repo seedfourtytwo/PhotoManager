@@ -57,7 +57,7 @@ class TypstPrintRenderer:
     SLUG_MM = 10.0  # extra paper outside the bleed, only when crop marks are requested
 
     def __init__(self, timestamp: datetime = DEFAULT_TIMESTAMP, template: Path = TEMPLATE) -> None:
-        self._timestamp = timestamp
+        self._timestamp = timestamp.replace(microsecond=0)  # Typst dates have whole seconds
         self._template = template
 
     def render_pdf(self, job: PrintJob) -> bytes:
