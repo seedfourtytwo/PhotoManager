@@ -29,7 +29,7 @@
 	let info = $state(viewport.desktop);
 	let idle = $state(false);
 	let dialog = $state<'download' | 'date' | 'edit' | null>(null);
-	let root: HTMLElement | undefined = $state();
+	let root: HTMLDialogElement | undefined = $state();
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
 
@@ -121,6 +121,7 @@
 	let previous: Element | null = null;
 	onMount(() => {
 		previous = document.activeElement;
+		root?.showModal();
 		root?.focus();
 		wake();
 	});
@@ -133,16 +134,16 @@
 
 <svelte:window {onkeydown} />
 
-<div
+<!-- A native modal dialog: the page behind becomes inert for keyboard and screen readers. -->
+<dialog
 	class="loupe"
 	class:info
 	class:idle
 	bind:this={root}
-	role="dialog"
-	aria-modal="true"
 	aria-label="Photo viewer"
 	tabindex="-1"
 	onpointermove={wake}
+	oncancel={(e) => e.preventDefault()}
 >
 	{#if asset}
 		<div
@@ -235,7 +236,7 @@
 			</aside>
 		{/if}
 	{/if}
-</div>
+</dialog>
 
 {#if asset && dialog === 'download'}
 	<DownloadDialog scope={{ ids: [asset.id] }} single={asset} onclose={() => (dialog = null)} />
@@ -269,6 +270,14 @@
 	.loupe {
 		position: fixed;
 		inset: 0;
+		width: 100vw;
+		height: 100dvh;
+		max-width: none;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		color: var(--ink);
 		z-index: 50;
 		background: var(--bg);
 		display: grid;
@@ -334,10 +343,11 @@
 	/* Words over the photo stay legible without a box around them. */
 	.top button,
 	.edge {
-		color: #fff;
+		color: var(--ink);
 		text-shadow:
-			0 0 2px rgb(0 0 0 / 0.8),
-			0 0 8px rgb(0 0 0 / 0.5);
+			0 0 2px var(--bg),
+			0 0 6px var(--bg),
+			0 0 12px var(--bg);
 	}
 	.spacer {
 		flex: 1;

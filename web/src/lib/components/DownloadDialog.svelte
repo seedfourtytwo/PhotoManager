@@ -125,16 +125,19 @@
 
 <Dialog title={single ? 'Download photo' : 'Download'} {onclose}>
 	<p class="summary" aria-live="polite">
-		{#if single}
-			1 photo
-		{:else}
-			{scopeLabel(scope, estimate?.count)}
-		{/if}
-		<span class="quiet">
-			{#if estimate}· {count.format(estimate.count)} photo{estimate.count === 1 ? '' : 's'}, about {formatBytes(
+		{#if estimate}
+			{single ? '1 photo' : scopeLabel(scope, estimate.count)}
+			<span class="quiet"
+				>· about {formatBytes(
 					estimate.bytes
-				)}{:else if estimateError}· {estimateError}{:else}· estimating…{/if}
-		</span>
+				)}{#if !single && 'ids' in scope && estimate.count < scope.ids.length}
+					· {scope.ids.length - estimate.count} you may not download are left out{/if}</span
+			>
+		{:else if estimateError}
+			<span class="quiet">{estimateError}</span>
+		{:else}
+			<span class="quiet">Estimating…</span>
+		{/if}
 	</p>
 
 	<fieldset>

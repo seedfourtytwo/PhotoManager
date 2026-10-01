@@ -29,6 +29,12 @@
 	);
 	let busy = $state(false);
 	let areaW = $state(0);
+	let dialog: HTMLDialogElement | undefined = $state();
+
+	$effect(() => {
+		dialog?.showModal();
+		return () => dialog?.close();
+	});
 	let areaH = $state(0);
 
 	const crop = $derived(recipe.crop ?? FULL);
@@ -135,7 +141,16 @@
 	}
 </script>
 
-<div class="editor" role="dialog" aria-modal="true" aria-label="Edit photo">
+<dialog
+	class="editor"
+	aria-label="Edit photo"
+	bind:this={dialog}
+	oncancel={(e) => {
+		e.preventDefault();
+		onclose();
+	}}
+	onkeydown={(e) => e.stopPropagation()}
+>
 	<div class="area" bind:clientWidth={areaW} bind:clientHeight={areaH}>
 		<div class="stage" style:width={`${stage.w}px`} style:height={`${stage.h}px`}>
 			<img
@@ -223,12 +238,20 @@
 			<button type="button" class="primary" disabled={busy || !loaded} onclick={save}>Save</button>
 		</div>
 	</div>
-</div>
+</dialog>
 
 <style>
 	.editor {
 		position: fixed;
 		inset: 0;
+		width: 100vw;
+		height: 100dvh;
+		max-width: none;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		color: var(--ink);
 		z-index: 70;
 		background: var(--bg);
 		display: grid;

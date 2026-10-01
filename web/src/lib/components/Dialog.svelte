@@ -8,8 +8,10 @@
 		/** Buttons row at the bottom (Cancel is always there). */
 		actions?: Snippet;
 		wide?: boolean;
+		/** 'Close' for dialogs that only show something. */
+		cancelLabel?: string;
 	};
-	let { title, onclose, children, actions, wide = false }: Props = $props();
+	let { title, onclose, children, actions, wide = false, cancelLabel = 'Cancel' }: Props = $props();
 
 	let dialog: HTMLDialogElement | undefined = $state();
 	const id = `dlg-${Math.random().toString(36).slice(2, 8)}`;
@@ -34,7 +36,7 @@
 	<h2 {id}>{title}</h2>
 	{@render children()}
 	<div class="actions">
-		<button type="button" onclick={onclose}>Cancel</button>
+		<button type="button" onclick={onclose}>{cancelLabel}</button>
 		{@render actions?.()}
 	</div>
 </dialog>

@@ -30,7 +30,7 @@
 	);
 </script>
 
-<Dialog title={`Last import · ${label}`} {onclose} wide>
+<Dialog title={`Last import · ${label}`} {onclose} wide cancelLabel="Close">
 	{#if report}
 		<dl class="summary">
 			<div>

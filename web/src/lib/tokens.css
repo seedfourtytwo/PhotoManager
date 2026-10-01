@@ -122,7 +122,8 @@ select option {
 }
 
 input[type='checkbox'],
-input[type='radio'] {
+input[type='radio'],
+input[type='range'] {
 	accent-color: var(--ink-2);
 	width: 1rem;
 	height: 1rem;
