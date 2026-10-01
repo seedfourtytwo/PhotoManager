@@ -226,6 +226,14 @@ class LibraryMixin(SqliteBase):
             next_cursor = encode_cursor(last["taken_at"], last["id"])
         return ViewPage(items, next_cursor)
 
+    def visible_asset_ids(self, viewer: Viewer, f: AssetFilter | None = None) -> list[int]:
+        """The visibility rule (plus filters) as plain ids, newest first: the candidate set
+        handed to search, similar photos and people, which never widen it."""
+        cte, params = visible_assets_cte(viewer)
+        where, fparams = filter_sql(f or AssetFilter())
+        rows = self._all(f"{cte} SELECT a.id {ASSET_FROM} {where} {ORDER}", params | fparams)
+        return [int(r["id"]) for r in rows]
+
     def list_all_views(self, viewer: Viewer, f: AssetFilter) -> list[AssetView]:
         return [view_from_row(r) for r in self._filtered(viewer, f, ORDER)]
 

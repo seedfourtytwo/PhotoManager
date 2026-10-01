@@ -23,6 +23,7 @@ from photo_assistant.api.routes import (
     edits,
     imports,
     library,
+    ml,
     remote_sources,
     sources,
     system,
@@ -101,6 +102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         upload,
         remote_sources,
         backup,
+        ml,
     ):
         app.include_router(module.router)
     _mount_web(app, settings.web_dir)

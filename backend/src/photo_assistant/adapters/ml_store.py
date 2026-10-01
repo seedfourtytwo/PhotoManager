@@ -134,6 +134,15 @@ class SqliteMlStore:
         )
         return [r[0] for r in rows]
 
+    def task_counts(self) -> dict[str, dict[str, int]]:
+        """``{task: {status: n}}`` over every asset, for the ML status page."""
+        counts: dict[str, dict[str, int]] = {}
+        for row in self._all(
+            "SELECT task, status, COUNT(*) AS n FROM ml_task GROUP BY task, status ORDER BY 1, 2"
+        ):
+            counts.setdefault(row["task"], {})[row["status"]] = int(row["n"])
+        return counts
+
     # --- CLIP ------------------------------------------------------------------------------
 
     def save_clip(self, asset_id: int, model: str, vector: Vector) -> None:

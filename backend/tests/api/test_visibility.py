@@ -213,3 +213,71 @@ def test_source_access_can_be_read_and_changed_only_by_admins(world: World) -> N
     assert bad.status_code == 422
     admin.put(f"/api/sources/{family['id']}/access", json={"everyone": None, "users": []})
     assert world.ids["p1"] not in visible_ids(tom)
+
+
+# --- local ML: search, similar photos and people start from the same rule --------------------
+
+
+def _fake_ml_index(world: World) -> None:
+    """Index every photo with a fake CLIP model and give each a face of one person."""
+    from photo_assistant.app.search import SemanticSearch, SimilarPhotos
+    from photo_assistant.domain.faces import BoundingBox, Face
+    from tests.api.conftest import services_of
+    from tests.ml.fakes import FakeClip
+
+    ml = services_of(world.clients["admin"]).ml
+    clip = FakeClip(dim=3)
+    face_ids = []
+    for i, asset_id in enumerate(world.ids.values()):
+        ml.store.save_clip(asset_id, clip.name, (1.0, i / 10, 0.0))
+        face = Face(BoundingBox(0.1, 0.1, 0.2, 0.2), 0.9, ((0.5, 0.5),) * 5, (1.0, 0.0, 0.0))
+        face_ids += ml.store.replace_faces(asset_id, "f", [face])
+    person = ml.store.create_person(face_ids[0])
+    for face_id in face_ids[1:]:
+        ml.store.assign_face(face_id, person)
+    ml.store.rename_person(person, "Lea")
+    ml.clip = clip  # type: ignore[assignment]
+    ml.search = SemanticSearch(clip, ml.store)
+    ml.similar = SimilarPhotos(ml.store, clip.name)
+
+
+@pytest.mark.parametrize("user", list(EXPECTED))
+def test_search_similar_and_people_never_show_hidden_photos(world: World, user: str) -> None:
+    _fake_ml_index(world)
+    client = world.clients[user]
+    should_see = {world.ids[p] for p, level in EXPECTED[user].items() if level}
+
+    for q in ("sunset", "person:Lea", "sunset person:Lea"):
+        found = client.get("/api/search", params={"q": q, "limit": 200}).json()["items"]
+        assert {a["id"] for a in found} == should_see, q
+    (lea,) = client.get("/api/people").json()
+    assert lea["face_count"] == len(should_see)
+    assert lea["cover"]["asset_id"] in should_see
+    people_assets = client.get(f"/api/people/{lea['id']}/assets").json()["items"]
+    assert {a["id"] for a in people_assets} == should_see
+    for photo, level in EXPECTED[user].items():
+        similar = client.get(f"/api/assets/{world.ids[photo]}/similar")
+        faces = client.get(f"/api/assets/{world.ids[photo]}/faces")
+        if level is None:
+            assert similar.status_code == 404 and faces.status_code == 404, photo
+        else:
+            assert {a["id"] for a in similar.json()} == should_see - {world.ids[photo]}
+            assert len(faces.json()) == 1
+
+
+def test_the_visible_id_set_is_the_timeline(world: World) -> None:
+    from photo_assistant.domain.access import Viewer
+    from photo_assistant.domain.library_filter import AssetFilter
+    from tests.api.conftest import services_of
+
+    services = services_of(world.clients["admin"])
+    for name, client in world.clients.items():
+        me = client.get("/api/auth/me").json()
+        user = services.repo.get_user(me["id"])
+        assert user is not None
+        ids = services.repo.visible_asset_ids(Viewer.of(user))
+        timeline = [
+            a["id"] for a in client.get("/api/assets", params={"limit": 500}).json()["items"]
+        ]
+        assert ids == timeline, name
+        assert services.repo.visible_asset_ids(Viewer.of(user), AssetFilter(year=1900)) == []

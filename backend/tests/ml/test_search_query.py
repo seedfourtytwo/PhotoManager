@@ -52,3 +52,38 @@ def test_parsing_never_crashes_and_text_has_no_double_spaces(q: str) -> None:
     parsed = parse_query(q)
     assert "  " not in parsed.text
     assert parsed.text == parsed.text.strip()
+
+
+def test_date_place_and_camera_facets_become_library_filters() -> None:
+    from datetime import date
+
+    from photo_assistant.domain.library_filter import AssetFilter
+    from photo_assistant.domain.search_query import with_facets
+
+    base = AssetFilter(favourite=True)
+    assert with_facets(base, parse_query("date:2019")) == AssetFilter(favourite=True, year=2019)
+    assert with_facets(base, parse_query("date:2019-07")) == AssetFilter(
+        favourite=True, year=2019, month=7
+    )
+    day = with_facets(base, parse_query('date:2021-01-02 place:"Le Havre" camera:X100'))
+    assert day == AssetFilter(
+        favourite=True,
+        from_day=date(2021, 1, 2),
+        to_day=date(2021, 1, 2),
+        place="Le Havre",
+        camera="X100",
+    )
+    # person and tag facets are not SQL filters: left for the ML store
+    assert with_facets(base, parse_query("person:Lea tag:beach")) == base
+
+
+def test_an_impossible_date_facet_is_an_error() -> None:
+    import pytest
+
+    from photo_assistant.domain.library_filter import AssetFilter
+    from photo_assistant.domain.search_query import InvalidFacetError, with_facets
+
+    with pytest.raises(InvalidFacetError):
+        with_facets(AssetFilter(), parse_query("date:2021-13"))
+    with pytest.raises(InvalidFacetError):
+        with_facets(AssetFilter(), parse_query("date:2021-02-30"))

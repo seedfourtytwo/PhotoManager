@@ -235,3 +235,17 @@ def test_assets_with_a_tag_within_the_visible_set(
     assert store.asset_ids_with_tag("beach", visible={a, c}) == [a, c]
     assert store.asset_ids_with_tag("snow", visible={a, b, c}) == []
     assert store.screen_or_document_ids(visible={a, b, c}) == [c]
+
+
+def test_task_counts_summarise_the_status_of_every_task(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    a, b, c = assets(repo, 3)
+    store.set_task_status(a, "embed_clip", "m", "done")
+    store.set_task_status(b, "embed_clip", "m", "done")
+    store.set_task_status(c, "embed_clip", "m", "model_missing", "run just models")
+    store.set_task_status(a, "detect_faces", "f", "failed", "broken")
+    assert store.task_counts() == {
+        "detect_faces": {"failed": 1},
+        "embed_clip": {"done": 2, "model_missing": 1},
+    }
