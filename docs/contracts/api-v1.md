@@ -15,7 +15,13 @@ Conventions
   (view + download only; never edits).
 - Access levels on a source: `view` < `download` < `edit`. Admins have `edit` everywhere.
   You **see** an asset if any source it came from grants you ≥ view, or it is in an album shared
-  with you. Private assets (`private=true` by their owner) are visible only to that owner.
+  with you.
+- **Private (v1.2, QA A3).** Whoever sets `private=true` is its *marker* (it needs `edit` on the
+  photo, from a source or as an admin). A private photo is hidden from everyone who reaches it
+  **only** through sources the marker owns or through albums — admins included. The marker
+  still sees it, and so does anyone who reaches it through a source the marker does *not* own
+  (e.g. the same file is also in the admin's own folder: the admin keeps seeing it there, at the
+  level that source gives). Ownership of the first source a photo came from no longer matters.
   Effective level on an asset = highest level over its sources. **Albums grant `view` only**
   (owner, editor or viewer alike): `download` and `edit` come only from sources (admins have
   `edit` everywhere). Changed in v1.2 (QA A1): album editors used to get `download`.
@@ -91,7 +97,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{byte_size, mime_type, camera_make, camera_model, latitude, longitude, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}` |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
-| PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (private only by an owner/admin) |
+| PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
 | POST | `/api/assets/state` | `{ids, favourite?, hidden?}` | `{updated}` |
 | POST | `/api/assets/dates` | `{ids, set?: "YYYY-MM-DDTHH:MM:SS", shift_minutes?: int}` (exactly one) | `{updated}`; needs `edit`; sets `date_source="manual"`, keeps the previous value |
 | GET | `/api/assets/{id}/edit` | – | `Recipe` |
@@ -141,7 +147,7 @@ renders via libvips with the edit recipe applied.
 |---|---|---|---|
 | GET | `/api/trash` | – | `AssetOut[] + trashed_at` |
 | POST | `/api/trash/restore` | `{ids}` | `{restored}` |
-| POST | `/api/trash/empty` | `{ids?}` | `{purged}` (admin) — removes the library copy and derivatives; never touches sources |
+| POST | `/api/trash/empty` | `{ids?}` | `{purged}` (admin) — removes the library copy and derivatives; never touches sources. Only photos the caller sees in the trash are purged (v1.2); a photo restored meanwhile is kept |
 
 Items in the trash disappear from every listing; after 30 days a job purges them.
 A purged photo that still exists in a source is **not** re-imported on rescan (remembered by hash).

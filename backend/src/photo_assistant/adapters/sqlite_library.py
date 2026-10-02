@@ -28,42 +28,49 @@ Bindings = dict[str, object]
 _VISIBLE = """vis(asset_id, level) AS (
     SELECT g.asset_id, MIN(MAX(g.level), :vis_cap)
     FROM (
+        -- every grant: (photo, level, owner of the source it came through, via an album?)
         -- a source that grants you (or everyone) a level
-        SELECT x.asset_id AS asset_id, sa.level AS level
+        SELECT x.asset_id AS asset_id, sa.level AS level, s.owner_id AS via_owner,
+               0 AS via_album
           FROM asset_source x JOIN source_access sa ON sa.source_id = x.source_id
+          JOIN source s ON s.id = x.source_id
          WHERE sa.user_id IS NULL OR sa.user_id = :vis_uid
         UNION ALL
         -- a source you own
-        SELECT x.asset_id, 3
+        SELECT x.asset_id, 3, s.owner_id, 0
           FROM asset_source x JOIN source s ON s.id = x.source_id
          WHERE s.owner_id = :vis_uid
         UNION ALL
         -- an album you own or that is shared with you: view only, whatever your album role
         -- (download and edit only ever come from sources; QA A1)
-        SELECT ai.asset_id, 1
+        SELECT ai.asset_id, 1, NULL, 1
           FROM album_item ai JOIN album al ON al.id = ai.album_id
           LEFT JOIN album_member am ON am.album_id = al.id AND am.user_id = :vis_uid
          WHERE al.owner_id = :vis_uid OR am.user_id IS NOT NULL
         UNION ALL
-        -- admins: everything
-        SELECT id, 3 FROM asset WHERE :vis_admin
+        -- admins: every source (and photos that have none left)
+        SELECT x.asset_id, 3, s.owner_id, 0
+          FROM asset_source x JOIN source s ON s.id = x.source_id WHERE :vis_admin
+        UNION ALL
+        SELECT a0.id, 3, NULL, 0 FROM asset a0
+         WHERE :vis_admin AND NOT EXISTS (SELECT 1 FROM asset_source x WHERE x.asset_id = a0.id)
     ) g
     JOIN asset a ON a.id = g.asset_id
-    LEFT JOIN source fs ON fs.id = a.first_source_id
-    -- private photos are for their owner only (admins included)
-    WHERE (a.private = 0 OR fs.owner_id = :vis_uid)
+    -- a private photo counts only grants through a source its marker does not own (albums
+    -- never reach it); its marker keeps every grant (QA A3)
+    WHERE (a.private = 0 OR a.private_by = :vis_uid
+           OR (g.via_album = 0 AND g.via_owner IS NOT a.private_by))
       AND (a.trashed_at IS NOT NULL) = :vis_trashed
     GROUP BY g.asset_id
 )"""
 
 ASSET_FROM = """FROM asset a JOIN vis ON vis.asset_id = a.id
     LEFT JOIN user_asset ua ON ua.asset_id = a.id AND ua.user_id = :vis_uid
-    LEFT JOIN source fs ON fs.id = a.first_source_id
     LEFT JOIN place p ON p.id = a.place_id
     LEFT JOIN edit_recipe er ON er.asset_id = a.id"""
 
 ASSET_COLUMNS = """a.*, vis.level AS vis_level, COALESCE(ua.favourite, 0) AS vis_favourite,
-    COALESCE(ua.hidden, 0) AS vis_hidden, fs.owner_id AS vis_owner, p.country, p.region, p.city,
+    COALESCE(ua.hidden, 0) AS vis_hidden, p.country, p.region, p.city,
     er.recipe_json AS vis_recipe"""
 
 # Albums and sources you can see (used for search, facets, origins and album lists).
@@ -96,7 +103,6 @@ def view_from_row(row: sqlite3.Row) -> AssetView:
         favourite=bool(row["vis_favourite"]),
         hidden=bool(row["vis_hidden"]),
         private=bool(row["private"]),
-        owner_id=row["vis_owner"],
         place=place,
         edit_version=row["edit_version"],
         edited=row["vis_recipe"] is not None,
@@ -414,5 +420,9 @@ class LibraryMixin(SqliteBase):
                 )
         return len(asset_ids)
 
-    def set_private(self, asset_id: int, private: bool) -> None:
-        self._write("UPDATE asset SET private = ? WHERE id = ?", (int(private), asset_id))
+    def set_private(self, asset_id: int, private: bool, by: int) -> None:
+        """Mark (or unmark) a photo private on behalf of ``by``, the marker (QA A3)."""
+        self._write(
+            "UPDATE asset SET private = ?, private_by = ? WHERE id = ?",
+            (int(private), by if private else None, asset_id),
+        )

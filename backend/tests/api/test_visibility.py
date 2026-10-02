@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import add_user, asset_id_of, import_folder, user_id_of
+from tests.api.conftest import add_user, asset_id_of, import_folder, services_of, user_id_of
 from tests.synthetic import write_photo
 
 pytestmark = pytest.mark.integration
@@ -293,3 +293,56 @@ def test_the_visible_id_set_is_the_timeline(world: World) -> None:
         ]
         assert ids == timeline, name
         assert services.repo.visible_asset_ids(Viewer.of(user), AssetFilter(year=1900)) == []
+
+
+# --- QA A3: "first importer owns the photo" ----------------------------------------------------
+
+
+def _source_id(admin: TestClient, label: str) -> int:
+    return next(s["id"] for s in admin.get("/api/sources").json() if s["label"] == label)
+
+
+def test_private_hides_only_from_viewers_who_reach_it_solely_through_the_markers_sources(
+    world: World, tmp_path: Path
+) -> None:
+    """Lea's source had the photo first, so she 'owned' it and could hide it from the admin
+    whose own family source holds the same file. Now private only hides it from people who
+    reach it through lea's own sources."""
+    admin, lea, tom = (world.clients[n] for n in ("admin", "lea", "tom"))
+    s4 = _source_id(admin, "lea's own")
+    write_photo(tmp_path / "s4" / "shared.jpg", seed=50)
+    assert admin.post(f"/api/sources/{s4}/scan").status_code == 202
+    services_of(admin).worker.run_until_idle()
+    write_photo(tmp_path / "s5" / "shared.jpg", seed=50)
+    s5 = import_folder(admin, tmp_path / "s5", "family two")
+    shared = asset_id_of(admin, s4, "shared.jpg")
+    assert asset_id_of(admin, s5, "shared.jpg") == shared, "one photo, two sources"
+
+    assert lea.patch(f"/api/assets/{shared}/state", json={"private": True}).is_success
+    assert lea.get(f"/api/assets/{shared}").json()["private"] is True
+    assert admin.get(f"/api/assets/{shared}").json()["level"] == "edit", "admin's own source"
+    assert tom.get(f"/api/assets/{shared}").json()["level"] == "download", "via family two"
+
+    assert admin.put(f"/api/sources/{s5}/access", json={"everyone": None, "users": []}).is_success
+    assert tom.get(f"/api/assets/{shared}").status_code == 404, "only lea's source is left"
+    assert shared in visible_ids(admin)
+
+
+def test_marking_private_needs_edit_from_a_source(world: World) -> None:
+    lea = world.clients["lea"]
+    denied = lea.patch(f"/api/assets/{world.ids['p2']}/state", json={"private": True})
+    assert denied.status_code == 403, "lea only views p2"
+
+
+def test_an_admin_cannot_see_list_or_purge_a_members_private_photo_in_the_trash(
+    world: World,
+) -> None:
+    admin, lea = world.clients["admin"], world.clients["lea"]
+    p5 = world.ids["p5"]  # private by lea, only in lea's own source
+    assert lea.request("DELETE", "/api/assets", json={"ids": [p5]}).json() == {"trashed": 1}
+    assert p5 in {t["id"] for t in lea.get("/api/trash").json()}
+    assert p5 not in {t["id"] for t in admin.get("/api/trash").json()}
+    assert admin.post("/api/trash/empty", json={"ids": [p5]}).json() == {"purged": 0}
+    assert admin.post("/api/trash/empty", json={}).json() == {"purged": 0}
+    assert services_of(admin).repo.get_asset(p5) is not None
+    assert lea.post("/api/trash/restore", json={"ids": [p5]}).json() == {"restored": 1}

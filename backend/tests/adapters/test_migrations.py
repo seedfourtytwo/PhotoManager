@@ -71,7 +71,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 16
+    assert _latest() == 17
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:

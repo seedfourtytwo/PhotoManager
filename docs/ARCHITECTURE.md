@@ -57,8 +57,10 @@ asset(id, content_hash UNIQUE, kind, mime_type, byte_size, width, height,
       taken_at, tz_offset_min, date_source[exif|exif_create|xmp|filename|file_mtime|manual],
       latitude, longitude, camera_make, camera_model, orientation,
       library_path, thumb_path, thumb_w, thumb_h, preview_path, variant_of, imported_at,
-      first_source_id  -- owner of the photo = owner of this source
-      private, place_id, phash, group_id, edit_version, trashed_at, trashed_by)
+      first_source_id  -- where it was first found (informational; grants nothing)
+      private, private_by  -- the marker (0017): hides it only from people who reach it
+                           -- solely through the marker's own sources or albums
+      place_id, phash, group_id, edit_version, trashed_at, trashed_by)
 asset_source(asset_id, source_id, relative_path, seen_at, byte_size, mtime_ns, ctime_ns)
 user_asset(user_id, asset_id, favourite, hidden)                      -- per-user state
 place(id, country, region, city)                                      -- offline geocoding
@@ -213,8 +215,9 @@ The LLM never writes to the database directly.
   `adapters/sqlite_library.py` is a SQL CTE `vis(asset_id, level)` = assets with at least one
   `asset_source` whose source grants the user (or everyone) a level or that the user owns, ∪
   assets in albums the user owns or that are shared with them (always `view`: download and
-  edit only ever come from sources), ∪ everything for admins (edit) — minus private items of other owners
-  (admins included) and trashed items; the level is the highest grant, capped at download for
+  edit only ever come from sources), ∪ every source for admins (edit) — where a private photo
+  only counts grants through sources its marker (`private_by`) does not own (the marker keeps
+  all of theirs; albums never reach it), and trashed items are left out; the level is the highest grant, capped at download for
   guests. Timeline, facets, calendar, map, albums, detail, images and downloads all start from
   it; the UI never filters for security. Covered by a table-driven API test
   (`tests/api/test_visibility.py`: users × sources × albums × private × roles).

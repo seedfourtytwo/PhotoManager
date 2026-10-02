@@ -132,13 +132,12 @@ def get_asset(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> AssetD
 def patch_state(
     services: ServicesDep, viewer: ViewerDep, asset_id: int, body: StatePatch
 ) -> AssetOut:
-    view = require_view(services, viewer, asset_id)
     if body.private is not None:
-        if not (viewer.is_admin or view.owner_id == viewer.user_id):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "only the photo's owner or an admin can do this"
-            )
-        services.repo.set_private(asset_id, body.private)
+        # needs edit from a source (or admin), never "first importer owns it" (QA A3)
+        require_view(services, viewer, asset_id, Level.EDIT)
+        services.repo.set_private(asset_id, body.private, viewer.user_id)
+    else:
+        require_view(services, viewer, asset_id)
     if body.favourite is not None or body.hidden is not None:
         services.repo.set_user_state(
             viewer.user_id, [asset_id], favourite=body.favourite, hidden=body.hidden

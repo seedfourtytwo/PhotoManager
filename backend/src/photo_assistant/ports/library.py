@@ -25,7 +25,6 @@ class AssetView:
     favourite: bool = False
     hidden: bool = False
     private: bool = False
-    owner_id: int | None = None
     place: Place | None = None
     edit_version: int = 0
     edited: bool = False
