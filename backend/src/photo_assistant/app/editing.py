@@ -10,7 +10,7 @@ from typing import Protocol
 
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.library_paths import edited_relpath
-from photo_assistant.ports import ImageRenderer, LibraryStore, RenderSpec
+from photo_assistant.ports import ImageRenderer, LibraryStore, RenderedImage, RenderSpec
 from photo_assistant.ports.library import AssetView
 
 
@@ -18,6 +18,7 @@ class EditStore(Protocol):
     def get_recipe(self, asset_id: int) -> Recipe | None: ...
     def save_recipe(self, asset_id: int, recipe: Recipe, user_id: int, now: datetime) -> None: ...
     def delete_recipe(self, asset_id: int) -> None: ...
+    def set_thumbnail(self, asset_id: int, thumb: RenderedImage) -> None: ...
 
 
 class Editor:
@@ -54,7 +55,14 @@ class Editor:
         a = view.asset
         if view.recipe is None:
             relative = a.thumb_path if kind == "thumb" else (a.preview_path or a.thumb_path)
-            return self._store.absolute(relative) if relative else None
+            if relative is None:
+                return None
+            path = self._store.absolute(relative)
+            if kind == "thumb" and a.thumb_size is None and path.is_file():
+                # photos migrated from M1 have no thumbnail size: measure it once (QA A12)
+                width, height = self._renderer.dimensions(path)
+                self._edits.set_thumbnail(a.id, RenderedImage(relative, width, height))
+            return path
         path = self._store.absolute(str(edited_relpath(kind, a.content_hash, view.recipe.key)))
         if not path.is_file():
             spec = RenderSpec(recipe=view.recipe, max_edge=self._edges[kind])

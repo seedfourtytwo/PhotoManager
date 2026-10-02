@@ -20,3 +20,7 @@ UPDATE asset SET edit_version = edit_version + 1
 DELETE FROM edit_recipe
  WHERE json_extract(recipe_json, '$.crop.w') < 0.001
     OR json_extract(recipe_json, '$.crop.h') < 0.001;
+
+-- Capture times are wall-clock to the second everywhere (QA A12): mtime-based dates were
+-- stored with microseconds.
+UPDATE asset SET taken_at = substr(taken_at, 1, 19) WHERE length(taken_at) > 19;

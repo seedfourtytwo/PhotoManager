@@ -176,7 +176,8 @@ def _in_zone_of(moment: datetime, reference: datetime, source: DateSource) -> Ca
     local = moment.astimezone(reference.tzinfo)
     offset = local.utcoffset()
     minutes = int(offset.total_seconds() // 60) if offset is not None else None
-    wall = max(local.replace(tzinfo=None), EARLIEST_PLAUSIBLE)
+    # whole seconds, like every other source (an mtime has nanoseconds; QA A12)
+    wall = max(local.replace(tzinfo=None, microsecond=0), EARLIEST_PLAUSIBLE)
     return CaptureTime(wall, minutes, source)
 
 

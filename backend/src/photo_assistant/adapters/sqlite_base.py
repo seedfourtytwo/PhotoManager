@@ -41,6 +41,7 @@ def asset_from_row(row: sqlite3.Row) -> Asset:
         thumb_path=row["thumb_path"],
         preview_path=row["preview_path"],
         variant_of=row["variant_of"],
+        thumb_size=(row["thumb_w"], row["thumb_h"]) if row["thumb_w"] else None,
     )
 
 

@@ -218,3 +218,11 @@ def test_epoch_names_become_local_wall_clock_time() -> None:
         MetadataDates(), filename="FB_IMG_1577835000000.jpg", file_mtime=mtime, now=NOW
     )
     assert result == CaptureTime(datetime(2020, 1, 1, 0, 30), 60, DateSource.FILENAME)
+
+
+def test_a_time_from_the_file_mtime_is_whole_seconds_like_every_other_source() -> None:
+    """QA A12: mtime dates were stored with microseconds."""
+    mtime = datetime(2020, 5, 1, 10, 0, 7, 729120, tzinfo=UTC)
+    result = pick_capture_time(MetadataDates(), filename="x.jpg", file_mtime=mtime, now=NOW)
+    assert result.value == datetime(2020, 5, 1, 10, 0, 7)
+    assert result.value.microsecond == 0

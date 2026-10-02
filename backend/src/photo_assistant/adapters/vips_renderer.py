@@ -94,6 +94,10 @@ class VipsRenderer:
             source, destination, RenderSpec(max_edge=max_edge, quality=self._quality)
         )
 
+    def dimensions(self, image: Path) -> tuple[int, int]:
+        header = pyvips.Image.new_from_file(str(image))  # reads the header only
+        return int(header.width), int(header.height)
+
     def render_variant(self, source: Path, destination: Path, spec: RenderSpec) -> tuple[int, int]:
         saver = _SAVERS.get(spec.format)
         if saver is None:

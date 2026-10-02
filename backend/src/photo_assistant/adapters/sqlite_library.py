@@ -5,6 +5,7 @@ searches or serves photos starts from it; nothing is filtered in Python afterwar
 """
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta
@@ -398,7 +399,10 @@ class LibraryMixin(SqliteBase):
                WHERE a.id = ? ORDER BY x.source_id = a.first_source_id DESC, x.rowid LIMIT 1""",
             (asset_id,),
         )
-        return str(row["relative_path"]).rsplit("/", 1)[-1] if row else None
+        if row is None:
+            return None
+        # the bare file name: a (Linux) name may contain "\", which Windows reads as a path
+        return re.split(r"[/\\]", str(row["relative_path"]))[-1] or None
 
     # --- per-user state --------------------------------------------------------------------
 

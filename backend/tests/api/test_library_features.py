@@ -272,3 +272,25 @@ def test_dates_cannot_be_set_or_shifted_into_the_future(lib: Lib) -> None:
         assert "future" in refused.json()["detail"]
     ok = c.post("/api/assets/dates", json={"ids": [ids["winter"]], "set": soon.isoformat()})
     assert ok.json() == {"updated": 1}, "now (up to a day ahead, for time zones) is fine"
+
+
+def test_the_original_is_named_after_the_file_never_a_path(lib: Lib) -> None:
+    """QA A12: a backslash in a (Linux) file name must not reach Content-Disposition."""
+    write_photo(lib.folder / "holiday\\..\\evil.jpg", seed=99)
+    assert lib.admin.post(f"/api/sources/{lib.source}/scan").status_code == 202
+    services_of(lib.admin).worker.run_until_idle()
+    asset_id = asset_id_of(lib.admin, lib.source, "holiday\\..\\evil.jpg")
+    disposition = lib.admin.get(f"/api/assets/{asset_id}/original").headers["content-disposition"]
+    assert 'filename="evil.jpg"' in disposition or "filename*=utf-8''evil.jpg" in disposition
+
+
+def test_a_missing_thumbnail_size_is_measured_and_stored_on_first_serve(lib: Lib) -> None:
+    """QA A12: photos migrated from M1 have no thumb_w/thumb_h."""
+    repo = services_of(lib.admin).repo
+    asset_id = lib.ids["paris1"]
+    repo._write("UPDATE asset SET thumb_w = NULL, thumb_h = NULL WHERE id = ?", (asset_id,))
+    asset = repo.get_asset(asset_id)
+    assert asset is not None and asset.thumb_size is None
+    assert lib.admin.get(f"/api/assets/{asset_id}/thumb").status_code == 200
+    measured = repo.get_asset(asset_id)
+    assert measured is not None and measured.thumb_size == (120, 80)

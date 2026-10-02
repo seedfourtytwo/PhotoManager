@@ -81,18 +81,18 @@ class SourcePatch(BaseModel):
 class SourceOut(BaseModel):
     id: int
     label: str
-    path: str
+    path: str | None  # the folder on the server: admins only (v1.2), else null
     enabled: bool
     kind: str
     owner_id: int | None
     asset_count: int
 
     @classmethod
-    def of(cls, s: Source, asset_count: int) -> "SourceOut":
+    def of(cls, s: Source, asset_count: int, show_path: bool) -> "SourceOut":
         return cls(
             id=s.id,
             label=s.label,
-            path=s.root,
+            path=s.root if show_path else None,
             enabled=s.enabled,
             kind=s.kind,
             owner_id=s.owner_id,

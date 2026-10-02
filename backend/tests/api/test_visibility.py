@@ -213,9 +213,9 @@ def test_source_access_can_be_read_and_changed_only_by_admins(world: World) -> N
         "everyone": "download",
         "users": [],
     }
-    assert tom.get(f"/api/sources/{family['id']}/access").status_code == 200
     restricted = sources["restricted"]["id"]
-    assert tom.get(f"/api/sources/{restricted}/access").status_code == 404
+    for source_id in (family["id"], restricted):  # admin-only (QA A12)
+        assert tom.get(f"/api/sources/{source_id}/access").status_code == 403
     denied = tom.put(f"/api/sources/{family['id']}/access", json={"everyone": None, "users": []})
     assert denied.status_code == 403
     bad = admin.put(
@@ -380,3 +380,10 @@ def test_trashed_photos_keep_their_thumbnail_and_preview_for_those_who_see_them_
         assert admin.get(f"/api/assets/{p5}/{kind}").status_code == 404, "lea's private photo"
     assert admin.get(f"/api/assets/{p1}").status_code == 404, "still gone from the library"
     assert admin.get(f"/api/assets/{p1}/original").status_code == 404
+
+
+def test_members_see_source_names_but_never_folder_paths(world: World) -> None:
+    """QA A12: absolute folder paths on the server are the admin's business."""
+    tom, admin = world.clients["tom"], world.clients["admin"]
+    assert {s["path"] for s in tom.get("/api/sources").json()} == {None}
+    assert all(s["path"].startswith("/") for s in admin.get("/api/sources").json())

@@ -30,14 +30,14 @@ router = APIRouter(prefix="/api/sources", tags=["sources"])
 def _out(services: Services, viewer: Viewer, source_id: int) -> SourceOut:
     for source, count in services.repo.sources_for(viewer):
         if source.id == source_id:
-            return SourceOut.of(source, count)
+            return SourceOut.of(source, count, viewer.is_admin)
     raise HTTPException(status.HTTP_404_NOT_FOUND, "source not found")
 
 
 @router.get("", dependencies=LOGGED_IN)
 def list_sources(services: ServicesDep, viewer: ViewerDep) -> list[SourceOut]:
     """The sources you may see (all of them for an admin)."""
-    return [SourceOut.of(s, n) for s, n in services.repo.sources_for(viewer)]
+    return [SourceOut.of(s, n, viewer.is_admin) for s, n in services.repo.sources_for(viewer)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -53,7 +53,7 @@ def add_source(services: ServicesDep, admin: AdminUser, body: SourceIn) -> Sourc
         source = services.repo.add_source(body.label, str(folder.resolve()), owner_id=admin.id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return SourceOut.of(source, 0)
+    return SourceOut.of(source, 0, show_path=True)
 
 
 @router.patch("/{source_id}")
@@ -71,10 +71,10 @@ def patch_source(
     return _out(services, viewer, source_id)
 
 
-@router.get("/{source_id}/access", dependencies=LOGGED_IN)
-def get_access(services: ServicesDep, viewer: ViewerDep, source_id: int) -> Access:
-    if not services.repo.source_visible_to(viewer, source_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "source not found")
+@router.get("/{source_id}/access", dependencies=ADMIN_ONLY)
+def get_access(services: ServicesDep, source_id: int) -> Access:
+    """Who may see a source: the admin's business only (v1.2, QA A12)."""
+    require_source(services, source_id)
     everyone, users = services.repo.get_access(source_id)
     return Access(
         everyone=everyone.label if everyone else None,  # type: ignore[arg-type]
@@ -83,7 +83,7 @@ def get_access(services: ServicesDep, viewer: ViewerDep, source_id: int) -> Acce
 
 
 @router.put("/{source_id}/access", dependencies=ADMIN_ONLY)
-def put_access(services: ServicesDep, viewer: ViewerDep, source_id: int, body: Access) -> Access:
+def put_access(services: ServicesDep, source_id: int, body: Access) -> Access:
     require_source(services, source_id)
     users = [(u.user_id, Level.parse(u.level)) for u in body.users]
     everyone = Level.parse(body.everyone) if body.everyone else None
@@ -91,7 +91,7 @@ def put_access(services: ServicesDep, viewer: ViewerDep, source_id: int, body: A
         services.repo.set_access(source_id, everyone, users)
     except UnknownUserError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    return get_access(services, viewer, source_id)
+    return get_access(services, source_id)
 
 
 @router.post("/scan-all", status_code=status.HTTP_202_ACCEPTED, dependencies=ADMIN_ONLY)

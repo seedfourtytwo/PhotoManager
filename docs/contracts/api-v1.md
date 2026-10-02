@@ -56,8 +56,9 @@ Existing M1 routes stay: `GET/POST /api/sources`, `PATCH /api/sources/{id}`,
 `POST /api/sources/{id}/scan`, `POST /api/sources/scan-all`, `GET /api/imports`,
 `GET /api/imports/{id}`, `GET /api/jobs`, `POST /api/jobs/{id}/retry`, `GET /api/stats`.
 Adding/scanning sources is admin-only. `SourceOut` gains `owner_id` and `asset_count`.
+Since v1.2 `SourceOut.path` (the folder on the server) is `null` for everyone but admins.
 
-| GET | `/api/sources/{id}/access` | – | `Access` |
+| GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
 | PUT | `/api/sources/{id}/access` | `Access` | `Access` (admin) |
 
