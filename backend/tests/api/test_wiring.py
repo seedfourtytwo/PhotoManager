@@ -52,7 +52,12 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
     admin: TestClient,
 ) -> None:
     periodic = services_of(admin).ops.periodic
-    assert periodic.task_names == ["due backups", "trash purge", "cluster faces"]
+    assert periodic.task_names == [
+        "due backups",
+        "trash purge",
+        "cluster faces",
+        "optimize database",
+    ]
 
 
 def test_housekeeping_queues_the_purge_and_a_global_face_clustering(admin: TestClient) -> None:

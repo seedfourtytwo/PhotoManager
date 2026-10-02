@@ -65,6 +65,12 @@ class SqliteRepository(
         finally:
             source.close()
 
+    def optimize(self) -> None:
+        """``PRAGMA optimize``: refresh the planner's statistics where they went stale (cheap;
+        the server runs it periodically, C25)."""
+        with self._lock:
+            self._conn.execute("PRAGMA optimize")
+
     # --- sources ---------------------------------------------------------------------------
 
     @staticmethod

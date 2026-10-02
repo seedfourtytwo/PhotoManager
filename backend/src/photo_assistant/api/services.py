@@ -127,6 +127,7 @@ def build_services(settings: Settings) -> Services:
             settings.face_cluster_every_hours * 3600,
             lambda: repo.enqueue_once(CLUSTER_FACES),
         ),
+        PeriodicTask("optimize database", 6 * 3600, repo.optimize),
     ]
     ops = build_ops_services(
         root,

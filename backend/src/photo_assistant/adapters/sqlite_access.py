@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
-from photo_assistant.adapters.sqlite_library import SOURCE_VISIBLE, visible_assets_cte
+from photo_assistant.adapters.sqlite_library import SOURCE_VISIBLE, visibility
 from photo_assistant.domain.access import Level, SourceAccess, Viewer
 from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.model import Source
@@ -64,10 +64,11 @@ class AccessMixin(SqliteBase):
 
     def sources_for(self, viewer: Viewer) -> list[tuple[Source, int]]:
         """Sources this viewer may see, each with how many of its photos they can see."""
-        cte, params = visible_assets_cte(viewer)
+        visible, _, params = visibility(viewer)
         rows = self._all(
-            f"""{cte} SELECT s.*, (SELECT COUNT(DISTINCT x.asset_id) FROM asset_source x
-                    JOIN vis ON vis.asset_id = x.asset_id WHERE x.source_id = s.id) AS n
+            f"""SELECT s.*, (SELECT COUNT(DISTINCT x.asset_id) FROM asset_source x
+                    JOIN asset a ON a.id = x.asset_id
+                   WHERE x.source_id = s.id AND {visible}) AS n
                 FROM source s WHERE {SOURCE_VISIBLE} ORDER BY s.id""",
             params,
         )

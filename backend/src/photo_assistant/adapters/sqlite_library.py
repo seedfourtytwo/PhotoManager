@@ -1,9 +1,10 @@
 """Reading the library as one viewer: the visibility rule, filters, facets, calendar, map.
 
-``visible_assets_cte`` is THE access rule (ARCHITECTURE §7). Every query that lists, counts,
-searches or serves photos starts from it; nothing is filtered in Python afterwards.
+``visibility`` is THE access rule (ARCHITECTURE §7). Every query that lists, counts, searches
+or serves photos applies it; nothing is filtered in Python afterwards.
 """
 
+import collections
 import json
 import re
 import sqlite3
@@ -26,53 +27,83 @@ from photo_assistant.ports.library import AssetView, Count, Facets, ViewPage
 Clauses = list[str]
 Bindings = dict[str, object]
 
-_VISIBLE = """vis(asset_id, level) AS (
-    SELECT g.asset_id, MIN(MAX(g.level), :vis_cap)
-    FROM (
-        -- every grant: (photo, level, owner of the source it came through, via an album?)
-        -- a source that grants you (or everyone) a level
-        SELECT x.asset_id AS asset_id, sa.level AS level, s.owner_id AS via_owner,
-               0 AS via_album
-          FROM asset_source x JOIN source_access sa ON sa.source_id = x.source_id
-          JOIN source s ON s.id = x.source_id
-         WHERE sa.user_id IS NULL OR sa.user_id = :vis_uid
-        UNION ALL
-        -- a source you own
-        SELECT x.asset_id, 3, s.owner_id, 0
-          FROM asset_source x JOIN source s ON s.id = x.source_id
-         WHERE s.owner_id = :vis_uid
-        UNION ALL
-        -- an album you own or that is shared with you: view only, whatever your album role
-        -- (download and edit only ever come from sources; QA A1)
-        SELECT ai.asset_id, 1, NULL, 1
-          FROM album_item ai JOIN album al ON al.id = ai.album_id
-          LEFT JOIN album_member am ON am.album_id = al.id AND am.user_id = :vis_uid
-         WHERE al.owner_id = :vis_uid OR am.user_id IS NOT NULL
-        UNION ALL
-        -- admins: every source (and photos that have none left)
-        SELECT x.asset_id, 3, s.owner_id, 0
-          FROM asset_source x JOIN source s ON s.id = x.source_id WHERE :vis_admin
-        UNION ALL
-        SELECT a0.id, 3, NULL, 0 FROM asset a0
-         WHERE :vis_admin AND NOT EXISTS (SELECT 1 FROM asset_source x WHERE x.asset_id = a0.id)
-    ) g
-    JOIN asset a ON a.id = g.asset_id
-    -- a private photo counts only grants through a source its marker does not own (albums
-    -- never reach it); its marker keeps every grant (QA A3)
-    WHERE (a.private = 0 OR a.private_by = :vis_uid
-           OR (g.via_album = 0 AND g.via_owner IS NOT a.private_by))
-      AND (a.trashed_at IS NOT NULL) = :vis_trashed
-    GROUP BY g.asset_id
-)"""
+# --- THE access rule (ARCHITECTURE §7), as per-photo SQL over the alias ``a`` --------------------
+#
+# A grant is a source that gives the viewer (or everyone) a level, a source the viewer owns
+# (edit), or an album the viewer owns or is a member of (view only: QA A1). A private photo only
+# counts grants through sources its marker does not own, unless the viewer is the marker;
+# albums never reach it (QA A3). Admins have edit through every source (and on photos left
+# without one). Guests are capped at download.
+#
+# Two expressions, both correlated on ``a`` (C25: evaluated per photo through the indexes, so
+# a timeline page stops after its LIMIT instead of computing the whole library first):
+# _MEMBER_VISIBLE / _ADMIN_VISIBLE decide *whether* (EXISTS, short-circuits) and go in WHERE;
+# _MEMBER_LEVEL decides *which level* and is only computed for the rows returned.
 
-ASSET_FROM = """FROM asset a JOIN vis ON vis.asset_id = a.id
-    LEFT JOIN user_asset ua ON ua.asset_id = a.id AND ua.user_id = :vis_uid
+_QUALIFIES = "(a.private = 0 OR a.private_by = :vis_uid OR {owner} IS NOT a.private_by)"
+
+_MEMBER_VISIBLE = f"""(EXISTS (
+        SELECT 1 FROM asset_source x JOIN source s ON s.id = x.source_id
+         WHERE x.asset_id = a.id AND {_QUALIFIES.format(owner="s.owner_id")}
+           AND (s.owner_id = :vis_uid OR EXISTS (
+                SELECT 1 FROM source_access sa WHERE sa.source_id = s.id
+                   AND (sa.user_id IS NULL OR sa.user_id = :vis_uid))))
+    OR ((a.private = 0 OR a.private_by = :vis_uid) AND EXISTS (
+        SELECT 1 FROM album_item ai JOIN album al ON al.id = ai.album_id
+         WHERE ai.asset_id = a.id AND (al.owner_id = :vis_uid OR EXISTS (
+               SELECT 1 FROM album_member am
+                WHERE am.album_id = al.id AND am.user_id = :vis_uid)))))"""
+
+_MEMBER_LEVEL = f"""(SELECT MIN(MAX(g.lv), :vis_cap) FROM (
+        SELECT sa.level AS lv FROM asset_source x JOIN source s ON s.id = x.source_id
+          JOIN source_access sa ON sa.source_id = x.source_id
+         WHERE x.asset_id = a.id AND (sa.user_id IS NULL OR sa.user_id = :vis_uid)
+           AND {_QUALIFIES.format(owner="s.owner_id")}
+        UNION ALL
+        SELECT 3 FROM asset_source x JOIN source s ON s.id = x.source_id
+         WHERE x.asset_id = a.id AND s.owner_id = :vis_uid
+           AND {_QUALIFIES.format(owner="s.owner_id")}
+        UNION ALL
+        SELECT 1 FROM album_item ai JOIN album al ON al.id = ai.album_id
+         WHERE ai.asset_id = a.id AND (a.private = 0 OR a.private_by = :vis_uid)
+           AND (al.owner_id = :vis_uid OR EXISTS (
+                SELECT 1 FROM album_member am
+                 WHERE am.album_id = al.id AND am.user_id = :vis_uid))) g)"""
+
+# Admins (C27): no access lists to consult; only someone else's private photo needs a look.
+_ADMIN_VISIBLE = f"""(a.private = 0 OR a.private_by = :vis_uid
+    OR EXISTS (SELECT 1 FROM asset_source x JOIN source s ON s.id = x.source_id
+                WHERE x.asset_id = a.id AND {_QUALIFIES.format(owner="s.owner_id")})
+    OR NOT EXISTS (SELECT 1 FROM asset_source x WHERE x.asset_id = a.id))"""
+
+
+def visibility(viewer: Viewer, *, trashed: bool = False) -> tuple[str, str, Bindings]:
+    """THE access rule for one viewer: (condition "``a`` is visible and in / out of the trash",
+    expression "the viewer's level on ``a``", bindings). Every query that lists, counts,
+    searches or serves photos uses it; nothing is filtered in Python afterwards."""
+    params: Bindings = {
+        "vis_uid": viewer.user_id,
+        "vis_admin": int(viewer.is_admin),
+        "vis_cap": int(viewer.level_cap),
+    }
+    trash = "a.trashed_at IS NOT NULL" if trashed else "a.trashed_at IS NULL"
+    if viewer.is_admin:
+        return f"({trash} AND {_ADMIN_VISIBLE})", ":vis_cap", params
+    return f"({trash} AND {_MEMBER_VISIBLE})", _MEMBER_LEVEL, params
+
+
+ASSET_JOINS = """LEFT JOIN user_asset ua ON ua.asset_id = a.id AND ua.user_id = :vis_uid
     LEFT JOIN place p ON p.id = a.place_id
     LEFT JOIN edit_recipe er ON er.asset_id = a.id"""
+ASSET_FROM = f"FROM asset a {ASSET_JOINS}"
 
-ASSET_COLUMNS = """a.*, vis.level AS vis_level, COALESCE(ua.favourite, 0) AS vis_favourite,
+
+def asset_columns(level: str) -> str:
+    """Everything ``view_from_row`` reads, with ``level`` from ``visibility``."""
+    return f"""a.*, {level} AS vis_level, COALESCE(ua.favourite, 0) AS vis_favourite,
     COALESCE(ua.hidden, 0) AS vis_hidden, p.country, p.region, p.city,
     er.recipe_json AS vis_recipe"""
+
 
 # Albums and sources you can see (used for search, facets, origins and album lists).
 ALBUM_VISIBLE = """(:vis_admin OR al.owner_id = :vis_uid OR EXISTS (
@@ -82,17 +113,6 @@ SOURCE_VISIBLE = """(:vis_admin OR s.owner_id = :vis_uid OR EXISTS (
        AND (sa.user_id IS NULL OR sa.user_id = :vis_uid)))"""
 
 ORDER = "ORDER BY a.taken_at DESC, a.id DESC"
-
-
-def visible_assets_cte(viewer: Viewer, *, trashed: bool = False) -> tuple[str, Bindings]:
-    """``WITH vis(asset_id, level)``: the photos this viewer may see and their level."""
-    params: Bindings = {
-        "vis_uid": viewer.user_id,
-        "vis_admin": int(viewer.is_admin),
-        "vis_cap": int(viewer.level_cap),
-        "vis_trashed": int(trashed),
-    }
-    return "WITH " + _VISIBLE, params
 
 
 def view_from_row(row: sqlite3.Row) -> AssetView:
@@ -126,12 +146,20 @@ def _days(f: AssetFilter, where: Clauses, params: Bindings) -> None:
 
 
 def _year_month(f: AssetFilter, where: Clauses, params: Bindings) -> None:
-    if f.year is not None:
-        where.append("substr(a.taken_at, 1, 4) = :f_year")
-        params["f_year"] = f"{f.year:04d}"
-    if f.month is not None:
-        where.append("substr(a.taken_at, 6, 2) = :f_month")
-        params["f_month"] = f"{f.month:02d}"
+    """As a taken_at range (C25), so the timeline index serves it."""
+    if f.year is None:
+        return
+    if f.month is None:
+        start, end = date(f.year, 1, 1), (date(f.year + 1, 1, 1) if f.year < 9999 else None)
+    else:
+        start = date(f.year, f.month, 1)
+        after = (f.year + 1, 1) if f.month == 12 else (f.year, f.month + 1)
+        end = date(*after, 1) if after[0] <= 9999 else None
+    where.append("a.taken_at >= :f_ym_start")
+    params["f_ym_start"] = start.isoformat()
+    if end is not None:
+        where.append("a.taken_at < :f_ym_end")
+        params["f_ym_end"] = end.isoformat()
 
 
 def _sources(f: AssetFilter, where: Clauses, params: Bindings) -> None:
@@ -196,6 +224,15 @@ _FILTERS: list[Callable[[AssetFilter, Clauses, Bindings], None]] = [
 ]
 
 
+def from_sql(f: AssetFilter) -> str:
+    """``FROM asset a`` with the per-photo joins. "Only my favourites" starts from my
+    favourites (C25): a handful of rows instead of a walk over the whole timeline."""
+    if f.favourite:
+        return f"""FROM user_asset fav JOIN asset a ON a.id = fav.asset_id
+            AND fav.user_id = :vis_uid AND fav.favourite = 1 {ASSET_JOINS}"""
+    return ASSET_FROM
+
+
 def filter_sql(f: AssetFilter) -> tuple[str, Bindings]:
     """``WHERE …`` for a filter (always at least ``1``)."""
     where: Clauses = ["1"]
@@ -205,13 +242,17 @@ def filter_sql(f: AssetFilter) -> tuple[str, Bindings]:
     return "WHERE " + " AND ".join(where), params
 
 
+def _by_count(counts: "collections.Counter[str]") -> list[Count]:
+    return [Count(k, n) for k, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
 class LibraryMixin(SqliteBase):
     def _filtered(
         self, viewer: Viewer, f: AssetFilter, tail: str, extra: Bindings | None = None
     ) -> list[sqlite3.Row]:
-        cte, params = visible_assets_cte(viewer)
+        visible, level, params = visibility(viewer)
         where, fparams = filter_sql(f)
-        sql = f"{cte} SELECT {ASSET_COLUMNS} {ASSET_FROM} {where} {tail}"
+        sql = f"SELECT {asset_columns(level)} {from_sql(f)} {where} AND {visible} {tail}"
         return self._all(sql, params | fparams | (extra or {}))
 
     # --- lists -----------------------------------------------------------------------------
@@ -237,9 +278,12 @@ class LibraryMixin(SqliteBase):
     def visible_asset_ids(self, viewer: Viewer, f: AssetFilter | None = None) -> list[int]:
         """The visibility rule (plus filters) as plain ids, newest first: the candidate set
         handed to search, similar photos and people, which never widen it."""
-        cte, params = visible_assets_cte(viewer)
-        where, fparams = filter_sql(f or AssetFilter())
-        rows = self._all(f"{cte} SELECT a.id {ASSET_FROM} {where} {ORDER}", params | fparams)
+        f = f or AssetFilter()
+        visible, _, params = visibility(viewer)
+        where, fparams = filter_sql(f)
+        rows = self._all(
+            f"SELECT a.id {from_sql(f)} {where} AND {visible} {ORDER}", params | fparams
+        )
         return [int(r["id"]) for r in rows]
 
     def list_all_views(self, viewer: Viewer, f: AssetFilter) -> list[AssetView]:
@@ -250,12 +294,14 @@ class LibraryMixin(SqliteBase):
     ) -> list[AssetView]:
         if not ids:
             return []
-        cte, params = visible_assets_cte(viewer, trashed=trashed)
+        visible, level, params = visibility(viewer, trashed=trashed)
         wanted = list(dict.fromkeys(ids))
         names = ", ".join(f":id{i}" for i in range(len(wanted)))
         params |= {f"id{i}": v for i, v in enumerate(wanted)}
         rows = self._all(
-            f"{cte} SELECT {ASSET_COLUMNS} {ASSET_FROM} WHERE a.id IN ({names})", params
+            f"""SELECT {asset_columns(level)} {ASSET_FROM}
+                WHERE a.id IN ({names}) AND {visible}""",
+            params,
         )
         by_id = {r["id"]: view_from_row(r) for r in rows}
         return [by_id[i] for i in wanted if i in by_id]
@@ -265,84 +311,80 @@ class LibraryMixin(SqliteBase):
         return found[0] if found else None
 
     def group_views(self, viewer: Viewer, group_id: int) -> list[AssetView]:
-        cte, params = visible_assets_cte(viewer)
+        visible, level, params = visibility(viewer)
         rows = self._all(
-            f"""{cte} SELECT {ASSET_COLUMNS} {ASSET_FROM} WHERE a.group_id = :group
-                ORDER BY a.taken_at, a.id""",
+            f"""SELECT {asset_columns(level)} {ASSET_FROM}
+                WHERE a.group_id = :group AND {visible} ORDER BY a.taken_at, a.id""",
             params | {"group": group_id},
         )
         return [view_from_row(r) for r in rows]
 
     def trashed_views(self, viewer: Viewer) -> list[AssetView]:
-        cte, params = visible_assets_cte(viewer, trashed=True)
+        visible, level, params = visibility(viewer, trashed=True)
         rows = self._all(
-            f"{cte} SELECT {ASSET_COLUMNS} {ASSET_FROM} ORDER BY a.trashed_at DESC", params
+            f"""SELECT {asset_columns(level)} {ASSET_FROM} WHERE {visible}
+                ORDER BY a.trashed_at DESC""",
+            params,
         )
         return [view_from_row(r) for r in rows]
 
     def count_visible(self, viewer: Viewer) -> int:
-        cte, params = visible_assets_cte(viewer)
-        return self._scalar(f"{cte} SELECT COUNT(*) FROM vis", params)
+        visible, _, params = visibility(viewer)
+        return self._scalar(f"SELECT COUNT(*) FROM asset a WHERE {visible}", params)
 
     # --- facets, calendar, map -------------------------------------------------------------
 
     def _grouped(
-        self, viewer: Viewer, f: AssetFilter, select: str, group: str, joins: str = ""
+        self, viewer: Viewer, f: AssetFilter, select: str, group: str
     ) -> list[sqlite3.Row]:
-        cte, params = visible_assets_cte(viewer)
+        visible, _, params = visibility(viewer)
         where, fparams = filter_sql(f)
-        sql = f"{cte} SELECT {select} {ASSET_FROM} {joins} {where} {group}"
+        sql = f"SELECT {select} {from_sql(f)} {where} AND {visible} {group}"
         return self._all(sql, params | fparams)
 
     def facets(self, viewer: Viewer, f: AssetFilter) -> Facets:
-        def counts(select: str, group: str) -> list[Count]:
-            rows = self._grouped(viewer, f, select, group)
-            return [Count(str(r["k"]), int(r["n"]), str(r["label"] or "")) for r in rows]
-
-        years = counts(
-            "substr(a.taken_at, 1, 4) AS k, COUNT(*) AS n, '' AS label",
-            "GROUP BY k ORDER BY k DESC",
+        """Two passes instead of five (C27): one grouped scan gives years, cameras, places,
+        guessed dates and the total; one more counts photos per source you may see."""
+        combos = self._grouped(
+            viewer,
+            f,
+            """substr(a.taken_at, 1, 4) AS year, a.camera_model AS camera,
+               a.date_source = 'file_mtime' AS guessed, p.country, p.city, COUNT(*) AS n""",
+            "GROUP BY year, camera, guessed, p.country, p.city",
         )
-        cameras = counts(
-            "a.camera_model AS k, COUNT(*) AS n, '' AS label",
-            "AND a.camera_model IS NOT NULL GROUP BY k ORDER BY n DESC, k",
-        )
-        totals = self._grouped(
-            viewer, f, "COUNT(*) AS n, SUM(a.date_source = 'file_mtime') AS g", ""
-        )[0]
+        years: collections.Counter[str] = collections.Counter()
+        cameras: collections.Counter[str] = collections.Counter()
+        places: collections.Counter[str] = collections.Counter()
+        guessed = 0
+        for r in combos:
+            n = int(r["n"])
+            years[r["year"]] += n
+            if r["camera"] is not None:
+                cameras[r["camera"]] += n
+            guessed += n if r["guessed"] else 0
+            for name in {r["country"], r["city"]} - {None, ""}:  # each works as a filter
+                places[name] += n
         return Facets(
-            years=years,
+            years=[Count(y, n) for y, n in sorted(years.items(), reverse=True)],
             sources=self._source_facets(viewer, f),
-            cameras=cameras,
-            places=self._place_facets(viewer, f),
-            guessed_dates=int(totals["g"] or 0),
-            total=int(totals["n"]),
+            cameras=_by_count(cameras),
+            places=_by_count(places),
+            guessed_dates=guessed,
+            total=sum(years.values()),
         )
 
     def _source_facets(self, viewer: Viewer, f: AssetFilter) -> list[Count]:
-        rows = self._grouped(
-            viewer,
-            f,
-            "s.id AS k, s.label AS label, COUNT(DISTINCT a.id) AS n",
-            f"AND {SOURCE_VISIBLE} GROUP BY s.id ORDER BY n DESC, s.id",
-            joins="JOIN asset_source x ON x.asset_id = a.id JOIN source s ON s.id = x.source_id",
+        visible, _, params = visibility(viewer)
+        where, fparams = filter_sql(f)
+        rows = self._all(
+            f"""SELECT s.id AS k, s.label AS label, COUNT(DISTINCT a.id) AS n
+                {from_sql(f)} JOIN asset_source x ON x.asset_id = a.id
+                JOIN source s ON s.id = x.source_id
+                {where} AND {visible} AND {SOURCE_VISIBLE}
+                GROUP BY s.id ORDER BY n DESC, s.id""",
+            params | fparams,
         )
         return [Count(str(r["k"]), int(r["n"]), r["label"]) for r in rows]
-
-    def _place_facets(self, viewer: Viewer, f: AssetFilter) -> list[Count]:
-        """Countries and cities together: every name works as a ``place`` filter."""
-        rows = self._grouped(
-            viewer,
-            f,
-            "p.country AS country, p.city AS city, COUNT(*) AS n",
-            "AND p.id IS NOT NULL GROUP BY p.country, p.city",
-        )
-        totals: dict[str, int] = {}
-        for r in rows:
-            for name in {r["country"], r["city"]} - {""}:
-                totals[name] = totals.get(name, 0) + int(r["n"])
-        ordered = sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))
-        return [Count(name, n) for name, n in ordered]
 
     def calendar(self, viewer: Viewer, f: AssetFilter) -> list[Count]:
         rows = self._grouped(
@@ -366,9 +408,9 @@ class LibraryMixin(SqliteBase):
 
     def origins_for(self, viewer: Viewer, asset_id: int) -> list[tuple[Source, str]]:
         """Where the photo came from, limited to sources this viewer may see."""
-        cte, params = visible_assets_cte(viewer)
+        _, _, params = visibility(viewer)
         rows = self._all(
-            f"""{cte} SELECT s.*, x.relative_path FROM asset_source x
+            f"""SELECT s.*, x.relative_path FROM asset_source x
                 JOIN source s ON s.id = x.source_id
                 WHERE x.asset_id = :asset AND {SOURCE_VISIBLE}
                 ORDER BY s.id, x.relative_path""",
@@ -385,9 +427,9 @@ class LibraryMixin(SqliteBase):
         ]
 
     def albums_of(self, viewer: Viewer, asset_id: int) -> list[tuple[int, str]]:
-        cte, params = visible_assets_cte(viewer)
+        _, _, params = visibility(viewer)
         rows = self._all(
-            f"""{cte} SELECT al.id, al.title FROM album_item ai JOIN album al ON al.id = ai.album_id
+            f"""SELECT al.id, al.title FROM album_item ai JOIN album al ON al.id = ai.album_id
                 WHERE ai.asset_id = :asset AND {ALBUM_VISIBLE} ORDER BY al.title, al.id""",
             params | {"asset": asset_id},
         )

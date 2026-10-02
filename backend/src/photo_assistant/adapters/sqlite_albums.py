@@ -13,24 +13,28 @@ from photo_assistant.adapters.sqlite_accounts import utc_text
 from photo_assistant.adapters.sqlite_base import SqliteBase
 from photo_assistant.adapters.sqlite_library import (
     ALBUM_VISIBLE,
-    ASSET_COLUMNS,
     ASSET_FROM,
+    asset_columns,
     view_from_row,
-    visible_assets_cte,
+    visibility,
 )
 from photo_assistant.domain.access import AlbumRole, Viewer
 from photo_assistant.ports.library import AlbumInfo, AssetView
 
-_INFO = f"""SELECT q.*, (SELECT edit_version FROM asset WHERE id = q.cover) AS cover_version
+
+def _info_sql(visible: str) -> str:
+    """Albums you may see, with their visible photo count and cover (``visible``: the rule)."""
+    shown = (
+        "FROM album_item ai JOIN asset a ON a.id = ai.asset_id"
+        f" WHERE ai.album_id = al.id AND {visible}"
+    )
+    return f"""SELECT q.*, (SELECT edit_version FROM asset WHERE id = q.cover) AS cover_version
 FROM (
     SELECT al.*, am.role AS member_role,
-        (SELECT COUNT(*) FROM album_item ai JOIN vis ON vis.asset_id = ai.asset_id
-          WHERE ai.album_id = al.id) AS n,
+        (SELECT COUNT(*) {shown}) AS n,
         COALESCE(
-            (SELECT ai.asset_id FROM album_item ai JOIN vis ON vis.asset_id = ai.asset_id
-              WHERE ai.album_id = al.id AND ai.asset_id = al.cover_asset_id),
-            (SELECT ai.asset_id FROM album_item ai JOIN vis ON vis.asset_id = ai.asset_id
-              WHERE ai.album_id = al.id ORDER BY ai.position LIMIT 1)
+            (SELECT ai.asset_id {shown} AND ai.asset_id = al.cover_asset_id),
+            (SELECT ai.asset_id {shown} ORDER BY ai.position LIMIT 1)
         ) AS cover
     FROM album al
     LEFT JOIN album_member am ON am.album_id = al.id AND am.user_id = :vis_uid
@@ -69,8 +73,8 @@ class AlbumsMixin(SqliteBase):
         )
 
     def _albums(self, viewer: Viewer, album_id: int | None) -> list[AlbumInfo]:
-        cte, params = visible_assets_cte(viewer)
-        rows = self._all(f"{cte} {_INFO}", params | {"album": album_id})
+        visible, _, params = visibility(viewer)
+        rows = self._all(_info_sql(visible), params | {"album": album_id})
         return [_info(r, viewer) for r in rows]
 
     def list_albums(self, viewer: Viewer) -> list[AlbumInfo]:
@@ -81,11 +85,11 @@ class AlbumsMixin(SqliteBase):
         return found[0] if found else None
 
     def album_views(self, viewer: Viewer, album_id: int) -> list[AssetView]:
-        cte, params = visible_assets_cte(viewer)
+        visible, level, params = visibility(viewer)
         rows = self._all(
-            f"""{cte} SELECT {ASSET_COLUMNS} {ASSET_FROM}
+            f"""SELECT {asset_columns(level)} {ASSET_FROM}
                 JOIN album_item ai ON ai.asset_id = a.id AND ai.album_id = :album
-                ORDER BY ai.position, a.id""",
+                WHERE {visible} ORDER BY ai.position, a.id""",
             params | {"album": album_id},
         )
         return [view_from_row(r) for r in rows]
