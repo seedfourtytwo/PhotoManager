@@ -194,3 +194,10 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 | Pre-commit | pre-commit (ruff, prettier, gitleaks, no large files) |
 | CI | GitHub Actions: lint → types → unit → integration (with exiftool/libvips in container) → E2E |
 | Versioning | Conventional Commits, release-please |
+
+## Typefaces (decided 2026-10-02)
+
+Newsreader (serif, optical sizes) for titles, dates and captions; Instrument Sans for controls.
+Both are SIL Open Font License; the woff2 files and licences are vendored in `web/static/fonts/`
+(about 520 KB), served by the app itself — no font CDN, nothing fetched at runtime. Fallbacks:
+Iowan/Charter/Georgia and the system sans.
