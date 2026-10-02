@@ -59,3 +59,23 @@ export function singleFileName(id: number, taken: string, format: DownloadOption
 	const ext = format === 'original' ? 'jpg' : format === 'jpeg' ? 'jpg' : format;
 	return `${taken.slice(0, 10)}_${id}.${ext}`;
 }
+
+/**
+ * A ZIP download runs in a hidden frame. When it works the frame stays empty (the browser
+ * saves the file); when the server refuses, the frame shows its answer: this turns that text
+ * into the sentence to show, or null for "no error".
+ */
+export function frameError(text: string | null): string | null {
+	const body = text?.trim();
+	if (!body) return null;
+	try {
+		const parsed: unknown = JSON.parse(body);
+		const detail =
+			parsed && typeof parsed === 'object' && 'detail' in parsed ? parsed.detail : null;
+		if (typeof detail === 'string' && detail)
+			return detail.charAt(0).toUpperCase() + detail.slice(1);
+	} catch {
+		// not JSON: a proxy's error page
+	}
+	return 'The library server could not make the download.';
+}

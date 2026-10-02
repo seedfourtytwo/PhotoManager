@@ -3,9 +3,13 @@ import {
 	expectAccessible,
 	isPhone,
 	resetMock,
+	selectionAction,
 	selectTiles,
 	signIn,
-	test
+	test,
+	GUEST,
+	longPress,
+	viewOnlyPhoto
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -18,10 +22,7 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 		[0, 1].map(async (i) => Number(await page.locator('.tile').nth(i).getAttribute('data-id')))
 	);
 	await selectTiles(page, [0, 1]);
-	await page
-		.getByRole('toolbar', { name: 'Selected photos' })
-		.getByRole('button', { name: 'Download' })
-		.click();
+	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/2 selected photos\s+· about [\d.]+ [KMG]B/)).toBeVisible();
 	await expectAccessible(page);
@@ -67,10 +68,7 @@ test('download everything matching a filter', async ({ page }) => {
 
 test('fix date: shift a selection with a before → after preview', async ({ page }) => {
 	await selectTiles(page, [0]);
-	await page
-		.getByRole('toolbar', { name: 'Selected photos' })
-		.getByRole('button', { name: 'Fix date' })
-		.click();
+	await selectionAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await dialog.getByLabel('Direction').selectOption({ label: 'earlier' });
 	await dialog.getByRole('spinbutton').nth(1).fill('2');
@@ -120,16 +118,106 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	await expect(page.getByRole('status')).toContainText('Back to the original');
 });
 
-test('trash: move, restore', async ({ page }) => {
+test('trash: move, see it with its thumbnail, open it full size, restore', async ({ page }) => {
 	const id = await page.locator('.tile').first().getAttribute('data-id');
 	await selectTiles(page, [0]);
-	await page.getByRole('button', { name: 'Move to trash' }).click();
+	await selectionAction(page, 'Move to trash');
 	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
 	await expect(page.locator(`.tile[data-id="${id}"]`)).toHaveCount(0);
 	await page.goto('/trash');
-	await expect(page.locator(`.tile[data-id="${id}"]`)).toBeVisible();
+	const tile = page.locator(`.tile[data-id="${id}"]`);
+	await expect(tile).toBeVisible();
+	await expect
+		.poll(() => tile.locator('img').evaluate((i: HTMLImageElement) => i.naturalWidth))
+		.toBeGreaterThan(0);
 	await expectAccessible(page);
-	await page.locator(`.tile[data-id="${id}"]`).click();
-	await page.getByRole('button', { name: 'Restore' }).click();
+	await tile.click();
+	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
+	await expect(loupe.locator('img.photo')).toBeVisible();
+	await expect
+		.poll(() => loupe.locator('img.photo').evaluate((i: HTMLImageElement) => i.naturalWidth))
+		.toBeGreaterThan(0);
+	await expect(loupe.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+	await loupe.getByRole('button', { name: 'Restore' }).click();
+	await expect(page.getByRole('status')).toContainText('Restored 1 photo');
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
+});
+
+test('fix date can be undone: the previous dates come back', async ({ page }) => {
+	await selectTiles(page, [0, 1]);
+	const before = await page
+		.locator('.tile.selected')
+		.evaluateAll((els) =>
+			els.map((e) => [e.getAttribute('data-id'), e.querySelector('img')?.getAttribute('alt')])
+		);
+	await selectionAction(page, 'Fix date');
+	const dialog = page.getByRole('dialog', { name: 'Fix date' });
+	await expect(dialog.getByText(/can be undone/)).toHaveCount(0);
+	await dialog.getByLabel('Set exactly').check();
+	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+	await dialog.getByRole('button', { name: 'Change date' }).click();
+	await expect(page.getByRole('status')).toContainText('Changed the date of 2 photos');
+	const undo = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
+	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+	expect((await undo).postDataJSON()).toHaveProperty('set');
+	await expect(page.getByRole('status')).toContainText('Dates put back');
+	for (const [id, alt] of before)
+		await expect(page.locator(`.tile[data-id="${id}"] img`)).toHaveAttribute('alt', alt!);
+});
+
+test('download: a server error or an expired session is said, not swallowed', async ({ page }) => {
+	await selectTiles(page, [0]);
+	await selectionAction(page, 'Download');
+	const dialog = page.getByRole('dialog', { name: 'Download' });
+	await expect(dialog.getByText(/about [\d.]+ [KMG]B/)).toBeVisible();
+	await page.route('**/api/downloads', (route) =>
+		route.request().method() === 'POST'
+			? route.fulfill({ status: 500, json: { detail: 'not enough space for the ZIP' } })
+			: route.continue()
+	);
+	await dialog.getByRole('button', { name: 'Download', exact: true }).click();
+	await expect(page.getByRole('status')).toContainText(
+		'The download did not start: Not enough space for the ZIP'
+	);
+
+	await page.getByRole('button', { name: 'Clear selection' }).click();
+	await selectTiles(page, [1]);
+	await selectionAction(page, 'Download');
+	await expect(dialog.getByText(/about [\d.]+ [KMG]B/)).toBeVisible();
+	await page.context().clearCookies();
+	await dialog.getByRole('button', { name: 'Download', exact: true }).click();
+	await expect(page).toHaveURL(/\/login\?next=/);
+});
+
+test('download: original files are labelled as without edits, with a hint for edited ones', async ({
+	page
+}) => {
+	await page.locator('.tile').first().click();
+	await page.getByRole('button', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Rotate right' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Download' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Download photo' });
+	await expect(dialog.getByLabel('Original file (without edits)')).toBeChecked();
+	await expect(dialog.getByText(/Choose JPEG to include the edits/)).toBeVisible();
+	await dialog.getByLabel('JPEG').check();
+	await expect(dialog.getByText(/Choose JPEG/)).toHaveCount(0);
+});
+
+test('download: a guest with view-only photos is told why nothing can be downloaded', async ({
+	page
+}) => {
+	await signIn(page, '/', GUEST);
+	const id = await viewOnlyPhoto(page);
+	await page.goto('/?source_id=2');
+	const tile = page.locator(`.tile[data-id="${id}"]`);
+	await tile.scrollIntoViewIfNeeded();
+	if (isPhone(page)) await longPress(tile);
+	else await tile.locator('.check').click({ force: true });
+	await expect(page.getByText('1 selected')).toBeVisible();
+	await selectionAction(page, 'Download');
+	const dialog = page.getByRole('dialog', { name: 'Download' });
+	await expect(dialog.getByText(/may view these photos but not download them/)).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Download', exact: true })).toBeDisabled();
+	await expectAccessible(page);
 });

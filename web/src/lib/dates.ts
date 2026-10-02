@@ -2,7 +2,7 @@
  * Wall-clock dates. `taken_at` is local time without a zone, so all arithmetic runs in UTC to
  * keep the browser's own time zone and DST out of it.
  */
-import type { AssetOut, DateSource } from './api/types';
+import type { AssetOut, DateChange, DateSource } from './api/types';
 
 const LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/;
 // What the server may send: fractions of a second are dropped, never a reason to fail the page.
@@ -46,6 +46,24 @@ export function previewDateChange(
 		before: item.taken_at,
 		after: 'set' in change ? change.set : shiftLocal(item.taken_at, change.shift_minutes)
 	}));
+}
+
+/**
+ * The requests that undo a date change: a shift goes back by the same amount; an exact date
+ * puts every photo back to its own previous time (one request per distinct time).
+ */
+export function undoDateChange(
+	items: readonly Pick<AssetOut, 'id' | 'taken_at'>[],
+	change: DateChangeSpec
+): DateChange[] {
+	const ids = items.map((a) => a.id);
+	if ('shift_minutes' in change) return [{ ids, shift_minutes: -change.shift_minutes }];
+	const byTime = new Map<string, number[]>();
+	for (const item of items) {
+		const time = fromUtcMillis(toUtcMillis(item.taken_at));
+		byTime.set(time, [...(byTime.get(time) ?? []), item.id]);
+	}
+	return [...byTime].map(([set, group]) => ({ ids: group, set }));
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

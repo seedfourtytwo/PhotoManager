@@ -14,13 +14,19 @@ import type {
 	AssetFilters,
 	AssetOut,
 	AssetPage,
+	BackupIn,
+	BackupRun,
+	BackupTarget,
 	BulkState,
 	CalendarDay,
 	DateChange,
+	Device,
+	DevicePlatform,
 	DirectoryEntry,
 	DownloadEstimate,
 	DownloadOptions,
 	DownloadRequest,
+	Face,
 	Facets,
 	Health,
 	Id,
@@ -30,10 +36,22 @@ import type {
 	JobStatus,
 	LoginBody,
 	MapPoint,
+	MlStatus,
+	NewDevice,
 	NewUser,
 	PasswordBody,
+	Person,
+	PrintedPdf,
+	PrintOptions,
+	PrintPlan,
+	PrintRequest,
 	Queued,
+	QueuedRun,
 	Recipe,
+	RemoteSource,
+	RemoteSourceIn,
+	ScoredAsset,
+	SearchResult,
 	SetupBody,
 	SetupState,
 	Source,
@@ -72,6 +90,20 @@ function withQuery(path: string, params: URLSearchParams): string {
 
 /** Shown as a sentence in the UI: capital first letter, whatever the server's style. */
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** The file name in a Content-Disposition header (RFC 6266, UTF-8 form preferred). */
+export function fileNameFrom(header: string | null, fallback: string): string {
+	if (!header) return fallback;
+	const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1];
+	if (utf8) {
+		try {
+			return decodeURIComponent(utf8);
+		} catch {
+			// fall through to the plain form
+		}
+	}
+	return /filename="([^"]+)"/i.exec(header)?.[1] ?? fallback;
+}
 
 async function readDetail(response: Response): Promise<string> {
 	try {
@@ -113,7 +145,31 @@ export function createApi(options: ApiOptions = {}) {
 		return (text ? JSON.parse(text) : undefined) as T;
 	}
 
+	/** A binary answer (a PDF): the body as a Blob plus its headers; errors as ApiError. */
+	async function binary(method: Method, path: string, body?: unknown) {
+		const init: RequestInit = { method, credentials: 'same-origin' };
+		if (body !== undefined) {
+			init.body = JSON.stringify(body);
+			init.headers = { 'content-type': 'application/json' };
+		}
+		const response = await fetcher(`${base}${path}`, init);
+		if (!response.ok) {
+			if (response.status === 401) options.onUnauthorized?.();
+			throw new ApiError(response.status, await readDetail(response));
+		}
+		return { blob: await response.blob(), headers: response.headers };
+	}
+
 	const get = <T>(path: string) => request<T>('GET', path);
+	const query = (path: string, values: Record<string, string | number | boolean | undefined>) =>
+		withQuery(
+			path,
+			new URLSearchParams(
+				Object.entries(values)
+					.filter(([, v]) => v !== undefined && v !== '')
+					.map(([k, v]) => [k, String(v)])
+			)
+		);
 	const filtered = (path: string, filters: AssetFilters) =>
 		withQuery(path, filtersToParams(filters));
 
@@ -230,7 +286,71 @@ export function createApi(options: ApiOptions = {}) {
 		trash: () => get<TrashItem[]>('/api/trash'),
 		restore: (ids: Id[]) => request<{ restored: number }>('POST', '/api/trash/restore', { ids }),
 		emptyTrash: (ids?: Id[]) =>
-			request<{ purged: number }>('POST', '/api/trash/empty', ids ? { ids } : {})
+			request<{ purged: number }>('POST', '/api/trash/empty', ids ? { ids } : {}),
+
+		// local ML (v1.1): search, similar photos, faces, people
+		search: (q: string, filters: AssetFilters = {}, limit = 100) => {
+			const params = filtersToParams({ ...filters, q });
+			params.set('limit', String(limit));
+			return get<SearchResult>(withQuery('/api/search', params));
+		},
+		similar: (id: Id, limit = 50) =>
+			get<ScoredAsset[]>(query(`/api/assets/${id}/similar`, { limit })),
+		faces: (id: Id) => get<Face[]>(`/api/assets/${id}/faces`),
+		people: () => get<Person[]>('/api/people'),
+		person: (id: Id) => get<Person>(`/api/people/${id}`),
+		renamePerson: (id: Id, name: string | null) =>
+			request<Person>('PATCH', `/api/people/${id}`, { name }),
+		mergePeople: (id: Id, sourceIds: Id[]) =>
+			request<Person>('POST', `/api/people/${id}/merge`, { source_ids: sourceIds }),
+		personAssets: (id: Id, cursor: string | null = null, limit = 200) =>
+			get<AssetPage>(query(`/api/people/${id}/assets`, { limit, cursor: cursor ?? undefined })),
+		mlStatus: () => get<MlStatus>('/api/ml/status'),
+		mlBackfill: () =>
+			request<{ queued: number; detail: string | null }>('POST', '/api/ml/backfill'),
+
+		// album → print (v1.1)
+		printOptions: () => get<PrintOptions>('/api/print/options'),
+		printPlan: (albumId: Id, body: PrintRequest) =>
+			request<PrintPlan>('POST', `/api/albums/${albumId}/print/plan`, body),
+		printPreviewUrl: (albumId: Id, page: number, body: PrintRequest, ppi = 96) =>
+			`${base}${query(`/api/albums/${albumId}/print/preview`, {
+				page,
+				trim: body.trim,
+				theme: body.theme,
+				cover: body.cover,
+				ppi
+			})}`,
+		printPdf: async (albumId: Id, body: PrintRequest): Promise<PrintedPdf> => {
+			const { blob, headers } = await binary('POST', `/api/albums/${albumId}/print`, body);
+			return {
+				blob,
+				filename: fileNameFrom(headers.get('content-disposition'), 'album.pdf'),
+				warnings: Number(headers.get('x-print-warnings') ?? 0)
+			};
+		},
+
+		// backups (admin, v1.1)
+		backups: () => get<BackupTarget[]>('/api/backups'),
+		addBackup: (body: BackupIn) => request<BackupTarget>('POST', '/api/backups', body),
+		setBackupEnabled: (id: Id, enabled: boolean) =>
+			request<BackupTarget>('PATCH', `/api/backups/${id}`, { enabled }),
+		runBackup: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/run`),
+		restoreTest: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/restore-test`),
+		backupRuns: (id: Id, limit = 10) =>
+			get<BackupRun[]>(query(`/api/backups/${id}/runs`, { limit })),
+
+		// devices (v1.1)
+		devices: () => get<Device[]>('/api/devices'),
+		createDevice: (body: { name: string; platform: DevicePlatform }) =>
+			request<NewDevice>('POST', '/api/devices', body),
+		revokeDevice: (id: Id) => request<void>('DELETE', `/api/devices/${id}`),
+
+		// remote (rclone) sources (admin, v1.1)
+		remotes: () => get<{ remotes: string[] }>('/api/remote-sources/remotes'),
+		addRemoteSource: (body: RemoteSourceIn) =>
+			request<RemoteSource>('POST', '/api/remote-sources', body),
+		pullRemoteSource: (id: Id) => request<Queued>('POST', `/api/remote-sources/${id}/pull`)
 	};
 }
 

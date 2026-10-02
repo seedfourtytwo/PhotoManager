@@ -18,13 +18,28 @@
 	}
 	$effect(() => void load());
 
-	async function patch(user: User, body: Parameters<typeof api.updateUser>[1]) {
+	let pending = $state<number | null>(null);
+
+	/** One change per person at a time; a refused one shows the server's reason and is undone. */
+	async function patch(
+		user: User,
+		body: Parameters<typeof api.updateUser>[1],
+		control?: HTMLSelectElement
+	) {
+		if (pending !== null) return false;
+		pending = user.id;
 		try {
 			const updated = await api.updateUser(user.id, body);
 			users = users.map((u) => (u.id === updated.id ? updated : u));
+			return true;
 		} catch (e) {
 			notice.error(e);
+			// The select already shows the refused value: put the real one back.
+			if (control) control.value = user.role;
 			await load();
+			return false;
+		} finally {
+			pending = null;
 		}
 	}
 
@@ -67,7 +82,9 @@
 						<select
 							aria-label={`Role of ${user.username}`}
 							value={user.role}
-							onchange={(e) => patch(user, { role: e.currentTarget.value as Role })}
+							disabled={pending === user.id}
+							onchange={(e) =>
+								patch(user, { role: e.currentTarget.value as Role }, e.currentTarget)}
 						>
 							<option value="admin">Admin</option>
 							<option value="member">Member</option>
@@ -75,11 +92,18 @@
 						</select>
 					</td>
 					<td>
+						<span class="state" class:quiet={!user.disabled}
+							>{user.disabled ? 'Disabled' : 'Active'}</span
+						>
 						{#if user.id !== session.user?.id}
-							<button type="button" onclick={() => patch(user, { disabled: !user.disabled })}>
+							<button
+								type="button"
+								disabled={pending === user.id}
+								onclick={() => patch(user, { disabled: !user.disabled })}
+							>
 								{user.disabled ? 'Enable' : 'Disable'}
 							</button>
-						{:else}<span class="quiet">you</span>{/if}
+						{:else}<span class="quiet">· you</span>{/if}
 					</td>
 					<td><button type="button" onclick={() => (resetting = user)}>Reset password</button></td>
 				</tr>
@@ -97,8 +121,20 @@
 				type="password"
 				bind:value={form.password}
 				autocomplete="new-password"
+				aria-describedby="new-pw-hint"
 			/></label
 		>
+		<p class="quiet small hint" id="new-pw-hint" aria-live="polite">
+			{#if form.password.length && form.password.length < MIN_PASSWORD}
+				{MIN_PASSWORD - form.password.length} more character{MIN_PASSWORD - form.password.length ===
+				1
+					? ''
+					: 's'} needed.
+			{:else}
+				At least {MIN_PASSWORD} characters.
+			{/if}
+			Give it to them in person; they can change it in Settings.
+		</p>
 		<label class="field">
 			Role
 			<select bind:value={form.role}>
@@ -165,6 +201,12 @@
 	}
 	td {
 		padding: 0.25rem 0.5rem 0.25rem 0;
+	}
+	.state {
+		margin-right: 0.25rem;
+	}
+	.hint {
+		margin: -0.5rem 0 0.75rem;
 	}
 	tr.off td:first-child {
 		color: var(--ink-2);

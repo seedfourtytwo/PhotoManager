@@ -6,6 +6,8 @@
 import type {
 	Access,
 	AlbumMember,
+	BackupRun,
+	Device,
 	DateSource,
 	ImportItem,
 	ImportRun,
@@ -130,11 +132,36 @@ export type MockAlbum = {
 
 export type MockReport = ImportRun & { items: ImportItem[] };
 
+/** The mock keeps every folder's path; the API hides it from non-admins. */
+export type MockSource = Source & { path: string };
+
+export type MockFace = {
+	id: number;
+	asset_id: number;
+	box: { x: number; y: number; w: number; h: number };
+	score: number;
+	person_id: number | null;
+};
+export type MockPerson = { id: number; name: string | null };
+export type MockBackup = {
+	id: number;
+	label: string;
+	kind: 'local' | 'rclone';
+	repository: string;
+	schedule: string;
+	quiet_window: string | null;
+	retention: Record<string, number>;
+	enabled: boolean;
+	/** Runs newest first; `ends_at` is when a running run finishes (mock clock). */
+	runs: (BackupRun & { ends_at: number })[];
+};
+export type MockDevice = Device & { user_id: number; token: string };
+
 export type MockState = {
 	users: MockUser[];
 	sessions: Map<string, number>;
 	failedLogins: Map<string, number[]>;
-	sources: Source[];
+	sources: MockSource[];
 	access: Map<number, Access>;
 	assets: MockAsset[];
 	favourites: Map<number, Set<number>>;
@@ -144,6 +171,14 @@ export type MockState = {
 	jobs: (Job & { run_at: number })[];
 	nextId: { asset: number; user: number; album: number; source: number; job: number; run: number };
 	purgedHashes: Set<number>;
+	ml: { installed: boolean };
+	people: MockPerson[];
+	faces: MockFace[];
+	backups: MockBackup[];
+	devices: MockDevice[];
+	remotes: string[];
+	/** rclone sources: source id → remote and path. */
+	remoteSources: Map<number, { remote: string; path: string }>;
 };
 
 /** Park–Miller PRNG: same seed, same library. */
@@ -211,7 +246,7 @@ export const SEED_USERS: Omit<MockUser, 'id'>[] = [
 	}
 ];
 
-function makeSources(): Source[] {
+function makeSources(): MockSource[] {
 	return [
 		{
 			id: 1,
@@ -317,6 +352,28 @@ function makeAssets(count: number, seed: number): MockAsset[] {
 		}
 	}
 	return assets;
+}
+
+const NAMES = ['Léa', 'Sam', null, 'Grandma', null, 'Tom'];
+
+/** Faces on about a third of the photos, grouped into a few people (some still unnamed). */
+function makePeople(assets: MockAsset[]): { people: MockPerson[]; faces: MockFace[] } {
+	const people = NAMES.map((name, i) => ({ id: i + 1, name }));
+	const faces: MockFace[] = [];
+	const r = rng(7);
+	for (const a of assets) {
+		if (r.next() > 0.35) continue;
+		const n = r.int(1, 2);
+		for (let i = 0; i < n; i++)
+			faces.push({
+				id: faces.length + 1,
+				asset_id: a.id,
+				box: { x: 0.2 + i * 0.35, y: 0.25, w: 0.2, h: 0.3 },
+				score: 0.9,
+				person_id: r.int(1, people.length)
+			});
+	}
+	return { people, faces };
 }
 
 export function makeState(options: { users: 'none' | 'seed'; count?: number; seed?: number }) {
@@ -441,7 +498,40 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 			job: 3,
 			run: reports.length + 1
 		},
-		purgedHashes: new Set()
+		purgedHashes: new Set(),
+		ml: { installed: false },
+		...makePeople(assets),
+		backups: [
+			{
+				id: 1,
+				label: 'Home server',
+				kind: 'rclone',
+				repository: 'rclone:home:/srv/backup/photos',
+				schedule: 'daily 02:30',
+				quiet_window: '22:00-06:00',
+				retention: { daily: 7, weekly: 4, monthly: 12 },
+				enabled: true,
+				runs: [
+					{
+						id: 1,
+						kind: 'backup',
+						status: 'failed',
+						started_at: '2026-09-25T02:30:00',
+						finished_at: '2026-09-25T02:31:12',
+						snapshot_id: null,
+						bytes_added: null,
+						files_new: null,
+						repo_bytes: 48_200_000_000,
+						error: 'repository not reachable: connection refused (is the server on?)',
+						details: null,
+						ends_at: 0
+					}
+				]
+			}
+		],
+		devices: [],
+		remotes: ['gdrive', 'nas'],
+		remoteSources: new Map()
 	};
 	return state;
 }

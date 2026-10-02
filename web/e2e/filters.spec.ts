@@ -36,13 +36,9 @@ test('filter by place, then reload the bookmarked URL', async ({ page }) => {
 	).toHaveValue('Lisbon');
 });
 
-test('search from the navigation filters by free text', async ({ page }) => {
-	await page
-		.getByRole('navigation', { name: 'Main' })
-		.getByRole('button', { name: 'Search' })
-		.click();
-	const search = page.getByRole('searchbox', { name: 'Search' });
-	await expect(search).toBeFocused();
+test('the filter panel searches the library by free text', async ({ page }) => {
+	const panel = await openFilters(page);
+	const search = panel.getByRole('searchbox', { name: 'Search' });
 	await search.fill('carnac');
 	await expect(page).toHaveURL(/q=carnac/);
 });
@@ -58,7 +54,9 @@ test('calendar: click a day to open the filtered library', async ({ page }) => {
 	await expect(page.locator('.tile').first()).toBeVisible();
 });
 
-test('map: choose a cluster, then open its place in the library', async ({ page }) => {
+test('map: choose a cluster, then open its place in the library with an honest count', async ({
+	page
+}) => {
 	await page.goto('/map');
 	await expect(page.getByText(/photos with a location/)).toBeVisible();
 	await expectAccessible(page);
@@ -67,6 +65,9 @@ test('map: choose a cluster, then open its place in the library', async ({ page 
 		.last()
 		.click();
 	await expect(page.locator('.chosen .tile').first()).toBeVisible();
-	await page.getByRole('button', { name: 'Open in library' }).click();
+	const open = page.getByRole('button', { name: /Open all \d+ from .+ in the library/ });
+	const [, n] = (await open.textContent())!.match(/Open all (\d+) from/)!;
+	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
+	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
 });

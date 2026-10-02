@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto, pushState, replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
@@ -115,9 +116,27 @@
 			3
 		)
 	);
+	const loupeId = $derived(openPhotoId(page));
 	const loupeIndex = $derived(
-		page.state.loupe === undefined ? -1 : chosenItems.findIndex((a) => a.id === page.state.loupe)
+		loupeId === undefined ? -1 : chosenItems.findIndex((a) => a.id === loupeId)
 	);
+	const tracker = new LoupeTracker();
+	$effect(() => tracker.seen(loupeId));
+
+	/** How many photos the library shows for the chosen place (it may differ from the dot). */
+	let placeTotal = $state<number | null>(null);
+	$effect(() => {
+		const place = chosenPlace;
+		const f = filters;
+		placeTotal = null;
+		if (!place) return;
+		let stale = false;
+		api
+			.facets({ ...f, place })
+			.then((facets) => !stale && (placeTotal = facets.total))
+			.catch(() => undefined);
+		return () => (stale = true);
+	});
 
 	function choose(c: Cluster) {
 		chosen = c;
@@ -207,22 +226,28 @@
 		<section class="chosen" aria-live="polite">
 			<h2>
 				{chosenPlace ?? 'Here'} <span class="quiet">{chosen.ids.length}</span>
-				{#if chosenPlace}
+				{#if chosenPlace && placeTotal !== null}
 					<button
 						type="button"
 						onclick={() =>
 							goto(`/${filtersToQuery({ ...filters, place: chosenPlace ?? undefined })}`)}
-						>Open in library</button
+						>Open all {placeTotal} from {chosenPlace} in the library</button
 					>
 				{/if}
 			</h2>
+			{#if chosenPlace && placeTotal !== null && placeTotal !== chosen.ids.length}
+				<p class="quiet small">
+					This dot holds {chosen.ids.length} photos; the library filters by place, so it shows all {placeTotal}
+					from {chosenPlace}.
+				</p>
+			{/if}
 			<div bind:clientWidth={gridWidth}>
 				<PhotoGrid
 					items={chosenItems}
 					{layout}
 					selected={new Set()}
 					selecting={false}
-					onopen={(id) => pushState('', { loupe: id })}
+					onopen={openPhoto}
 					ontoggle={() => {}}
 				/>
 			</div>
@@ -236,8 +261,8 @@
 	<Loupe
 		items={chosenItems}
 		index={loupeIndex}
-		onindex={(i) => replaceState('', { loupe: chosenItems[i].id })}
-		onclose={() => history.back()}
+		onindex={(i) => showPhoto(chosenItems[i].id)}
+		onclose={closePhoto}
 		onchanged={(a) => (located = copyWith(located, a))}
 	/>
 {/if}

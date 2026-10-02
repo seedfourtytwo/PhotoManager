@@ -3,7 +3,7 @@
  * Svelte runes in a module, so every component shares one instance.
  */
 import { goto } from '$app/navigation';
-import { ApiError, createApi, type User } from '$lib/api';
+import { ApiError, createApi, type MlStatus, type Source, type User } from '$lib/api';
 
 const PUBLIC_ROUTES = ['/login', '/setup'];
 
@@ -60,6 +60,44 @@ class Session {
 export const api = createApi({ onUnauthorized: () => session.lost() });
 export const session = new Session();
 
+// --- shared library facts --------------------------------------------------------------
+
+class Library {
+	/**
+	 * Bumped after anything that changes which photos a view counts (trash, hide, restore,
+	 * dates, uploads): headers, facets and calendars reload when it changes.
+	 */
+	version = $state(0);
+	#sources: Promise<Source[]> | null = null;
+	#ml: Promise<MlStatus | null> | null = null;
+
+	changed() {
+		this.version++;
+	}
+
+	/** Sources you may see (who owns what decides who may make a photo private). */
+	sources(): Promise<Source[]> {
+		this.#sources ??= api.sources().catch(() => {
+			this.#sources = null;
+			return [];
+		});
+		return this.#sources;
+	}
+
+	/** Whether the local ML models are installed (search by meaning, similar photos). */
+	ml(): Promise<MlStatus | null> {
+		this.#ml ??= api.mlStatus().catch(() => null);
+		return this.#ml;
+	}
+
+	forget() {
+		this.#sources = null;
+		this.#ml = null;
+	}
+}
+
+export const library = new Library();
+
 // --- viewer settings (per browser) -----------------------------------------------------
 
 export type Theme = 'system' | 'dark' | 'light';
@@ -83,7 +121,8 @@ function store(key: string, value: string) {
 }
 
 class Settings {
-	theme = $state<Theme>(stored('pa.theme', ['system', 'dark', 'light'], 'system'));
+	/** Dark by default: photos are judged best on a dark ground (DESIGN_PRINCIPLES §2). */
+	theme = $state<Theme>(stored('pa.theme', ['system', 'dark', 'light'], 'dark'));
 	density = $state<Density>(
 		stored('pa.density', ['compact', 'comfortable', 'large'], 'comfortable')
 	);
@@ -164,6 +203,8 @@ class Ui {
 	sheet = $state(false);
 	/** Bumped to ask the filter panel to focus its search field. */
 	focusSearch = $state(0);
+	/** The library's first thumbnails are in: secondary requests (facets) may start. */
+	gridReady = $state(false);
 }
 
 export const ui = new Ui();

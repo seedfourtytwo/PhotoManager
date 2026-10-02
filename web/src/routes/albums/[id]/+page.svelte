@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto, pushState, replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
+	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
@@ -34,9 +35,10 @@
 	);
 	const order = $derived(items.map((a) => a.id));
 	const selected = $derived(items.filter((a) => selection.ids.has(a.id)));
-	const loupeIndex = $derived(
-		page.state.loupe === undefined ? -1 : order.indexOf(page.state.loupe)
-	);
+	const loupeId = $derived(openPhotoId(page));
+	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
+	const tracker = new LoupeTracker();
+	$effect(() => tracker.seen(loupeId));
 
 	async function load() {
 		try {
@@ -88,18 +90,39 @@
 		}
 	}
 
+	let removing = false;
 	async function removeSelected() {
+		if (removing) return;
+		removing = true;
 		const ids = [...selection.ids];
+		const before = items.map((a) => a.id);
 		try {
 			await api.removeFromAlbum(id, ids);
-			items = items.filter((a) => !selection.ids.has(a.id));
+			items = items.filter((a) => !ids.includes(a.id));
 			selection = EMPTY;
 			notice.show(`Removed ${ids.length} from the album. The photos stay in the library.`, {
-				action: {
-					label: 'Undo',
-					run: () => void api.addToAlbum(id, ids).then(load)
-				}
+				action: { label: 'Undo', run: () => void undoRemove(ids, before) }
 			});
+		} catch (e) {
+			notice.error(e);
+		} finally {
+			removing = false;
+		}
+	}
+
+	/**
+	 * Put removed photos back exactly where they were: each at its old index, smallest first
+	 * (contract v1.2; positions count the photos you see, so this works for editors too).
+	 */
+	async function undoRemove(ids: Id[], before: Id[]) {
+		try {
+			const back = ids
+				.map((photo) => ({ photo, at: before.indexOf(photo) }))
+				.filter((p) => p.at >= 0)
+				.sort((a, b) => a.at - b.at);
+			for (const { photo, at } of back) await api.addToAlbum(id, [photo], at);
+			await load();
+			notice.show('Put back.');
 		} catch (e) {
 			notice.error(e);
 		}
@@ -142,6 +165,7 @@
 			</p>
 			<div class="tools">
 				<button type="button" onclick={() => (dialog = 'download')}>Download</button>
+				{#if items.length}<a class="button" href={`/albums/${album.id}/print`}>Print</a>{/if}
 				{#if canEdit}
 					<button type="button" aria-pressed={arrange} onclick={() => (arrange = !arrange)}>
 						{arrange ? 'Done arranging' : 'Arrange'}
@@ -175,7 +199,7 @@
 				selecting={selection.ids.size > 0}
 				{arrange}
 				onmove={move}
-				onopen={(assetId) => pushState('', { loupe: assetId })}
+				onopen={openPhoto}
 				ontoggle={(assetId, range) =>
 					(selection = applyClick(selection, assetId, order, { shift: range, toggle: true }))}
 			/>
@@ -201,8 +225,8 @@
 	<Loupe
 		{items}
 		index={loupeIndex}
-		onindex={(i) => replaceState('', { loupe: items[i].id })}
-		onclose={() => history.back()}
+		onindex={(i) => showPhoto(items[i].id)}
+		onclose={closePhoto}
 		onchanged={(a) => (items = items.map((x) => (x.id === a.id ? { ...x, ...a } : x)))}
 		ondates={load}
 	/>
@@ -211,7 +235,11 @@
 {#if album && dialog === 'share'}
 	<ShareDialog albumId={album.id} ownerId={album.owner_id} onclose={() => (dialog = null)} />
 {:else if album && dialog === 'download'}
-	<DownloadDialog scope={{ album_id: album.id }} onclose={() => (dialog = null)} />
+	<DownloadDialog
+		scope={{ album_id: album.id }}
+		edited={items.some((a) => a.edited)}
+		onclose={() => (dialog = null)}
+	/>
 {:else if dialog === 'rename'}
 	<Dialog title="Rename album" onclose={() => (dialog = null)}>
 		<label class="field">Title <input bind:value={title} /></label>
@@ -250,7 +278,8 @@
 		flex-wrap: wrap;
 		margin: 0.5rem 0 0 -0.5rem;
 	}
-	.tools button {
+	.tools button,
+	.tools a {
 		color: var(--ink-2);
 	}
 	.tools button[aria-pressed='true'] {

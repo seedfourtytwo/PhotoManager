@@ -1,9 +1,12 @@
 <script lang="ts">
 	import type { Id, TrashItem } from '$lib/api';
-	import { api, notice, session, settings, viewport } from '$lib/app.svelte';
+	import { page } from '$app/state';
+	import { api, library, notice, session, settings, viewport } from '$lib/app.svelte';
+	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 	import SelectionBar from '$lib/components/SelectionBar.svelte';
 
@@ -32,14 +35,25 @@
 	}
 	$effect(() => void load());
 
+	const loupeId = $derived(openPhotoId(page));
+	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
+	const tracker = new LoupeTracker();
+	$effect(() => tracker.seen(loupeId));
+	let restoring = false;
+
 	async function restore(ids: Id[]) {
+		if (restoring) return;
+		restoring = true;
 		try {
 			const { restored } = await api.restore(ids);
 			notice.show(`Restored ${restored} photo${restored === 1 ? '' : 's'}.`);
 			selection = EMPTY;
+			library.changed();
 			await load();
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			restoring = false;
 		}
 	}
 
@@ -64,7 +78,8 @@
 		<h1>Trash</h1>
 		<p class="quiet">
 			Photos stay here for 30 days, then the library copy is removed. Your source folders are never
-			touched.
+			touched. Open a photo to see it full size; select photos (the circle, or a long press) to
+			restore several.
 		</p>
 		{#if list.length}
 			<div class="tools">
@@ -83,8 +98,8 @@
 			items={list}
 			{layout}
 			selected={selection.ids}
-			selecting={true}
-			onopen={() => {}}
+			selecting={selection.ids.size > 0}
+			onopen={openPhoto}
 			ontoggle={(id, range) =>
 				(selection = applyClick(selection, id, order, { shift: range, toggle: true }))}
 		/>
@@ -101,6 +116,20 @@
 		/>
 	{/if}
 </div>
+
+{#if loupeIndex >= 0}
+	<Loupe
+		items={list}
+		index={loupeIndex}
+		onindex={(i) => showPhoto(list[i].id)}
+		onclose={closePhoto}
+		onchanged={() => undefined}
+		onrestore={(a) => {
+			closePhoto();
+			void restore([a.id]);
+		}}
+	/>
+{/if}
 
 {#if confirmEmpty}
 	<Dialog title="Delete for good?" onclose={() => (confirmEmpty = false)}>

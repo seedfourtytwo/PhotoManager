@@ -14,6 +14,10 @@
 	let label = $state('');
 	let path = $state('');
 	let addError = $state('');
+	let cloud = $state<{ label: string; remote: string; path: string } | null>(null);
+	let remotes = $state<string[] | null>(null);
+	let remotesError = $state('');
+	let cloudError = $state('');
 	let accessFor = $state<Source | null>(null);
 	let reportFor = $state<{ run: ImportRun; label: string } | null>(null);
 	const count = new Intl.NumberFormat('en-GB');
@@ -47,6 +51,48 @@
 		}
 	}
 
+	async function openCloud() {
+		cloud = { label: '', remote: '', path: '' };
+		cloudError = '';
+		remotesError = '';
+		try {
+			remotes = (await api.remotes()).remotes;
+			if (remotes.length && cloud) cloud.remote = remotes[0];
+		} catch (e) {
+			remotes = [];
+			remotesError = e instanceof Error ? e.message : 'rclone is not available on the server.';
+		}
+	}
+
+	async function addCloud() {
+		if (!cloud) return;
+		cloudError = '';
+		try {
+			const added = await api.addRemoteSource({
+				label: cloud.label.trim(),
+				remote: cloud.remote,
+				path: cloud.path.trim()
+			});
+			await api.pullRemoteSource(added.id);
+			notice.show(`Added “${added.label}”. Copying it read-only, then importing.`);
+			cloud = null;
+			onscan();
+			await load();
+		} catch (e) {
+			cloudError = e instanceof Error ? e.message : 'Could not add the cloud folder.';
+		}
+	}
+
+	async function pull(source: Source) {
+		try {
+			await api.pullRemoteSource(source.id);
+			notice.show(`Pulling “${source.label}”.`);
+			onscan();
+		} catch (e) {
+			notice.error(e);
+		}
+	}
+
 	async function scan(source?: Source) {
 		try {
 			if (source) await api.scanSource(source.id);
@@ -71,6 +117,7 @@
 	<header>
 		<h2 id="a-sources">Folders</h2>
 		<button type="button" onclick={() => (adding = true)}>Add folder</button>
+		<button type="button" onclick={openCloud}>Add cloud folder</button>
 		<button type="button" disabled={busy} onclick={() => scan()}>Rescan all</button>
 	</header>
 	<ul>
@@ -79,18 +126,33 @@
 			<li class:off={!source.enabled}>
 				<div class="name">
 					<span>{source.label}</span>
-					<span class="quiet small path">{source.path}</span>
+					<span class="quiet small path">{source.path ?? ''}</span>
+					{#if source.problem}<span class="problem small">{source.problem}</span>{/if}
 				</div>
 				<div class="quiet small">
 					{count.format(source.asset_count)} photos{#if !source.enabled}&nbsp;· disabled{/if}
-					{#if run}&nbsp;· last import {run.status === 'done' ? '' : `${run.status} · `}{run.summary
-							.imported}
+					{#if run?.status === 'running'}
+						&nbsp;· <span class="live"
+							>importing · {count.format(run.summary.files_seen)} file{run.summary.files_seen === 1
+								? ''
+								: 's'} so far</span
+						>
+					{:else if run?.status === 'failed'}
+						&nbsp;· <span class="problem"
+							>last import failed: {run.message ?? 'no reason given'}</span
+						>
+					{:else if run}&nbsp;· last import {run.status === 'done' ? '' : `${run.status} · `}{run
+							.summary.imported}
 						new{#if run.summary.failed}, {run.summary.failed} failed{/if}{#if run.summary.skipped},
 							{run.summary.skipped} skipped{/if}
 					{/if}
 				</div>
 				<div class="actions">
-					<button type="button" disabled={busy} onclick={() => scan(source)}>Scan</button>
+					{#if source.kind === 'rclone'}
+						<button type="button" disabled={busy} onclick={() => pull(source)}>Pull now</button>
+					{:else}
+						<button type="button" disabled={busy} onclick={() => scan(source)}>Scan</button>
+					{/if}
 					<button type="button" onclick={() => (accessFor = source)}>Access</button>
 					{#if run}
 						<button type="button" onclick={() => (reportFor = { run, label: source.label })}
@@ -119,6 +181,39 @@
 		{#snippet actions()}
 			<button class="primary" type="button" disabled={!label.trim() || !path.trim()} onclick={add}
 				>Add and import</button
+			>
+		{/snippet}
+	</Dialog>
+{:else if cloud}
+	<Dialog title="Add a cloud folder" onclose={() => (cloud = null)}>
+		<p class="quiet small">
+			A folder on a cloud drive or NAS that rclone on the server knows. It is copied read-only into
+			the library's staging area, then imported; nothing is ever written back.
+		</p>
+		{#if remotesError}
+			<p role="alert">{remotesError}</p>
+		{:else if remotes && remotes.length === 0}
+			<p class="quiet">
+				rclone has no remotes yet. Set one up on the server (rclone config) first.
+			</p>
+		{/if}
+		<label class="field">Name <input bind:value={cloud.label} placeholder="Drive photos" /></label>
+		<label class="field"
+			>Remote
+			<select bind:value={cloud.remote} disabled={!remotes?.length}>
+				{#each remotes ?? [] as remote (remote)}<option value={remote}>{remote}</option>{/each}
+			</select>
+		</label>
+		<label class="field"
+			>Folder on the remote <input bind:value={cloud.path} placeholder="Photos" /></label
+		>
+		{#if cloudError}<p role="alert">{cloudError}</p>{/if}
+		{#snippet actions()}
+			<button
+				class="primary"
+				type="button"
+				disabled={!cloud?.label.trim() || !cloud?.remote}
+				onclick={addCloud}>Add and pull</button
 			>
 		{/snippet}
 	</Dialog>
@@ -177,6 +272,10 @@
 	}
 	.actions {
 		margin-left: -0.5rem;
+	}
+	.live,
+	.problem {
+		color: var(--ink);
 	}
 	.field {
 		display: grid;

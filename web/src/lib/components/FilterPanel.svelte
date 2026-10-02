@@ -2,8 +2,14 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
-	import { api, settings, ui } from '$lib/app.svelte';
-	import { activeFilterCount, filtersFromParams, filtersToQuery, withFilter } from '$lib/filters';
+	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
+	import {
+		activeFilterCount,
+		filtersFromParams,
+		filtersToQuery,
+		mergeFacets,
+		withFilter
+	} from '$lib/filters';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let facets = $state<Facets | null>(null);
@@ -27,17 +33,41 @@
 		'Dec'
 	];
 
+	// Facets are counted only while the panel is shown, and on the library only once its first
+	// thumbnails are in: the photos come first. They refresh after every library change.
+	const shown = $derived(viewport.desktop ? settings.filtersOpen : ui.sheet);
+	const ready = $derived(page.url.pathname !== '/' || ui.gridReady);
 	$effect(() => {
+		if (!shown || !ready) return;
 		const current = filters;
+		void library.version;
 		let stale = false;
-		api
-			.facets(current)
-			.then((f) => {
-				if (!stale) facets = f;
-			})
-			.catch(() => undefined);
+		void loadFacets(current).then((f) => {
+			if (!stale && f) facets = f;
+		});
 		return () => (stale = true);
 	});
+
+	async function loadFacets(current: AssetFilters): Promise<Facets | null> {
+		const without = (keys: (keyof AssetFilters)[]) =>
+			api.facets(
+				Object.fromEntries(
+					Object.entries(current).filter(([k]) => !keys.includes(k as keyof AssetFilters))
+				)
+			);
+		try {
+			const [main, withoutYear, withoutSource, sources] = await Promise.all([
+				api.facets(current),
+				current.year === undefined ? null : without(['year', 'month']),
+				current.source_id?.length ? without(['source_id']) : null,
+				current.source_id?.length ? library.sources() : []
+			]);
+			const labels = new Map(sources.map((s) => [s.id, s.label]));
+			return mergeFacets({ main, withoutYear, withoutSource }, current, labels);
+		} catch {
+			return null;
+		}
+	}
 
 	$effect(() => {
 		if (ui.focusSearch > 0) queueMicrotask(() => search?.focus());
@@ -91,8 +121,11 @@
 		</h2>
 		<span>
 			{#if active}<button type="button" onclick={() => apply({})}>Clear</button>{/if}
-			<button type="button" class="collapse" onclick={() => settings.setFiltersOpen(false)}
-				>Hide</button
+			<button
+				type="button"
+				class="collapse"
+				aria-label="Hide filters"
+				onclick={() => settings.setFiltersOpen(false)}>Hide</button
 			>
 			<button type="button" class="done" onclick={() => (ui.sheet = false)}>Done</button>
 		</span>

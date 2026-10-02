@@ -17,20 +17,27 @@ export const RESET_URL = process.env.E2E_RESET_URL ?? (MOCK_URL ? `${MOCK_URL}/_
 export const REAL_BACKEND = !!process.env.E2E_RESET_URL;
 
 /** Fresh, known state (the mock's seed, or the real backend's seeded snapshot). */
-export async function resetMock(users: 'seed' | 'none' = 'seed') {
+export async function resetMock(
+	users: 'seed' | 'none' = 'seed',
+	options: { models?: boolean; count?: number } = {}
+) {
 	test.skip(!RESET_URL, 'needs a reset endpoint (mock API or backend test mode)');
+	test.skip(REAL_BACKEND && !!options.models, 'ML models are a mock-only switch');
 	const response = await fetch(RESET_URL, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ users })
+		body: JSON.stringify(REAL_BACKEND ? { users } : { users, ...options })
 	});
 	expect(response.status).toBe(204);
 }
 
-export async function signIn(page: Page, path = '/') {
+export const GUEST = { username: 'guest', password: 'guest password' };
+export const MEMBER = { username: 'partner', password: 'battery staple' };
+
+export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await page.goto(`/login?next=${encodeURIComponent(path)}`);
-	await page.getByLabel('User name').fill(ADMIN.username);
-	await page.getByLabel('Password').fill(ADMIN.password);
+	await page.getByLabel('User name').fill(who.username);
+	await page.getByLabel('Password').fill(who.password);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
@@ -60,6 +67,38 @@ export async function swipe(target: Locator, dx: number, dy = 0) {
 	await touch(target, 'pointerup', dx, dy);
 }
 
+/**
+ * Real touch input through the DevTools protocol: the browser applies touch-action and may
+ * cancel the pointer stream, exactly as on a phone (dispatched pointer events would not).
+ */
+export async function touchSwipe(
+	page: Page,
+	from: { x: number; y: number },
+	to: { x: number; y: number },
+	steps = 8
+) {
+	const cdp = await page.context().newCDPSession(page);
+	const point = (t: number) => [
+		{ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }
+	];
+	await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(0) });
+	for (let i = 1; i <= steps; i++) {
+		await cdp.send('Input.dispatchTouchEvent', {
+			type: 'touchMove',
+			touchPoints: point(i / steps)
+		});
+		await page.waitForTimeout(16);
+	}
+	await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+	await cdp.detach();
+}
+
+/** The centre of an element, for touch gestures. */
+export async function centre(target: Locator) {
+	const box = (await target.boundingBox())!;
+	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
 /** Select photos the way each device does it: click the check circle, or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');
@@ -70,6 +109,24 @@ export async function selectTiles(page: Page, indexes: number[]) {
 		else await tile.tap();
 	}
 	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
+}
+
+/** A photo the signed-in user may only view (not download), found through the API. */
+export async function viewOnlyPhoto(page: Page): Promise<number> {
+	const list = await (await page.request.get('/api/assets?source_id=2&limit=200')).json();
+	for (const item of list.items as { id: number }[]) {
+		const detail = await (await page.request.get(`/api/assets/${item.id}`)).json();
+		if (detail.level === 'view') return item.id;
+	}
+	throw new Error('no view-only photo for this user');
+}
+
+/** Run an action of the selection bar; on a phone the later ones are under "More". */
+export async function selectionAction(page: Page, name: string) {
+	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
+	const button = bar.getByRole('button', { name, exact: true });
+	if (!(await button.isVisible())) await bar.getByRole('button', { name: 'More' }).click();
+	await button.click();
 }
 
 /** Zero serious or critical axe violations on the current page. */

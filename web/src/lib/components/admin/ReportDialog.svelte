@@ -48,7 +48,15 @@
 				<dd>{report.summary.ignored}</dd>
 			</div>
 		</dl>
-		{#if report.message}<p>{report.message}</p>{/if}
+		<p class="state">
+			{report.status === 'done'
+				? 'Finished'
+				: report.status === 'failed'
+					? 'Failed'
+					: report.status === 'running'
+						? 'Still running'
+						: 'Paused: the library disk is almost full'}{#if report.message}: {report.message}{/if}
+		</p>
 		{#each groups.filter((g) => g.outcome !== 'imported') as g (g.outcome)}
 			<h3>{WORDS[g.outcome]}</h3>
 			<table>
@@ -65,6 +73,9 @@
 </Dialog>
 
 <style>
+	.state {
+		margin: 0.75rem 0 0;
+	}
 	.summary {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));

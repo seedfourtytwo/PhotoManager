@@ -1,43 +1,61 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { isFilterable, session, settings, ui, viewport } from '$lib/app.svelte';
+	import { session } from '$lib/app.svelte';
 
-	const links = $derived([
-		{ href: '/', label: 'Library', match: (p: string) => p === '/' || p === '/calendar' },
-		{ href: '/map', label: 'Map', match: (p: string) => p === '/map' },
-		{ href: '/albums', label: 'Albums', match: (p: string) => p.startsWith('/albums') }
-	]);
+	type Link = { href: string; label: string; match: (p: string) => boolean };
 	const path = $derived(page.url.pathname);
 
-	async function search() {
-		if (!isFilterable(path)) await goto('/');
-		if (viewport.desktop) settings.setFiltersOpen(true);
-		else ui.sheet = true;
-		ui.focusSearch++;
-	}
+	/** The five places of DESIGN_PRINCIPLES §3, the same on laptop and phone. */
+	const main: Link[] = [
+		{ href: '/', label: 'Library', match: (p) => p === '/' || p === '/calendar' },
+		{ href: '/map', label: 'Map', match: (p) => p === '/map' },
+		{ href: '/people', label: 'People', match: (p) => p.startsWith('/people') },
+		{ href: '/albums', label: 'Albums', match: (p) => p.startsWith('/albums') },
+		{ href: '/search', label: 'Search', match: (p) => p === '/search' }
+	];
+	/** Everything else: in the rail's foot on a laptop, under "More" on a phone. */
+	const rest = $derived<Link[]>([
+		{ href: '/trash', label: 'Trash', match: (p) => p === '/trash' },
+		{ href: '/settings', label: 'Settings', match: (p) => p.startsWith('/settings') },
+		...(session.isAdmin
+			? [{ href: '/admin', label: 'Admin', match: (p: string) => p.startsWith('/admin') }]
+			: [])
+	]);
+	let more = $state(false);
+	const inRest = $derived(rest.some((l) => l.match(path)));
+
+	// Close the phone menu whenever the page changes.
+	$effect(() => {
+		void path;
+		more = false;
+	});
 </script>
 
 <nav aria-label="Main">
-	<ul>
-		{#each links as link (link.href)}
+	<ul class="main">
+		{#each main as link (link.href)}
 			<li>
 				<a href={link.href} aria-current={link.match(path) ? 'page' : undefined}>{link.label}</a>
 			</li>
 		{/each}
-		<li><button type="button" onclick={search}>Search</button></li>
-		<li>
-			<a href="/settings" aria-current={path.startsWith('/settings') ? 'page' : undefined}
-				>Settings</a
+		<li class="more-item">
+			<button
+				type="button"
+				class="more"
+				class:current={inRest}
+				aria-expanded={more}
+				aria-controls="nav-more"
+				onclick={() => (more = !more)}>More</button
 			>
 		</li>
-		{#if session.isAdmin}
-			<li>
-				<a href="/admin" aria-current={path.startsWith('/admin') ? 'page' : undefined}>Admin</a>
-			</li>
-		{/if}
 	</ul>
-	<a class="trash" href="/trash" aria-current={path === '/trash' ? 'page' : undefined}>Trash</a>
+	<ul class="rest" class:open={more} id="nav-more">
+		{#each rest as link (link.href)}
+			<li>
+				<a href={link.href} aria-current={link.match(path) ? 'page' : undefined}>{link.label}</a>
+			</li>
+		{/each}
+	</ul>
 </nav>
 
 <style>
@@ -71,18 +89,22 @@
 		text-decoration: none;
 		box-sizing: border-box;
 	}
-	a[aria-current='page'] {
+	a[aria-current='page'],
+	.more.current {
 		color: var(--ink);
 	}
 	a:hover,
 	button:hover {
 		color: var(--ink);
 	}
-	.trash {
+	.rest a {
 		font-size: var(--fs-12);
 	}
+	.more-item {
+		display: none;
+	}
 
-	/* Phone: the same items as a bottom bar (DESIGN_PRINCIPLES rule 10). */
+	/* Phone: the same five places as a bottom bar, the rest under More (rule 10). */
 	@media (max-width: 1023px) {
 		nav {
 			position: fixed;
@@ -97,16 +119,19 @@
 			border-right: 0;
 			border-top: 1px solid var(--hairline);
 		}
-		ul {
+		.main {
 			flex-direction: row;
 			justify-content: space-around;
 			gap: 0;
 		}
-		li {
+		.main li {
 			flex: 1;
 		}
-		a,
-		button {
+		.more-item {
+			display: block;
+		}
+		.main a,
+		.main button {
 			text-align: center;
 			font-size: var(--fs-12);
 			min-height: var(--bar);
@@ -115,8 +140,23 @@
 			justify-content: center;
 			padding: 0 0.25rem;
 		}
-		.trash {
+		.rest {
 			display: none;
+			position: absolute;
+			right: 0;
+			bottom: 100%;
+			min-width: 12rem;
+			background: var(--bg);
+			border-top: 1px solid var(--hairline);
+			border-left: 1px solid var(--hairline);
+			padding: 0.25rem 0;
+		}
+		.rest.open {
+			display: flex;
+		}
+		.rest a {
+			font-size: var(--fs-14);
+			padding: 0.65rem 1rem;
 		}
 	}
 </style>

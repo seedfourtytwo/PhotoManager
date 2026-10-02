@@ -1,30 +1,51 @@
 <script lang="ts" module>
 	import type { DownloadRequest } from '$lib/api';
+	import { frameError } from '$lib/download';
 
-	const FRAME = 'pa-download-frame';
+	let frames = 0;
 
 	/**
-	 * Start a streamed ZIP download: a real form POST into a hidden iframe, so the browser
-	 * writes the stream straight to disk instead of holding it in memory. The body is one
-	 * field, `request`, holding the DownloadRequest JSON (see docs/wiring/web.md).
+	 * Start a download in a hidden frame, so the browser writes the stream straight to disk
+	 * instead of holding it in memory. A ZIP is a real form POST whose one field, `request`,
+	 * holds the DownloadRequest JSON (docs/wiring/web.md); a single photo is a GET.
+	 * When the server refuses, the frame loads its JSON answer instead of saving a file:
+	 * `onerror` then gets the server's sentence.
 	 */
-	export function postDownload(action: string, request: DownloadRequest) {
-		if (!document.querySelector(`iframe[name="${FRAME}"]`)) {
-			const frame = document.createElement('iframe');
-			frame.name = FRAME;
-			frame.title = 'Downloads';
-			frame.hidden = true;
-			document.body.append(frame);
+	export function startDownload(
+		target: { post: string; request: DownloadRequest } | { get: string },
+		onerror: (detail: string) => void
+	) {
+		const frame = document.createElement('iframe');
+		frame.name = `pa-download-${++frames}`;
+		frame.title = 'Download';
+		frame.hidden = true;
+		frame.addEventListener('load', () => {
+			let text: string | null;
+			try {
+				text = frame.contentDocument?.body?.innerText ?? null;
+			} catch {
+				// a cross-origin page (should not happen): treat as an error below
+				text = '{}';
+			}
+			const detail = frameError(text);
+			if (detail) onerror(detail);
+		});
+		document.body.append(frame);
+		// A saved download never loads the frame; keep it a while so a slow stream isn't cut.
+		setTimeout(() => frame.remove(), 30 * 60_000);
+		if ('get' in target) {
+			frame.src = target.get;
+			return;
 		}
 		const form = document.createElement('form');
 		form.method = 'POST';
-		form.action = action;
-		form.target = FRAME;
+		form.action = target.post;
+		form.target = frame.name;
 		form.hidden = true;
 		const field = document.createElement('input');
 		field.type = 'hidden';
 		field.name = 'request';
-		field.value = JSON.stringify(request);
+		field.value = JSON.stringify(target.request);
 		form.append(field);
 		document.body.append(form);
 		form.submit();
@@ -45,16 +66,25 @@
 	import { formatBytes } from '$lib/format';
 	import Dialog from './Dialog.svelte';
 
-	type Props = { scope: DownloadScope; single?: AssetOut; onclose: () => void };
-	let { scope, single, onclose }: Props = $props();
+	type Props = {
+		scope: DownloadScope;
+		single?: AssetOut;
+		/** Some of the photos have edits (which an original file does not include). */
+		edited?: boolean;
+		onclose: () => void;
+	};
+	let { scope, single, edited = false, onclose }: Props = $props();
 
 	let options = $state<DownloadOptions>({ ...DEFAULT_OPTIONS });
 	let custom = $state(false);
 	let estimate = $state<DownloadEstimate | null>(null);
 	let estimateError = $state('');
+	let error = $state('');
 	let busy = $state(false);
 	const lossy = $derived(options.format === 'jpeg' || options.format === 'webp');
 	const request = $derived(buildDownloadRequest(scope, options));
+	const hasEdits = $derived(single ? single.edited : edited);
+	const nothing = $derived(estimate?.count === 0);
 
 	$effect(() => {
 		const body = request;
@@ -92,6 +122,7 @@
 		busy = true;
 		try {
 			const response = await fetch(singleUrl(asset), { credentials: 'same-origin' });
+			if (response.status === 401) await api.me(); // signs out and goes to the sign-in page
 			if (!response.ok) throw new Error(`The library server answered ${response.status}.`);
 			const blob = await response.blob();
 			const file = new File([blob], singleFileName(asset.id, asset.taken_at, options.format), {
@@ -106,16 +137,34 @@
 		}
 	}
 
-	function download() {
-		if (single) {
-			const a = document.createElement('a');
-			a.href = singleUrl(single);
-			a.download = singleFileName(single.id, single.taken_at, options.format);
-			document.body.append(a);
-			a.click();
-			a.remove();
-		} else {
-			postDownload(api.downloadAction, request);
+	/** The frame showed an error: say so, and find out whether the session ran out. */
+	function failed(detail: string) {
+		notice.show(`The download did not start: ${detail}`, { ms: 10_000 });
+		api.me().catch(() => undefined); // a 401 here sends the user to sign in
+	}
+
+	/**
+	 * Check first (session, rights, server health) with the estimate, so a refusal shows up
+	 * here as a sentence instead of a download that silently never starts.
+	 */
+	async function download() {
+		busy = true;
+		error = '';
+		try {
+			const checked = await api.estimateDownload(request);
+			if (checked.count === 0) {
+				estimate = checked;
+				return;
+			}
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not start the download.';
+			return;
+		} finally {
+			busy = false;
+		}
+		if (single) startDownload({ get: singleUrl(single) }, failed);
+		else {
+			startDownload({ post: api.downloadAction, request }, failed);
 			notice.show('Download started. Your browser saves the ZIP as it arrives.');
 		}
 		onclose();
@@ -124,13 +173,20 @@
 
 <Dialog title={single ? 'Download photo' : 'Download'} {onclose}>
 	<p class="summary" aria-live="polite">
-		{#if estimate}
+		{#if estimate && nothing}
+			<span id="dl-nothing">
+				You may view {single ? 'this photo' : 'these photos'} but not download {single
+					? 'it'
+					: 'them'}: downloading needs access to the folder a photo comes from. An album shared with
+				you only lets you see its photos.
+			</span>
+		{:else if estimate}
 			{single ? '1 photo' : scopeLabel(scope, estimate.count)}
 			<span class="quiet"
 				>· about {formatBytes(
 					estimate.bytes
 				)}{#if !single && 'ids' in scope && estimate.count < scope.ids.length}
-					· {scope.ids.length - estimate.count} you may not download are left out{/if}</span
+					· {scope.ids.length - estimate.count} you may only view are left out{/if}</span
 			>
 		{:else if estimateError}
 			<span class="quiet">{estimateError}</span>
@@ -141,12 +197,18 @@
 
 	<fieldset>
 		<legend>Format</legend>
-		{#each [['original', 'Original file'], ['jpeg', 'JPEG'], ['png', 'PNG'], ['webp', 'WebP']] as [value, label] (value)}
+		{#each [['original', 'Original file (without edits)'], ['jpeg', 'JPEG'], ['png', 'PNG'], ['webp', 'WebP']] as [value, label] (value)}
 			<label class="choice">
 				<input type="radio" name="format" {value} bind:group={options.format} />
 				{label}
 			</label>
 		{/each}
+		{#if hasEdits && options.format === 'original'}
+			<p class="quiet small note">
+				{single ? 'This photo has' : 'Some of these photos have'} edits; an original file comes as it
+				was taken. Choose JPEG to include the edits.
+			</p>
+		{/if}
 	</fieldset>
 
 	{#if lossy}
@@ -228,12 +290,19 @@
 			</label>
 		</fieldset>
 	{/if}
+	{#if error}<p role="alert">{error}</p>{/if}
 
 	{#snippet actions()}
-		{#if single && canShareFiles()}
+		{#if single && canShareFiles() && !nothing}
 			<button type="button" disabled={busy} onclick={() => share(single)}>Save to Photos</button>
 		{/if}
-		<button class="primary" type="button" disabled={estimate?.count === 0} onclick={download}>
+		<button
+			class="primary"
+			type="button"
+			disabled={nothing || busy}
+			aria-describedby={nothing ? 'dl-nothing' : undefined}
+			onclick={download}
+		>
 			Download
 		</button>
 	{/snippet}
@@ -262,6 +331,9 @@
 		gap: 0.35rem;
 		margin: 0.15rem 1rem 0.15rem 0;
 		color: var(--ink);
+	}
+	.note {
+		margin: 0.35rem 0 0;
 	}
 	.row {
 		display: grid;

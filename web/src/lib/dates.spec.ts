@@ -5,7 +5,8 @@ import {
 	isValidLocal,
 	previewDateChange,
 	shiftLocal,
-	toMinutes
+	toMinutes,
+	undoDateChange
 } from './dates';
 import { makeAsset } from './testing/fixtures';
 
@@ -67,5 +68,26 @@ describe('server timestamps', () => {
 	it('ignore fractions of a second instead of failing', async () => {
 		const { shiftLocal } = await import('./dates');
 		expect(shiftLocal('2026-10-01T23:44:25.729120', 0)).toBe('2026-10-01T23:44:25');
+	});
+});
+
+describe('undoDateChange (put the previous dates back)', () => {
+	const items = [
+		{ id: 1, taken_at: '2019-07-04T18:30:00' },
+		{ id: 2, taken_at: '2019-07-04T18:31:00.250' },
+		{ id: 3, taken_at: '2019-07-04T18:30:00' }
+	];
+
+	it('shifts back by the same amount', () => {
+		expect(undoDateChange(items, { shift_minutes: 90 })).toEqual([
+			{ ids: [1, 2, 3], shift_minutes: -90 }
+		]);
+	});
+
+	it('sets each photo back to its own previous time, grouped, to the second', () => {
+		expect(undoDateChange(items, { set: '2001-02-03T04:05:06' })).toEqual([
+			{ ids: [1, 3], set: '2019-07-04T18:30:00' },
+			{ ids: [2], set: '2019-07-04T18:31:00' }
+		]);
 	});
 });

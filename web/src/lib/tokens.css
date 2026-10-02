@@ -97,10 +97,16 @@ button:disabled {
 	cursor: default;
 }
 
+/* The one action a dialog or form exists for: filled with ink (not the accent), still small. */
 button.primary {
-	text-decoration: underline;
-	text-underline-offset: 0.2em;
-	text-decoration-thickness: 1px;
+	background: var(--ink);
+	color: var(--bg);
+	padding: 0.3rem 0.9rem;
+}
+
+button.primary:disabled {
+	background: var(--hairline);
+	color: var(--ink-2);
 }
 
 input,
@@ -122,11 +128,49 @@ select option {
 }
 
 input[type='checkbox'],
-input[type='radio'],
-input[type='range'] {
+input[type='radio'] {
 	accent-color: var(--ink-2);
 	width: 1rem;
 	height: 1rem;
+}
+
+/* Sliders: a hairline track and a small ink thumb, wide enough to set a value precisely. */
+input[type='range'] {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 100%;
+	max-width: 16rem;
+	min-width: 8rem;
+	height: 1.5rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track {
+	height: 2px;
+	background: var(--hairline);
+}
+input[type='range']::-moz-range-track {
+	height: 2px;
+	background: var(--hairline);
+}
+input[type='range']::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 0.9rem;
+	height: 0.9rem;
+	margin-top: calc(1px - 0.45rem);
+	border-radius: 50%;
+	background: var(--ink);
+	border: 0;
+}
+input[type='range']::-moz-range-thumb {
+	width: 0.9rem;
+	height: 0.9rem;
+	border-radius: 50%;
+	background: var(--ink);
+	border: 0;
 }
 
 label {

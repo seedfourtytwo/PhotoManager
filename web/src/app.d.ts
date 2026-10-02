@@ -2,8 +2,8 @@
 declare global {
 	namespace App {
 		interface PageState {
-			/** Shallow-routed loupe: Back closes it. */
-			loupe?: number;
+			/** Shallow-routed loupe (lib/loupe.svelte.ts): the open photo, null once closed. */
+			photo?: number | null;
 		}
 	}
 }

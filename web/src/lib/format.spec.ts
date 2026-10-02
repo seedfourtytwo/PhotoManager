@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes } from './format';
+import { formatBytes, formatWhen } from './format';
 
 describe('formatBytes', () => {
 	it.each([
@@ -16,5 +16,13 @@ describe('formatBytes', () => {
 	it('rejects negative and non-finite input', () => {
 		expect(() => formatBytes(-1)).toThrow(RangeError);
 		expect(() => formatBytes(Number.NaN)).toThrow(RangeError);
+	});
+});
+
+describe('formatWhen', () => {
+	it('formats a server timestamp and tolerates nothing', () => {
+		expect(formatWhen('2026-09-25T02:31:12')).toMatch(/25 Sept? 2026, 02:31/);
+		expect(formatWhen(null)).toBe('');
+		expect(formatWhen('nonsense')).toBe('');
 	});
 });

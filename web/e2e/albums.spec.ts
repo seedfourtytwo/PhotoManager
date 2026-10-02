@@ -3,6 +3,7 @@ import {
 	expectAccessible,
 	isPhone,
 	resetMock,
+	selectionAction,
 	selectTiles,
 	signIn,
 	test
@@ -17,10 +18,7 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 	const tiles = page.locator('.tile');
 	const ids = await Promise.all([0, 1, 2].map((i) => tiles.nth(i).getAttribute('data-id')));
 	await selectTiles(page, [0, 1, 2]);
-	await page
-		.getByRole('toolbar', { name: 'Selected photos' })
-		.getByRole('button', { name: 'Add to album' })
-		.click();
+	await selectionAction(page, 'Add to album');
 	const dialog = page.getByRole('dialog', { name: 'Add to album' });
 	await dialog.getByLabel('New album title').fill('Test trip');
 	await dialog.getByRole('button', { name: 'Add' }).click();
@@ -56,7 +54,7 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 	await page.getByRole('button', { name: 'Done arranging' }).click();
 
 	await selectTiles(page, [1]);
-	await page.getByRole('button', { name: 'Set as cover' }).click();
+	await selectionAction(page, 'Set as cover');
 	await expect(page.getByRole('status')).toContainText('Cover changed');
 });
 
@@ -75,4 +73,19 @@ test('share an album with another person', async ({ page }) => {
 		{ user_id: 2, role: 'editor' },
 		{ user_id: 3, role: 'viewer' }
 	]);
+});
+
+test('remove from album, then Undo puts the photos back where they were', async ({ page }) => {
+	await page.goto('/albums/1');
+	const tiles = page.locator('.tile');
+	await expect(tiles.first()).toBeVisible();
+	const order = await tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-id')));
+	await selectTiles(page, [1, 3]);
+	await selectionAction(page, 'Remove from album');
+	await expect(tiles).toHaveCount(order.length - 2);
+	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+	await expect(tiles).toHaveCount(order.length);
+	await expect
+		.poll(() => tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-id'))))
+		.toEqual(order);
 });
