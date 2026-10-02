@@ -39,9 +39,7 @@ def test_a_source_may_not_overlap_a_backup_repository(client: TestClient, tmp_pa
     disk = tmp_path / "disk"
     (disk / "photos" / "data").mkdir(parents=True)
     services(client).ops.backup.add_target(
-        NewBackupTarget(
-            label="Disk", repository=str(disk / "photos"), password_file=str(password)
-        )
+        NewBackupTarget(label="Disk", repository=str(disk / "photos"), password_file=str(password))
     )
     for folder in (disk, disk / "photos" / "data"):
         refused = client.post("/api/sources", json={"label": "x", "path": str(folder)})

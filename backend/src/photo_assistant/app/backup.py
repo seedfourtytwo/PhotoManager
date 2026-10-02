@@ -113,16 +113,18 @@ class BackupService:
         if not password.is_file():
             raise ValueError(f"password file not found: {password} (create it first)")
         if new.kind is TargetKind.LOCAL:
-            repo = Path(new.repository)
-            if not repo.is_absolute():
-                raise ValueError("a local backup location must be an absolute path")
-            if _inside(repo, self._config.data_root):
-                raise ValueError("a backup cannot live inside the library, or contain it")
-            for root in self._config.source_roots():
-                if _inside(repo, root):
-                    raise ValueError(
-                        f"a backup cannot live inside a source folder, or contain one: {root}"
-                    )
+            self._validate_local_repository(Path(new.repository))
+
+    def _validate_local_repository(self, repo: Path) -> None:
+        if not repo.is_absolute():
+            raise ValueError("a local backup location must be an absolute path")
+        if _inside(repo, self._config.data_root):
+            raise ValueError("a backup cannot live inside the library, or contain it")
+        for root in self._config.source_roots():
+            if _inside(repo, root):
+                raise ValueError(
+                    f"a backup cannot live inside a source folder, or contain one: {root}"
+                )
 
     def repository_overlaps(self, folder: Path) -> bool:
         """Is ``folder`` inside a local backup repository, or does it contain one? (A source
