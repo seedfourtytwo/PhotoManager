@@ -49,6 +49,7 @@ Passwords ≥ 10 characters. Sessions expire after 30 days idle.
 |---|---|---|---|
 | POST | `/api/users` | `{username, display_name, password, role}` | `201 User` |
 | PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, password?}` | `User`; cannot remove the last admin (`409`). A `password` reset ends **all** the user's sessions and revokes their device tokens (v1.2) |
+| POST | `/api/users/{id}/unlock` | – | `204`; clears the failed-login block (`429`) for that username from every address (v1.3); `404` unknown id |
 
 ## Sources (existing, plus access)
 
@@ -120,7 +121,7 @@ One recipe per photo, shared by everyone (needs `edit`). Originals never change.
 
 | POST | `/api/downloads/estimate` | `DownloadRequest` | `{count, bytes}` — from each photo's real size: exact for untouched originals, calibrated factors for conversions (v1.2; see docs/PERFORMANCE.md) |
 |---|---|---|---|
-| POST | `/api/downloads` | `DownloadRequest` | streamed `application/zip` |
+| POST | `/api/downloads` | `DownloadRequest` | streamed `application/zip`, named after its scope (v1.3, below) |
 | GET | `/api/assets/{id}/download` | query: `format, quality, max_edge, strip_location` | the single file |
 
 ```
@@ -137,6 +138,18 @@ the ZIP is being produced (missing library file, render error) is left out and t
 goes on; the archive then ends with a `manifest.txt` entry listing each left-out file and why
 (`X-Skipped` is sent before streaming starts, so it only counts access) (v1.2). `original` + no resize streams the untouched file; any other option
 renders via libvips with the edit recipe applied.
+
+**ZIP name (v1.3).** `Content-Disposition: attachment; filename="<ASCII>"; filename*=UTF-8''<name>`
+(RFC 6266/5987). `<name>` is: `album_id` → `<album title>.zip`; `filters` →
+`photos-<words>.zip` (`photos-all.zip` with no filter); `ids` → `photos-<n>.zip` (`n` = distinct ids
+asked for). Filter words, in this order, lowercase, joined by `-`: day range (`2019-07-04`,
+`2019-07-01-to-2019-08-31`, `from-…`, `to-…`), `year[-month]` (`2019`, `2019-07`),
+`<n>-source(s)`, camera, place, `q` (each slugged: runs of non-letters/digits → `-`),
+`favourites`, `hidden`, `guessed-dates`, `with-location`/`without-location`. E.g.
+`{year: 2019, place: "France"}` → `photos-2019-france.zip`. Names are sanitised (no `/ \ : * ? " < > |`
+or control characters → `_`; blank titles → `album.zip`) and at most 100 characters. The ASCII
+`filename` drops accents and turns other non-ASCII characters into `_`. Single-photo downloads
+use the same header shape.
 
 ## Albums
 
@@ -257,7 +270,7 @@ Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop mar
 |---|---|---|---|
 | GET | `/api/backups` | – | `[Target]` with `last_run`, `next_run_at`, `overdue`, `needs_attention` (drives the banner) |
 | POST | `/api/backups` | `{label, repository, password_file, schedule?, quiet_window?, retention?: {daily, weekly, monthly}}` | `201 Target` |
-| PATCH | `/api/backups/{id}` | `{enabled}` | `Target` |
+| PATCH | `/api/backups/{id}` | `{enabled?, schedule?, quiet_window?, retention?: {daily?, weekly?, monthly?}}` | `Target`. Only the fields sent change (v1.3); `quiet_window: null` = any time; retention counts merge into the current ones. Bad schedule/window/retention or an unknown field: `422`, nothing changed |
 | POST | `/api/backups/{id}/run` · `/restore-test` | – | `202 {job_id, target_id}` |
 | GET | `/api/backups/{id}/runs` | `limit` | `[Run]` |
 
@@ -282,3 +295,15 @@ Each change is also written next to the route it concerns above. For the web app
 | Errors | Ids beyond 2^63−1: path `404`, body `422`, `source_id` `400`. The cross-site guard answers `{"detail"}` JSON. `to=9999-12-31` is valid. | None. |
 | Transport | JSON responses ≥ 1 KiB are gzip-encoded when asked (`Accept-Encoding`); images, ZIPs and PDFs never. `/_app/immutable/*` is cached for a year. The `/api/map` shape is unchanged. | None (browsers decode gzip). |
 | ML | ML jobs are only queued when model files are installed; `/api/ml/backfill` queues `0` (with `detail`) without them. | `ml/status` counts stay empty without models. |
+
+---
+
+# v1.3 changes (fix/asks)
+
+Backwards compatible. Each change is also written next to its route above.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Downloads | The ZIP is named after its scope: `<album title>.zip`, `photos-<filter words>.zip`, `photos-<n>.zip`; `filename*` (UTF-8) plus a sanitised ASCII `filename`. | Read the name from `Content-Disposition` (`filename*` first) if the app ever saves the blob itself; a form post already gets the right name. |
+| Backups | `PATCH /api/backups/{id}` also takes `schedule`, `quiet_window` (null clears) and partial `retention`; `enabled` is optional. | Edit form for an existing target (`api.updateBackup`). |
+| Users | `POST /api/users/{id}/unlock` (admin) clears the 10-fails/15-min login block for that account; `204`. | "Unlock" action on the users page (`api.unlockUser`). |

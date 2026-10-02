@@ -94,7 +94,7 @@ for module in (system, sources, imports, assets, backup):
 app.state.ops = services.ops        # in the lifespan, next to app.state.services
 ```
 
-Endpoints: `GET/POST /api/backups`, `PATCH /api/backups/{id}` (`{"enabled": bool}`),
+Endpoints: `GET/POST /api/backups`, `PATCH /api/backups/{id}` (`{enabled?, schedule?, quiet_window?, retention?}`, v1.3),
 `POST /api/backups/{id}/run` and `/restore-test` (202, queued as jobs),
 `GET /api/backups/{id}/runs?limit=`. Each target in `GET /api/backups` has
 `needs_attention` → the overdue/failed banner (FEATURES 9b.7).
