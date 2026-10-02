@@ -29,6 +29,26 @@ def add_and_scan(client: TestClient, folder: Path) -> dict[str, object]:
     return source  # type: ignore[no-any-return]
 
 
+def test_a_source_may_not_overlap_a_backup_repository(client: TestClient, tmp_path: Path) -> None:
+    """QA A5, the other way round: a source around or inside a local backup repository."""
+    from photo_assistant.domain.backup import NewBackupTarget
+
+    password = tmp_path / "secret" / "pw"
+    password.parent.mkdir()
+    password.write_text("pw\n")
+    disk = tmp_path / "disk"
+    (disk / "photos" / "data").mkdir(parents=True)
+    services(client).ops.backup.add_target(
+        NewBackupTarget(
+            label="Disk", repository=str(disk / "photos"), password_file=str(password)
+        )
+    )
+    for folder in (disk, disk / "photos" / "data"):
+        refused = client.post("/api/sources", json={"label": "x", "path": str(folder)})
+        assert refused.status_code == 422, folder
+        assert "backup" in refused.json()["detail"]
+
+
 def test_add_list_and_disable_sources(client: TestClient, source_guard: Path) -> None:
     created = client.post("/api/sources", json={"label": "Pictures", "path": str(source_guard)})
     assert created.status_code == 201

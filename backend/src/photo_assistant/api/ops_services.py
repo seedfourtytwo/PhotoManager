@@ -4,7 +4,7 @@
 integrator wires it in. The CLI (``api/cli_ops.py``) uses the same builders on its own.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -42,7 +42,10 @@ class OpsServices:
 
 
 def build_backup_service(
-    data_root: Path, ops: OpsSettings, queue: JobQueue | None = None
+    data_root: Path,
+    ops: OpsSettings,
+    queue: JobQueue | None = None,
+    source_roots: Callable[[], Sequence[Path]] = lambda: (),
 ) -> tuple[BackupService, SqliteBackupStore]:
     database = data_root / DATABASE
     # Own connection (WAL); migrations are a no-op when the main services opened it first.
@@ -57,6 +60,7 @@ def build_backup_service(
             data_root=data_root,
             restore_sample=ops.backup_restore_sample,
             scratch_dir=ops.backup_scratch_dir,
+            source_roots=source_roots,
         ),
         queue=queue,
     )
@@ -68,10 +72,12 @@ def build_ops_services(
     ops: OpsSettings | None = None,
     queue: JobQueue | None = None,
     housekeeping: Sequence[PeriodicTask] = (),
+    source_roots: Callable[[], Sequence[Path]] = lambda: (),
 ) -> OpsServices:
-    """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering)."""
+    """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering).
+    ``source_roots``: the library's source folders (backups may not overlap them)."""
     ops = ops or OpsSettings()
-    backup, store = build_backup_service(data_root, ops, queue)
+    backup, store = build_backup_service(data_root, ops, queue, source_roots)
     tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, backup.run_due)]
     return OpsServices(
         backup, store, Periodic([*(tasks if ops.backup_enabled else []), *housekeeping])

@@ -12,7 +12,11 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from photo_assistant.domain.library_paths import InvalidLibraryPathError, ensure_relative
+from photo_assistant.domain.library_paths import (
+    InvalidLibraryPathError,
+    ensure_relative,
+    nested_or_same,
+)
 from photo_assistant.ports import Hasher
 from photo_assistant.ports.backup import AssetFile
 from photo_assistant.ports.library_files import (
@@ -74,8 +78,7 @@ class ExportSummary:
 
 
 def _overlap(a: Path, b: Path) -> bool:
-    x, y = a.resolve(), b.resolve()
-    return x == y or x in y.parents or y in x.parents
+    return nested_or_same(a.resolve(), b.resolve())
 
 
 class LibraryTransfer:

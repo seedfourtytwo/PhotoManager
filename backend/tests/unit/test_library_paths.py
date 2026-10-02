@@ -77,3 +77,14 @@ def test_print_renditions_are_keyed_by_content_and_recipe() -> None:
         print_relpath(digest, "../x")
     with pytest.raises(InvalidLibraryPathError):
         print_relpath("nothex", "0123456789abcdef")
+
+
+def test_nested_or_same_is_the_one_overlap_rule() -> None:
+    from pathlib import PurePosixPath as P
+
+    from photo_assistant.domain.library_paths import nested_or_same
+
+    assert nested_or_same(P("/a"), P("/a"))
+    assert nested_or_same(P("/a/b"), P("/a")) and nested_or_same(P("/a"), P("/a/b"))
+    assert not nested_or_same(P("/a/b"), P("/a/c"))
+    assert not nested_or_same(P("/ab"), P("/a")), "a prefix of the name is not a parent"

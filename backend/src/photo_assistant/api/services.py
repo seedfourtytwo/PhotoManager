@@ -2,6 +2,7 @@
 
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader, ExifToolStripper
 from photo_assistant.adapters.filesystem import (
@@ -137,7 +138,13 @@ def build_services(settings: Settings) -> Services:
             lambda: repo.enqueue_once(CLUSTER_FACES),
         ),
     ]
-    ops = build_ops_services(root, settings.ops, queue=repo, housekeeping=housekeeping)
+    ops = build_ops_services(
+        root,
+        settings.ops,
+        queue=repo,
+        housekeeping=housekeeping,
+        source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
+    )
     worker = Worker(
         repo,
         {

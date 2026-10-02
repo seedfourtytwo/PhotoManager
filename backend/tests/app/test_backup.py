@@ -162,6 +162,21 @@ def test_targets_are_validated(world: World, tmp_path: Path) -> None:
     assert [t.label for t in world.service.targets()] == ["Server", "Disk"]
 
 
+def test_a_backup_repository_may_not_overlap_a_source_folder(tmp_path: Path) -> None:
+    """QA A5: restic would write its repository into a folder the library only reads."""
+    pictures = tmp_path / "media" / "Pictures"
+    pictures.mkdir(parents=True)
+    world = World(tmp_path, source_roots=lambda: [pictures])
+    with pytest.raises(ValueError, match="source folder"):
+        world.target(repository=str(pictures / "backup"))
+    with pytest.raises(ValueError, match="source folder"):
+        world.target(label="around", repository=str(tmp_path / "media"))
+    world.target(repository=str(tmp_path / "disk" / "photos"))
+    assert world.service.repository_overlaps(tmp_path / "disk")
+    assert world.service.repository_overlaps(tmp_path / "disk" / "photos" / "data")
+    assert not world.service.repository_overlaps(pictures)
+
+
 def test_scheduled_runs_happen_once_per_slot(world: World) -> None:
     target_id = world.target(schedule="daily 02:30")
     world.target(label="Only by hand", schedule="manual")

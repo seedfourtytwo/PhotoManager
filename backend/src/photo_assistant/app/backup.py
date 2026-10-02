@@ -11,8 +11,8 @@ import logging
 import shutil
 import tempfile
 import threading
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
 from pathlib import Path
 
@@ -31,6 +31,7 @@ from photo_assistant.domain.backup import (
     TargetKind,
     TargetStatus,
 )
+from photo_assistant.domain.library_paths import nested_or_same
 from photo_assistant.domain.schedule import is_due, is_overdue, next_run, parse_window
 from photo_assistant.ports import Clock, Hasher
 from photo_assistant.ports.backup import (
@@ -62,12 +63,13 @@ class BackupConfig:
     restore_sample: int = 20
     scratch_dir: Path | None = None  # where restore tests unpack; None = the system temp dir
     local_tz: tzinfo | None = None  # schedules are local wall-clock; None = this machine's zone
+    # the folders the library imports from: a local repository may not overlap one (QA A5)
+    source_roots: Callable[[], Sequence[Path]] = field(default=lambda: ())
 
 
 def _inside(a: Path, b: Path) -> bool:
     """True if either path contains the other (after resolving symlinks)."""
-    x, y = a.expanduser().resolve(), b.expanduser().resolve()
-    return x == y or x in y.parents or y in x.parents
+    return nested_or_same(a.expanduser().resolve(), b.expanduser().resolve())
 
 
 def _message(exc: BaseException) -> str:
@@ -116,6 +118,20 @@ class BackupService:
                 raise ValueError("a local backup location must be an absolute path")
             if _inside(repo, self._config.data_root):
                 raise ValueError("a backup cannot live inside the library, or contain it")
+            for root in self._config.source_roots():
+                if _inside(repo, root):
+                    raise ValueError(
+                        f"a backup cannot live inside a source folder, or contain one: {root}"
+                    )
+
+    def repository_overlaps(self, folder: Path) -> bool:
+        """Is ``folder`` inside a local backup repository, or does it contain one? (A source
+        there would import restic's files, and restic would write into a source.)"""
+        return any(
+            _inside(folder, Path(t.repository))
+            for t in self._store.list_targets()
+            if t.kind is TargetKind.LOCAL
+        )
 
     def targets(self) -> list[BackupTarget]:
         return self._store.list_targets()

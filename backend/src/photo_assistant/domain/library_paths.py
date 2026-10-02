@@ -5,7 +5,7 @@ root, so moving the library from the laptop to the server is "copy the folder, c
 setting". These functions are the single place that rule is applied.
 """
 
-from pathlib import PurePosixPath
+from pathlib import PurePath, PurePosixPath
 
 _HASH_ALPHABET = frozenset("0123456789abcdef")
 _BLAKE3_HEX_LENGTH = 64
@@ -67,3 +67,11 @@ def edited_relpath(kind: str, content_hash: str, recipe_key: str) -> PurePosixPa
     return PurePosixPath(
         "derived", "edited", content_hash[:2], f"{content_hash}-{recipe_key}-{base.parts[1]}.webp"
     )
+
+
+def nested_or_same(a: PurePath, b: PurePath) -> bool:
+    """True if either folder contains the other (or they are the same).
+
+    The one overlap rule (library vs sources, backups vs sources, export destinations). Pure:
+    callers pass absolute paths already resolved (symlinks followed) by an adapter."""
+    return a == b or a in b.parents or b in a.parents

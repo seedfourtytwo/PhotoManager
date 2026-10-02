@@ -12,7 +12,7 @@ from pathlib import Path
 
 from blake3 import blake3
 
-from photo_assistant.domain.library_paths import ensure_relative
+from photo_assistant.domain.library_paths import ensure_relative, nested_or_same
 from photo_assistant.domain.model import Source
 from photo_assistant.ports import ImportBusyError, SourceFile
 
@@ -120,8 +120,7 @@ class DiskLibraryStore:
         return len(leftovers)
 
     def overlaps(self, folder: Path) -> bool:
-        a, b = folder.resolve(), self.root.resolve()
-        return a == b or a in b.parents or b in a.parents
+        return nested_or_same(folder.resolve(), self.root.resolve())
 
     def free_bytes(self) -> int:
         self.root.mkdir(parents=True, exist_ok=True)
