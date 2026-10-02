@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.model import (
     Asset,
@@ -156,6 +157,10 @@ class Repository(Protocol):
     def find_asset_id_by_hash(self, content_hash: str) -> int | None: ...
     def is_purged_hash(self, content_hash: str) -> bool:
         """True if this content was purged from the library (it must not come back)."""
+        ...
+
+    def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
+        """See ``ports.upload.LibraryIndex``: what this viewer already has."""
         ...
 
     def add_asset(self, asset: NewAsset, imported_at: datetime) -> int: ...

@@ -5,11 +5,12 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 
 from photo_assistant.api.services import Services
-from photo_assistant.domain.access import Level, User, Viewer
+from photo_assistant.domain.access import Level, Role, User, Viewer
 from photo_assistant.domain.model import Source
 from photo_assistant.ports.library import AssetView
 
 SESSION_COOKIE = "pa_session"
+_BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
 def get_services(request: Request) -> Services:
@@ -30,6 +31,76 @@ def current_user(request: Request, services: ServicesDep) -> User:
 
 
 CurrentUser = Annotated[User, Depends(current_user)]
+
+
+def _device_user(services: Services, authorization: str) -> User:
+    scheme, _, token = authorization.partition(" ")
+    user_id = (
+        services.integrations.devices.authenticate(token.strip())
+        if scheme.lower() == "bearer"
+        else None
+    )
+    user = services.accounts.get_user(user_id) if user_id is not None else None
+    if user is None or user.disabled:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "device token not valid (revoked, mistyped, or its account is disabled)",
+            headers=_BEARER_CHALLENGE,
+        )
+    return user
+
+
+def session_or_device_user(request: Request, services: ServicesDep) -> User:
+    """The session cookie, or ``Authorization: Bearer <device token>`` (uploads, hash check).
+    A presented token must be valid: it never falls back to the cookie. Fails closed."""
+    authorization = request.headers.get("authorization")
+    if authorization is not None:
+        return _device_user(services, authorization)
+    token = request.cookies.get(SESSION_COOKIE)
+    user = services.accounts.authenticate(token) if token else None
+    if user is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "sign in, or send a device token",
+            headers=_BEARER_CHALLENGE,
+        )
+    return user
+
+
+SessionOrDeviceUser = Annotated[User, Depends(session_or_device_user)]
+
+
+def session_only_user(request: Request, user: CurrentUser) -> User:
+    """Managing devices needs a signed-in browser; a device token can't mint more tokens."""
+    if request.headers.get("authorization") is not None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "sign in to manage devices (device tokens can't)"
+        )
+    return user
+
+
+SessionOnlyUser = Annotated[User, Depends(session_only_user)]
+
+
+def require_not_guest(user: User) -> User:
+    """Guests view and download; they never upload, create, rename or edit anything."""
+    if user.role is Role.GUEST:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "guests can view and download, not change anything"
+        )
+    return user
+
+
+def member_user(user: CurrentUser) -> User:
+    return require_not_guest(user)
+
+
+def uploader_user(user: SessionOrDeviceUser) -> User:
+    return require_not_guest(user)
+
+
+MemberUser = Annotated[User, Depends(member_user)]
+UploaderUser = Annotated[User, Depends(uploader_user)]
 
 
 def current_viewer(user: CurrentUser) -> Viewer:

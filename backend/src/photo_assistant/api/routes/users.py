@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from photo_assistant.api.deps import ADMIN_ONLY, CurrentUser, ServicesDep
+from photo_assistant.api.deps import ADMIN_ONLY, MemberUser, ServicesDep
 from photo_assistant.api.schemas import DirectoryEntry, NewUser, UserOut, UserPatchIn
 from photo_assistant.app.accounts import (
     AccountError,
@@ -17,11 +17,9 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 @router.get("/directory")
-def directory(services: ServicesDep, user: CurrentUser) -> list[DirectoryEntry]:
+def directory(services: ServicesDep, user: MemberUser) -> list[DirectoryEntry]:
     """Names to share albums with (v1.1): any member sees the active accounts, an admin sees
     every account. Ids and display names only; guests can't share, so they get none."""
-    if user.role is Role.GUEST:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "guests can't share albums")
     everyone = services.accounts.list_users()
     shown = everyone if user.role is Role.ADMIN else [u for u in everyone if not u.disabled]
     return [DirectoryEntry(id=u.id, display_name=u.display_name) for u in shown]

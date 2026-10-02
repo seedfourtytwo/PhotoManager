@@ -1,5 +1,6 @@
 """UploadInbox and DeviceTokens with a real temp-folder spool and in-memory fakes."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -9,10 +10,12 @@ import pytest
 from photo_assistant.adapters.upload_spool import DiskUploadSpool
 from photo_assistant.app.devices import DeviceTokens, hash_token
 from photo_assistant.app.upload import UploadInbox, UploadOutcome, UploadSettings
+from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.model import Source
 from photo_assistant.ports.upload import Device, SpooledUpload
 from tests.factories import NOW
 
+ME = Viewer(7, Role.MEMBER)
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"pixels" * 10
 
 
@@ -26,8 +29,8 @@ class FakeLibrary:
     known: dict[str, int] = field(default_factory=dict)
     jobs: list[tuple[str, dict[str, object]]] = field(default_factory=list)
 
-    def find_asset_id_by_hash(self, content_hash: str) -> int | None:
-        return self.known.get(content_hash)
+    def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
+        return {h: self.known[h] for h in hashes if h in self.known}
 
     def enqueue(self, kind: str, payload: dict[str, object]) -> int:
         self.jobs.append((kind, payload))
@@ -73,7 +76,7 @@ def _spooled(world: World, content: bytes) -> SpooledUpload:
 
 
 def test_a_photo_lands_in_the_users_inbox_under_the_month(world: World) -> None:
-    result = world.use_case.accept(7, "IMG_1.JPG", _spooled(world, JPEG))
+    result = world.use_case.accept(ME, "IMG_1.JPG", _spooled(world, JPEG))
     assert result.outcome is UploadOutcome.STORED
     assert result.stored_as == "2026-09/IMG_1.JPG"
     assert (world.inbox_root / "7" / "2026-09" / "IMG_1.JPG").read_bytes() == JPEG
@@ -82,7 +85,7 @@ def test_a_photo_lands_in_the_users_inbox_under_the_month(world: World) -> None:
 
 def test_finishing_a_batch_enqueues_one_import_of_the_inbox(world: World) -> None:
     results = [
-        world.use_case.accept(7, f"{n}.jpg", _spooled(world, JPEG + bytes([n]))) for n in (1, 2)
+        world.use_case.accept(ME, f"{n}.jpg", _spooled(world, JPEG + bytes([n]))) for n in (1, 2)
     ]
     job = world.use_case.finish_batch(7, results)
     assert job == 1
@@ -91,13 +94,13 @@ def test_finishing_a_batch_enqueues_one_import_of_the_inbox(world: World) -> Non
 
 
 def test_nothing_stored_means_nothing_to_import(world: World) -> None:
-    result = world.use_case.accept(7, "x.jpg", _spooled(world, b"not a photo"))
+    result = world.use_case.accept(ME, "x.jpg", _spooled(world, b"not a photo"))
     assert world.use_case.finish_batch(7, [result]) is None
     assert world.library.jobs == []
 
 
 def test_non_photos_are_rejected_by_content_and_removed(world: World) -> None:
-    result = world.use_case.accept(7, "fake.jpg", _spooled(world, b"<html>hello</html>"))
+    result = world.use_case.accept(ME, "fake.jpg", _spooled(world, b"<html>hello</html>"))
     assert result.outcome is UploadOutcome.REJECTED
     assert result.reason is not None and "not a photo" in result.reason
     assert list(world.tmp.iterdir()) == []
@@ -107,7 +110,7 @@ def test_non_photos_are_rejected_by_content_and_removed(world: World) -> None:
 def test_photos_already_in_the_library_are_not_stored_again(world: World) -> None:
     spooled = _spooled(world, JPEG)
     world.library.known[spooled.content_hash] = 55
-    result = world.use_case.accept(7, "IMG_1.JPG", spooled)
+    result = world.use_case.accept(ME, "IMG_1.JPG", spooled)
     assert (result.outcome, result.asset_id) == (UploadOutcome.DUPLICATE, 55)
     assert list(world.tmp.iterdir()) == []
 
@@ -121,14 +124,14 @@ def test_too_large_is_reported_as_a_rejection(world: World) -> None:
 def test_missing_lists_only_hashes_not_in_the_library(world: World) -> None:
     known, unknown = "a" * 64, "b" * 64
     world.library.known[known] = 1
-    assert world.use_case.missing([known, unknown, unknown]) == [unknown]
+    assert world.use_case.missing(ME, [known, unknown, unknown]) == [unknown]
 
 
 def test_missing_refuses_malformed_or_too_many_hashes(world: World) -> None:
     with pytest.raises(ValueError, match="not a content hash"):
-        world.use_case.missing(["xyz"])
+        world.use_case.missing(ME, ["xyz"])
     with pytest.raises(ValueError, match="at most"):
-        world.use_case.missing(["a" * 64] * 5001)
+        world.use_case.missing(ME, ["a" * 64] * 5001)
 
 
 # --- device tokens ---------------------------------------------------------------------------

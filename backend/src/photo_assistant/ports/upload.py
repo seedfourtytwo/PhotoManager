@@ -1,11 +1,12 @@
 """Ports for uploads from phones and browsers into a user's inbox source."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.model import Source
 
 
@@ -46,7 +47,11 @@ class UploadSpool(Protocol):
 class LibraryIndex(Protocol):
     """The two things uploads need from the library (the Repository satisfies it)."""
 
-    def find_asset_id_by_hash(self, content_hash: str) -> int | None: ...
+    def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
+        """Of ``hashes``, the ones this viewer already has: the photo's id if they may see it
+        (in the trash too), None if it was purged. Hashes left out are missing for them; the
+        id of a photo they can't see is never returned."""
+        ...
 
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...
 

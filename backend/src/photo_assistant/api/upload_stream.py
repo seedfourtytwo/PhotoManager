@@ -10,6 +10,7 @@ from typing import Any
 from python_multipart.multipart import parse_options_header
 
 from photo_assistant.app.upload import UploadInbox, UploadOutcome, UploadResult
+from photo_assistant.domain.access import Viewer
 from photo_assistant.ports.upload import SpoolWriter, UploadTooLargeError
 
 FALLBACK_NAME = "upload"
@@ -28,9 +29,9 @@ def part_filename(headers: dict[bytes, bytes]) -> str | None:
 
 
 class UploadReceiver:
-    def __init__(self, upload: UploadInbox, user_id: int, max_files: int) -> None:
+    def __init__(self, upload: UploadInbox, viewer: Viewer, max_files: int) -> None:
         self._upload = upload
-        self._user_id = user_id
+        self._viewer = viewer
         self._max_files = max_files
         self.results: list[UploadResult] = []
         self.complete = False
@@ -98,7 +99,7 @@ class UploadReceiver:
             return
         spooled = self._writer.finish()
         self._writer = None
-        self.results.append(self._upload.accept(self._user_id, self._name, spooled))
+        self.results.append(self._upload.accept(self._viewer, self._name, spooled))
 
     def _end(self) -> None:
         self.complete = True

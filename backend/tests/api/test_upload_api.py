@@ -1,7 +1,7 @@
-"""Upload, hash check and device-token routes through FastAPI (streamed multipart parsing).
+"""Upload, hash check and device-token routes through the real app (streamed multipart).
 
-Sessions belong to the core auth work; here a test hook maps an ``X-Test-User`` header to a
-user id, exactly where the real session lookup will plug in (docs/wiring/ai-sources.md).
+Users sign in with real sessions; ``_as(n)`` is the session cookie of user ``n`` (1 is the
+admin). Device tokens go through the same single auth dependency (api/deps.py).
 """
 
 from collections.abc import Iterator
@@ -10,15 +10,15 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.filesystem import Blake3Hasher
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from photo_assistant.api.deps import SESSION_COOKIE
 from photo_assistant.api.integration_settings import IntegrationSettings
-from photo_assistant.api.integrations import Integrations, build_integrations
-from photo_assistant.api.routes import upload as upload_routes
-from photo_assistant.domain.model import ImportReport, RunStatus
+from photo_assistant.api.integrations import Integrations
+from photo_assistant.api.main import create_app
+from tests.api.conftest import BASE, PASSWORD, make_settings, services_of
 from tests.factories import NOW, new_asset
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "photos"
@@ -32,54 +32,53 @@ class FixedClock:
         return NOW
 
 
-class StubImporter:
-    def run(self, source_id: int) -> tuple[int, ImportReport]:
-        return 1, ImportReport(source_id, RunStatus.DONE)
-
-
-def _session_hook(request: Request) -> int | None:
-    user = request.headers.get("x-test-user")
-    return int(user) if user else None
-
-
 @dataclass
 class World:
-    client: TestClient
+    client: TestClient  # no cookies of its own: each request says who it is
     repo: SqliteRepository
     integrations: Integrations
     data: Path
+    sessions: dict[int, str]
 
 
 @pytest.fixture
 def world(tmp_path: Path) -> Iterator[World]:
     data = tmp_path / "data"
-    conn = open_database(tmp_path / "library.db")
-    repo = SqliteRepository(conn)
-    for user_id in (1, 2, 4):  # inboxes belong to accounts (core's user table)
-        conn.execute(
-            "INSERT INTO user (id, username, display_name, password_hash, role) "
-            "VALUES (?, ?, ?, 'x', 'member')",
-            (user_id, f"user{user_id}", f"User {user_id}"),
+    settings = make_settings(data, integrations=IntegrationSettings(upload_max_mb=0.01))
+    app = create_app(settings)
+    with TestClient(app, base_url=BASE) as admin:
+        admin.post(
+            "/api/setup", json={"username": "u1", "display_name": "U1", "password": PASSWORD}
         )
-    integrations = build_integrations(
-        data_root=data,
-        settings=IntegrationSettings(upload_max_mb=0.01),
-        conn=conn,
-        repo=repo,
-        importer=StubImporter(),
-        clock=FixedClock(),
-    )
-    app = FastAPI()
-    app.include_router(upload_routes.router)
-    app.state.integrations = integrations
-    app.state.session_user_hook = _session_hook
-    with TestClient(app, base_url="http://127.0.0.1") as client:
-        yield World(client, repo, integrations, data)
-    conn.close()
+        sessions = {1: admin.cookies[SESSION_COOKIE]}
+        for n in (2, 3, 4):
+            body = {"username": f"u{n}", "display_name": f"U{n}", "password": PASSWORD}
+            assert admin.post("/api/users", json=body | {"role": "member"}).status_code == 201
+            other = TestClient(app, base_url=BASE)
+            assert other.post("/api/auth/login", json={"username": f"u{n}", "password": PASSWORD})
+            sessions[n] = other.cookies[SESSION_COOKIE]
+        services = services_of(admin)
+        services.integrations.upload._clock = FixedClock()  # type: ignore[attr-defined]
+        yield World(
+            TestClient(app, base_url=BASE),
+            services.repo,
+            services.integrations,
+            data,
+            sessions,
+        )
+
+
+_SESSIONS: dict[int, str] = {}
+
+
+@pytest.fixture(autouse=True)
+def _remember_sessions(world: World) -> None:
+    _SESSIONS.clear()
+    _SESSIONS.update(world.sessions)
 
 
 def _as(user: int) -> dict[str, str]:
-    return {"X-Test-User": str(user)}
+    return {"Cookie": f"{SESSION_COOKIE}={_SESSIONS[user]}"}
 
 
 def _upload(world: World, files: list[tuple[str, bytes]], headers: dict[str, str]) -> dict:  # type: ignore[type-arg]
@@ -140,7 +139,9 @@ def test_path_traversal_in_file_names_is_neutralised(
     assert body["files"][0]["stored_as"] == f"{MONTH}/{stored}"
     assert _inbox_files(world, 1) == {f"{MONTH}/{stored}"}
     written = {
-        p for p in world.data.parent.rglob("*") if p.is_file() and "library.db" not in p.name
+        p
+        for p in world.data.parent.rglob("*")
+        if p.is_file() and "library.db" not in p.name and p.parent.name != "logs"
     }
     assert written == {world.data / "inbox" / "1" / MONTH / stored}
 
@@ -309,19 +310,6 @@ def test_bad_device_names_are_422(world: World) -> None:
     assert response.status_code == 422
 
 
-def test_without_a_session_hook_only_tokens_work(tmp_path: Path, world: World) -> None:
-    _, token = _new_token(world)
-    app = FastAPI()
-    app.include_router(upload_routes.router)
-    app.state.integrations = world.integrations
-    client = TestClient(app, base_url="http://127.0.0.1")
-    assert client.get("/api/devices", headers=_as(1)).status_code == 401
-    ok = client.post(
-        "/api/upload/check", json={"hashes": []}, headers={"Authorization": f"Bearer {token}"}
-    )
-    assert ok.status_code == 200
-
-
 def test_a_multipart_type_without_boundary_is_a_bad_request(world: World) -> None:
     headers = {**_as(1), "Content-Type": "multipart/form-data"}
     assert world.client.post("/api/upload", content=b"x", headers=headers).status_code == 400
@@ -341,11 +329,11 @@ def test_photos_stored_before_a_failure_are_still_queued_for_import(
     real_accept = world.integrations.upload.accept
     calls = []
 
-    def accept_then_fail(user_id: int, name: str, spooled):  # type: ignore[no-untyped-def]
+    def accept_then_fail(viewer, name: str, spooled):  # type: ignore[no-untyped-def]
         calls.append(name)
         if len(calls) > 1:
             raise OSError("disk full")
-        return real_accept(user_id, name, spooled)
+        return real_accept(viewer, name, spooled)
 
     monkeypatch.setattr(world.integrations.upload, "accept", accept_then_fail)
     files = [("file", ("a.jpg", JPEG)), ("file", ("b.png", PNG))]
@@ -353,3 +341,17 @@ def test_photos_stored_before_a_failure_are_still_queued_for_import(
         world.client.post("/api/upload", files=files, headers=_as(1))
     assert _inbox_files(world, 1) == {f"{MONTH}/a.jpg"}
     assert len(world.repo.list_jobs()) == 1
+
+
+def test_guests_are_refused_and_a_disabled_accounts_token_stops_working(world: World) -> None:
+    """One dependency (session or device token) for every upload route, failing closed (B18)."""
+    _, token = _new_token(world, user=4)
+    bearer = {"Authorization": f"Bearer {token}"}
+    admin = _as(1)
+    assert world.client.patch("/api/users/3", json={"role": "guest"}, headers=admin).is_success
+    guest = world.client.post("/api/upload/check", json={"hashes": []}, headers=_as(3))
+    assert guest.status_code == 403
+    assert world.client.post("/api/upload/check", json={"hashes": []}, headers=bearer).is_success
+    assert world.client.patch("/api/users/4", json={"disabled": True}, headers=admin).is_success
+    disabled = world.client.post("/api/upload/check", json={"hashes": []}, headers=bearer)
+    assert disabled.status_code == 401

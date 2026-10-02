@@ -12,6 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
+from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.uploads import (
     is_content_hash,
     numbered_names,
@@ -75,18 +76,24 @@ class UploadInbox:
         """A writer for the next file; its ``write`` enforces the size limit."""
         return self._spool.open(self._settings.max_bytes)
 
-    def accept(self, user_id: int, client_name: str, spooled: SpooledUpload) -> UploadResult:
+    def accept(self, viewer: Viewer, client_name: str, spooled: SpooledUpload) -> UploadResult:
+        """Store a received photo in the uploader's inbox, unless *they* already have it.
+
+        A photo that exists but is hidden from them is stored like a new one: the inbox import
+        then links the existing library photo to their inbox source (one asset, no second
+        library file), which is how they gain access to it (QA A7)."""
         digest = spooled.content_hash
         ext = sniff_image_type(spooled.head)
         if ext is None:
             self._spool.discard(spooled)
             return UploadResult(client_name, UploadOutcome.REJECTED, reason=NOT_A_PHOTO)
-        known = self._library.find_asset_id_by_hash(digest)
-        if known is not None:
+        present = self._library.hashes_present(viewer, [digest])
+        if digest in present:
             self._spool.discard(spooled)
             return UploadResult(
-                client_name, UploadOutcome.DUPLICATE, content_hash=digest, asset_id=known
+                client_name, UploadOutcome.DUPLICATE, content_hash=digest, asset_id=present[digest]
             )
+        user_id = viewer.user_id
         month = self._clock.now().strftime("%Y-%m")
         name = safe_upload_name(client_name, ext)
         stored = self._spool.commit(
@@ -111,15 +118,17 @@ class UploadInbox:
         source = self._inbox.ensure_inbox_source(user_id, str(self._user_folder(user_id)))
         return self._library.enqueue(self._settings.import_job_kind, {"source_id": source.id})
 
-    def missing(self, hashes: Sequence[str]) -> list[str]:
-        """Of these content hashes, the ones the library doesn't have (in order, no repeats)."""
+    def missing(self, viewer: Viewer, hashes: Sequence[str]) -> list[str]:
+        """Of these content hashes, the ones this viewer doesn't have (in order, no repeats).
+        Purged photos count as present: the phone must not send them again and again."""
         if len(hashes) > self._settings.max_check_hashes:
             raise ValueError(f"send at most {self._settings.max_check_hashes} hashes at a time")
         for value in hashes:
             if not is_content_hash(value):
                 raise ValueError(f"not a content hash (64 lowercase hex characters): {value!r}")
-        unique = dict.fromkeys(hashes)
-        return [h for h in unique if self._library.find_asset_id_by_hash(h) is None]
+        unique = list(dict.fromkeys(hashes))
+        present = self._library.hashes_present(viewer, unique)
+        return [h for h in unique if h not in present]
 
     def _user_folder(self, user_id: int) -> Path:
         return self._root / str(int(user_id))

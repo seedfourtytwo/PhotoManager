@@ -1,82 +1,25 @@
 """Uploads into the caller's inbox, the "what's new?" hash check, and device tokens.
 
 Authentication (api-v1 conventions): the browser's session cookie, or
-``Authorization: Bearer <device token>`` for clients like Apple Shortcuts. A device token may
-upload and check, never manage devices. Cookie sessions come from the core auth module through
-``app.state.session_user_hook`` (docs/wiring/ai-sources.md); ``app.state.uploader_hook`` then
-says whether that account may upload at all (core roles: guests view and download only).
+``Authorization: Bearer <device token>`` for clients like Apple Shortcuts, resolved by one
+dependency in ``api/deps.py`` (fails closed; guests 403). A device token may upload and check,
+never manage devices.
 """
 
-from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import MultipartParser, parse_options_header
 from starlette.concurrency import run_in_threadpool
 
-from photo_assistant.api.integrations import IntegrationsDep
+from photo_assistant.api.deps import ServicesDep, SessionOnlyUser, UploaderUser
 from photo_assistant.api.upload_stream import UploadReceiver
+from photo_assistant.domain.access import Viewer
 from photo_assistant.ports.upload import Device
 
 router = APIRouter(prefix="/api", tags=["upload"])
-
-SessionHook = Callable[[Request], int | None]
-# user id -> None (no such active account), False (may not upload), True (may upload)
-UploaderHook = Callable[[int], bool | None]
-_BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
-
-
-# --- authentication --------------------------------------------------------------------------
-
-
-def session_user_id(request: Request) -> int | None:
-    """The signed-in user of the session cookie, via the hook the integrator installs."""
-    hook: SessionHook | None = getattr(request.app.state, "session_user_hook", None)
-    return hook(request) if hook is not None else None
-
-
-SessionUser = Annotated[int | None, Depends(session_user_id)]
-
-
-def _unauthorized(detail: str) -> HTTPException:
-    return HTTPException(status.HTTP_401_UNAUTHORIZED, detail, headers=_BEARER_CHALLENGE)
-
-
-def _may_upload(request: Request, user_id: int) -> int:
-    hook: UploaderHook | None = getattr(request.app.state, "uploader_hook", None)
-    allowed = True if hook is None else hook(user_id)
-    if allowed is None:
-        raise _unauthorized("this account is disabled")
-    if not allowed:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "guests can view and download, not upload")
-    return user_id
-
-
-def current_user_id(request: Request, integrations: IntegrationsDep, session: SessionUser) -> int:
-    """Device token if one is presented (and then it must be valid), else the session."""
-    header = request.headers.get("authorization")
-    if header is not None:
-        scheme, _, token = header.partition(" ")
-        user = integrations.devices.authenticate(token.strip())
-        if scheme.lower() != "bearer" or user is None:
-            raise _unauthorized("device token not valid (revoked or mistyped)")
-        return _may_upload(request, user)
-    if session is None:
-        raise _unauthorized("sign in, or send a device token")
-    return _may_upload(request, session)
-
-
-def session_user_required(request: Request, session: SessionUser) -> int:
-    if request.headers.get("authorization") is not None or session is None:
-        raise _unauthorized("sign in to manage devices (device tokens can't)")
-    return session
-
-
-CurrentUser = Annotated[int, Depends(current_user_id)]
-SessionOnlyUser = Annotated[int, Depends(session_user_required)]
 
 
 # --- schemas ---------------------------------------------------------------------------------
@@ -166,17 +109,16 @@ async def _receive(request: Request, receiver: UploadReceiver, boundary: bytes) 
 
 
 @router.post("/upload")
-async def upload(
-    request: Request, user_id: CurrentUser, integrations: IntegrationsDep
-) -> UploadOut:
+async def upload(request: Request, user: UploaderUser, services: ServicesDep) -> UploadOut:
+    integrations = services.integrations
     boundary = _boundary(request.headers.get("content-type", ""))
-    receiver = UploadReceiver(integrations.upload, user_id, integrations.upload_max_files)
+    receiver = UploadReceiver(integrations.upload, Viewer.of(user), integrations.upload_max_files)
     try:
         await _receive(request, receiver, boundary)
     finally:
         # files already stored in the inbox are valid photos: always queue their import
         job_id = await run_in_threadpool(
-            integrations.upload.finish_batch, user_id, receiver.results
+            integrations.upload.finish_batch, user.id, receiver.results
         )
     files = [
         UploadedFile(
@@ -193,33 +135,31 @@ async def upload(
 
 
 @router.post("/upload/check")
-def check(body: CheckIn, user_id: CurrentUser, integrations: IntegrationsDep) -> CheckOut:
+def check(body: CheckIn, user: UploaderUser, services: ServicesDep) -> CheckOut:
+    """The hashes *this user* lacks: purged photos count as present; photos that exist but
+    are hidden from them are missing (uploading links them to their inbox)."""
     try:
-        return CheckOut(missing=integrations.upload.missing(body.hashes))
+        return CheckOut(missing=services.integrations.upload.missing(Viewer.of(user), body.hashes))
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
 
 @router.get("/devices")
-def list_devices(user_id: SessionOnlyUser, integrations: IntegrationsDep) -> list[DeviceOut]:
-    return [DeviceOut.of(d) for d in integrations.devices.list(user_id)]
+def list_devices(user: SessionOnlyUser, services: ServicesDep) -> list[DeviceOut]:
+    return [DeviceOut.of(d) for d in services.integrations.devices.list(user.id)]
 
 
 @router.post("/devices", status_code=status.HTTP_201_CREATED)
-def create_device(
-    body: DeviceIn, user_id: SessionOnlyUser, integrations: IntegrationsDep
-) -> NewDeviceOut:
+def create_device(body: DeviceIn, user: SessionOnlyUser, services: ServicesDep) -> NewDeviceOut:
     try:
-        device, token = integrations.devices.create(user_id, body.name, body.platform)
+        device, token = services.integrations.devices.create(user.id, body.name, body.platform)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return NewDeviceOut(device=DeviceOut.of(device), token=token)
 
 
 @router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_device(
-    device_id: int, user_id: SessionOnlyUser, integrations: IntegrationsDep
-) -> Response:
-    if not integrations.devices.revoke(user_id, device_id):
+def revoke_device(device_id: int, user: SessionOnlyUser, services: ServicesDep) -> Response:
+    if not services.integrations.devices.revoke(user.id, device_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

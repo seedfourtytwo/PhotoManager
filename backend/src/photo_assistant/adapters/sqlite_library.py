@@ -420,6 +420,27 @@ class LibraryMixin(SqliteBase):
                 )
         return len(asset_ids)
 
+    def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
+        """Uploads (QA A7): visible photos by id (trash included), purged hashes as None."""
+        if not hashes:
+            return {}
+        marks = ", ".join("?" for _ in hashes)
+        present: dict[str, int | None] = {
+            r[0]: None
+            for r in self._all(
+                f"SELECT content_hash FROM purged_hash WHERE content_hash IN ({marks})",
+                tuple(hashes),
+            )
+        }
+        rows = self._all(
+            f"SELECT id, content_hash FROM asset WHERE content_hash IN ({marks})", tuple(hashes)
+        )
+        ids = [int(r["id"]) for r in rows]
+        seen = {v.id for v in self.views_by_ids(viewer, ids)}
+        seen |= {v.id for v in self.views_by_ids(viewer, ids, trashed=True)}
+        present |= {r["content_hash"]: int(r["id"]) for r in rows if r["id"] in seen}
+        return present
+
     def set_private(self, asset_id: int, private: bool, by: int) -> None:
         """Mark (or unmark) a photo private on behalf of ``by``, the marker (QA A3)."""
         self._write(

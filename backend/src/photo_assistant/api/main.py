@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -12,7 +12,6 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from photo_assistant import __version__
-from photo_assistant.api.deps import SESSION_COOKIE
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.routes import (
     albums,
@@ -56,18 +55,9 @@ def _mount_web(app: FastAPI, web_dir: Path | None) -> None:
 
 
 def _install_services(app: FastAPI, services: Services) -> None:
-    """Expose the services, plus the hooks that tie the integrations to core's accounts."""
-
-    def session_user_id(request: Request) -> int | None:
-        token = request.cookies.get(SESSION_COOKIE)
-        user = services.accounts.authenticate(token) if token else None
-        return None if user is None else user.id
-
     app.state.services = services
     app.state.integrations = services.integrations
     app.state.ops = services.ops
-    app.state.session_user_hook = session_user_id
-    app.state.uploader_hook = services.may_upload
 
 
 def _check_test_mode(settings: Settings) -> None:

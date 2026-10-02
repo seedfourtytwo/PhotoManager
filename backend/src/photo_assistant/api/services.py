@@ -34,7 +34,6 @@ from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.worker import Worker
-from photo_assistant.domain.access import Role
 
 SCAN_JOB = SCAN_JOB_KIND  # "scan_source": one handler pulls rclone sources, then imports
 
@@ -62,13 +61,6 @@ class Services:
         """After an import: places and groups for whatever is new (both are idempotent)."""
         self.repo.enqueue_once(GEOCODE_JOB)
         self.repo.enqueue_once(GROUP_JOB)
-
-    def may_upload(self, user_id: int) -> bool | None:
-        """None: no such active account; False: a guest (view + download only)."""
-        user = self.repo.get_user(user_id)
-        if user is None or user.disabled:
-            return None
-        return user.role is not Role.GUEST
 
     def start_background(self) -> None:
         """Server only (never the CLI): the job worker and the periodic housekeeping."""

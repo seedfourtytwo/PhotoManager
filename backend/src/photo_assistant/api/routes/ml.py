@@ -15,9 +15,9 @@ from pydantic import BaseModel, Field
 from photo_assistant.api.deps import (
     ADMIN_ONLY,
     LOGGED_IN,
-    CurrentUser,
     ServicesDep,
     ViewerDep,
+    member_user,
     require_view,
 )
 from photo_assistant.api.filters import FilterDep, checked
@@ -25,7 +25,7 @@ from photo_assistant.api.schemas import AssetOut
 from photo_assistant.api.services import Services
 from photo_assistant.app.people import FaceNotFoundError, PersonNotFoundError
 from photo_assistant.app.search import NotIndexedError, SearchUnavailableError, parse_query
-from photo_assistant.domain.access import Role, User, Viewer
+from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.search_query import InvalidFacetError, ParsedQuery, with_facets
 from photo_assistant.ports.ml import PersonSummary, StoredFace
 
@@ -148,14 +148,8 @@ class BackfillOut(BaseModel):
 # --- helpers ---------------------------------------------------------------------------------
 
 
-def editor_role(user: CurrentUser) -> User:
-    """Naming and regrouping people changes what others see: members and admins only."""
-    if user.role is Role.GUEST:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "guests can view and download only")
-    return user
-
-
-NOT_GUEST = [Depends(editor_role)]
+# Naming and regrouping people changes what others see: members and admins only.
+NOT_GUEST = [Depends(member_user)]
 
 
 def _visible(services: Services, viewer: Viewer) -> list[int]:

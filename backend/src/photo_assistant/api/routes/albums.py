@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Response, status
 
 from photo_assistant.adapters.sqlite_access import UnknownUserError
-from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep
+from photo_assistant.api.deps import LOGGED_IN, MemberUser, ServicesDep, ViewerDep
 from photo_assistant.api.schemas import (
     AlbumDetail,
     AlbumIn,
@@ -17,7 +17,7 @@ from photo_assistant.api.schemas import (
     Member,
 )
 from photo_assistant.api.services import Services
-from photo_assistant.domain.access import AlbumRole, Role, Viewer, can_edit_album
+from photo_assistant.domain.access import AlbumRole, Viewer, can_edit_album
 from photo_assistant.ports.library import AlbumInfo
 
 router = APIRouter(prefix="/api/albums", tags=["albums"], dependencies=LOGGED_IN)
@@ -55,9 +55,9 @@ def list_albums(services: ServicesDep, viewer: ViewerDep) -> list[AlbumSummary]:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_album(services: ServicesDep, viewer: ViewerDep, body: AlbumIn) -> AlbumSummary:
-    if viewer.role is Role.GUEST:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "guests can't create albums")
+def create_album(
+    services: ServicesDep, viewer: ViewerDep, body: AlbumIn, user: MemberUser
+) -> AlbumSummary:
     now = services.clock.now()
     album_id = services.repo.create_album(viewer.user_id, body.title, body.description, now)
     ids = _visible_ids(services, viewer, body.asset_ids)

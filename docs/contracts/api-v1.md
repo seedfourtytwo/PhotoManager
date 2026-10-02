@@ -185,8 +185,8 @@ access `{everyone: null, users: [{owner, edit}]}`: **private to the uploader** u
 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
-| POST | `/api/upload` | session or device | multipart, any field name, many files | `{files: [{name, outcome: "stored"\|"duplicate"\|"rejected", stored_as, content_hash, asset_id, reason}], import_job_id\|null}`; `400` broken multipart, `415` not multipart |
-| POST | `/api/upload/check` | session or device | `{hashes: [blake3 hex]}` (≤ 5000) | `{missing: [...]}` |
+| POST | `/api/upload` | session or device | multipart, any field name, many files | `{files: [{name, outcome: "stored"\|"duplicate"\|"rejected", stored_as, content_hash, asset_id, reason}], import_job_id\|null}`; `400` broken multipart, `415` not multipart. `duplicate` = you already have it (or it was purged); `asset_id` is only ever the id of a photo you can see, else `null` (v1.2) |
+| POST | `/api/upload/check` | session or device | `{hashes: [blake3 hex]}` (≤ 5000) | `{missing: [...]}` — missing **for you** (v1.2): purged photos count as present; a photo that exists but is hidden from you is missing (uploading it links the existing photo to your inbox: one library copy, and you gain access through your inbox) |
 | GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, revoked}]` |
 | POST | `/api/devices` | session | `{name, platform: "ios"\|"android"\|"desktop"\|"other"}` | `201 {device, token}` (the token is shown once) |
 | DELETE | `/api/devices/{id}` | session | – | `204`; `404` if not yours |
