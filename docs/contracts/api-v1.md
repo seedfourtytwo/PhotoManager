@@ -149,7 +149,7 @@ renders via libvips with the edit recipe applied.
 
 | DELETE | `/api/assets` | `{ids}` | `{trashed}`; needs `edit` |
 |---|---|---|---|
-| GET | `/api/trash` | – | `AssetOut[] + trashed_at` |
+| GET | `/api/trash` | – | `AssetOut[] + trashed_at`. Their `/api/assets/{id}/thumb` and `/preview` keep working for whoever sees them here (v1.2); detail, original and downloads do not |
 | POST | `/api/trash/restore` | `{ids}` | `{restored}` |
 | POST | `/api/trash/empty` | `{ids?}` | `{purged}` (admin) — removes the library copy and derivatives; never touches sources. Only photos the caller sees in the trash are purged (v1.2); a photo restored meanwhile is kept |
 

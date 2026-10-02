@@ -364,3 +364,19 @@ def test_source_filter_and_file_name_search_only_use_sources_you_can_see(
         assert tom.get("/api/assets/facets", params=params).json()["total"] == 0, params
     by_admin = admin.get("/api/assets", params={"q": "secretname"}).json()["items"]
     assert [a["id"] for a in by_admin] == [world.ids["p1"]]
+
+
+def test_trashed_photos_keep_their_thumbnail_and_preview_for_those_who_see_them_in_the_trash(
+    world: World,
+) -> None:
+    """QA A10: the trash page showed broken images."""
+    admin, lea = world.clients["admin"], world.clients["lea"]
+    p1, p5 = world.ids["p1"], world.ids["p5"]
+    assert admin.request("DELETE", "/api/assets", json={"ids": [p1]}).json() == {"trashed": 1}
+    assert lea.request("DELETE", "/api/assets", json={"ids": [p5]}).json() == {"trashed": 1}
+    for kind in ("thumb", "preview"):
+        assert admin.get(f"/api/assets/{p1}/{kind}").status_code == 200, kind
+        assert lea.get(f"/api/assets/{p5}/{kind}").status_code == 200, kind
+        assert admin.get(f"/api/assets/{p5}/{kind}").status_code == 404, "lea's private photo"
+    assert admin.get(f"/api/assets/{p1}").status_code == 404, "still gone from the library"
+    assert admin.get(f"/api/assets/{p1}/original").status_code == 404

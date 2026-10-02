@@ -152,9 +152,20 @@ def _serve_webp(services: Services, view: AssetView, kind: str) -> Response:
     return FileResponse(path, media_type="image/webp", headers={"Cache-Control": IMMUTABLE})
 
 
+def _image_view(services: Services, viewer: Viewer, asset_id: int) -> AssetView:
+    """Thumbnails and previews also serve photos in the trash, to whoever sees them there
+    (QA A10: the trash page must show what it lists). Nothing else does."""
+    view = services.repo.get_view(viewer, asset_id) or services.repo.get_view(
+        viewer, asset_id, trashed=True
+    )
+    if view is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "photo not found")
+    return view
+
+
 @router.get("/{asset_id}/thumb")
 def thumb(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
-    return _serve_webp(services, require_view(services, viewer, asset_id), "thumb")
+    return _serve_webp(services, _image_view(services, viewer, asset_id), "thumb")
 
 
 @router.get("/{asset_id}/preview")
@@ -165,7 +176,7 @@ def preview(
     edit: Annotated[Literal["none"] | None, Query()] = None,
 ) -> Response:
     """``?edit=none`` (v1.1): the photo without its recipe, the editor's base image."""
-    view = require_view(services, viewer, asset_id)
+    view = _image_view(services, viewer, asset_id)
     if edit == "none":
         view = replace(view, recipe=None)
     return _serve_webp(services, view, "preview")
