@@ -40,7 +40,10 @@
 	{#if error}
 		<p class="quiet">{error}</p>
 	{:else if days && days.length === 0}
-		<p class="quiet">No photos match these filters.</p>
+		<div class="empty-state">
+			<p>No photos match these filters.</p>
+			<p>Loosen a filter, or <a href="/calendar">show every year</a>.</p>
+		</div>
 	{:else if days}
 		<CalendarHeatmap {days} {hrefFor} />
 	{:else}
@@ -50,6 +53,17 @@
 
 <style>
 	.page {
-		padding: 0 0.75rem 2rem;
+		padding: 0 var(--page-x) var(--s-6);
+	}
+	.page > p {
+		padding: var(--s-4) 0;
+	}
+	@media (max-width: 639px) {
+		.page {
+			padding: 0 var(--gutter) var(--s-6);
+		}
+		.page > :global(:not(header)) {
+			padding-inline: var(--s-2);
+		}
 	}
 </style>
