@@ -64,6 +64,31 @@ test-backend:
 test-web:
     cd web && pnpm test
 
+# E2E (Playwright, desktop 1440x900 + phone 390x844) against the REAL backend: a synthetic
+# library, a throw-away data root and a test-mode server on 127.0.0.1:8440. Never your library.
+e2e *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    server=""
+    trap '[ -n "$server" ] && kill "$server" 2>/dev/null; rm -rf "$tmp"' EXIT
+    echo "Synthetic library and seeded data root in $tmp …"
+    (cd backend && uv run python scripts/make_mock_library.py "$tmp/src" --count 150 --size 800 >/dev/null)
+    (cd backend && uv run python scripts/e2e_seed.py "$tmp/src" "$tmp/data" --scans "$tmp/scans")
+    (cd web && pnpm build >/dev/null)
+    web="$(cd web/build && pwd)"
+    (cd backend && PA_DATA_ROOT="$tmp/data" PA_TEST_MODE=1 PA_HOST=127.0.0.1 PA_PORT=8440 \
+        PA_ALLOWED_HOSTS='["127.0.0.1","localhost"]' PA_MIN_FREE_GB=0 PA_WEB_DIR="$web" \
+        PA_BACKUP_ENABLED=false exec uv run python -m photo_assistant >"$tmp/server.log" 2>&1) &
+    server=$!
+    for _ in $(seq 60); do curl -sf http://127.0.0.1:8440/api/health >/dev/null && break; sleep 0.5; done
+    cd web && E2E_BASE_URL=http://127.0.0.1:8440 E2E_RESET_URL=http://127.0.0.1:8440/__test/reset \
+        E2E_SCANS_DIR="$tmp/scans" pnpm exec playwright test {{args}}
+
+# The same E2E suite against the in-memory mock API (no backend needed).
+e2e-mock *args:
+    cd web && pnpm e2e {{args}}
+
 # Auto-fix formatting and simple lint issues.
 fmt:
     cd backend && uv run ruff format . && uv run ruff check --fix .

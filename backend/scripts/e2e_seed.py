@@ -101,8 +101,8 @@ def write_scans(scans: Path, sources: Path) -> None:
         image.save(scans / f"scan_{i + 1:03d}.jpg", quality=85, exif=exif)
     first_phone = sorted((sources / "phone").rglob("*.[jJ][pP][gG]"))[0]
     shutil.copy(first_phone, scans / f"copy of {first_phone.name}")
-    whole = (scans / "scan_001.jpg").read_bytes()
-    (scans / "broken.jpg").write_bytes(whole[: len(whole) // 3])
+    # a JPEG header and then noise: libvips decodes a merely truncated JPEG (greyed bottom)
+    (scans / "broken.jpg").write_bytes(b"\xff\xd8\xff\xe0" + rng.randbytes(2000))
     (scans / "IMG_0501.MOV").write_bytes(b"\x00\x00\x00\x18ftypqt  " + bytes(64))
 
 

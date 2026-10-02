@@ -1,5 +1,8 @@
 import { expect, expectAccessible, resetMock, signIn, test } from './helpers.ts';
 
+/** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
+const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
+
 test.beforeEach(async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/admin');
@@ -16,7 +19,7 @@ test('admin adds a folder, sees the import progress and every skip/failure reaso
 	await dialog.getByLabel('Folder path on the server').fill('/home/c/missing');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 	await expect(dialog.getByRole('alert')).toContainText('Folder not found');
-	await dialog.getByLabel('Folder path on the server').fill('/home/c/Scans');
+	await dialog.getByLabel('Folder path on the server').fill(SCANS);
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 
 	await expect(page.getByText(/working: \d running, \d queued/)).toBeVisible();
@@ -26,9 +29,10 @@ test('admin adds a folder, sees the import progress and every skip/failure reaso
 	});
 	await row.getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: 'Last import · Scans' });
-	await expect(report.getByText('file is corrupt: JPEG ends early')).toBeVisible();
-	await expect(report.getByText('video (not supported yet)')).toBeVisible();
-	await expect(report.getByText('same content as IMG_0001.JPG (Phone)')).toBeVisible();
+	// Every skip, failure and duplicate says why (wording differs between mock and server).
+	await expect(report.getByText(/file is corrupt|cannot decode|cannot read/)).toBeVisible();
+	await expect(report.getByText(/not supported yet/)).toBeVisible();
+	await expect(report.getByText(/same (content|photo)/)).toBeVisible();
 	await expectAccessible(page);
 });
 

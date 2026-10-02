@@ -178,13 +178,22 @@
 						class:chosen={chosen?.ids[0] === c.ids[0]}
 						stroke-width={1 / pxPerUnit}
 					/>
-					{#if c.ids.length > 1}
-						<text x={c.x + r + 3 / pxPerUnit} y={c.y} font-size={11 / pxPerUnit} class="n"
-							>{c.ids.length}</text
-						>
-					{/if}
 				</a>
 			{/each}
+			<!-- Counts go on top of every dot but never take a click (a neighbour's label could
+			     otherwise cover a small cluster); each link already says its count. -->
+			<g class="counts" aria-hidden="true">
+				{#each clusters as c (c.ids[0])}
+					{#if c.ids.length > 1}
+						<text
+							x={c.x + clusterRadius(c.ids.length, 2) / pxPerUnit + 3 / pxPerUnit}
+							y={c.y}
+							font-size={11 / pxPerUnit}
+							class="n">{c.ids.length}</text
+						>
+					{/if}
+				{/each}
+			</g>
 		</svg>
 	</div>
 
@@ -277,6 +286,9 @@
 	}
 	a:focus {
 		outline: none;
+	}
+	.counts {
+		pointer-events: none;
 	}
 	.n {
 		fill: var(--ink-2);
