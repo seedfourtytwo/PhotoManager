@@ -231,7 +231,13 @@
 	}
 </script>
 
-<svelte:window onscroll={schedule} onresize={schedule} />
+<svelte:window
+	onscroll={schedule}
+	onresize={() => {
+		band = null; // a new screen height: a new band
+		schedule();
+	}}
+/>
 
 <div
 	class="timeline"
