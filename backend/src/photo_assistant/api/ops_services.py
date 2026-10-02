@@ -16,7 +16,7 @@ from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
 from photo_assistant.api.settings import OpsSettings
-from photo_assistant.app.backup import BackupConfig, BackupService
+from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupService
 from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer
 from photo_assistant.app.periodic import Periodic, PeriodicTask
@@ -80,7 +80,11 @@ def build_ops_services(
     ``source_roots``: the library's source folders (backups may not overlap them)."""
     ops = ops or OpsSettings()
     backup, store = build_backup_service(data_root, ops, queue, source_roots, db)
-    tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, backup.run_due)]
+    # with a job queue (the server) the check only enqueues: backups run on the long-job lane
+    check: Callable[[], object] = (
+        (lambda: queue.enqueue_once(BACKUP_DUE_JOB)) if queue is not None else backup.run_due
+    )
+    tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, check)]
     return OpsServices(
         backup, store, Periodic([*(tasks if ops.backup_enabled else []), *housekeeping])
     )

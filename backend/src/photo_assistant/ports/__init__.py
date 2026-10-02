@@ -1,6 +1,6 @@
 """Protocol interfaces the app layer depends on. Adapters implement them; tests fake them."""
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -235,7 +235,17 @@ class Repository(SourceRegistry, Protocol):
         """Queue a payload-less job unless one of that kind is already waiting."""
         ...
 
-    def claim_next_job(self, now: datetime) -> Job | None: ...
+    def claim_next_job(
+        self,
+        now: datetime,
+        *,
+        only: Collection[str] | None = None,
+        excluding: Collection[str] = (),
+    ) -> Job | None:
+        """Atomically mark the oldest queued job running: only of the kinds in ``only`` (if
+        given), never of a kind in ``excluding`` (job lanes, B24)."""
+        ...
+
     def complete_job(self, job_id: int) -> None: ...
     def fail_job(self, job_id: int, error: str, retry: bool) -> None: ...
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]: ...

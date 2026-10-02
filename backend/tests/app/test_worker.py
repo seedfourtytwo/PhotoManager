@@ -115,3 +115,59 @@ def test_periodic_jobs_are_queued_once_per_interval(repo: SqliteRepository) -> N
 def test_enqueue_once_skips_a_waiting_duplicate(repo: SqliteRepository) -> None:
     assert repo.enqueue_once("geocode") is not None
     assert repo.enqueue_once("geocode") is None
+
+
+# --- B24: long jobs run on a lane of their own ---------------------------------------------------
+
+
+def test_a_long_job_does_not_starve_quick_ones(tmp_path: Path) -> None:
+    """A backup (minutes to hours) must not hold up previews and uploads behind it."""
+    from photo_assistant.app.worker import Lanes
+
+    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    backup_started, finish_backup = threading.Event(), threading.Event()
+    previews: list[object] = []
+
+    def long_backup(payload: dict[str, object]) -> None:
+        backup_started.set()
+        finish_backup.wait(10)
+
+    repo.enqueue("backup_run", {})
+    repo.enqueue("preview", {"asset_id": 1})
+    lanes = Lanes(
+        repo,
+        {"backup_run": long_backup, "preview": lambda p: previews.append(p["asset_id"])},
+        FixedClock(),
+        long_kinds={"backup_run"},
+        poll_seconds=0.01,
+    )
+    lanes.start()
+    try:
+        assert backup_started.wait(5)
+        deadline = threading.Event()
+        for _ in range(200):
+            if previews:
+                break
+            deadline.wait(0.01)
+        assert previews == [1], "the preview ran while the backup was still running"
+    finally:
+        finish_backup.set()
+        lanes.stop()
+    assert {j["kind"] for j in repo.list_jobs("done")} == {"backup_run", "preview"}
+    assert lanes.kinds == {"backup_run", "preview"}
+
+
+def test_run_until_idle_drains_every_lane(repo: SqliteRepository) -> None:
+    from photo_assistant.app.worker import Lanes
+
+    done: list[str] = []
+    repo.enqueue("backup_run", {})
+    repo.enqueue("preview", {})
+    lanes = Lanes(
+        repo,
+        {"backup_run": lambda p: done.append("backup"), "preview": lambda p: done.append("p")},
+        FixedClock(),
+        long_kinds={"backup_run"},
+    )
+    assert lanes.run_until_idle() == 2
+    assert sorted(done) == ["backup", "p"]

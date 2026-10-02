@@ -3,7 +3,7 @@
 import logging
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 
 from photo_assistant.domain.errors import DomainError
 from photo_assistant.ports import Clock, ImportBusyError, Repository
@@ -23,6 +23,9 @@ class Worker:
         max_attempts: int = 3,
         poll_seconds: float = 1.0,
         periodic: Mapping[str, float] | None = None,
+        only: Collection[str] | None = None,
+        excluding: Collection[str] = (),
+        name: str = "pa-worker",
     ) -> None:
         self._repo = repo
         self._handlers = dict(handlers)
@@ -33,6 +36,9 @@ class Worker:
         self._thread: threading.Thread | None = None
         self._periodic = dict(periodic or {})  # job kind -> seconds between runs
         self._last_queued: dict[str, float] = {}
+        self._only = None if only is None else frozenset(only)  # this lane's job kinds
+        self._excluding = frozenset(excluding)
+        self._name = name
 
     @property
     def kinds(self) -> set[str]:
@@ -49,7 +55,9 @@ class Worker:
 
     def run_once(self) -> bool:
         """Process one job. Returns False when the queue is empty."""
-        job = self._repo.claim_next_job(self._clock.now())
+        job = self._repo.claim_next_job(
+            self._clock.now(), only=self._only, excluding=self._excluding
+        )
         if job is None:
             return False
         handler = self._handlers.get(job.kind)
@@ -86,7 +94,7 @@ class Worker:
         if self.is_running:
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="pa-worker", daemon=True)
+        self._thread = threading.Thread(target=self._loop, name=self._name, daemon=True)
         self._thread.start()
 
     def stop(self, timeout: float = 10.0) -> None:
@@ -109,3 +117,50 @@ class Worker:
                 busy = False
             if not busy:
                 self._stop.wait(self._poll)
+
+
+class Lanes:
+    """Two workers on one queue (B24): long jobs (backups, restore tests, source scans with
+    rclone pulls) on a lane of their own, so previews and uploads never wait behind them."""
+
+    def __init__(
+        self,
+        repo: Repository,
+        handlers: Mapping[str, Handler],
+        clock: Clock,
+        *,
+        long_kinds: Collection[str],
+        poll_seconds: float = 1.0,
+    ) -> None:
+        self.long_kinds = frozenset(long_kinds)
+        quick = {k: h for k, h in handlers.items() if k not in self.long_kinds}
+        slow = {k: h for k, h in handlers.items() if k in self.long_kinds}
+        self.quick = Worker(
+            repo, quick, clock, poll_seconds=poll_seconds, excluding=self.long_kinds
+        )
+        self.long = Worker(
+            repo, slow, clock, poll_seconds=poll_seconds, only=self.long_kinds, name="pa-long-jobs"
+        )
+
+    @property
+    def kinds(self) -> set[str]:
+        return self.quick.kinds | self.long.kinds
+
+    def run_until_idle(self) -> int:
+        """Both lanes, until neither finds a job (follow-ups may cross lanes)."""
+        total = 0
+        while ran := self.quick.run_until_idle() + self.long.run_until_idle():
+            total += ran
+        return total
+
+    def start(self) -> None:
+        self.quick.start()
+        self.long.start()
+
+    def stop(self, timeout: float = 10.0) -> None:
+        self.quick.stop(timeout)
+        self.long.stop(timeout)
+
+    @property
+    def is_running(self) -> bool:
+        return self.quick.is_running or self.long.is_running

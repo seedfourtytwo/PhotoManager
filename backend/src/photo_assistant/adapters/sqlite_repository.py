@@ -4,7 +4,7 @@ connections live in ``sqlite_database``; ``open_database`` is re-exported here).
 import json
 import sqlite3
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -381,14 +381,27 @@ class SqliteRepository(
                 return None
             return self._write("INSERT INTO job (kind, payload_json) VALUES (?, '{}')", (kind,))
 
-    def claim_next_job(self, now: datetime) -> Job | None:
-        """Atomic across processes: one statement picks and marks the job."""
+    def claim_next_job(
+        self,
+        now: datetime,
+        *,
+        only: Collection[str] | None = None,
+        excluding: Collection[str] = (),
+    ) -> Job | None:
+        """Atomic across processes: one statement picks and marks the job (of a lane's kinds)."""
+        where, params = "status = 'queued'", [_iso(now)]
+        if only is not None:
+            where += f" AND kind IN ({', '.join('?' for _ in only)})"
+            params += list(only)
+        if excluding:
+            where += f" AND kind NOT IN ({', '.join('?' for _ in excluding)})"
+            params += list(excluding)
         with self._lock:  # a write (UPDATE … RETURNING): on the writer
             row = self._conn.execute(
-                """UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
-                   WHERE id = (SELECT id FROM job WHERE status = 'queued' ORDER BY id LIMIT 1)
-                   RETURNING id, kind, payload_json, attempts""",
-                (_iso(now),),
+                f"""UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
+                    WHERE id = (SELECT id FROM job WHERE {where} ORDER BY id LIMIT 1)
+                    RETURNING id, kind, payload_json, attempts""",
+                params,
             ).fetchone()
         if row is None:
             return None

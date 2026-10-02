@@ -24,6 +24,7 @@ from photo_assistant.api.ops_services import OpsServices, build_ops_services
 from photo_assistant.api.settings import Settings
 from photo_assistant.app.accounts import Accounts
 from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
+from photo_assistant.app.backup import LONG_JOBS
 from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import Editor
@@ -33,7 +34,7 @@ from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
-from photo_assistant.app.worker import Worker
+from photo_assistant.app.worker import Lanes
 
 
 @dataclass
@@ -42,7 +43,7 @@ class Services:
     repo: SqliteRepository
     store: DiskLibraryStore
     importer: ImportSource
-    worker: Worker
+    worker: Lanes
     exiftool: ExifToolReader
     accounts: Accounts
     editor: Editor
@@ -135,7 +136,7 @@ def build_services(settings: Settings) -> Services:
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
         db=db,
     )
-    worker = Worker(
+    worker = Lanes(
         repo,
         {
             # ML jobs read the preview, so they are planned once it exists
@@ -150,6 +151,9 @@ def build_services(settings: Settings) -> Services:
             **ops.backup.job_handlers(),
         },
         clock,
+        # backups, restore tests and source scans (rclone pulls, whole-folder imports) run on a
+        # lane of their own: previews, uploads and the rest never wait behind them (B24)
+        long_kinds={SCAN_JOB_KIND, *LONG_JOBS},
         poll_seconds=settings.worker_poll_seconds,
     )
     hasher = Argon2Hasher(settings.argon2_time_cost, settings.argon2_memory_kib)

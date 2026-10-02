@@ -193,3 +193,14 @@ def test_import_then_everything_downstream_runs(admin: TestClient, tmp_path: Pat
     jobs = services_of(admin).repo.list_jobs()
     assert {j["kind"] for j in jobs} >= {"scan_source", "preview", "embed_clip", "detect_faces"}
     assert all(j["status"] == "done" for j in jobs), jobs
+
+
+def test_due_backups_are_queued_for_the_long_lane_not_run_inline(admin: TestClient) -> None:
+    """B24: the periodic thread only enqueues; the long-job lane runs the backups."""
+    services = services_of(admin)
+    services.ops.periodic.tick()
+    queued = {j["kind"] for j in services.repo.list_jobs()}
+    assert "backup_due" in queued
+    assert {"backup_run", "backup_restore_test", "backup_due", "scan_source"} <= (
+        services.worker.long_kinds
+    )

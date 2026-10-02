@@ -134,3 +134,6 @@ class BackupStore(Protocol):
 
 class JobQueue(Protocol):
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...
+    def enqueue_once(self, kind: str) -> int | None:
+        """Queue a payload-less job unless one of that kind is already waiting."""
+        ...

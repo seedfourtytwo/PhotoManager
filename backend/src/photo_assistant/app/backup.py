@@ -48,6 +48,8 @@ log = logging.getLogger(__name__)
 
 BACKUP_JOB = "backup_run"
 RESTORE_TEST_JOB = "backup_restore_test"
+BACKUP_DUE_JOB = "backup_due"  # queued by the periodic check: runs every target that is due
+LONG_JOBS = frozenset({BACKUP_JOB, RESTORE_TEST_JOB, BACKUP_DUE_JOB})
 DB_SNAPSHOT_PATH = f"{DB_SNAPSHOT_DIR}/{DB_SNAPSHOT_FILE}"
 
 Handler = Callable[[dict[str, object]], object]
@@ -330,4 +332,5 @@ class BackupService:
         return {
             BACKUP_JOB: lambda payload: self.run_now(int(str(payload["target_id"]))),
             RESTORE_TEST_JOB: lambda payload: self.restore_test(int(str(payload["target_id"]))),
+            BACKUP_DUE_JOB: lambda payload: self.run_due(),
         }
