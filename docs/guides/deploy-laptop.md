@@ -17,7 +17,7 @@ uv tool install rust-just                                 # the `just` command (
 ## 2. Get the code and set it up
 
 ```bash
-git clone <repo-url> ~/photo-assistant && cd ~/photo-assistant
+git clone git@github.com:seedfourtytwo/PhotoManager.git ~/photo-assistant && cd ~/photo-assistant
 cp .env.example .env            # PA_DATA_ROOT is the only setting you must check
 just setup                      # installs everything, says what is missing
 just doctor                     # checklist: every line should be ok (or -- for optional)
@@ -57,6 +57,23 @@ App logs are also in `~/PhotoAssistant/data/logs/`.
 
 The service is niced, has a 2 GB memory cap (it restarts instead of freezing the laptop),
 and listens on 127.0.0.1 only.
+
+## 4b. First visit: create the admin account
+
+Open <http://127.0.0.1:8420>. The first visit asks you to create the admin account (you).
+Then, in **Admin → People**, add an account for your partner (member) and anyone else.
+In **Admin → Folders**, set who may see each folder (everyone / chosen people) and at which
+level (view, download, edit). Headless alternative: `uv run python -m photo_assistant create-user NAME --role admin`
+from `backend/`.
+
+## 4c. Optional: AI search and faces
+
+```bash
+just models            # downloads the search (CLIP) and face models into the data folder
+```
+
+Then restart the app; existing photos are processed in the background. Without the models
+everything else works, and Search says the AI part isn't set up yet.
 
 ## 5. Update
 
