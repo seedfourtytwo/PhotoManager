@@ -163,6 +163,7 @@
 			</p>
 			<div class="tools">
 				<button type="button" onclick={() => (dialog = 'download')}>Download</button>
+				{#if items.length}<a class="button" href={`/albums/${album.id}/print`}>Print</a>{/if}
 				{#if canEdit}
 					<button type="button" aria-pressed={arrange} onclick={() => (arrange = !arrange)}>
 						{arrange ? 'Done arranging' : 'Arrange'}
@@ -275,7 +276,8 @@
 		flex-wrap: wrap;
 		margin: 0.5rem 0 0 -0.5rem;
 	}
-	.tools button {
+	.tools button,
+	.tools a {
 		color: var(--ink-2);
 	}
 	.tools button[aria-pressed='true'] {
