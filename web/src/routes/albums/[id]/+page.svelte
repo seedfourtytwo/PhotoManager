@@ -295,9 +295,11 @@
 	.tools a {
 		color: var(--ink-2);
 	}
-	.tools button:hover,
-	.tools a:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		.tools button:hover,
+		.tools a:hover {
+			color: var(--ink);
+		}
 	}
 	.tools button[aria-pressed='true'] {
 		color: var(--ink);

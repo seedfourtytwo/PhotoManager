@@ -44,8 +44,8 @@
 		<div class="empty-state">
 			<p>No albums yet.</p>
 			<p>
-				Select photos in the <a href="/">library</a> and choose “Add to album”{#if session.canEdit}, or
-					start an empty one with New album{/if}.
+				Select photos in the <a href="/">library</a> and choose “Add to album”{#if session.canEdit},
+					or start an empty one with New album{/if}.
 			</p>
 		</div>
 	{/if}
@@ -92,8 +92,10 @@
 	header button {
 		color: var(--ink-2);
 	}
-	header button:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		header button:hover {
+			color: var(--ink);
+		}
 	}
 	.albums {
 		list-style: none;
@@ -127,10 +129,12 @@
 		font-size: var(--fs-20);
 		line-height: var(--lh-tight);
 	}
-	a:hover .title {
-		text-decoration: underline;
-		text-decoration-thickness: 1px;
-		text-underline-offset: 0.2em;
+	@media (hover: hover) {
+		a:hover .title {
+			text-decoration: underline;
+			text-decoration-thickness: 1px;
+			text-underline-offset: 0.2em;
+		}
 	}
 	a:focus-visible {
 		outline-offset: var(--s-1);

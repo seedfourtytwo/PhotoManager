@@ -46,9 +46,11 @@
 		border-radius: var(--r-1);
 	}
 	@media (hover: hover) {
-		.views a:hover {
-			color: var(--ink);
-			background: var(--tint);
+		@media (hover: hover) {
+			.views a:hover {
+				color: var(--ink);
+				background: var(--tint);
+			}
 		}
 	}
 	.views a[aria-current='page'] {
@@ -73,8 +75,10 @@
 	.tools :global(button) {
 		color: var(--ink-2);
 	}
-	.tools :global(button:hover) {
-		color: var(--ink);
+	@media (hover: hover) {
+		.tools :global(button:hover) {
+			color: var(--ink);
+		}
 	}
 	@media (max-width: 639px) {
 		header {

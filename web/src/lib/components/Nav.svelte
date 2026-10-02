@@ -109,10 +109,12 @@
 		font-weight: 600;
 	}
 	@media (hover: hover) {
-		a:hover,
-		button:hover {
-			color: var(--ink);
-			background: var(--tint);
+		@media (hover: hover) {
+			a:hover,
+			button:hover {
+				color: var(--ink);
+				background: var(--tint);
+			}
 		}
 	}
 	.rest a {
@@ -133,8 +135,7 @@
 			right: 0;
 			height: auto;
 			z-index: 20;
-			padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom)
-				env(safe-area-inset-left);
+			padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 			background: var(--bg);
 			border-right: 0;
 			border-top: 1px solid var(--hairline);

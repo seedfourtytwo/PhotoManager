@@ -235,8 +235,10 @@
 		user-select: none;
 		transition: none;
 	}
-	.tile:hover {
-		background: var(--hairline);
+	@media (hover: hover) {
+		.tile:hover {
+			background: var(--hairline);
+		}
 	}
 	.tile:focus-visible {
 		outline: 2px solid var(--accent);
@@ -278,8 +280,10 @@
 	/* The circle appears where it helps — under the mouse or keyboard focus — and stays on
 	   selected photos; unselected photos stay clean while selecting. */
 	@media (hover: hover) {
-		.tile:hover .check {
-			opacity: 1;
+		@media (hover: hover) {
+			.tile:hover .check {
+				opacity: 1;
+			}
 		}
 	}
 	.tile:focus-visible .check {

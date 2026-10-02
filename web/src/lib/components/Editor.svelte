@@ -201,8 +201,11 @@
 		<div class="group" role="group" aria-label="Rotate and flip">
 			<button type="button" onclick={() => rotate(-1)}>Rotate left</button>
 			<button type="button" onclick={() => rotate(1)}>Rotate right</button>
-			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'h'))}>Flip horizontal</button>
-			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'v'))}>Flip vertical</button>
+			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'h'))}
+				>Flip horizontal</button
+			>
+			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'v'))}>Flip vertical</button
+			>
 		</div>
 		<div class="group" role="group" aria-label="Crop ratio">
 			{#each RATIOS as r (r.label)}
@@ -360,8 +363,10 @@
 	.group button[aria-pressed='false'] {
 		color: var(--ink-2);
 	}
-	.group button[aria-pressed='false']:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		.group button[aria-pressed='false']:hover {
+			color: var(--ink);
+		}
 	}
 	.end {
 		margin-left: auto;

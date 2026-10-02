@@ -339,8 +339,10 @@
 	header button {
 		color: var(--ink-2);
 	}
-	header button:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		header button:hover {
+			color: var(--ink);
+		}
 	}
 	.done {
 		display: none;
@@ -390,8 +392,10 @@
 		min-height: 1.5rem;
 		color: var(--ink-2);
 	}
-	.bars button:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		.bars button:hover {
+			color: var(--ink);
+		}
 	}
 	.bars button[aria-pressed='true'] {
 		color: var(--ink);

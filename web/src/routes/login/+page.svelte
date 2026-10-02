@@ -76,9 +76,6 @@
 		font-weight: 400;
 		color: var(--ink);
 	}
-	.hint {
-		margin: calc(-1 * var(--s-2)) 0 var(--s-3);
-	}
 	button {
 		justify-self: start;
 		min-height: 2.5rem;

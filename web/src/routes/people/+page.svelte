@@ -101,10 +101,12 @@
 	.name.quiet {
 		font-style: italic;
 	}
-	a:hover .name {
-		text-decoration: underline;
-		text-decoration-thickness: 1px;
-		text-underline-offset: 0.2em;
+	@media (hover: hover) {
+		a:hover .name {
+			text-decoration: underline;
+			text-decoration-thickness: 1px;
+			text-underline-offset: 0.2em;
+		}
 	}
 	@media (max-width: 639px) {
 		.people {

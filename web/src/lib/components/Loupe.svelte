@@ -429,8 +429,10 @@
 		border-radius: 0;
 		transition: opacity var(--motion) var(--ease);
 	}
-	.edge:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		.edge:hover {
+			color: var(--ink);
+		}
 	}
 	.edge svg {
 		width: 22px;

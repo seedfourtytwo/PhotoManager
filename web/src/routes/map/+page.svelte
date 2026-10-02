@@ -263,8 +263,8 @@
 		<div class="empty-state">
 			<p>No photos with a location here.</p>
 			<p>
-				Photos appear on the map when the camera saved where they were taken. Loosen a filter to
-				see more.
+				Photos appear on the map when the camera saved where they were taken. Loosen a filter to see
+				more.
 			</p>
 		</div>
 	{/if}
@@ -305,8 +305,10 @@
 	.tools button {
 		color: var(--ink-2);
 	}
-	.tools button:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		.tools button:hover {
+			color: var(--ink);
+		}
 	}
 	.map {
 		border: 1px solid var(--hairline);
@@ -371,8 +373,10 @@
 		font-family: var(--font-ui);
 		font-size: var(--fs-14);
 	}
-	.chosen h2 button:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		.chosen h2 button:hover {
+			color: var(--ink);
+		}
 	}
 	.chosen p {
 		margin: 0 0 var(--s-3);
