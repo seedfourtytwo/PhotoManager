@@ -15,7 +15,7 @@ from pathlib import Path
 import pyvips  # type: ignore[import-untyped]
 
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
-from photo_assistant.app.print_album import PrintOptions, PrintPhoto, plan_print
+from photo_assistant.app.print_job import PrintOptions, PrintPhoto, plan_print
 from photo_assistant.domain.print_layout import TEXT_LAYOUT_ID, Page, auto_layout, trim_size
 from photo_assistant.domain.print_theme import page_geometry, theme
 
