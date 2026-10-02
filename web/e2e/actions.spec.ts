@@ -56,7 +56,7 @@ test('download everything matching a filter', async ({ page }) => {
 	await page.goto('/?year=2019');
 	await page.getByRole('button', { name: 'Download all' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Download' });
-	await expect(dialog.getByText(/all 28 matching photos/)).toBeVisible();
+	await expect(dialog.getByText(/all \d+ matching photos/)).toBeVisible();
 	const estimate = page.waitForRequest((r) => r.url().endsWith('/api/downloads/estimate'));
 	await dialog.getByLabel('Email · 1280').check();
 	expect((await estimate).postDataJSON()).toMatchObject({

@@ -44,7 +44,7 @@ def list_sources(services: ServicesDep, viewer: ViewerDep) -> list[SourceOut]:
 def add_source(services: ServicesDep, admin: AdminUser, body: SourceIn) -> SourceOut:
     folder = Path(body.path).expanduser()
     if not folder.is_dir():
-        raise HTTPException(422, f"not a folder on this machine: {folder}")
+        raise HTTPException(422, f"folder not found on this machine: {folder}")
     if services.store.overlaps(folder):
         raise HTTPException(422, "that folder contains, or is inside, the photo library itself")
     try:

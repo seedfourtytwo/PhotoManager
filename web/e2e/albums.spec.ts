@@ -65,7 +65,8 @@ test('share an album with another person', async ({ page }) => {
 	await page.getByRole('link', { name: /Summers at the house/ }).click();
 	await page.getByRole('button', { name: 'Share' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Share album' });
-	await expect(dialog.getByText('Partner (partner)')).toBeVisible();
+	// Names come from the user directory (v1.1), so owners who aren't admins see them too.
+	await expect(dialog.getByRole('listitem').filter({ hasText: 'Partner' })).toBeVisible();
 	await dialog.getByLabel('Person to add').selectOption({ label: 'Guest' });
 	await dialog.getByRole('button', { name: 'Add', exact: true }).click();
 	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/members'));

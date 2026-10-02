@@ -70,17 +70,20 @@ function withQuery(path: string, params: URLSearchParams): string {
 	return query ? `${path}?${query}` : path;
 }
 
+/** Shown as a sentence in the UI: capital first letter, whatever the server's style. */
+const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 async function readDetail(response: Response): Promise<string> {
 	try {
 		const body: unknown = await response.json();
 		const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
-		if (typeof detail === 'string') return detail;
+		if (typeof detail === 'string') return sentence(detail);
 		// FastAPI validation errors: detail is a list of {loc, msg}.
 		if (Array.isArray(detail)) {
 			const messages = detail
 				.map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
 				.filter(Boolean);
-			if (messages.length) return messages.join(' ');
+			if (messages.length) return sentence(messages.join(' '));
 		}
 	} catch {
 		// Not JSON (a proxy error page, say): fall through to a generic sentence.

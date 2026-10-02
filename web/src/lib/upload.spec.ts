@@ -80,7 +80,7 @@ describe('uploadFiles', () => {
 		const xhr = new FakeXhr();
 		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
 		xhr.respond(403, { detail: 'guests can view and download, not upload' });
-		await expect(done).rejects.toThrow('guests can view and download, not upload');
+		await expect(done).rejects.toThrow('Guests can view and download, not upload');
 	});
 
 	it('reports a dropped connection', async () => {

@@ -27,7 +27,7 @@ function detailOf(text: string, status: number): string {
 	try {
 		const body: unknown = JSON.parse(text);
 		if (body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string')
-			return body.detail;
+			return body.detail.charAt(0).toUpperCase() + body.detail.slice(1);
 	} catch {
 		/* not JSON: fall through */
 	}

@@ -73,7 +73,7 @@ describe('createApi', () => {
 			.catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(ApiError);
 		expect((error as ApiError).status).toBe(400);
-		expect((error as ApiError).message).toBe('wrong password');
+		expect((error as ApiError).message).toBe('Wrong password'); // shown as a sentence
 	});
 
 	it('falls back to a readable message when the error body is not JSON', async () => {
@@ -105,8 +105,8 @@ describe('createApi', () => {
 			json({ detail: 'wrong' }, 401)
 		]);
 		const api = createApi({ fetch: fetcher, onUnauthorized: () => lost++ });
-		await expect(api.me()).rejects.toThrow('no session');
-		await expect(api.login({ username: 'a', password: 'b' })).rejects.toThrow('wrong');
+		await expect(api.me()).rejects.toThrow('No session');
+		await expect(api.login({ username: 'a', password: 'b' })).rejects.toThrow('Wrong');
 		expect(lost).toBe(1);
 	});
 
@@ -280,5 +280,15 @@ describe('contract v1.1', () => {
 	it('asks for the un-edited preview as the editor base', () => {
 		const api = createApi({ fetch: fakeServer([]).fetcher });
 		expect(api.previewUrl(4, { edit: 'none' })).toBe('/api/assets/4/preview?edit=none');
+	});
+});
+
+describe('error sentences', () => {
+	it('start with a capital letter, whatever the server sent', async () => {
+		const { fetcher } = fakeServer([json({ detail: 'wrong user name or password' }, 401)]);
+		const api = createApi({ fetch: fetcher });
+		await expect(api.login({ username: 'c', password: 'x' })).rejects.toThrow(
+			'Wrong user name or password'
+		);
 	});
 });

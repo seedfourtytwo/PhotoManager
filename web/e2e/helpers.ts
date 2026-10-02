@@ -13,8 +13,7 @@ export const ADMIN = {
  * test mode (`PA_TEST_MODE=1`, `/__test/reset`, see `just e2e`). Without one, tests that need a
  * known state skip.
  */
-export const RESET_URL =
-	process.env.E2E_RESET_URL ?? (MOCK_URL ? `${MOCK_URL}/__mock/reset` : '');
+export const RESET_URL = process.env.E2E_RESET_URL ?? (MOCK_URL ? `${MOCK_URL}/__mock/reset` : '');
 export const REAL_BACKEND = !!process.env.E2E_RESET_URL;
 
 /** Fresh, known state (the mock's seed, or the real backend's seeded snapshot). */
