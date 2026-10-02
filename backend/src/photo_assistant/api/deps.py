@@ -6,11 +6,20 @@ from fastapi import Depends, HTTPException, Request, status
 
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Role, User, Viewer
-from photo_assistant.domain.model import Source
+from photo_assistant.domain.model import MAX_ID, Source
 from photo_assistant.ports.library import AssetView
 
 SESSION_COOKIE = "pa_session"
 _BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
+
+
+def path_ids_in_range(request: Request) -> None:
+    """Every ``*_id`` path parameter beyond SQLite's integers names nothing: 404, not a 500
+    from the driver (QA A11). Installed on the whole app."""
+    for name, value in request.path_params.items():
+        too_big = isinstance(value, str) and value.isdigit() and int(value) > MAX_ID
+        if name.endswith("_id") and too_big:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
 
 def get_services(request: Request) -> Services:

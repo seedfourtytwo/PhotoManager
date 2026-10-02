@@ -224,3 +224,51 @@ def test_trash_empty_with_ids_and_without_body(lib: Lib) -> None:
     c.request("DELETE", "/api/assets", json={"ids": [ids["winter"], ids["nodate"]]})
     assert c.post("/api/trash/empty", json={"ids": [ids["nodate"]]}).json() == {"purged": 1}
     assert c.post("/api/trash/empty").json() == {"purged": 1}
+
+
+# --- QA A11: out-of-range input is a 4xx, never a 500 -----------------------------------------
+
+HUGE = 2**63  # one past SQLite's largest integer
+
+
+def test_ids_beyond_sqlite_integers_are_not_found_or_unprocessable(lib: Lib) -> None:
+    c = lib.admin
+    for path in (
+        f"/api/assets/{HUGE}",
+        f"/api/assets/{HUGE * 4}/thumb",
+        f"/api/albums/{HUGE}",
+        f"/api/groups/{HUGE}",
+        f"/api/people/{HUGE}",
+    ):
+        assert c.get(path).status_code == 404, path
+    for method, path, body in (
+        ("POST", "/api/assets/state", {"ids": [HUGE], "favourite": True}),
+        ("DELETE", "/api/assets", {"ids": [HUGE]}),
+        ("POST", "/api/trash/restore", {"ids": [HUGE]}),
+        ("POST", "/api/albums", {"title": "x", "asset_ids": [HUGE]}),
+        ("POST", "/api/downloads/estimate", {"ids": [HUGE]}),
+    ):
+        assert c.request(method, path, json=body).status_code == 422, path
+    assert c.get("/api/assets", params={"source_id": HUGE}).status_code == 400
+
+
+def test_the_last_day_of_the_calendar_is_a_valid_upper_bound(lib: Lib) -> None:
+    c = lib.admin
+    everything = listed(c)
+    assert listed(c, **{"to": "9999-12-31"}) == everything
+    assert c.get("/api/calendar", params={"to": "9999-12-31"}).status_code == 200
+    assert c.get("/api/assets/facets", params={"to": "9999-12-31"}).status_code == 200
+
+
+def test_dates_cannot_be_set_or_shifted_into_the_future(lib: Lib) -> None:
+    c, ids = lib.admin, lib.ids
+    soon = datetime.now().replace(microsecond=0)
+    for body in (
+        {"ids": [ids["winter"]], "set": f"{soon.year + 1}-01-01T00:00:00"},
+        {"ids": [ids["winter"]], "shift_minutes": 60 * 24 * 365 * 50},
+    ):
+        refused = c.post("/api/assets/dates", json=body)
+        assert refused.status_code == 422, body
+        assert "future" in refused.json()["detail"]
+    ok = c.post("/api/assets/dates", json={"ids": [ids["winter"]], "set": soon.isoformat()})
+    assert ok.json() == {"updated": 1}, "now (up to a day ahead, for time zones) is fine"

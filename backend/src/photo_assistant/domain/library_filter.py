@@ -6,6 +6,8 @@ The filter is plain data; the repository turns it into SQL *after* the visibilit
 from dataclasses import dataclass
 from datetime import date
 
+from photo_assistant.domain.model import MAX_ID
+
 MAX_SEARCH_TERMS = 8
 MAX_SEARCH_LENGTH = 200
 
@@ -38,6 +40,8 @@ def filter_problem(f: AssetFilter) -> str | None:
         return "'from' must be on or before 'to'"
     if f.q is not None and len(f.q) > MAX_SEARCH_LENGTH:
         return "search text is too long"
+    if any(not 1 <= s <= MAX_ID for s in f.source_ids):
+        return "no such source"
     return None
 
 

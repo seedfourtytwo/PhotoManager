@@ -7,6 +7,9 @@ from enum import StrEnum
 from photo_assistant.domain.capture_time import DateSource, MetadataDates
 from photo_assistant.domain.media_types import MediaKind
 
+# Ids are SQLite integers: anything larger can name nothing (QA A11: it used to be a 500).
+MAX_ID = 2**63 - 1
+
 
 @dataclass(frozen=True, slots=True)
 class PhotoMetadata:

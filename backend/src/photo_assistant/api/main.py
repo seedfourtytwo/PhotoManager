@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -12,6 +12,7 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from photo_assistant import __version__
+from photo_assistant.api.deps import path_ids_in_range
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.routes import (
     albums,
@@ -89,7 +90,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             services.close()
             shutdown_logging()
 
-    app = FastAPI(title="Photo Assistant", version=__version__, lifespan=lifespan)
+    app = FastAPI(
+        title="Photo Assistant",
+        version=__version__,
+        lifespan=lifespan,
+        dependencies=[Depends(path_ids_in_range)],
+    )
     app.state.settings = settings
     for module in (
         system,

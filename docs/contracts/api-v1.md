@@ -26,6 +26,8 @@ Conventions
   (owner, editor or viewer alike): `download` and `edit` come only from sources (admins have
   `edit` everywhere). Changed in v1.2 (QA A1): album editors used to get `download`.
 - Pagination: `limit` (1–500, default 200) + opaque `cursor`; response `next_cursor|null`.
+- Ids are positive 64-bit integers (v1.2): a larger id in a path is `404`, in a body `422`,
+  in `source_id` `400`. `to=9999-12-31` is a valid (open) upper bound.
 
 ## Setup & auth
 
@@ -99,7 +101,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
 | PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
 | POST | `/api/assets/state` | `{ids, favourite?, hidden?}` | `{updated}` |
-| POST | `/api/assets/dates` | `{ids, set?: "YYYY-MM-DDTHH:MM:SS", shift_minutes?: int}` (exactly one) | `{updated}`; needs `edit`; sets `date_source="manual"`, keeps the previous value |
+| POST | `/api/assets/dates` | `{ids, set?: "YYYY-MM-DDTHH:MM:SS", shift_minutes?: int}` (exactly one) | `{updated}`; needs `edit`; sets `date_source="manual"`, keeps the previous value. `422` if a photo would end up more than a day after the server's local now (v1.2) |
 | GET | `/api/assets/{id}/edit` | – | `Recipe` |
 | PUT | `/api/assets/{id}/edit` | `Recipe` | `Recipe`; needs `edit` |
 | DELETE | `/api/assets/{id}/edit` | – | `204` (revert) |

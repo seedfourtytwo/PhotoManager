@@ -9,7 +9,7 @@ from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
-from photo_assistant.domain.model import Source
+from photo_assistant.domain.model import MAX_ID, Source
 from photo_assistant.ports.library import AlbumInfo, AssetView
 
 # Contract: capture times are local wall-clock to the second (`2019-07-04T18:30:00`); a date
@@ -213,7 +213,8 @@ class StatePatch(BaseModel):
     private: bool | None = None
 
 
-Ids = Annotated[list[int], Field(min_length=1, max_length=10_000)]
+Id = Annotated[int, Field(ge=1, le=MAX_ID)]  # a SQLite rowid (QA A11)
+Ids = Annotated[list[Id], Field(min_length=1, max_length=10_000)]
 
 
 class BulkState(BaseModel):
@@ -285,7 +286,7 @@ class RecipeIO(BaseModel):
 class AlbumIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=5000)
-    asset_ids: list[int] = Field(default_factory=list, max_length=10_000)
+    asset_ids: list[Id] = Field(default_factory=list, max_length=10_000)
 
 
 class AlbumPatch(BaseModel):
@@ -333,7 +334,7 @@ class AlbumItemsOut(BaseModel):
 
 
 class AlbumOrder(BaseModel):
-    asset_ids: list[int] = Field(max_length=10_000)
+    asset_ids: list[Id] = Field(max_length=10_000)
 
 
 class Member(BaseModel):
@@ -357,7 +358,7 @@ class FiltersIn(BaseModel):
     to_day: date | None = Field(default=None, alias="to")
     year: int | None = None
     month: int | None = None
-    source_id: list[int] = Field(default_factory=list)
+    source_id: list[Id] = Field(default_factory=list)
     camera: str | None = None
     place: str | None = None
     q: str | None = None
@@ -372,7 +373,7 @@ class FiltersIn(BaseModel):
 
 
 class DownloadRequest(BaseModel):
-    ids: list[int] | None = Field(default=None, max_length=100_000)
+    ids: list[Id] | None = Field(default=None, max_length=100_000)
     album_id: int | None = None
     filters: FiltersIn | None = None
     format: Literal["original", "jpeg", "png", "webp"] = "original"
@@ -414,7 +415,7 @@ class IdsIn(BaseModel):
 
 
 class OptionalIds(BaseModel):
-    ids: list[int] | None = Field(default=None, max_length=100_000)
+    ids: list[Id] | None = Field(default=None, max_length=100_000)
 
 
 class TrashedOut(AssetOut):

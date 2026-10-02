@@ -116,7 +116,8 @@ def fix_dates(services: ServicesDep, viewer: ViewerDep, body: DatesIn) -> Update
     views = require_views(services, viewer, body.ids, Level.EDIT)
     old = [(v.id, v.asset.taken_at) for v in views]
     try:
-        changes = new_capture_times(old, body.set, body.shift_minutes)
+        local_now = services.clock.now().astimezone().replace(tzinfo=None)
+        changes = new_capture_times(old, body.set, body.shift_minutes, local_now)
     except DateFixError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     updated = services.repo.change_dates(changes, viewer.user_id, services.clock.now())

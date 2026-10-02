@@ -7,7 +7,7 @@ searches or serves photos starts from it; nothing is filtered in Python afterwar
 import json
 import sqlite3
 from collections.abc import Callable, Sequence
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from photo_assistant.adapters.sqlite_base import (
     SqliteBase,
@@ -119,7 +119,7 @@ def _days(f: AssetFilter, where: Clauses, params: Bindings) -> None:
     if f.from_day:
         where.append("a.taken_at >= :f_from")
         params["f_from"] = f.from_day.isoformat()
-    if f.to_day:
+    if f.to_day and f.to_day < date.max:  # the last day of the calendar bounds nothing
         where.append("a.taken_at < :f_to")
         params["f_to"] = (f.to_day + timedelta(days=1)).isoformat()
 
