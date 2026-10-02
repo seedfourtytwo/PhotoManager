@@ -3,8 +3,8 @@
 	import { goto } from '$app/navigation';
 	import type { AssetDetail, AssetOut } from '$lib/api';
 	import { api, library, notice, session, viewport } from '$lib/app.svelte';
-	import { dateSourceLabel, formatShort, formatTaken } from '$lib/dates';
-	import { formatBytes } from '$lib/format';
+	import { dateSourceLabel, formatTaken } from '$lib/dates';
+	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
 	import { describePhoto } from './PhotoGrid.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
@@ -291,7 +291,7 @@
 				</p>
 				{#if placeLabel(asset.place)}<p>{placeLabel(asset.place)}</p>{/if}
 				{#if trash && 'trashed_at' in asset}
-					<p class="quiet small">In the trash since {formatShort(String(asset.trashed_at))}</p>
+					<p class="quiet small">In the trash since {formatWhen(String(asset.trashed_at))}</p>
 				{/if}
 				{#if asset.private}<p class="quiet small">Private: only you see it</p>{/if}
 				{#if viewOnly}

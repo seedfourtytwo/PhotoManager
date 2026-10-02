@@ -1,5 +1,14 @@
 /** Search, people, and the navigation that reaches them on both devices. */
-import { expect, expectAccessible, GUEST, isPhone, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	GUEST,
+	isPhone,
+	REAL_BACKEND,
+	resetMock,
+	signIn,
+	test
+} from './helpers.ts';
 
 test('search without models: word matches and a calm note on how to get AI search', async ({
 	page
@@ -14,9 +23,9 @@ test('search without models: word matches and a calm note on how to get AI searc
 	const box = page.getByRole('searchbox', { name: 'Search' });
 	await expect(box).toBeFocused();
 	await expect(page.getByRole('note')).toContainText('run just models on the server');
-	await box.fill('carnac');
+	await box.fill('sarlat');
 	await box.press('Enter');
-	await expect(page).toHaveURL(/\/search\?q=carnac$/);
+	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
 	await expect(page.locator('.meta')).toContainText(/\d+ photos? · matching words/);
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await expectAccessible(page);
@@ -32,6 +41,7 @@ test('search with models ranks by meaning; facets are read back', async ({ page 
 });
 
 test('people: grid of faces, rename, merge, and a person’s photos', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await resetMock();
 	await signIn(page, '/people');
 	await expect(page.getByRole('heading', { name: 'People' })).toBeVisible();
@@ -57,6 +67,7 @@ test('people: grid of faces, rename, merge, and a person’s photos', async ({ p
 });
 
 test('guests see people but cannot rename or merge', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await resetMock();
 	await signIn(page, '/people', GUEST);
 	await page

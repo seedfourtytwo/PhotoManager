@@ -7,7 +7,9 @@ import {
 	selectTiles,
 	signIn,
 	test,
-	GUEST
+	GUEST,
+	longPress,
+	viewOnlyPhoto
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -144,8 +146,10 @@ test('trash: move, see it with its thumbnail, open it full size, restore', async
 test('fix date can be undone: the previous dates come back', async ({ page }) => {
 	await selectTiles(page, [0, 1]);
 	const before = await page
-		.locator('.tile.selected img')
-		.evaluateAll((els) => els.map((e) => e.getAttribute('alt')));
+		.locator('.tile.selected')
+		.evaluateAll((els) =>
+			els.map((e) => [e.getAttribute('data-id'), e.querySelector('img')?.getAttribute('alt')])
+		);
 	await selectionAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await expect(dialog.getByText(/can be undone/)).toHaveCount(0);
@@ -157,7 +161,8 @@ test('fix date can be undone: the previous dates come back', async ({ page }) =>
 	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
 	expect((await undo).postDataJSON()).toHaveProperty('set');
 	await expect(page.getByRole('status')).toContainText('Dates put back');
-	for (const alt of before) await expect(page.getByAltText(alt!, { exact: true })).toBeVisible();
+	for (const [id, alt] of before)
+		await expect(page.locator(`.tile[data-id="${id}"] img`)).toHaveAttribute('alt', alt!);
 });
 
 test('download: a server error or an expired session is said, not swallowed', async ({ page }) => {
@@ -202,8 +207,14 @@ test('download: original files are labelled as without edits, with a hint for ed
 test('download: a guest with view-only photos is told why nothing can be downloaded', async ({
 	page
 }) => {
-	await signIn(page, '/?source_id=2&to=2015-12-31', GUEST);
-	await selectTiles(page, [0]);
+	await signIn(page, '/', GUEST);
+	const id = await viewOnlyPhoto(page);
+	await page.goto('/?source_id=2');
+	const tile = page.locator(`.tile[data-id="${id}"]`);
+	await tile.scrollIntoViewIfNeeded();
+	if (isPhone(page)) await longPress(tile);
+	else await tile.locator('.check').click({ force: true });
+	await expect(page.getByText('1 selected')).toBeVisible();
 	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/may view these photos but not download them/)).toBeVisible();

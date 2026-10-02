@@ -99,7 +99,7 @@ test('a refused role change puts the old role back; disabled people say so', asy
 	const me = rowOf('admin');
 	const role = me.getByRole('combobox');
 	await role.selectOption('member');
-	await expect(page.getByRole('status')).toContainText(/at least one admin/i);
+	await expect(page.getByRole('status')).toContainText(/at least one (active )?admin/i);
 	await expect(role).toHaveValue('admin');
 
 	const guest = rowOf('guest');

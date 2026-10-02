@@ -111,6 +111,16 @@ export async function selectTiles(page: Page, indexes: number[]) {
 	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
 }
 
+/** A photo the signed-in user may only view (not download), found through the API. */
+export async function viewOnlyPhoto(page: Page): Promise<number> {
+	const list = await (await page.request.get('/api/assets?source_id=2&limit=200')).json();
+	for (const item of list.items as { id: number }[]) {
+		const detail = await (await page.request.get(`/api/assets/${item.id}`)).json();
+		if (detail.level === 'view') return item.id;
+	}
+	throw new Error('no view-only photo for this user');
+}
+
 /** Run an action of the selection bar; on a phone the later ones are under "More". */
 export async function selectionAction(page: Page, name: string) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });

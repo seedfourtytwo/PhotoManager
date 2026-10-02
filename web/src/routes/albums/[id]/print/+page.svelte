@@ -143,7 +143,7 @@
 						<p class="quiet small">Every photo has enough pixels for this size.</p>
 					{/if}
 					<ul>
-						{#each plan?.issues ?? [] as issue (issue.asset_id ?? issue.ppi)}
+						{#each plan?.issues ?? [] as issue, i (i)}
 							{@const asset = issue.asset_id === null ? undefined : byId.get(issue.asset_id)}
 							<li>
 								{#if asset?.thumb}<img src={asset.thumb.url} alt="" />{/if}
@@ -252,8 +252,6 @@
 		margin: 0 0 0.5rem;
 		padding: 0;
 		font-size: var(--fs-12);
-		max-height: 14rem;
-		overflow-y: auto;
 	}
 	.issues li {
 		display: flex;

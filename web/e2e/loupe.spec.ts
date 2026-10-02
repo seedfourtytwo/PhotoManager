@@ -8,7 +8,8 @@ import {
 	resetMock,
 	signIn,
 	test,
-	touchSwipe
+	touchSwipe,
+	viewOnlyPhoto
 } from './helpers.ts';
 
 const loupe = (page: import('@playwright/test').Page) =>
@@ -119,8 +120,8 @@ test('guest: view-only photos say why they cannot be downloaded; no edit or priv
 	await resetMock();
 	await signIn(page, '/', GUEST);
 	// The guest sees the old disk (view only) and the phone (download).
-	await page.goto('/?source_id=2&to=2015-12-31');
-	await page.locator('.tile').first().click();
+	const id = await viewOnlyPhoto(page);
+	await page.goto(`/?photo=${id}`);
 	const dialog = loupe(page);
 	await expect(dialog.getByRole('button', { name: 'Download' })).toBeDisabled();
 	await expect(dialog.getByText('view only', { exact: true })).toBeVisible();

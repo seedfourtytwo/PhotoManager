@@ -132,6 +132,9 @@ export type MockAlbum = {
 
 export type MockReport = ImportRun & { items: ImportItem[] };
 
+/** The mock keeps every folder's path; the API hides it from non-admins. */
+export type MockSource = Source & { path: string };
+
 export type MockFace = {
 	id: number;
 	asset_id: number;
@@ -158,7 +161,7 @@ export type MockState = {
 	users: MockUser[];
 	sessions: Map<string, number>;
 	failedLogins: Map<string, number[]>;
-	sources: Source[];
+	sources: MockSource[];
 	access: Map<number, Access>;
 	assets: MockAsset[];
 	favourites: Map<number, Set<number>>;
@@ -243,7 +246,7 @@ export const SEED_USERS: Omit<MockUser, 'id'>[] = [
 	}
 ];
 
-function makeSources(): Source[] {
+function makeSources(): MockSource[] {
 	return [
 		{
 			id: 1,
