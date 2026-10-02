@@ -157,3 +157,29 @@ def test_stats_and_jobs(client: TestClient, source_guard: Path) -> None:
     ml = {"embed_clip", "detect_faces", "auto_tag"}
     assert {j["kind"] for j in jobs} == {"scan_source", "preview", "geocode", "group"} | ml
     assert client.post("/api/jobs/999/retry").status_code == 404
+
+
+def test_rescanning_a_folder_that_disappeared_fails_visibly(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """QA A13 (E2E): the rescan said "0 new" and nothing else."""
+    from tests.synthetic import write_photo
+
+    folder = tmp_path / "usb-disk"
+    write_photo(folder / "a.jpg", seed=1)
+    source = add_and_scan(client, folder)
+    folder.rename(tmp_path / "unplugged")
+
+    assert client.post(f"/api/sources/{source['id']}/scan").status_code == 202
+    services(client).worker.run_until_idle()
+
+    latest = client.get("/api/imports", params={"source_id": source["id"]}).json()[0]
+    assert latest["status"] == "failed"
+    assert "folder not found" in latest["message"]
+    (failed,) = client.get("/api/jobs", params={"status": "failed"}).json()
+    assert failed["kind"] == "scan_source" and failed["attempts"] == 1, "no pointless retries"
+    assert "folder not found" in failed["error"]
+    listed = {s["id"]: s for s in client.get("/api/sources").json()}
+    assert listed[source["id"]]["problem"] == "folder not found"
+    (tmp_path / "unplugged").rename(folder)
+    assert client.get("/api/sources").json()[0]["problem"] is None

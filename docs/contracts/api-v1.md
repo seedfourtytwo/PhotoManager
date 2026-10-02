@@ -56,7 +56,10 @@ Existing M1 routes stay: `GET/POST /api/sources`, `PATCH /api/sources/{id}`,
 `POST /api/sources/{id}/scan`, `POST /api/sources/scan-all`, `GET /api/imports`,
 `GET /api/imports/{id}`, `GET /api/jobs`, `POST /api/jobs/{id}/retry`, `GET /api/stats`.
 Adding/scanning sources is admin-only. `SourceOut` gains `owner_id` and `asset_count`.
-Since v1.2 `SourceOut.path` (the folder on the server) is `null` for everyone but admins.
+Since v1.2 `SourceOut.path` (the folder on the server) is `null` for everyone but admins, and
+`SourceOut.problem` is `"folder not found"` when the folder is gone (else `null`). A scan of
+such a source fails visibly: its import run is `failed` with that message, and the scan job
+is `failed` without retries.
 
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|

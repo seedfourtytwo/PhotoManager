@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from photo_assistant.domain.capture_time import pick_capture_time
+from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.library_paths import derived_relpath, original_relpath
 from photo_assistant.domain.media_types import MediaKind, classify, edited_original_name
 from photo_assistant.domain.model import (
@@ -45,7 +46,7 @@ PURGED_REASON = "deleted from the library earlier"
 PAUSED_REASON = "not processed: import paused because free disk space is low"
 
 
-class SourceUnavailableError(RuntimeError):
+class SourceUnavailableError(UnavailableError):
     """The source can't be imported right now (missing, unplugged, disabled)."""
 
 
@@ -136,7 +137,13 @@ class ImportSource:
         source = self._require_source(source_id)
         with self._store.exclusive_import():
             started = self._clock.now()
-            files = self._list_files(source)
+            try:
+                files = self._list_files(source)
+            except SourceUnavailableError as exc:
+                # put it where the user looks: the source's import history (QA A13)
+                failed = ImportReport(source.id, RunStatus.FAILED, message=str(exc))
+                self._repo.save_import_report(failed, started, self._clock.now())
+                raise
             log.info("import started", extra={"source_id": source.id, "files": len(files)})
             report = ImportReport(source_id=source.id)
             try:

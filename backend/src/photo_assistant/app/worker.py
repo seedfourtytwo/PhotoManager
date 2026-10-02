@@ -5,6 +5,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 
+from photo_assistant.domain.errors import DomainError
 from photo_assistant.ports import Clock, ImportBusyError, Repository
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,10 @@ class Worker:
             # Another import holds the library; try again later without using up attempts.
             self._repo.release_job(job.id)
             return False
+        except DomainError as exc:
+            # not transient (a folder is gone, a value is invalid): retrying changes nothing
+            log.warning("job failed", extra={"job_id": job.id, "kind": job.kind, "retry": False})
+            self._repo.fail_job(job.id, f"{type(exc).__name__}: {exc}", retry=False)
         except Exception as exc:
             retry = job.attempts < self._max_attempts
             log.warning("job failed", extra={"job_id": job.id, "kind": job.kind, "retry": retry})

@@ -86,9 +86,12 @@ class SourceOut(BaseModel):
     kind: str
     owner_id: int | None
     asset_count: int
+    problem: str | None = None  # v1.2: "folder not found" when its folder is gone
 
     @classmethod
-    def of(cls, s: Source, asset_count: int, show_path: bool) -> "SourceOut":
+    def of(
+        cls, s: Source, asset_count: int, show_path: bool, problem: str | None = None
+    ) -> "SourceOut":
         return cls(
             id=s.id,
             label=s.label,
@@ -97,6 +100,7 @@ class SourceOut(BaseModel):
             kind=s.kind,
             owner_id=s.owner_id,
             asset_count=asset_count,
+            problem=problem,
         )
 
 
