@@ -53,9 +53,9 @@ const TRIMS = [
 	{ id: 'square-20', label: 'Square 20 cm', width_mm: 200, height_mm: 200 }
 ];
 const THEMES = [
-	{ id: 'quiet', label: 'Quiet', paper: '#fbfaf7', ink: '#1a1a1a', font: 'Source Serif 4' },
-	{ id: 'warm', label: 'Warm', paper: '#f4ede1', ink: '#3b2f25', font: 'Source Serif 4' },
-	{ id: 'night', label: 'Night', paper: '#151515', ink: '#ececec', font: 'Inter' }
+	{ id: 'quiet', label: 'Quiet', paper: '#fbfaf7', ink: '#1a1a1a', font: 'Libertinus Serif' },
+	{ id: 'warm', label: 'Warm', paper: '#f4ede1', ink: '#3b2f25', font: 'New Computer Modern' },
+	{ id: 'night', label: 'Night', paper: '#151515', ink: '#ececec', font: 'Libertinus Serif' }
 ];
 const LAYOUTS = [
 	{ id: 'full-bleed', label: 'Full bleed', capacity: 1 },
