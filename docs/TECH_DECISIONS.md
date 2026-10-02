@@ -171,7 +171,7 @@ limit, instead of being spooled whole to the system temp folder first. Added 202
 |---|---|
 | Task runner | `just` |
 | Python lint/format/types | ruff, ruff format, mypy --strict (domain/app), pyright in editor OK |
-| Python tests | pytest, hypothesis, pytest-cov, syrupy (snapshots), import-linter |
+| Python tests | pytest, hypothesis, pytest-cov, syrupy (snapshots), import-linter; `httpx2` is the transport of Starlette ≥ 1.x's `TestClient` (with plain `httpx` it warns, an error under our warning filter) — kept on purpose (reviewed 2026-10-02, B20) |
 | Web lint/format/types | eslint, prettier, svelte-check, TypeScript strict |
 | Web tests | Vitest + Testing Library, Playwright (E2E, mobile + desktop viewports), axe-core |
 | Pre-commit | pre-commit (ruff, prettier, gitleaks, no large files) |
