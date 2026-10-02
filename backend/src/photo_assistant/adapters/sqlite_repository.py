@@ -91,6 +91,16 @@ class SqliteRepository(
 ):
     """Thread-safe enough for one API process plus a worker thread (one lock, WAL mode)."""
 
+    def restore_from(self, snapshot: Path) -> None:
+        """Replace the whole library database with a snapshot, in place (test mode only: the
+        E2E suite resets the real server between tests). Other connections see it at once."""
+        source = sqlite3.connect(snapshot)
+        try:
+            with self._lock:
+                source.backup(self._conn)
+        finally:
+            source.close()
+
     # --- sources ---------------------------------------------------------------------------
 
     @staticmethod

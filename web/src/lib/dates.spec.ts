@@ -62,3 +62,10 @@ describe('labels', () => {
 		expect(dateSourceLabel('manual')).toBe('date set by hand');
 	});
 });
+
+describe('server timestamps', () => {
+	it('ignore fractions of a second instead of failing', async () => {
+		const { shiftLocal } = await import('./dates');
+		expect(shiftLocal('2026-10-01T23:44:25.729120', 0)).toBe('2026-10-01T23:44:25');
+	});
+});

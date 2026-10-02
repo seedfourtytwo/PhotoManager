@@ -5,9 +5,11 @@
 import type { AssetOut, DateSource } from './api/types';
 
 const LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/;
+// What the server may send: fractions of a second are dropped, never a reason to fail the page.
+const FROM_SERVER = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?$/;
 
 function toUtcMillis(iso: string): number {
-	const m = LOCAL.exec(iso);
+	const m = FROM_SERVER.exec(iso);
 	if (!m) throw new RangeError(`not a local timestamp: ${iso}`);
 	const [, y, mo, d, h, mi, s] = m.map(Number);
 	return Date.UTC(y, mo - 1, d, h, mi, s);

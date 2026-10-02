@@ -123,3 +123,19 @@ def test_an_album_owner_can_share_using_the_directory(admin: TestClient, photo: 
     )
     assert shared.status_code == 200
     assert [a["title"] for a in tom.get("/api/albums").json()] == ["Ours"]
+
+
+def test_taken_at_is_wall_clock_to_the_second(admin: TestClient, tmp_path: Path) -> None:
+    """Contract: `2019-07-04T18:30:00`. Dates guessed from a file's mtime had microseconds."""
+    import os
+    import re
+
+    folder = tmp_path / "noexif"
+    path = write_photo(folder / "x.jpg", seed=5)
+    os.utime(path, ns=(1_700_000_000_123_456_789, 1_700_000_000_123_456_789))
+    import_folder(admin, folder, "No EXIF")
+    (item,) = admin.get("/api/assets").json()["items"]
+    assert item["date_source"] == "file_mtime"
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", item["taken_at"]), item["taken_at"]
+    detail = admin.get(f"/api/assets/{item['id']}").json()
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", detail["taken_at"])

@@ -8,10 +8,19 @@ export const ADMIN = {
 	password: process.env.E2E_PASSWORD ?? 'correct horse'
 };
 
-/** Fresh mock state; skipped (with the test) against a real backend. */
+/**
+ * Where to reset the library before a test: the mock's `/__mock/reset`, or a real backend in
+ * test mode (`PA_TEST_MODE=1`, `/__test/reset`, see `just e2e`). Without one, tests that need a
+ * known state skip.
+ */
+export const RESET_URL =
+	process.env.E2E_RESET_URL ?? (MOCK_URL ? `${MOCK_URL}/__mock/reset` : '');
+export const REAL_BACKEND = !!process.env.E2E_RESET_URL;
+
+/** Fresh, known state (the mock's seed, or the real backend's seeded snapshot). */
 export async function resetMock(users: 'seed' | 'none' = 'seed') {
-	test.skip(!MOCK_URL, 'needs the mock API to reset state');
-	const response = await fetch(`${MOCK_URL}/__mock/reset`, {
+	test.skip(!RESET_URL, 'needs a reset endpoint (mock API or backend test mode)');
+	const response = await fetch(RESET_URL, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({ users })

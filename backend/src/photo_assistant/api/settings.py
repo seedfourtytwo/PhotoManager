@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     integrations: IntegrationSettings = Field(default_factory=IntegrationSettings)
     ml: MlSettings = Field(default_factory=MlSettings)
     ops: OpsSettings = Field(default_factory=OpsSettings)
-    face_cluster_every_hours: float = 24.0  # global face clustering (deferred faces get people)
+    face_cluster_every_hours: float = 24.0
+    # E2E only: adds POST /__test/reset. Refused unless the server stays on this machine.
+    test_mode: bool = False  # global face clustering (deferred faces get people)
 
     @property
     def database_path(self) -> Path:

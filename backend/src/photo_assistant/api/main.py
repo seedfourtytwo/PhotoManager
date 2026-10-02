@@ -28,6 +28,7 @@ from photo_assistant.api.routes import (
     remote_sources,
     sources,
     system,
+    testing,
     trash,
     upload,
     users,
@@ -69,8 +70,20 @@ def _install_services(app: FastAPI, services: Services) -> None:
     app.state.uploader_hook = services.may_upload
 
 
+def _check_test_mode(settings: Settings) -> None:
+    """Test mode resets the library: refuse it unless the server stays on this machine."""
+    names = [settings.host, *settings.allowed_hosts]
+    if not all(testing.is_loopback(name) for name in names):
+        raise RuntimeError(
+            "PA_TEST_MODE=1 resets the library: it only runs with PA_HOST=127.0.0.1 and "
+            "loopback PA_ALLOWED_HOSTS. Never set it on a real library."
+        )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    if settings.test_mode:
+        _check_test_mode(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -107,6 +120,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         printing,
     ):
         app.include_router(module.router)
+    if settings.test_mode:
+        app.include_router(testing.router)
     _mount_web(app, settings.web_dir)
     app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)

@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.edit_recipe import Recipe
@@ -11,6 +11,12 @@ from photo_assistant.domain.export_naming import ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.model import Source
 from photo_assistant.ports.library import AlbumInfo, AssetView
+
+# Contract: capture times are local wall-clock to the second (`2019-07-04T18:30:00`); a date
+# guessed from a file's mtime carries microseconds that the contract (and the web) don't take.
+WallClock = Annotated[
+    datetime, PlainSerializer(lambda d: d.isoformat(timespec="seconds"), return_type=str)
+]
 
 # --- accounts --------------------------------------------------------------------------------
 
@@ -129,7 +135,7 @@ def image_url(asset_id: int, kind: str, version: int) -> str:
 
 class AssetOut(BaseModel):
     id: int
-    taken_at: datetime
+    taken_at: WallClock
     tz_offset_minutes: int | None
     date_source: str
     width: int | None
