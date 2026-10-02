@@ -17,7 +17,8 @@ import type {
 	Role,
 	User
 } from '../src/lib/api/types.ts';
-import { filtersFromParams } from '../src/lib/filters.ts';
+import { describeFilters, filtersFromParams } from '../src/lib/filters.ts';
+import { v11Routes } from './v11.ts';
 import {
 	makeAsset,
 	makeState,
@@ -30,34 +31,23 @@ import {
 } from './data.ts';
 import { editedSize, iconSvg, renderAsset } from './images.ts';
 import { zip } from './zip.ts';
-
-class HttpError extends Error {
-	readonly status: number;
-	constructor(status: number, detail: string) {
-		super(detail);
-		this.status = status;
-	}
-}
-
-type Ctx = {
-	req: IncomingMessage;
-	res: ServerResponse;
-	url: URL;
-	params: string[];
-	body: unknown;
-	user: MockUser | null;
-};
-type Result =
-	| { status: number; json?: unknown; headers?: Record<string, string> }
-	| { status: number; raw: Buffer | string; type: string; headers?: Record<string, string> };
-type Handler = (ctx: Ctx) => Result | Promise<Result>;
+import {
+	admin,
+	HttpError,
+	idParam,
+	me,
+	noContent,
+	nowIso,
+	ok,
+	requireFields,
+	type Ctx,
+	type Result,
+	type Route
+} from './http.ts';
 
 const LEVELS: Level[] = ['view', 'download', 'edit'];
 const rank = (level: Level | null) => (level ? LEVELS.indexOf(level) : -1);
 const maxLevel = (a: Level | null, b: Level | null) => (rank(a) >= rank(b) ? a : b);
-const ok = (json: unknown, status = 200): Result => ({ status, json });
-const noContent: Result = { status: 204 };
-const nowIso = () => new Date().toISOString().slice(0, 19);
 
 function publicUser(u: MockUser): User {
 	return {
@@ -67,13 +57,6 @@ function publicUser(u: MockUser): User {
 		role: u.role,
 		disabled: u.disabled
 	};
-}
-
-function requireFields<T extends object>(body: unknown, fields: (keyof T)[]): T {
-	if (!body || typeof body !== 'object') throw new HttpError(422, 'Expected a JSON body.');
-	for (const f of fields)
-		if (!(f in body)) throw new HttpError(422, `Missing field: ${String(f)}.`);
-	return body as T;
 }
 
 function checkPassword(password: unknown) {
@@ -113,7 +96,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		for (const album of state.albums) {
 			if (!album.items.includes(asset.id)) continue;
 			const role = albumRole(user, album);
-			if (role) level = maxLevel(level, role === 'viewer' ? 'view' : 'download');
+			// Albums grant view only; downloading and editing come from folder access.
+			if (role) level = maxLevel(level, 'view');
 		}
 		if (user.role === 'guest' && level === 'edit') level = 'download';
 		return level;
@@ -281,6 +265,21 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 	function finishImport(sourceId: number) {
 		const source = state.sources.find((s) => s.id === sourceId);
 		if (!source) return;
+		if (source.path.includes('gone')) {
+			// A folder that was there when added and has gone since (an unplugged disk).
+			const zero = { imported: 0, duplicate: 0, already_known: 0, skipped: 0, failed: 0 };
+			state.reports.unshift({
+				id: state.nextId.run++,
+				source_id: sourceId,
+				status: 'failed',
+				started_at: nowIso(),
+				finished_at: nowIso(),
+				message: `folder not found on this machine: ${source.path}`,
+				summary: { ...zero, ignored: 0, files_seen: 0 },
+				items: []
+			});
+			return;
+		}
 		const r = rng(state.nextId.run * 7919);
 		const fresh = source.path.includes('empty') ? 0 : 6;
 		const added: MockAsset[] = [];
@@ -409,12 +408,6 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 
 	// --- routes -------------------------------------------------------------------------
 
-	const admin = (ctx: Ctx) => {
-		if (ctx.user?.role !== 'admin') throw new HttpError(403, 'Only an admin can do that.');
-		return ctx.user;
-	};
-	const me = (ctx: Ctx) => ctx.user!;
-	const idParam = (ctx: Ctx, i = 0) => Number(ctx.params[i]);
 	const ids = (body: unknown, key = 'ids'): number[] => {
 		const value = (body as Record<string, unknown> | null)?.[key];
 		if (!Array.isArray(value) || !value.every((v) => Number.isInteger(v)))
@@ -469,6 +462,19 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		return `${folder}${base}.${ext}`;
 	}
 
+	/** The ZIP is named after what it holds: the album, the filtered view, or a count. */
+	function zipName(request: DownloadRequest): string {
+		if ('album_id' in request && request.album_id !== undefined) {
+			const album = state.albums.find((a) => a.id === request.album_id);
+			return `${(album?.title ?? 'album').replace(/["\\]/g, '_')}.zip`;
+		}
+		if ('filters' in request && request.filters) {
+			const words = describeFilters(request.filters).replace(/[^\p{L}\p{N}]+/gu, '-');
+			return `photos-${words.replace(/^-|-$/g, '') || 'all'}.zip`;
+		}
+		return `photos-${'ids' in request ? request.ids.length : 0}.zip`;
+	}
+
 	function parseDownload(ctx: Ctx): DownloadRequest {
 		const body = ctx.body as Record<string, unknown> | null;
 		// Form posts (so the browser streams the ZIP to disk) carry the JSON in one field.
@@ -477,7 +483,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		return request;
 	}
 
-	const routes: [string, RegExp, Handler][] = [
+	const routes: Route[] = [
 		// system
 		['GET', /^\/api\/health$/, () => ok({ status: 'ok', version: 'mock' })],
 		[
@@ -958,7 +964,10 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/assets\/(\d+)\/(thumb|preview)$/,
 			(ctx) => {
-				const asset = findAsset(me(ctx), idParam(ctx));
+				// Trashed photos keep their images, so the trash can show them.
+				const asset = state.assets.find((a) => a.id === idParam(ctx));
+				if (!asset || assetLevel(me(ctx), asset) === null)
+					throw new HttpError(404, 'Photo not found.');
 				const raw = ctx.url.searchParams.get('edit') === 'none';
 				return {
 					status: 200,
@@ -1098,7 +1107,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					raw: body,
 					type: 'application/zip',
 					headers: {
-						'content-disposition': 'attachment; filename="photos.zip"',
+						'content-disposition': `attachment; filename="${zipName(request)}"`,
 						'x-skipped': String(skipped)
 					}
 				};
@@ -1280,6 +1289,20 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			}
 		]
 	];
+
+	routes.push(
+		...v11Routes({
+			state: () => state,
+			now,
+			visible,
+			toOut,
+			filtered,
+			findAsset,
+			assetLevel,
+			findAlbum,
+			queueScan
+		})
+	);
 
 	const PUBLIC = new Set(['/api/health', '/api/setup', '/api/auth/login']);
 

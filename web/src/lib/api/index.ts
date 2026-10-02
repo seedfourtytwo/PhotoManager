@@ -1,2 +1,2 @@
 export * from './types';
-export { ApiError, createApi, type Api, type ApiOptions } from './client';
+export { ApiError, createApi, fileNameFrom, type Api, type ApiOptions } from './client';

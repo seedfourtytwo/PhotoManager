@@ -6,8 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
  * a fresh data dir) and set E2E_BASE_URL (web app origin) and E2E_MOCK_URL='' — tests that
  * need to reset state then skip. See docs/wiring/web.md.
  */
-const MOCK_PORT = 8431;
-const WEB_PORT = 5183;
+const MOCK_PORT = Number(process.env.E2E_MOCK_PORT ?? 8431);
+const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 5183);
 const external = !!process.env.E2E_BASE_URL;
 const executablePath = process.env.PW_CHROMIUM || undefined;
 

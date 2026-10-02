@@ -247,3 +247,116 @@ export type UploadedFile = {
 };
 /** POST /api/upload (multipart, any field name, many files). */
 export type UploadResult = { files: UploadedFile[]; import_job_id: Id | null };
+
+// --- local ML: search, similar, people (v1.1) ----------------------------------------------
+
+export type ScoredAsset = AssetOut & { score: number | null };
+export type SearchMode = 'semantic' | 'text' | 'filter';
+export type SearchResult = {
+	items: ScoredAsset[];
+	/** The free text left after the facets. */
+	text: string;
+	facets: { name: string; value: string }[];
+	mode: SearchMode;
+	/** Why the search fell back, if it did (e.g. models not installed). */
+	detail: string | null;
+};
+export type FaceBox = { x: number; y: number; w: number; h: number };
+export type Face = { id: Id; asset_id: Id; box: FaceBox; score: number; person_id: Id | null };
+export type Person = {
+	id: Id;
+	name: string | null;
+	face_count: number;
+	asset_count: number;
+	/** Crop the asset's thumbnail to this box for the People grid. */
+	cover: Face | null;
+};
+export type MlStatus = {
+	clip: { ready: boolean; detail: string };
+	faces: { ready: boolean; detail: string };
+	models_installed: boolean;
+	counts: Record<string, Record<string, number>>;
+};
+
+// --- album → print (v1.1) -------------------------------------------------------------------
+
+export type PrintTrim = { id: string; label: string; width_mm: number; height_mm: number };
+export type PrintTheme = { id: string; label: string; paper: string; ink: string; font: string };
+export type PrintLayout = { id: string; label: string; capacity: number };
+export type PrintOptions = { trims: PrintTrim[]; themes: PrintTheme[]; layouts: PrintLayout[] };
+export type PrintRequest = {
+	trim: string;
+	theme: string;
+	cover: boolean;
+	crop_marks: boolean;
+	pages?: { layout_id: string; asset_ids: Id[]; text?: string }[];
+	allow_low_resolution?: boolean;
+};
+export type PrintIssue = { asset_id: Id | null; ppi: number; level: 'warn' | 'block' };
+export type PrintPlan = {
+	pages: { layout_id: string; photos: Id[]; text: string }[];
+	issues: PrintIssue[];
+	/** Cover included. */
+	page_count: number;
+};
+export type PrintedPdf = { blob: Blob; filename: string; warnings: number };
+
+// --- backups (admin, v1.1) ------------------------------------------------------------------
+
+export type BackupRun = {
+	id: Id;
+	kind: 'backup' | 'check' | 'restore_test';
+	status: 'running' | 'succeeded' | 'failed';
+	started_at: string;
+	finished_at: string | null;
+	snapshot_id: string | null;
+	bytes_added: number | null;
+	files_new: number | null;
+	repo_bytes: number | null;
+	error: string | null;
+	details: string | null;
+};
+export type BackupTarget = {
+	id: Id;
+	label: string;
+	kind: string;
+	repository: string;
+	/** "manual", "hourly", "daily 02:30" or "weekly sun 03:00". */
+	schedule: string;
+	quiet_window: string | null;
+	retention: Record<string, number>;
+	enabled: boolean;
+	last_success_at: string | null;
+	last_run: BackupRun | null;
+	repo_bytes: number | null;
+	next_run_at: string | null;
+	overdue: boolean;
+	/** Drives the warning banner. */
+	needs_attention: boolean;
+};
+export type BackupIn = {
+	label: string;
+	repository: string;
+	password_file: string;
+	schedule?: string;
+	quiet_window?: string | null;
+	retention?: { daily: number; weekly: number; monthly: number };
+};
+export type QueuedRun = { job_id: Id; target_id: Id };
+
+// --- devices and remote sources (v1.1) ------------------------------------------------------
+
+export type DevicePlatform = 'ios' | 'android' | 'desktop' | 'other';
+export type Device = {
+	id: Id;
+	name: string;
+	platform: DevicePlatform;
+	created_at: string;
+	last_used_at: string | null;
+	revoked: boolean;
+};
+/** The token is shown once. */
+export type NewDevice = { device: Device; token: string };
+
+export type RemoteSourceIn = { label: string; remote: string; path: string };
+export type RemoteSource = RemoteSourceIn & { id: Id };
