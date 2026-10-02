@@ -16,8 +16,9 @@ Conventions
 - Access levels on a source: `view` < `download` < `edit`. Admins have `edit` everywhere.
   You **see** an asset if any source it came from grants you ≥ view, or it is in an album shared
   with you. Private assets (`private=true` by their owner) are visible only to that owner.
-  Effective level on an asset = highest level over its sources (albums grant `view`, plus
-  `download` for album editors).
+  Effective level on an asset = highest level over its sources. **Albums grant `view` only**
+  (owner, editor or viewer alike): `download` and `edit` come only from sources (admins have
+  `edit` everywhere). Changed in v1.2 (QA A1): album editors used to get `download`.
 - Pagination: `limit` (1–500, default 200) + opaque `cursor`; response `next_cursor|null`.
 
 ## Setup & auth

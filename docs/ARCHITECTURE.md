@@ -212,8 +212,8 @@ The LLM never writes to the database directly.
 - **Visibility is one function in the repository layer:** `visible_assets_cte(viewer)` in
   `adapters/sqlite_library.py` is a SQL CTE `vis(asset_id, level)` = assets with at least one
   `asset_source` whose source grants the user (or everyone) a level or that the user owns, ∪
-  assets in albums the user owns (download) or that are shared with them (viewer: view,
-  editor: download), ∪ everything for admins (edit) — minus private items of other owners
+  assets in albums the user owns or that are shared with them (always `view`: download and
+  edit only ever come from sources), ∪ everything for admins (edit) — minus private items of other owners
   (admins included) and trashed items; the level is the highest grant, capped at download for
   guests. Timeline, facets, calendar, map, albums, detail, images and downloads all start from
   it; the UI never filters for security. Covered by a table-driven API test

@@ -38,9 +38,9 @@ _VISIBLE = """vis(asset_id, level) AS (
           FROM asset_source x JOIN source s ON s.id = x.source_id
          WHERE s.owner_id = :vis_uid
         UNION ALL
-        -- an album you own (download) or that is shared with you (viewer: view, editor: download)
-        SELECT ai.asset_id,
-               CASE WHEN al.owner_id = :vis_uid OR am.role = 'editor' THEN 2 ELSE 1 END
+        -- an album you own or that is shared with you: view only, whatever your album role
+        -- (download and edit only ever come from sources; QA A1)
+        SELECT ai.asset_id, 1
           FROM album_item ai JOIN album al ON al.id = ai.album_id
           LEFT JOIN album_member am ON am.album_id = al.id AND am.user_id = :vis_uid
          WHERE al.owner_id = :vis_uid OR am.user_id IS NOT NULL

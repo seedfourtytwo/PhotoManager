@@ -32,12 +32,12 @@ EXPECTED: dict[str, dict[str, str | None]] = {
     "lea": {
         "p1": "download",
         "p_priv": None,
-        "p2": "download",
+        "p2": "view",  # her own album "Trip" grants view only (owner decision, QA A1)
         "p3": None,
         "p4": "download",
         "p5": "edit",
         "p6": "edit",
-        "p7": "download",
+        "p7": "view",  # S2 grants view; owning the album adds nothing
     },
     "tom": {
         "p1": "download",
@@ -57,7 +57,7 @@ EXPECTED: dict[str, dict[str, str | None]] = {
         "p4": "download",
         "p5": None,
         "p6": "view",
-        "p7": "download",
+        "p7": "view",  # album editor: albums grant view, never download
     },
 }
 
@@ -166,6 +166,18 @@ def test_zip_downloads_leave_out_what_you_may_not_download(world: World, user: s
     allowed = [p for p, lvl in EXPECTED[user].items() if lvl in ("download", "edit")]
     assert response.status_code == 200
     assert int(response.headers["x-skipped"]) == len(PHOTOS) - len(allowed)
+
+
+def test_albums_grant_view_only_so_an_album_never_unlocks_a_download(world: World) -> None:
+    """QA A1: lea could only *view* p2, put it in her own album and then download it."""
+    lea, gus = world.clients["lea"], world.clients["gus"]
+    for client, photo in ((lea, "p2"), (lea, "p7"), (gus, "p7")):
+        asset_id = world.ids[photo]
+        assert client.get(f"/api/assets/{asset_id}").json()["level"] == "view"
+        assert client.get(f"/api/assets/{asset_id}/original").status_code == 403
+        assert client.get(f"/api/assets/{asset_id}/download").status_code == 403
+        body = {"ids": [asset_id], "format": "original"}
+        assert client.post("/api/downloads", json=body).headers["x-skipped"] == "1"
 
 
 def test_album_titles_and_sources_do_not_leak(world: World) -> None:

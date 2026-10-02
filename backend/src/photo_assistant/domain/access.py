@@ -78,8 +78,10 @@ class Viewer:
 
 
 def album_grant(role: AlbumRole) -> Level:
-    """Albums grant view; people who may change the album may also download its photos."""
-    return Level.VIEW if role is AlbumRole.VIEWER else Level.DOWNLOAD
+    """Albums grant view only, whatever the album role: download and edit come only from
+    sources (owner decision after QA: an album must never unlock more than its photos'
+    sources do)."""
+    return Level.VIEW
 
 
 def can_edit_album(album_role: AlbumRole | None, user_role: Role) -> bool:

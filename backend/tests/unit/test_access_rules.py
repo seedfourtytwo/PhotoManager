@@ -39,10 +39,10 @@ def test_guests_never_get_more_than_download(role: Role, cap: Level) -> None:
     assert viewer.is_admin is (role is Role.ADMIN)
 
 
-def test_album_roles_grant_view_or_download() -> None:
+def test_album_roles_grant_view_only() -> None:
     assert album_grant(AlbumRole.VIEWER) is Level.VIEW
-    assert album_grant(AlbumRole.EDITOR) is Level.DOWNLOAD
-    assert album_grant(AlbumRole.OWNER) is Level.DOWNLOAD
+    assert album_grant(AlbumRole.EDITOR) is Level.VIEW, "albums grant view only (QA A1)"
+    assert album_grant(AlbumRole.OWNER) is Level.VIEW
 
 
 @pytest.mark.parametrize(
