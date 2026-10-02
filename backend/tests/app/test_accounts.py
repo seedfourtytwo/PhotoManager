@@ -174,3 +174,71 @@ def test_create_user_from_the_command_line_needs_no_session(accounts: Accounts) 
     user = accounts.create_user("c", "c", GOOD, Role.ADMIN)
     assert not accounts.needs_admin()
     assert user.role is Role.ADMIN
+
+
+# --- QA A8: check-then-write races -------------------------------------------------------------
+
+
+class RacingStore:
+    """The real store, except that every reader of a count waits until all racers read it."""
+
+    def __init__(self, repo: SqliteRepository, racers: int) -> None:
+        import threading
+
+        self._repo = repo
+        self._barrier = threading.Barrier(racers, timeout=5)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._repo, name)
+
+    def count_users(self) -> int:
+        n = self._repo.count_users()
+        self._barrier.wait()
+        return n
+
+    def count_active_admins(self) -> int:
+        n = self._repo.count_active_admins()
+        self._barrier.wait()
+        return n
+
+
+def _race(*calls: object) -> list[BaseException | None]:
+    import threading
+
+    outcomes: list[BaseException | None] = [None] * len(calls)
+
+    def run(i: int) -> None:
+        try:
+            calls[i]()  # type: ignore[operator]
+        except BaseException as exc:  # recorded and asserted on below
+            outcomes[i] = exc
+
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(len(calls))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return outcomes
+
+
+def test_concurrent_first_run_setups_create_exactly_one_admin(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    accounts = Accounts(RacingStore(repo, 3), FakeHasher(), MovableClock())  # type: ignore[arg-type]
+    outcomes = _race(*(lambda n=n: accounts.setup(f"admin{n}", "A", GOOD) for n in range(3)))
+    assert repo.count_users() == 1
+    assert sum(o is None for o in outcomes) == 1
+    assert all(isinstance(o, AlreadySetUpError) for o in outcomes if o is not None)
+
+
+def test_two_admins_demoting_each_other_at_once_leave_one_admin(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    plain = Accounts(repo, FakeHasher(), MovableClock())
+    a, _ = plain.setup("a", "A", GOOD)
+    b = plain.create_user("b", "B", GOOD, Role.ADMIN)
+    racing = Accounts(RacingStore(repo, 2), FakeHasher(), MovableClock())  # type: ignore[arg-type]
+    outcomes = _race(
+        lambda: racing.update_user(a.id, UserPatch(role=Role.MEMBER)),
+        lambda: racing.update_user(b.id, UserPatch(disabled=True)),
+    )
+    assert repo.count_active_admins() == 1
+    assert [type(o) for o in outcomes].count(LastAdminError) == 1

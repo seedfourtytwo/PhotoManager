@@ -20,7 +20,13 @@ from photo_assistant.domain.access import (
     username_problem,
 )
 from photo_assistant.ports import Clock
-from photo_assistant.ports.accounts import AccountStore, PasswordHasher, UsernameTakenError
+from photo_assistant.ports.accounts import (
+    AccountStore,
+    NoActiveAdminError,
+    NotFirstUserError,
+    PasswordHasher,
+    UsernameTakenError,
+)
 
 _TOUCH_EVERY = timedelta(minutes=1)  # don't write to the database on every request
 
@@ -77,6 +83,13 @@ def _check_password(password: str) -> None:
         raise AccountError(problem)
 
 
+def _check_new_account(username: str, password: str) -> None:
+    problem = username_problem(username)
+    if problem:
+        raise AccountError(problem)
+    _check_password(password)
+
+
 class Accounts:
     def __init__(self, store: AccountStore, hasher: PasswordHasher, clock: Clock) -> None:
         self._store = store
@@ -92,26 +105,25 @@ class Accounts:
     def setup(self, username: str, display_name: str, password: str) -> tuple[User, str]:
         if not self.needs_admin():
             raise AlreadySetUpError()
-        user = self.create_user(username, display_name, password, Role.ADMIN)
+        _check_new_account(username, password)
+        try:
+            user = self._store.add_first_admin(
+                username, display_name.strip() or username, self._hasher.hash(password)
+            )
+        except NotFirstUserError as exc:  # another setup won the race
+            raise AlreadySetUpError() from exc
         return user, self._start_session(user)
 
     # --- users -----------------------------------------------------------------------------
 
     def create_user(self, username: str, display_name: str, password: str, role: Role) -> User:
-        problem = username_problem(username)
-        if problem:
-            raise AccountError(problem)
-        _check_password(password)
-        first = self.needs_admin()
+        _check_new_account(username, password)
         try:
-            user = self._store.add_user(
+            return self._store.add_user(
                 username, display_name.strip() or username, self._hasher.hash(password), role
             )
         except UsernameTakenError as exc:
             raise NameTakenError(username) from exc
-        if first and role is Role.ADMIN:
-            self._store.claim_ownerless(user.id)
-        return user
 
     def list_users(self) -> list[User]:
         return self._store.list_users()
@@ -130,9 +142,12 @@ class Accounts:
             # an admin reset is for a lost or leaked password: nothing the old one opened stays
             self._store.delete_sessions_of(user_id)
             self._store.revoke_devices_of(user_id, self._clock.now())
-        self._store.update_user(
-            user_id, display_name=patch.display_name, role=patch.role, disabled=patch.disabled
-        )
+        try:
+            self._store.update_user(
+                user_id, display_name=patch.display_name, role=patch.role, disabled=patch.disabled
+            )
+        except NoActiveAdminError as exc:  # a concurrent change got past the early check
+            raise LastAdminError() from exc
         if patch.disabled:
             self._store.delete_sessions_of(user_id)
         updated = self._store.get_user(user_id)

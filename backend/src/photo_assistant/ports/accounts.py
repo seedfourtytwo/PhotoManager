@@ -18,11 +18,24 @@ class UsernameTakenError(ValueError):
     """Another account already uses that user name (names ignore case)."""
 
 
+class NotFirstUserError(ValueError):
+    """First-run setup lost a race: accounts exist already."""
+
+
+class NoActiveAdminError(ValueError):
+    """The change would leave the library without an active admin (nothing was changed)."""
+
+
 class AccountStore(Protocol):
     # users
     def count_users(self) -> int: ...
     def add_user(self, username: str, display_name: str, password_hash: str, role: Role) -> User:
         """Raises UsernameTakenError."""
+        ...
+
+    def add_first_admin(self, username: str, display_name: str, password_hash: str) -> User:
+        """Atomically: create the first account (an admin) and give it the ownerless sources.
+        Raises NotFirstUserError if any account exists (concurrent setups: one wins)."""
         ...
 
     def get_user(self, user_id: int) -> User | None: ...
@@ -38,12 +51,13 @@ class AccountStore(Protocol):
         display_name: str | None = None,
         role: Role | None = None,
         disabled: bool | None = None,
-    ) -> None: ...
+    ) -> None:
+        """One transaction; raises NoActiveAdminError (and changes nothing) if afterwards no
+        active admin is left."""
+        ...
+
     def set_password_hash(self, user_id: int, password_hash: str) -> None: ...
     def count_active_admins(self) -> int: ...
-    def claim_ownerless(self, user_id: int) -> None:
-        """Give sources (and their photos) that have no owner yet to this user."""
-        ...
 
     # sessions
     def add_session(self, token_hash: str, user_id: int, now: datetime) -> None: ...

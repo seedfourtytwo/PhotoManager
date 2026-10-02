@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
 from photo_assistant.domain.access import Role, User
-from photo_assistant.ports.accounts import UsernameTakenError
+from photo_assistant.ports.accounts import (
+    NoActiveAdminError,
+    NotFirstUserError,
+    UsernameTakenError,
+)
 
 
 def utc_text(value: datetime) -> str:
@@ -42,6 +46,23 @@ class AccountsMixin(SqliteBase):
         assert user is not None
         return user
 
+    def add_first_admin(self, username: str, display_name: str, password_hash: str) -> User:
+        with self._transaction():  # BEGIN IMMEDIATE: one setup at a time (QA A8)
+            if self._conn.execute("SELECT 1 FROM user LIMIT 1").fetchone():
+                raise NotFirstUserError("accounts exist already")
+            user_id = int(
+                self._conn.execute(
+                    """INSERT INTO user (username, display_name, password_hash, role)
+                       VALUES (?, ?, ?, 'admin')""",
+                    (username, display_name, password_hash),
+                ).lastrowid
+                or 0
+            )
+            self._conn.execute("UPDATE source SET owner_id = ? WHERE owner_id IS NULL", (user_id,))
+        user = self.get_user(user_id)
+        assert user is not None
+        return user
+
     def get_user(self, user_id: int) -> User | None:
         row = self._one("SELECT * FROM user WHERE id = ?", (user_id,))
         return _user(row) if row else None
@@ -61,26 +82,29 @@ class AccountsMixin(SqliteBase):
         role: Role | None = None,
         disabled: bool | None = None,
     ) -> None:
-        self._write(
-            """UPDATE user SET display_name = COALESCE(?, display_name),
-                   role = COALESCE(?, role), disabled = COALESCE(?, disabled)
-               WHERE id = ?""",
-            (
-                display_name,
-                role.value if role else None,
-                None if disabled is None else int(disabled),
-                user_id,
-            ),
-        )
+        with self._transaction():  # the last-admin rule is checked inside (QA A8)
+            self._conn.execute(
+                """UPDATE user SET display_name = COALESCE(?, display_name),
+                       role = COALESCE(?, role), disabled = COALESCE(?, disabled)
+                   WHERE id = ?""",
+                (
+                    display_name,
+                    role.value if role else None,
+                    None if disabled is None else int(disabled),
+                    user_id,
+                ),
+            )
+            admins = self._conn.execute(
+                "SELECT COUNT(*) FROM user WHERE role = 'admin' AND disabled = 0"
+            ).fetchone()[0]
+            if admins == 0:
+                raise NoActiveAdminError("the library needs at least one active admin")
 
     def set_password_hash(self, user_id: int, password_hash: str) -> None:
         self._write("UPDATE user SET password_hash = ? WHERE id = ?", (password_hash, user_id))
 
     def count_active_admins(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM user WHERE role = 'admin' AND disabled = 0")
-
-    def claim_ownerless(self, user_id: int) -> None:
-        self._write("UPDATE source SET owner_id = ? WHERE owner_id IS NULL", (user_id,))
 
     # --- sessions --------------------------------------------------------------------------
 
