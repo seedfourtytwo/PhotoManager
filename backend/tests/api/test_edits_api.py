@@ -70,6 +70,8 @@ def test_invalid_recipes_are_refused(admin: TestClient, photo: int) -> None:
         f"/api/assets/{photo}/edit", json={"crop": {"x": 0.8, "y": 0, "w": 0.5, "h": 0.5}}
     )
     assert crop.status_code == 422 and "inside" in crop.json()["detail"]
+    tiny = {"crop": {"x": 0, "y": 0, "w": 1e-12, "h": 0.5}}
+    assert admin.put(f"/api/assets/{photo}/edit", json=tiny).status_code == 422
 
 
 def test_editing_needs_edit_access(admin: TestClient, photo: int) -> None:

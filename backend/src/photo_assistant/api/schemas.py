@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.edit_recipe import Recipe
-from photo_assistant.domain.export_naming import ExportOptions, Folders, Naming
+from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.model import Source
 from photo_assistant.ports.library import AlbumInfo, AssetView
@@ -377,7 +377,7 @@ class DownloadRequest(BaseModel):
     filters: FiltersIn | None = None
     format: Literal["original", "jpeg", "png", "webp"] = "original"
     quality: int = Field(default=90, ge=1, le=100)
-    max_edge: int | None = Field(default=None, ge=1)
+    max_edge: int | None = Field(default=None, ge=1, le=MAX_EDGE)
     strip_location: bool = False
     strip_all_metadata: bool = False
     naming: Naming = Naming.ORIGINAL

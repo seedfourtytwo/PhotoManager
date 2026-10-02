@@ -4,14 +4,19 @@ import math
 import os
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import pyvips  # type: ignore[import-untyped]
 
 from photo_assistant.domain.edit_recipe import Recipe, straighten_scale
+from photo_assistant.domain.export_naming import MAX_EDGE
 from photo_assistant.ports import RenderSpec
 
 _ROTATIONS = {90: "d90", 180: "d180", 270: "d270"}
+# Never ask libvips to decode at more than this edge (it only shrinks, never upscales):
+# a tiny crop divides the wanted edge by a tiny fraction (QA A6).
+_MAX_DECODE_EDGE = 100_000
 
 
 def _save_webp(image: pyvips.Image, path: str, spec: RenderSpec) -> None:
@@ -55,7 +60,9 @@ def apply_recipe(image: pyvips.Image, recipe: Recipe) -> pyvips.Image:
         image = _straighten(image, recipe.straighten)
     if recipe.crop is not None:
         c = recipe.crop
-        left, top = round(c.x * image.width), round(c.y * image.height)
+        # at least one pixel, inside the image, however small or close to the edge
+        left = min(round(c.x * image.width), image.width - 1)
+        top = min(round(c.y * image.height), image.height - 1)
         w = max(1, min(round(c.w * image.width), image.width - left))
         h = max(1, min(round(c.h * image.height), image.height - top))
         image = image.crop(left, top, w, h)
@@ -73,7 +80,7 @@ def _load_edge(spec: RenderSpec) -> int | None:
         keep *= min(recipe.crop.w, recipe.crop.h)
     if recipe.straighten:
         keep *= math.cos(math.radians(abs(recipe.straighten))) / 2
-    return math.ceil(spec.max_edge / keep)
+    return min(math.ceil(spec.max_edge / keep), _MAX_DECODE_EDGE)
 
 
 class VipsRenderer:
@@ -91,6 +98,8 @@ class VipsRenderer:
         saver = _SAVERS.get(spec.format)
         if saver is None:
             raise ValueError(f"unsupported output format: {spec.format!r}")
+        if spec.max_edge is not None and spec.max_edge > MAX_EDGE:
+            spec = replace(spec, max_edge=MAX_EDGE)
         image = self._load(source, spec)
         if spec.recipe is not None:
             if spec.max_edge is not None:

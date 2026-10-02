@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 MAX_STRAIGHTEN = 15.0
+MIN_CROP = 0.001  # a crop keeps at least 1/1000 of the width and height (QA A6)
 QUARTER_TURNS = (0, 90, 180, 270)
 _EPSILON = 1e-9
 
@@ -38,6 +39,8 @@ class Crop:
     def __post_init__(self) -> None:
         if min(self.x, self.y) < 0 or self.w <= 0 or self.h <= 0:
             raise InvalidRecipeError("crop needs x, y ≥ 0 and a width and height above 0")
+        if min(self.w, self.h) < MIN_CROP - _EPSILON:
+            raise InvalidRecipeError("crop must keep at least 1/1000 of the width and height")
         if self.x + self.w > 1 + _EPSILON or self.y + self.h > 1 + _EPSILON:
             raise InvalidRecipeError("crop must stay inside the photo (x + w ≤ 1, y + h ≤ 1)")
 

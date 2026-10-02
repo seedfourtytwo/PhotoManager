@@ -106,7 +106,8 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/groups/{group_id}` | – | `AssetOut[]` (a burst / near-duplicate set) |
 
 `Recipe = {rotate: 0|90|180|270, flip_horizontal: bool, flip_vertical: bool,
-crop: {x, y, w, h} | null (fractions 0–1 of the rotated image), straighten: -15..15}`.
+crop: {x, y, w, h} | null (fractions 0–1 of the rotated image; `w`, `h` ≥ 0.001 since v1.2),
+straighten: -15..15}`.
 One recipe per photo, shared by everyone (needs `edit`). Originals never change.
 
 ## Downloads
@@ -125,7 +126,10 @@ DownloadRequest = {
 }
 ```
 Needs `download` on every included asset (others are silently left out and counted in the
-`X-Skipped` header). `original` + no resize streams the untouched file; any other option
+`X-Skipped` header). `max_edge` is 1–20000 (`422` otherwise, v1.2). A photo that fails while
+the ZIP is being produced (missing library file, render error) is left out and the stream
+goes on; the archive then ends with a `manifest.txt` entry listing each left-out file and why
+(`X-Skipped` is sent before streaming starts, so it only counts access) (v1.2). `original` + no resize streams the untouched file; any other option
 renders via libvips with the edit recipe applied.
 
 ## Albums

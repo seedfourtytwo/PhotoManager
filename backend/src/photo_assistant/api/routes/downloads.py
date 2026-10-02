@@ -14,7 +14,7 @@ from photo_assistant.api.schemas import DownloadRequest, Estimate
 from photo_assistant.api.services import Services
 from photo_assistant.app.downloads import MEDIA_TYPES, Entry, downloadable
 from photo_assistant.domain.access import Level, Viewer
-from photo_assistant.domain.export_naming import ExportOptions, OptionsError
+from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, OptionsError
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api", tags=["downloads"], dependencies=LOGGED_IN)
@@ -113,7 +113,7 @@ def download_one(
     asset_id: int,
     fmt: Annotated[str, Query(alias="format")] = "original",
     quality: Annotated[int, Query(ge=1, le=100)] = 90,
-    max_edge: Annotated[int | None, Query(ge=1)] = None,
+    max_edge: Annotated[int | None, Query(ge=1, le=MAX_EDGE)] = None,
     strip_location: bool = False,
 ) -> StreamingResponse:
     view = require_view(services, viewer, asset_id, Level.DOWNLOAD)

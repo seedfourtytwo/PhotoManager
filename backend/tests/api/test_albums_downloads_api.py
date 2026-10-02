@@ -172,3 +172,40 @@ def test_single_download(admin: TestClient, ids: list[int]) -> None:
     untouched = admin.get(f"/api/assets/{ids[1]}/download")
     with Image.open(io.BytesIO(untouched.content)) as im:
         assert im.size == (400, 300), "original means untouched"
+
+
+def test_an_absurd_max_edge_is_refused(admin: TestClient, ids: list[int]) -> None:
+    """QA A6: max_edge=10**9 overflowed libvips."""
+    body = {"ids": ids, "format": "jpeg", "max_edge": 10**9}
+    assert admin.post("/api/downloads", json=body).status_code == 422
+    assert admin.post("/api/downloads/estimate", json=body).status_code == 422
+    one = admin.get(f"/api/assets/{ids[0]}/download", params={"format": "jpeg", "max_edge": 10**9})
+    assert one.status_code == 422
+
+
+def test_a_photo_that_fails_is_left_out_of_the_zip_and_listed_in_its_manifest(
+    admin: TestClient, ids: list[int]
+) -> None:
+    """QA A6: one failing photo used to cut the ZIP short (a truncated, unreadable archive)."""
+    from tests.api.conftest import services_of
+
+    services = services_of(admin)
+    broken = services.repo.get_asset(ids[1])
+    assert broken is not None
+    library_file = services.store.absolute(broken.library_path)
+    library_file.chmod(0o644)
+    library_file.write_bytes(b"not a photo any more")  # synthetic test library only
+    for fmt in ("original", "jpeg"):
+        body = {"ids": ids, "format": fmt} | ({"strip_location": True} if fmt == "original" else {})
+        if fmt == "original":
+            library_file.unlink()
+        response = admin.post("/api/downloads", json=body)
+        assert response.status_code == 200
+        names = zip_names(response.content)
+        assert "manifest.txt" in names, fmt
+        assert len([n for n in names if n != "manifest.txt"]) == 3
+        with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+            manifest = z.read("manifest.txt").decode()
+        assert "1 photo could not be included" in manifest and "IMG_1" in manifest
+    fine = admin.post("/api/downloads", json={"ids": [ids[0]], "format": "jpeg"})
+    assert zip_names(fine.content) == ["IMG_0.jpg"], "no manifest when nothing failed"

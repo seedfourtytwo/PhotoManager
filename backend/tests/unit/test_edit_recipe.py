@@ -32,6 +32,8 @@ def test_the_default_recipe_changes_nothing() -> None:
         {"crop": {"x": 0.6, "y": 0, "w": 0.5, "h": 0.5}},
         {"crop": {"x": 0, "y": 0, "w": 0, "h": 0.5}},
         {"crop": {"x": 0, "y": 0, "w": 0.5}},
+        {"crop": {"x": 0, "y": 0, "w": 1e-12, "h": 0.5}},  # QA A6: 500s and broken ZIPs
+        {"crop": {"x": 0, "y": 0, "w": 0.5, "h": 0.0009}},
         {"flip_horizontal": "yes"},
         {"straighten": float("nan")},
     ],
@@ -89,3 +91,18 @@ def test_fit_within_never_upscales() -> None:
     assert fit_within(1000, 800, 2048) == (1000, 800)
     assert fit_within(3000, 4000, None) == (3000, 4000)
     assert fit_within(10000, 1, 100) == (100, 1)
+
+
+def test_the_smallest_crop_is_a_thousandth_of_the_photo() -> None:
+    from photo_assistant.domain.edit_recipe import MIN_CROP
+
+    assert MIN_CROP == 0.001
+    Crop(0.999, 0.999, 0.001, 0.001)  # allowed: the renderer keeps at least one pixel
+
+
+def test_download_options_refuse_an_absurd_max_edge() -> None:
+    from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, OptionsError
+
+    assert ExportOptions(max_edge=MAX_EDGE).max_edge == 20000
+    with pytest.raises(OptionsError, match="20000"):
+        ExportOptions(max_edge=MAX_EDGE + 1)

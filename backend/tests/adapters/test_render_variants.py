@@ -141,3 +141,16 @@ def test_an_edit_of_a_photo_larger_than_the_preview_renders(
     for recipe in (Recipe(rotate=90), Recipe(straighten=5.0), Recipe(flip_vertical=True)):
         size = renderer.render_variant(source, out, RenderSpec(recipe=recipe, max_edge=2048))
         assert max(size) == 2048
+
+
+def test_a_tiny_crop_at_the_edge_and_a_huge_max_edge_still_render(
+    renderer: VipsRenderer, tmp_path: Path
+) -> None:
+    """QA A6: the smallest crop in the far corner keeps one pixel; a huge max_edge is capped
+    instead of overflowing libvips."""
+    source = halves(tmp_path / "in.jpg", "red", "blue")
+    corner = Recipe(crop=Crop(0.999, 0.999, 0.001, 0.001))
+    size = renderer.render_variant(source, tmp_path / "c.png", RenderSpec(corner, format="png"))
+    assert size == (1, 1)
+    spec = RenderSpec(corner, max_edge=10**9, format="jpeg")
+    assert renderer.render_variant(source, tmp_path / "big.jpg", spec) == (1, 1)

@@ -10,6 +10,7 @@ from pathlib import PurePosixPath
 from photo_assistant.domain.edit_recipe import fit_within
 
 FORMATS = ("original", "jpeg", "png", "webp")
+MAX_EDGE = 20000  # pixels; larger requests overflowed libvips (QA A6)
 _EXTENSIONS = {"jpeg": ".jpg", "png": ".png", "webp": ".webp"}
 # Rough bytes per pixel, measured on photos: good enough to warn "this is 2 GB".
 _BYTES_PER_PIXEL = {"jpeg": 0.45, "webp": 0.3, "png": 2.5}
@@ -46,8 +47,8 @@ class ExportOptions:
             raise OptionsError(f"format must be one of {', '.join(FORMATS)}")
         if not 1 <= self.quality <= 100:
             raise OptionsError("quality must be 1 to 100")
-        if self.max_edge is not None and self.max_edge < 1:
-            raise OptionsError("max_edge must be a positive number of pixels")
+        if self.max_edge is not None and not 1 <= self.max_edge <= MAX_EDGE:
+            raise OptionsError(f"max_edge must be 1 to {MAX_EDGE} pixels")
 
     @property
     def untouched(self) -> bool:
@@ -107,3 +108,11 @@ def estimate_bytes(
     w, h = fit_within(width, height, options.max_edge)
     quality = options.quality / 90 if fmt != "png" else 1.0
     return max(1, round(w * h * _BYTES_PER_PIXEL[fmt] * quality))
+
+
+def skipped_manifest(failed: list[tuple[str, str]]) -> str:
+    """``manifest.txt`` for a ZIP that had to leave photos out: (name, reason) each."""
+    n = len(failed)
+    lines = [f"{n} photo{'s' if n != 1 else ''} could not be included:", ""]
+    lines += [f"- {name}: {reason}" for name, reason in failed]
+    return "\n".join(lines) + "\n"
