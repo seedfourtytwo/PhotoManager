@@ -121,8 +121,7 @@
 						{formatBytes(t.repo_bytes)} stored{/if}
 				</p>
 				<p class="small status" class:attention={t.needs_attention}>
-					{#if t.overdue}<strong>overdue</strong> ·
-					{/if}{lastLine(t)}
+					{t.overdue ? 'overdue · ' : ''}{lastLine(t)}
 				</p>
 				<div class="actions">
 					<button type="button" disabled={busy !== null || !t.enabled} onclick={() => act(t, 'run')}
@@ -249,9 +248,6 @@
 	}
 	.status.attention {
 		color: var(--ink);
-	}
-	strong {
-		font-weight: 600;
 	}
 	.actions {
 		margin-left: -0.5rem;
