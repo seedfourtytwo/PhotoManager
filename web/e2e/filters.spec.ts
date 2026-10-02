@@ -36,13 +36,9 @@ test('filter by place, then reload the bookmarked URL', async ({ page }) => {
 	).toHaveValue('Lisbon');
 });
 
-test('search from the navigation filters by free text', async ({ page }) => {
-	await page
-		.getByRole('navigation', { name: 'Main' })
-		.getByRole('button', { name: 'Search' })
-		.click();
-	const search = page.getByRole('searchbox', { name: 'Search' });
-	await expect(search).toBeFocused();
+test('the filter panel searches the library by free text', async ({ page }) => {
+	const panel = await openFilters(page);
+	const search = panel.getByRole('searchbox', { name: 'Search' });
 	await search.fill('carnac');
 	await expect(page).toHaveURL(/q=carnac/);
 });
