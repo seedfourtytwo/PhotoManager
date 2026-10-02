@@ -17,7 +17,7 @@ import type {
 	Role,
 	User
 } from '../src/lib/api/types.ts';
-import { describeFilters, filtersFromParams } from '../src/lib/filters.ts';
+import { filtersFromParams } from '../src/lib/filters.ts';
 import { v11Routes } from './v11.ts';
 import {
 	makeAsset,
@@ -489,17 +489,64 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		return `${folder}${base}.${ext}`;
 	}
 
-	/** The ZIP is named after what it holds: the album, the filtered view, or a count. */
+	/** The ZIP is named after what it holds (v1.3; backend domain/archive_name.py). */
 	function zipName(request: DownloadRequest): string {
+		const clip = (stem: string, trim: RegExp) => stem.slice(0, 96).replace(trim, '') + '.zip';
 		if ('album_id' in request && request.album_id !== undefined) {
-			const album = state.albums.find((a) => a.id === request.album_id);
-			return `${(album?.title ?? 'album').replace(/["\\]/g, '_')}.zip`;
+			const title = state.albums.find((a) => a.id === request.album_id)?.title ?? '';
+			// eslint-disable-next-line no-control-regex
+			const safe = title.replace(/[\x00-\x1f\x7f/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ');
+			const text = safe.replace(/^[. ]+|[. ]+$/g, '');
+			return clip(/[^_]/.test(text) ? text : 'album', /[. ]+$/);
 		}
 		if ('filters' in request && request.filters) {
-			const words = describeFilters(request.filters).replace(/[^\p{L}\p{N}]+/gu, '-');
-			return `photos-${words.replace(/^-|-$/g, '') || 'all'}.zip`;
+			return clip(`photos-${zipWords(request.filters).join('-') || 'all'}`, /-+$/);
 		}
-		return `photos-${'ids' in request ? request.ids.length : 0}.zip`;
+		return `photos-${'ids' in request ? new Set(request.ids).size : 0}.zip`;
+	}
+
+	function zipWords(f: AssetFilters): string[] {
+		const slug = (t: string) =>
+			t
+				.normalize('NFC')
+				.toLowerCase()
+				.replace(/[^\p{L}\p{N}]+/gu, '-')
+				.replace(/^-+|-+$/g, '');
+		const days =
+			f.from && f.from === f.to
+				? f.from
+				: f.from && f.to
+					? `${f.from}-to-${f.to}`
+					: f.from
+						? `from-${f.from}`
+						: f.to
+							? `to-${f.to}`
+							: '';
+		const n = f.source_id?.length ?? 0;
+		return [
+			days,
+			f.year === undefined
+				? ''
+				: f.month
+					? `${f.year}-${String(f.month).padStart(2, '0')}`
+					: `${f.year}`,
+			n ? `${n}-source${n === 1 ? '' : 's'}` : '',
+			...[f.camera, f.place, f.q].map((t) => (t ? slug(t) : '')),
+			f.favourite ? 'favourites' : '',
+			f.hidden ? 'hidden' : '',
+			f.guessed_date ? 'guessed-dates' : '',
+			f.has_location === true ? 'with-location' : f.has_location === false ? 'without-location' : ''
+		].filter(Boolean);
+	}
+
+	/** RFC 6266: the UTF-8 name, plus an ASCII stand-in (accents dropped, the rest `_`). */
+	function attachment(name: string): string {
+		const ascii = [...name.normalize('NFC')]
+			.map((c) => c.normalize('NFKD').replace(/\p{M}/gu, ''))
+			.map((c) => (c && /^[\x20-\x7e]+$/.test(c) ? c : '_'))
+			.join('')
+			.replace(/["\\]/g, '_');
+		return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 	}
 
 	function parseDownload(ctx: Ctx): DownloadRequest {
@@ -722,6 +769,20 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				if (user.disabled)
 					for (const [t, id] of state.sessions) if (id === user.id) state.sessions.delete(t);
 				return ok(publicUser(user));
+			}
+		],
+		[
+			'POST',
+			/^\/api\/users\/(\d+)\/unlock$/,
+			(ctx) => {
+				admin(ctx);
+				const user = state.users.find((u) => u.id === idParam(ctx));
+				if (!user) throw new HttpError(404, 'User not found.');
+				const name = user.username.toLowerCase();
+				for (const key of [...state.failedLogins.keys()])
+					if (key.slice(0, key.lastIndexOf('|')).toLowerCase() === name)
+						state.failedLogins.delete(key);
+				return noContent;
 			}
 		],
 
@@ -1136,7 +1197,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					raw: body,
 					type: 'application/zip',
 					headers: {
-						'content-disposition': `attachment; filename="${zipName(request)}"`,
+						'content-disposition': attachment(zipName(request)),
 						'x-skipped': String(skipped)
 					}
 				};

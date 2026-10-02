@@ -345,6 +345,13 @@ export type BackupIn = {
 	quiet_window?: string | null;
 	retention?: { daily: number; weekly: number; monthly: number };
 };
+/** v1.3: only the fields sent change; `quiet_window: null` = any time; retention merges. */
+export type BackupPatch = {
+	enabled?: boolean;
+	schedule?: string;
+	quiet_window?: string | null;
+	retention?: { daily?: number; weekly?: number; monthly?: number };
+};
 export type QueuedRun = { job_id: Id; target_id: Id };
 
 // --- devices and remote sources (v1.1) ------------------------------------------------------

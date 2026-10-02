@@ -15,6 +15,7 @@ import type {
 	AssetOut,
 	AssetPage,
 	BackupIn,
+	BackupPatch,
 	BackupRun,
 	BackupTarget,
 	BulkState,
@@ -190,6 +191,8 @@ export function createApi(options: ApiOptions = {}) {
 		users: () => get<User[]>('/api/users'),
 		createUser: (body: NewUser) => request<User>('POST', '/api/users', body),
 		updateUser: (id: Id, body: UserPatch) => request<User>('PATCH', `/api/users/${id}`, body),
+		/** v1.3: lift the failed-login block (429) on this account. */
+		unlockUser: (id: Id) => request<void>('POST', `/api/users/${id}/unlock`),
 		/** v1.1: names to share albums with, for any member (not only admins). */
 		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
 		uploadUrl: `${base}/api/upload`,
@@ -335,6 +338,9 @@ export function createApi(options: ApiOptions = {}) {
 		addBackup: (body: BackupIn) => request<BackupTarget>('POST', '/api/backups', body),
 		setBackupEnabled: (id: Id, enabled: boolean) =>
 			request<BackupTarget>('PATCH', `/api/backups/${id}`, { enabled }),
+		/** v1.3: change schedule, quiet window, retention (and/or enabled). */
+		updateBackup: (id: Id, body: BackupPatch) =>
+			request<BackupTarget>('PATCH', `/api/backups/${id}`, body),
 		runBackup: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/run`),
 		restoreTest: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/restore-test`),
 		backupRuns: (id: Id, limit = 10) =>

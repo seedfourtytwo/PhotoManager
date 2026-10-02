@@ -81,6 +81,21 @@ describe('with seeded users', () => {
 		);
 	});
 
+	it('lets an admin unlock a rate-limited account', async () => {
+		const api = browser();
+		for (let i = 0; i < 10; i++)
+			await api.login({ username: 'partner', password: 'nope' }).catch(() => undefined);
+		const blocked = { username: 'partner', password: 'battery staple' };
+		await expect(api.login(blocked)).rejects.toMatchObject({ status: 429 });
+		const admin = await signedIn();
+		const partner = (await admin.users()).find((u) => u.username === 'partner')!;
+		const member = await signedIn('guest', 'guest password');
+		await expect(member.unlockUser(partner.id)).rejects.toMatchObject({ status: 403 });
+		await admin.unlockUser(partner.id);
+		await expect(api.login(blocked)).resolves.toMatchObject({ username: 'partner' });
+		await expect(admin.unlockUser(999)).rejects.toMatchObject({ status: 404 });
+	});
+
 	it('logs out', async () => {
 		const api = await signedIn();
 		await api.logout();

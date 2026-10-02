@@ -70,6 +70,14 @@ describe('integration rules', () => {
 		expect(album.headers.get('content-disposition')).toContain('Summers at the house.zip');
 		const year = await form(zipRequest({ filters: { year: 2019 } }));
 		expect(year.headers.get('content-disposition')).toContain('photos-2019.zip');
+		const place = await form(zipRequest({ filters: { year: 2019, place: 'France' } }));
+		expect(place.headers.get('content-disposition')).toBe(
+			`attachment; filename="photos-2019-france.zip"; filename*=UTF-8''photos-2019-france.zip`
+		);
+		const all = await form(zipRequest({ filters: {} }));
+		expect(all.headers.get('content-disposition')).toContain('photos-all.zip');
+		const ids = await form(zipRequest({ ids: [1, 2, 2] }));
+		expect(ids.headers.get('content-disposition')).toContain("filename*=UTF-8''photos-2.zip");
 	});
 
 	it('answers errors as JSON {detail}, also for unknown routes', async () => {
@@ -156,6 +164,21 @@ describe('backups, devices and remote sources', () => {
 		expect(runs[0].status).toBe('succeeded');
 		await api.restoreTest(target.id);
 		expect((await api.setBackupEnabled(target.id, false)).enabled).toBe(false);
+		const changed = await api.updateBackup(target.id, {
+			schedule: 'weekly sun 03:00',
+			quiet_window: '22:00-06:00',
+			retention: { weekly: 2 }
+		});
+		expect(changed).toMatchObject({
+			schedule: 'weekly sun 03:00',
+			quiet_window: '22:00-06:00',
+			retention: { daily: 7, weekly: 2, monthly: 12 },
+			enabled: false
+		});
+		expect((await api.updateBackup(target.id, { quiet_window: null })).quiet_window).toBeNull();
+		await expect(api.updateBackup(target.id, { schedule: 'often' })).rejects.toMatchObject({
+			status: 422
+		});
 		const member = await h.signedIn('partner', 'battery staple');
 		await expect(member.backups()).rejects.toMatchObject({ status: 403 });
 	});

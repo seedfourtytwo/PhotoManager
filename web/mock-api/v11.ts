@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import type {
 	AssetFilters,
 	AssetOut,
+	BackupPatch,
 	Level,
 	PrintPlan,
 	PrintRequest
@@ -495,7 +496,23 @@ export function v11Routes(h: Helpers): Route[] {
 			/^\/api\/backups\/(\d+)$/,
 			(ctx) => {
 				const target = findBackup(ctx);
-				target.enabled = Boolean((ctx.body as { enabled?: boolean })?.enabled);
+				const body = (ctx.body ?? {}) as BackupPatch & Record<string, unknown>;
+				const unknown = Object.keys(body).filter(
+					(k) => !['enabled', 'schedule', 'quiet_window', 'retention'].includes(k)
+				);
+				if (unknown.length) throw new HttpError(422, `extra fields not permitted: ${unknown}`);
+				if ('schedule' in body && !SCHEDULE.test(body.schedule ?? ''))
+					throw new HttpError(422, `unknown schedule '${body.schedule}': use 'manual', 'hourly', 'daily HH:MM' or 'weekly sun HH:MM'`); // prettier-ignore
+				if (body.quiet_window && !/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(body.quiet_window))
+					throw new HttpError(422, `quiet window '${body.quiet_window}' must look like 22:00-06:00`); // prettier-ignore
+				const retention = { ...target.retention, ...body.retention };
+				const counts = Object.values(retention);
+				if (counts.some((v) => v < 0) || !counts.some((v) => v > 0))
+					throw new HttpError(422, 'retention must keep at least one snapshot and no negative counts'); // prettier-ignore
+				if (body.schedule !== undefined) target.schedule = body.schedule;
+				if ('quiet_window' in body) target.quiet_window = body.quiet_window ?? null;
+				target.retention = retention;
+				if (body.enabled !== undefined) target.enabled = body.enabled;
 				return ok(targetOut(target));
 			}
 		],
