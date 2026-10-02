@@ -68,6 +68,7 @@ export type MockOptions = { now?: () => number };
 
 export function createMockApi(initial: MockState, options: MockOptions = {}) {
 	let state = initial;
+	const initialCount = initial.assets.length;
 	const now = options.now ?? (() => Date.now());
 
 	// --- access -------------------------------------------------------------------------
@@ -1340,8 +1341,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 
 	async function mockRoute(url: URL, req: IncomingMessage): Promise<Result | null> {
 		if (url.pathname === '/__mock/reset' && req.method === 'POST') {
-			const body = ((await readBody(req)) ?? {}) as { users?: 'none' | 'seed'; count?: number };
-			state = makeState({ users: body.users ?? 'seed', count: body.count });
+			const body = ((await readBody(req)) ?? {}) as {
+				users?: 'none' | 'seed';
+				count?: number;
+				models?: boolean;
+			};
+			state = makeState({ users: body.users ?? 'seed', count: body.count ?? initialCount });
+			state.ml.installed = body.models ?? false;
 			return noContent;
 		}
 		if (url.pathname.startsWith('/__mock/icon-')) {

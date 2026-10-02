@@ -3,9 +3,11 @@ import {
 	expectAccessible,
 	isPhone,
 	resetMock,
+	selectionAction,
 	selectTiles,
 	signIn,
-	test
+	test,
+	GUEST
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -18,10 +20,7 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 		[0, 1].map(async (i) => Number(await page.locator('.tile').nth(i).getAttribute('data-id')))
 	);
 	await selectTiles(page, [0, 1]);
-	await page
-		.getByRole('toolbar', { name: 'Selected photos' })
-		.getByRole('button', { name: 'Download' })
-		.click();
+	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/2 selected photos\s+· about [\d.]+ [KMG]B/)).toBeVisible();
 	await expectAccessible(page);
@@ -67,10 +66,7 @@ test('download everything matching a filter', async ({ page }) => {
 
 test('fix date: shift a selection with a before → after preview', async ({ page }) => {
 	await selectTiles(page, [0]);
-	await page
-		.getByRole('toolbar', { name: 'Selected photos' })
-		.getByRole('button', { name: 'Fix date' })
-		.click();
+	await selectionAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await dialog.getByLabel('Direction').selectOption({ label: 'earlier' });
 	await dialog.getByRole('spinbutton').nth(1).fill('2');
@@ -123,7 +119,7 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 test('trash: move, restore', async ({ page }) => {
 	const id = await page.locator('.tile').first().getAttribute('data-id');
 	await selectTiles(page, [0]);
-	await page.getByRole('button', { name: 'Move to trash' }).click();
+	await selectionAction(page, 'Move to trash');
 	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
 	await expect(page.locator(`.tile[data-id="${id}"]`)).toHaveCount(0);
 	await page.goto('/trash');
@@ -132,4 +128,55 @@ test('trash: move, restore', async ({ page }) => {
 	await page.locator(`.tile[data-id="${id}"]`).click();
 	await page.getByRole('button', { name: 'Restore' }).click();
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
+});
+
+test('download: a server error or an expired session is said, not swallowed', async ({ page }) => {
+	await selectTiles(page, [0]);
+	await selectionAction(page, 'Download');
+	const dialog = page.getByRole('dialog', { name: 'Download' });
+	await expect(dialog.getByText(/about [\d.]+ [KMG]B/)).toBeVisible();
+	await page.route('**/api/downloads', (route) =>
+		route.request().method() === 'POST'
+			? route.fulfill({ status: 500, json: { detail: 'not enough space for the ZIP' } })
+			: route.continue()
+	);
+	await dialog.getByRole('button', { name: 'Download', exact: true }).click();
+	await expect(page.getByRole('status')).toContainText(
+		'The download did not start: Not enough space for the ZIP'
+	);
+
+	await page.getByRole('button', { name: 'Clear selection' }).click();
+	await selectTiles(page, [1]);
+	await selectionAction(page, 'Download');
+	await expect(dialog.getByText(/about [\d.]+ [KMG]B/)).toBeVisible();
+	await page.context().clearCookies();
+	await dialog.getByRole('button', { name: 'Download', exact: true }).click();
+	await expect(page).toHaveURL(/\/login\?next=/);
+});
+
+test('download: original files are labelled as without edits, with a hint for edited ones', async ({
+	page
+}) => {
+	await page.locator('.tile').first().click();
+	await page.getByRole('button', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Rotate right' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Download' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Download photo' });
+	await expect(dialog.getByLabel('Original file (without edits)')).toBeChecked();
+	await expect(dialog.getByText(/Choose JPEG to include the edits/)).toBeVisible();
+	await dialog.getByLabel('JPEG').check();
+	await expect(dialog.getByText(/Choose JPEG/)).toHaveCount(0);
+});
+
+test('download: a guest with view-only photos is told why nothing can be downloaded', async ({
+	page
+}) => {
+	await signIn(page, '/?source_id=2&to=2015-12-31', GUEST);
+	await selectTiles(page, [0]);
+	await selectionAction(page, 'Download');
+	const dialog = page.getByRole('dialog', { name: 'Download' });
+	await expect(dialog.getByText(/may view these photos but not download them/)).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Download', exact: true })).toBeDisabled();
+	await expectAccessible(page);
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeAsset } from './testing/fixtures';
-import { aspect, groupByMonth, justify, rowHeightFor } from './timeline';
+import { aspect, groupByMonth, justify, neighbour, rowHeightFor, visibleRange } from './timeline';
 
 describe('groupByMonth', () => {
 	it('groups consecutive photos by local month and keeps order', () => {
@@ -110,5 +110,50 @@ describe('rowHeightFor', () => {
 		expect(rowHeightFor(390, 'comfortable')).toBe(110);
 		expect(rowHeightFor(1440, 'compact')).toBeLessThan(220);
 		expect(rowHeightFor(1440, 'large')).toBeGreaterThan(220);
+	});
+});
+
+describe('visibleRange (windowing inside a month)', () => {
+	// Three rows of two 100 px boxes, 3 px gaps: rows at y = 0, 103, 206.
+	const boxes = justify([1, 1, 1, 1, 1, 1], 203, 100, 3).boxes;
+
+	it('keeps only the boxes overlapping [from, to)', () => {
+		expect(visibleRange(boxes, 110, 150)).toEqual([2, 4]);
+		expect(visibleRange(boxes, -500, 50)).toEqual([0, 2]);
+		expect(visibleRange(boxes, 0, 1000)).toEqual([0, 6]);
+	});
+
+	it('is empty when the window misses the month', () => {
+		expect(visibleRange(boxes, 400, 900)).toEqual([0, 0]);
+		expect(visibleRange(boxes, -900, -400)).toEqual([0, 0]);
+	});
+});
+
+describe('neighbour (arrow keys between photos)', () => {
+	// Row 1: a wide and a narrow photo; row 2: three photos.
+	const boxes = [
+		{ x: 0, y: 0, w: 200, h: 100 },
+		{ x: 203, y: 0, w: 97, h: 100 },
+		{ x: 0, y: 103, w: 100, h: 100 },
+		{ x: 103, y: 103, w: 100, h: 100 },
+		{ x: 206, y: 103, w: 94, h: 100 }
+	];
+
+	it('steps left and right in reading order, stopping at the ends', () => {
+		expect(neighbour(boxes, 1, 'ArrowRight')).toBe(2);
+		expect(neighbour(boxes, 0, 'ArrowLeft')).toBeNull();
+		expect(neighbour(boxes, 4, 'ArrowRight')).toBeNull();
+	});
+
+	it('moves up and down to the photo closest under or above the centre', () => {
+		expect(neighbour(boxes, 1, 'ArrowDown')).toBe(4);
+		expect(neighbour(boxes, 3, 'ArrowUp')).toBe(0);
+		expect(neighbour(boxes, 2, 'ArrowUp')).toBe(0);
+		expect(neighbour(boxes, 3, 'ArrowDown')).toBeNull();
+	});
+
+	it('jumps to the first and last with Home and End', () => {
+		expect(neighbour(boxes, 3, 'Home')).toBe(0);
+		expect(neighbour(boxes, 0, 'End')).toBe(4);
 	});
 });

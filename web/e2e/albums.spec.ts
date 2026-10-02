@@ -3,6 +3,7 @@ import {
 	expectAccessible,
 	isPhone,
 	resetMock,
+	selectionAction,
 	selectTiles,
 	signIn,
 	test
@@ -17,10 +18,7 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 	const tiles = page.locator('.tile');
 	const ids = await Promise.all([0, 1, 2].map((i) => tiles.nth(i).getAttribute('data-id')));
 	await selectTiles(page, [0, 1, 2]);
-	await page
-		.getByRole('toolbar', { name: 'Selected photos' })
-		.getByRole('button', { name: 'Add to album' })
-		.click();
+	await selectionAction(page, 'Add to album');
 	const dialog = page.getByRole('dialog', { name: 'Add to album' });
 	await dialog.getByLabel('New album title').fill('Test trip');
 	await dialog.getByRole('button', { name: 'Add' }).click();
@@ -56,7 +54,7 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 	await page.getByRole('button', { name: 'Done arranging' }).click();
 
 	await selectTiles(page, [1]);
-	await page.getByRole('button', { name: 'Set as cover' }).click();
+	await selectionAction(page, 'Set as cover');
 	await expect(page.getByRole('status')).toContainText('Cover changed');
 });
 

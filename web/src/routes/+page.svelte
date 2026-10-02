@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { pushState, replaceState } from '$app/navigation';
-	import type { AssetFilters, Id } from '$lib/api';
-	import { api, settings, ui, viewport } from '$lib/app.svelte';
+	import type { AssetFilters, AssetOut, Id } from '$lib/api';
+	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { monthTotals } from '$lib/calendar';
 	import { TimelineLoader } from '$lib/loader.svelte';
+	import { closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
 	import DateScrubber from '$lib/components/DateScrubber.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
@@ -14,6 +14,9 @@
 	import Timeline from '$lib/components/Timeline.svelte';
 	import UploadButton from '$lib/components/UploadButton.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
+
+	/** A shared link to a photo loads at most this many photos looking for it. */
+	const DEEP_LINK_LIMIT = 2000;
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
@@ -32,13 +35,22 @@
 		lastQuery = query;
 		selection = EMPTY;
 		void loader.reset(filters);
-		loadMonths(filters);
 	});
 
-	function loadMonths(f: AssetFilters) {
+	// Counts and the scrubber follow the filters and every change to the library.
+	$effect(() => {
+		const f = filters;
+		void library.version;
+		let stale = false;
+		loadMonths(f, () => stale);
+		return () => (stale = true);
+	});
+
+	function loadMonths(f: AssetFilters, isStale: () => boolean) {
 		api
 			.calendar(f)
 			.then((days) => {
+				if (isStale()) return;
 				months = monthTotals(days);
 				total = days.reduce((n, d) => n + d.count, 0);
 				currentMonth ??= months[0]?.key ?? null;
@@ -48,14 +60,49 @@
 
 	function reloadAll() {
 		void loader.reload();
-		loadMonths(filters);
+		library.changed();
 	}
+
+	$effect(() => {
+		if (loader.items.length || loader.done) ui.gridReady = true;
+	});
 
 	const order = $derived(loader.items.map((a) => a.id));
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
-	const loupeId = $derived(page.state.loupe);
-	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
 	const described = $derived(describeFilters(filters));
+
+	// --- the loupe follows ?photo=<id> -------------------------------------------------------
+	const loupeId = $derived(openPhotoId(page));
+	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
+	/** A linked photo that is not among the loaded ones (yet), shown on its own. */
+	let single = $state<AssetOut | null>(null);
+	let lastOpen: Id | undefined;
+
+	$effect(() => {
+		const id = loupeId;
+		if (id !== undefined) {
+			lastOpen = id;
+			if (loupeIndex < 0 && single?.id !== id) void findPhoto(id);
+		} else if (lastOpen !== undefined) {
+			// Closed: back to where that photo is in the grid, with focus on it.
+			const id = lastOpen;
+			lastOpen = undefined;
+			single = null;
+			void timeline?.reveal(id);
+		}
+	});
+
+	async function findPhoto(id: Id) {
+		await loader.until(
+			(items) => items.some((a) => a.id === id) || items.length >= DEEP_LINK_LIMIT
+		);
+		if (loader.items.some((a) => a.id === id) || openPhotoId(page) !== id) return;
+		try {
+			single = await api.asset(id);
+		} catch {
+			closePhoto();
+		}
+	}
 
 	function toggle(id: Id, range: boolean) {
 		selection = applyClick(selection, id, order, { shift: range, toggle: true });
@@ -104,7 +151,7 @@
 		bind:this={timeline}
 		{loader}
 		{selection}
-		onopen={(id) => pushState('', { loupe: id })}
+		onopen={openPhoto}
 		ontoggle={toggle}
 		onselect={(next) => (selection = next)}
 		onmonth={(key) => (currentMonth = key)}
@@ -114,7 +161,10 @@
 		{selected}
 		onclear={() => (selection = EMPTY)}
 		onpatch={(ids, patch) => loader.updateMany(ids, patch)}
-		onremove={(ids) => loader.remove(ids)}
+		onremove={(ids) => {
+			loader.remove(ids);
+			library.changed();
+		}}
 		onreload={reloadAll}
 	/>
 </div>
@@ -129,10 +179,19 @@
 	<Loupe
 		items={loader.items}
 		index={loupeIndex}
-		onindex={(i) => replaceState('', { loupe: loader.items[i].id })}
-		onclose={() => history.back()}
+		onindex={(i) => showPhoto(loader.items[i].id)}
+		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
 		onchanged={(a) => loader.update(a.id, a)}
+		ondates={reloadAll}
+	/>
+{:else if single && loupeId === single.id}
+	<Loupe
+		items={[single]}
+		index={0}
+		onindex={() => undefined}
+		onclose={closePhoto}
+		onchanged={(a) => (single = { ...single!, ...a })}
 		ondates={reloadAll}
 	/>
 {/if}

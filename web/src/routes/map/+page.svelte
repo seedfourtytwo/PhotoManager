@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto, pushState, replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
@@ -115,9 +116,12 @@
 			3
 		)
 	);
+	const loupeId = $derived(openPhotoId(page));
 	const loupeIndex = $derived(
-		page.state.loupe === undefined ? -1 : chosenItems.findIndex((a) => a.id === page.state.loupe)
+		loupeId === undefined ? -1 : chosenItems.findIndex((a) => a.id === loupeId)
 	);
+	const tracker = new LoupeTracker();
+	$effect(() => tracker.seen(loupeId));
 
 	function choose(c: Cluster) {
 		chosen = c;
@@ -222,7 +226,7 @@
 					{layout}
 					selected={new Set()}
 					selecting={false}
-					onopen={(id) => pushState('', { loupe: id })}
+					onopen={openPhoto}
 					ontoggle={() => {}}
 				/>
 			</div>
@@ -236,8 +240,8 @@
 	<Loupe
 		items={chosenItems}
 		index={loupeIndex}
-		onindex={(i) => replaceState('', { loupe: chosenItems[i].id })}
-		onclose={() => history.back()}
+		onindex={(i) => showPhoto(chosenItems[i].id)}
+		onclose={closePhoto}
 		onchanged={(a) => (located = copyWith(located, a))}
 	/>
 {/if}

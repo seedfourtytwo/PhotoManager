@@ -9,7 +9,8 @@
 </script>
 
 <script lang="ts">
-	import type { Layout } from '$lib/timeline';
+	import { tick } from 'svelte';
+	import { NAV_KEYS, neighbour, type Layout, type NavKey } from '$lib/timeline';
 
 	type Props = {
 		items: AssetOut[];
@@ -22,6 +23,18 @@
 		/** Album arrange mode: drag or Alt+←/→ to move a photo. */
 		arrange?: boolean;
 		onmove?: (id: Id, to: number) => void;
+		/** Only render items [start, end) (windowing); the grid keeps its full height. */
+		range?: [number, number];
+		/**
+		 * Roving tab stop: the one tile reachable with Tab (null: none in this grid). Left
+		 * undefined, the grid manages it itself (first tile, then the last one focused).
+		 */
+		active?: Id | null;
+		onfocusphoto?: (id: Id) => void;
+		/** Arrow keys: handled by the caller (a timeline spanning several grids) when given. */
+		onnav?: (id: Id, key: NavKey) => void;
+		/** Accessible name of the grid. */
+		label?: string;
 	};
 	let {
 		items,
@@ -31,8 +44,41 @@
 		onopen,
 		ontoggle,
 		arrange = false,
-		onmove
+		onmove,
+		range,
+		active,
+		onfocusphoto,
+		onnav,
+		label = 'Photos'
 	}: Props = $props();
+
+	let own = $state<Id | null>(null);
+	const tabStop = $derived(
+		active !== undefined
+			? active
+			: own !== null && items.some((a) => a.id === own)
+				? own
+				: (items[0]?.id ?? null)
+	);
+	/** Rendered tiles: the window, plus the tab stop so focus never falls off the page. */
+	const shown = $derived.by(() => {
+		const [start, end] = range ?? [0, items.length];
+		const out: { item: AssetOut; i: number }[] = [];
+		for (let i = start; i < Math.min(end, items.length); i++) out.push({ item: items[i], i });
+		const stop = tabStop === null ? -1 : items.findIndex((a) => a.id === tabStop);
+		if (stop >= 0 && (stop < start || stop >= end)) {
+			out.push({ item: items[stop], i: stop });
+			out.sort((a, b) => a.i - b.i);
+		}
+		return out;
+	});
+	let grid: HTMLElement | undefined = $state();
+
+	async function focusTile(id: Id) {
+		own = id;
+		await tick();
+		grid?.querySelector<HTMLElement>(`.tile[data-id="${id}"]`)?.focus();
+	}
 
 	const LONG_PRESS_MS = 450;
 	let pressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -76,6 +122,17 @@
 	}
 
 	function onkeydown(event: KeyboardEvent, id: Id, index: number) {
+		const plain = !event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
+		if (plain && NAV_KEYS.includes(event.key)) {
+			event.preventDefault();
+			const key = event.key as NavKey;
+			if (onnav) onnav(id, key);
+			else {
+				const to = neighbour(layout.boxes, index, key);
+				if (to !== null) void focusTile(items[to].id);
+			}
+			return;
+		}
 		if (event.key === 'x' || (event.key === ' ' && selecting)) {
 			event.preventDefault();
 			ontoggle(id, event.shiftKey);
@@ -103,8 +160,14 @@
 	}
 </script>
 
-<div class="grid" style:height={`${layout.height}px`}>
-	{#each items as item, i (item.id)}
+<div
+	class="grid"
+	role="group"
+	aria-label={label}
+	bind:this={grid}
+	style:height={`${layout.height}px`}
+>
+	{#each shown as { item, i } (item.id)}
 		{@const box = layout.boxes[i]}
 		{#if box}
 			<button
@@ -112,6 +175,11 @@
 				class="tile"
 				class:selected={selected.has(item.id)}
 				data-id={item.id}
+				tabindex={item.id === tabStop ? 0 : -1}
+				onfocus={() => {
+					own = item.id;
+					onfocusphoto?.(item.id);
+				}}
 				aria-pressed={selecting || selected.has(item.id) ? selected.has(item.id) : undefined}
 				style:transform={`translate(${box.x}px, ${box.y}px)`}
 				style:width={`${box.w}px`}

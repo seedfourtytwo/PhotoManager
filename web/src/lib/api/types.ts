@@ -139,6 +139,8 @@ export type AssetDetail = AssetOut & {
 	origins: { source_id: Id; source_label: string; relative_path: string }[];
 	albums: { id: Id; title: string }[];
 	level: Level;
+	/** Not in the contract yet: who may make the photo private (owner or an admin). */
+	owner_id?: Id | null;
 };
 
 /** Query filters shared by /api/assets, /facets, /calendar, /map and download scopes. */

@@ -149,7 +149,9 @@
 		display: grid;
 		gap: 0.15rem;
 	}
-	form button,
+	form button {
+		justify-self: start;
+	}
 	.signout {
 		justify-self: start;
 		padding-left: 0;

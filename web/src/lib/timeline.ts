@@ -84,3 +84,67 @@ export function rowHeightFor(width: number, density: 'compact' | 'comfortable' |
 	const base = width < 640 ? 110 : 220;
 	return Math.round(base * { compact: 0.75, comfortable: 1, large: 1.4 }[density]);
 }
+
+/**
+ * Indexes [start, end) of the boxes that overlap the vertical band [from, to) (coordinates of
+ * the month's grid). Boxes come in rows, top to bottom, so a binary search finds the edges.
+ */
+export function visibleRange(boxes: readonly Box[], from: number, to: number): [number, number] {
+	const first = (pred: (b: Box) => boolean) => {
+		let lo = 0;
+		let hi = boxes.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (pred(boxes[mid])) hi = mid;
+			else lo = mid + 1;
+		}
+		return lo;
+	};
+	const start = first((b) => b.y + b.h > from);
+	const end = first((b) => b.y >= to);
+	return end > start ? [start, end] : [0, 0];
+}
+
+export type NavKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Home' | 'End';
+export const NAV_KEYS: readonly string[] = [
+	'ArrowLeft',
+	'ArrowRight',
+	'ArrowUp',
+	'ArrowDown',
+	'Home',
+	'End'
+];
+
+/**
+ * The photo an arrow key moves to from `index` in a justified layout: left/right in reading
+ * order; up/down to the nearest row above/below, at the photo closest to the same column.
+ */
+export function neighbour(
+	boxes: readonly Pick<Box, 'x' | 'y' | 'w' | 'h'>[],
+	index: number,
+	key: NavKey
+): number | null {
+	const n = boxes.length;
+	if (key === 'Home') return n ? 0 : null;
+	if (key === 'End') return n ? n - 1 : null;
+	if (key === 'ArrowLeft') return index > 0 ? index - 1 : null;
+	if (key === 'ArrowRight') return index < n - 1 ? index + 1 : null;
+	const here = boxes[index];
+	const centre = here.x + here.w / 2;
+	const down = key === 'ArrowDown';
+	// The adjacent row: the nearest y strictly below (or above) this one.
+	let rowY: number | null = null;
+	for (const b of boxes) {
+		const beyond = down ? b.y > here.y + 0.5 : b.y < here.y - 0.5;
+		if (beyond && (rowY === null || (down ? b.y < rowY : b.y > rowY))) rowY = b.y;
+	}
+	if (rowY === null) return null;
+	let best: number | null = null;
+	let bestDistance = Infinity;
+	boxes.forEach((b, i) => {
+		if (Math.abs(b.y - rowY!) > 0.5) return;
+		const distance = Math.abs(b.x + b.w / 2 - centre);
+		if (distance < bestDistance) [best, bestDistance] = [i, distance];
+	});
+	return best;
+}

@@ -7,6 +7,7 @@
 	let username = $state('');
 	let displayName = $state('');
 	let password = $state('');
+	let confirm = $state('');
 	let error = $state('');
 	let busy = $state(false);
 
@@ -20,6 +21,10 @@
 		error = '';
 		if (password.length < MIN_PASSWORD) {
 			error = `Use at least ${MIN_PASSWORD} characters for the password.`;
+			return;
+		}
+		if (password !== confirm) {
+			error = 'The two passwords are not the same.';
 			return;
 		}
 		busy = true;
@@ -60,6 +65,10 @@
 		/>
 	</label>
 	<p id="pw-hint" class="quiet small">At least {MIN_PASSWORD} characters.</p>
+	<label>
+		Password again
+		<input bind:value={confirm} type="password" autocomplete="new-password" required />
+	</label>
 	{#if error}<p role="alert">{error}</p>{/if}
 	<button class="primary" type="submit" disabled={busy}>Create admin account</button>
 </form>
@@ -76,7 +85,6 @@
 	}
 	button {
 		justify-self: start;
-		padding-left: 0;
 	}
 	p[role='alert'] {
 		color: var(--ink);

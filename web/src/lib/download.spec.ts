@@ -3,6 +3,7 @@ import {
 	DEFAULT_OPTIONS,
 	EDGE_PRESETS,
 	buildDownloadRequest,
+	frameError,
 	isUntouched,
 	scopeLabel,
 	singleFileName
@@ -55,5 +56,22 @@ describe('download model', () => {
 	it('names single files by date', () => {
 		expect(singleFileName(7, '2019-07-04T18:30:00', 'webp')).toBe('2019-07-04_7.webp');
 		expect(singleFileName(7, '2019-07-04T18:30:00', 'original')).toBe('2019-07-04_7.jpg');
+	});
+});
+
+describe('frameError (what a download frame shows when the server refused)', () => {
+	it('is nothing while the file downloads (an empty frame)', () => {
+		expect(frameError('')).toBeNull();
+		expect(frameError(null)).toBeNull();
+	});
+
+	it("reads the server's {detail} sentence", () => {
+		expect(frameError('{"detail":"not signed in"}')).toBe('Not signed in');
+	});
+
+	it('falls back to a plain sentence for anything else', () => {
+		expect(frameError('<h1>502 Bad Gateway</h1>')).toBe(
+			'The library server could not make the download.'
+		);
 	});
 });

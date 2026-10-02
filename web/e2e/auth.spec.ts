@@ -10,11 +10,19 @@ test.describe('first run and sign-in', () => {
 
 		await page.getByLabel('User name').fill('c');
 		await page.getByLabel('Your name').fill('C');
-		await page.getByLabel('Password').fill('short');
+		const password = page.getByLabel('Password', { exact: true });
+		const again = page.getByLabel('Password again');
+		await password.fill('short');
+		await again.fill('short');
 		await page.getByRole('button', { name: 'Create admin account' }).click();
 		await expect(page.getByRole('alert')).toContainText('at least 10 characters');
 
-		await page.getByLabel('Password').fill('a long passphrase');
+		await password.fill('a long passphrase');
+		await again.fill('a long passphrase!');
+		await page.getByRole('button', { name: 'Create admin account' }).click();
+		await expect(page.getByRole('alert')).toContainText('not the same');
+
+		await again.fill('a long passphrase');
 		await page.getByRole('button', { name: 'Create admin account' }).click();
 		await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
 		await expect(page.locator('.tile').first()).toBeVisible();

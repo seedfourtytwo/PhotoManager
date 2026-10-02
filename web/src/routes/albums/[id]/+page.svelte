@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto, pushState, replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
+	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
@@ -34,9 +35,10 @@
 	);
 	const order = $derived(items.map((a) => a.id));
 	const selected = $derived(items.filter((a) => selection.ids.has(a.id)));
-	const loupeIndex = $derived(
-		page.state.loupe === undefined ? -1 : order.indexOf(page.state.loupe)
-	);
+	const loupeId = $derived(openPhotoId(page));
+	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
+	const tracker = new LoupeTracker();
+	$effect(() => tracker.seen(loupeId));
 
 	async function load() {
 		try {
@@ -175,7 +177,7 @@
 				selecting={selection.ids.size > 0}
 				{arrange}
 				onmove={move}
-				onopen={(assetId) => pushState('', { loupe: assetId })}
+				onopen={openPhoto}
 				ontoggle={(assetId, range) =>
 					(selection = applyClick(selection, assetId, order, { shift: range, toggle: true }))}
 			/>
@@ -201,8 +203,8 @@
 	<Loupe
 		{items}
 		index={loupeIndex}
-		onindex={(i) => replaceState('', { loupe: items[i].id })}
-		onclose={() => history.back()}
+		onindex={(i) => showPhoto(items[i].id)}
+		onclose={closePhoto}
 		onchanged={(a) => (items = items.map((x) => (x.id === a.id ? { ...x, ...a } : x)))}
 		ondates={load}
 	/>
@@ -211,7 +213,11 @@
 {#if album && dialog === 'share'}
 	<ShareDialog albumId={album.id} ownerId={album.owner_id} onclose={() => (dialog = null)} />
 {:else if album && dialog === 'download'}
-	<DownloadDialog scope={{ album_id: album.id }} onclose={() => (dialog = null)} />
+	<DownloadDialog
+		scope={{ album_id: album.id }}
+		edited={items.some((a) => a.edited)}
+		onclose={() => (dialog = null)}
+	/>
 {:else if dialog === 'rename'}
 	<Dialog title="Rename album" onclose={() => (dialog = null)}>
 		<label class="field">Title <input bind:value={title} /></label>
