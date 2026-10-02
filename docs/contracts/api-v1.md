@@ -70,10 +70,10 @@ New sources default to `{everyone: "download", users: []}`.
 |---|---|
 | `from`, `to` | inclusive day range `YYYY-MM-DD` |
 | `year`, `month` | shortcuts (month needs year) |
-| `source_id` | repeatable |
+| `source_id` | repeatable; only sources you can see count (a hidden source's id selects nothing, v1.2) |
 | `camera` | exact `camera_model` |
 | `place` | matches country, region or city (case-insensitive) |
-| `q` | free text over file names, place names, camera, album titles |
+| `q` | free text over file names (in sources you can see, v1.2), place names, camera, album titles (of albums you can see) |
 | `favourite` | `true` = only my favourites |
 | `hidden` | `true` = only my hidden; default hides them |
 | `guessed_date` | `true` = only photos whose date came from the file (`file_mtime`) |

@@ -346,3 +346,21 @@ def test_an_admin_cannot_see_list_or_purge_a_members_private_photo_in_the_trash(
     assert admin.post("/api/trash/empty", json={}).json() == {"purged": 0}
     assert services_of(admin).repo.get_asset(p5) is not None
     assert lea.post("/api/trash/restore", json={"ids": [p5]}).json() == {"restored": 1}
+
+
+def test_source_filter_and_file_name_search_only_use_sources_you_can_see(
+    world: World, tmp_path: Path
+) -> None:
+    """QA A9: tom could probe the restricted source by id, or by a file name only it has."""
+    admin, tom = world.clients["admin"], world.clients["tom"]
+    restricted = _source_id(admin, "restricted")
+    write_photo(tmp_path / "s3" / "secretname.jpg", seed=0)  # the same file as p1
+    assert admin.post(f"/api/sources/{restricted}/scan").status_code == 202
+    services_of(admin).worker.run_until_idle()
+    assert asset_id_of(admin, restricted, "secretname.jpg") == world.ids["p1"]
+
+    for params in ({"source_id": restricted}, {"q": "secretname"}):
+        assert tom.get("/api/assets", params=params).json()["items"] == [], params
+        assert tom.get("/api/assets/facets", params=params).json()["total"] == 0, params
+    by_admin = admin.get("/api/assets", params={"q": "secretname"}).json()["items"]
+    assert [a["id"] for a in by_admin] == [world.ids["p1"]]

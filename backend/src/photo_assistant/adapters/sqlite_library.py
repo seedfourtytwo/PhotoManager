@@ -138,9 +138,10 @@ def _sources(f: AssetFilter, where: Clauses, params: Bindings) -> None:
         return
     names = [f":f_src{i}" for i in range(len(f.source_ids))]
     params.update({n[1:]: sid for n, sid in zip(names, f.source_ids, strict=True)})
+    # only sources this viewer may see: a hidden source's id must not select anything (QA A9)
     where.append(
-        "EXISTS (SELECT 1 FROM asset_source x WHERE x.asset_id = a.id "
-        f"AND x.source_id IN ({', '.join(names)}))"
+        "EXISTS (SELECT 1 FROM asset_source x JOIN source s ON s.id = x.source_id "
+        f"WHERE x.asset_id = a.id AND x.source_id IN ({', '.join(names)}) AND {SOURCE_VISIBLE})"
     )
 
 
@@ -162,8 +163,8 @@ def _text(f: AssetFilter, where: Clauses, params: Bindings) -> None:
         params[key[1:]] = like_pattern(term)
         like = f"LIKE {key} ESCAPE '\\'"
         where.append(
-            f"""(EXISTS (SELECT 1 FROM asset_source x WHERE x.asset_id = a.id
-                     AND x.relative_path {like})
+            f"""(EXISTS (SELECT 1 FROM asset_source x JOIN source s ON s.id = x.source_id
+                     WHERE x.asset_id = a.id AND x.relative_path {like} AND {SOURCE_VISIBLE})
                  OR p.city {like} OR p.region {like} OR p.country {like}
                  OR a.camera_model {like} OR a.camera_make {like}
                  OR EXISTS (SELECT 1 FROM album_item ai JOIN album al ON al.id = ai.album_id
