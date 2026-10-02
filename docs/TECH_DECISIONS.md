@@ -165,6 +165,23 @@ same SvelteKit UI, so it has every web feature.
 parser so each file goes straight to `data/tmp`, hashed as it arrives and cut off at the size
 limit, instead of being spooled whole to the system temp folder first. Added 2026-09-29.
 
+## Concurrency, jobs and rendering (fix/backend, 2026-10-02)
+
+No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
+- **One `Database` per process** (`adapters/sqlite_database.py`): one writer connection and one
+  lock shared by every store, per-thread read-only WAL connections for reads. Replaces one
+  connection + RLock per store (several locks on one connection could interleave transactions).
+- **Visibility as per-photo correlated SQL** instead of a whole-library CTE: a timeline page
+  costs ~4 ms at 50k photos (was 160–200 ms).
+- **Job lanes** (`app.worker.Lanes`): quick lane, long lane (imports, pulls, backups), preview
+  pool of max(1, cores − 2) threads. Still one SQLite-backed queue; no APScheduler/Celery.
+- **WebP effort 2** for derivatives (default 4): half the encode time, a few % more bytes.
+- **GZip** (Starlette's middleware, level 6, ≥ 1 KiB, never images/ZIPs/PDFs/originals): the
+  map keeps its contract shape and shrinks ~17× instead of changing the payload format.
+- **One `Settings`** with nested sections (ml, ops, integrations) filled from the historical
+  env names by one settings source; no `python-dotenv` import of our own (pydantic-settings
+  already reads `.env`).
+
 ## Tooling
 
 | Concern | Tool |

@@ -1,9 +1,12 @@
-# Wiring local ML (M3) — for the integrator
+# Wiring local ML (M3)
 
-Branch `feat/ml`. Everything below is built and tested. It is **not wired** into the running
-app, because `api/main.py`, `api/services.py`, `api/settings.py`, `ports/__init__.py`,
-`sqlite_repository.py` and the routes belong to other branches. This page says exactly what
-to add.
+> **Status (2026-10-02, fix/backend): wired.** Everything here runs in the app: `api/services.py`
+> builds it from the one `Settings` and the one `Database`. This page stays as the record of how
+> the branch was integrated; where it differs from the code, the code and ARCHITECTURE.md win.
+
+Since fix/backend: the ML store shares the app's `Database` (no connection of its own); the
+settings are the `ml` section of `Settings` (env names `PA_ML_*` unchanged); ML jobs are only
+planned (after a preview, or by `just ml-backfill`) when the model files are installed.
 
 ## 1. What exists
 
@@ -50,7 +53,7 @@ def build_services(settings: Settings) -> Services:
             PREVIEW_JOB: ml.planner.after(
                 GeneratePreview(repo, store, renderer, settings.preview_edge)
             ),
-            SCAN_JOB: ...,
+            SCAN_JOB_KIND: ...,
             **ml.handlers,      # embed_clip, detect_faces, cluster_faces, auto_tag
         },
         clock, poll_seconds=settings.worker_poll_seconds,

@@ -260,3 +260,25 @@ Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop mar
 | PATCH | `/api/backups/{id}` | `{enabled}` | `Target` |
 | POST | `/api/backups/{id}/run` · `/restore-test` | – | `202 {job_id, target_id}` |
 | GET | `/api/backups/{id}/runs` | `limit` | `[Run]` |
+
+---
+
+# v1.2 changes (fix/backend, after the M2 QA)
+
+Each change is also written next to the route it concerns above. For the web app:
+
+| Area | Change | Web impact |
+|---|---|---|
+| Access | Albums grant **view only** (editor/owner included); download and edit come only from sources. | An album editor may now get `403` on originals/downloads of album photos: hide "Download" when `level` is `view`. |
+| Access | `private` is set by a *marker* (needs `edit`); it hides the photo only from people who reach it solely through the marker's own sources or albums. | None (the `private` flag is unchanged). |
+| Access | `GET /api/sources/{id}/access` is admin-only (`403` for others); `SourceOut.path` is `null` for non-admins. | Don't show folder paths or access lists to members. |
+| Sources | `SourceOut.problem`: `"folder not found"` or `null`. A scan of a vanished folder records a `failed` import run with that message. | Show `problem` next to the source; show failed runs. |
+| Auth | Password change ends the user's *other* sessions; an admin reset ends all of them and revokes device tokens. | After an admin reset the user must sign in again (their phone too). |
+| Upload | `/api/upload/check` answers for **you**: purged = present; hidden from you = missing (an upload links it to your inbox). `asset_id` is `null` unless you can see that photo. | None. |
+| Trash | `POST /api/trash/empty` purges only what you see in the trash; trashed photos keep their `thumb`/`preview` URLs for those who see them there. | Trash thumbnails now load. |
+| Albums | `POST /api/albums/{id}/items` `position` counts the items you see; removing the cover keeps it remembered (an undo restores it). | Undo: post each removed photo back at its old index, smallest first. |
+| Downloads | `max_edge` 1–20000 (else `422`); a crop must keep ≥ 1/1000 of each side; a failing photo is left out of a ZIP and listed in a final `manifest.txt`; estimates are calibrated. | Possibly show `manifest.txt` hint; estimates are now realistic. |
+| Dates | Set/shift that lands more than a day after the server's local now: `422`. | Show the `detail`. |
+| Errors | Ids beyond 2^63−1: path `404`, body `422`, `source_id` `400`. The cross-site guard answers `{"detail"}` JSON. `to=9999-12-31` is valid. | None. |
+| Transport | JSON responses ≥ 1 KiB are gzip-encoded when asked (`Accept-Encoding`); images, ZIPs and PDFs never. `/_app/immutable/*` is cached for a year. The `/api/map` shape is unchanged. | None (browsers decode gzip). |
+| ML | ML jobs are only queued when model files are installed; `/api/ml/backfill` queues `0` (with `detail`) without them. | `ml/status` counts stay empty without models. |

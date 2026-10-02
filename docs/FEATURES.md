@@ -50,7 +50,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | 2.6 | Quality signals: blur, exposure, eyes-closed (from face landmarks) → used for "best of" picks | Could | M3 |
 | 2.7 | Semantic embeddings (CLIP-family) for every photo | Must | M3 |
 | 2.8 | Face detection + clustering into people; user names clusters; merge/split | Should | M3 |
-| 2.9 | Auto-tags from embeddings against a fixed vocabulary (beach, snow, food, document, screenshot…) | Should | M3 |
+| 2.9 | Auto-tags from embeddings against a fixed vocabulary (beach, snow, food, document, screenshot…) | Should | M3 ✅ (API) |
 | 2.10 | Screenshot / document / meme detection → filtered out of "memories" by default | Should | M3 |
 | 2.11 | Captions from local vision LLM (via AI socket) | Could | M5 |
 | 2.12 | **Fix dates**: set or shift the date of one or many photos (e.g. Facebook downloads whose only date is the download day); the photo shows "date guessed from file" until fixed; corrections are kept in the library and exported with XMP (11.2) | Should | M2 ✅ (API) |
@@ -63,10 +63,10 @@ separate, explicit "purge from library copy" that never touches the source.
 | 3.2 | Facet filters: date range, place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, source, guessed date, location; people/tags in M3* | Must | M2 |
 | 3.3 | Favourites (per user) and hide (per user) | Must | M2 ✅ (API) |
 | 3.4 | Keyword search over places, tags, names, captions — *API: file names, places, camera, album titles; tags/names/captions in M3* | Must | M2 |
-| 3.5 | Natural-language search ("kids in the snow at grandma's") via embeddings | Should | M3 |
-| 3.6 | "More like this" similar-photo search | Should | M3 |
+| 3.5 | Natural-language search ("kids in the snow at grandma's") via embeddings | Should | M3 ✅ (API) |
+| 3.6 | "More like this" similar-photo search | Should | M3 ✅ (API) |
 | 3.7 | Smart collections = saved filters (e.g. "France house, summer") | Should | M3 |
-| 3.8 | Private items: visible only to their owner | Should | M2 ✅ (API) |
+| 3.8 | Private items: hidden from everyone who reaches them only through the marker's own folders (the marker, and people with access through other folders, still see them) | Should | M2 ✅ (API) |
 
 ## 4. Look (views)
 
@@ -79,7 +79,7 @@ Each view is a way to *see* the library, not decoration. See `DESIGN_PRINCIPLES.
 | 4.3 | **Calendar heat map** — years × days, ink = number of photos; click a day to open it | Should | M2 |
 | 4.4 | **Map** — clustered points, draw-to-filter | Should | M3 |
 | 4.5 | **Small multiples** — one row per year for the same week/place ("every summer at the house") | Could | M3 |
-| 4.6 | **People** — face grid, then a person's timeline | Should | M3 |
+| 4.6 | **People** — face grid, then a person's timeline | Should | M3 ✅ (API) |
 | 4.7 | **On this day** — same date, previous years | Could | M3 |
 | 4.8 | **Slideshow / ambient mode** for a TV or tablet | Could | M5 |
 

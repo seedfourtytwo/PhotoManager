@@ -1,8 +1,9 @@
 # Wiring: AI socket, remote sources, phone/web upload (branch `feat/ai-sources`)
 
-This branch is self-contained: nothing in `api/main.py`, `api/services.py`, `__main__.py`,
-`ports/__init__.py`, `sqlite_repository.py`, `app/import_source.py`, existing migrations or
-existing routes was edited. This page is everything the integrator has to do to switch it on.
+> **Status (2026-10-02, fix/backend): wired.** Everything here runs in the app: `api/services.py`
+> builds it from the one `Settings` and the one `Database`. This page stays as the record of how
+> the branch was integrated; where it differs from the code, the code and ARCHITECTURE.md win.
+
 
 ## 1. What the branch adds
 
@@ -74,7 +75,7 @@ def build_services(settings: Settings) -> Services:
             PREVIEW_JOB: GeneratePreview(repo, store, renderer, settings.preview_edge),
             # (4) was: importer.run(...). SyncSource pulls rclone sources first and just
             # imports every other kind, so this one handler serves all scan jobs.
-            SCAN_JOB: lambda payload: integrations.sync_source.run(int(str(payload["source_id"]))),
+            SCAN_JOB_KIND: lambda payload: integrations.sync_source.run(int(str(payload["source_id"]))),
         },
         ...
     )
@@ -84,7 +85,7 @@ def build_services(settings: Settings) -> Services:
 `Services.close()`: if `integrations.ai` is an `OllamaProvider`, call its `close()`.
 
 **Job names:** no new job kinds. Uploads and `/api/remote-sources/{id}/pull` enqueue
-`"scan_source"` (`app.sync_source.SCAN_JOB_KIND`, equal to `api.services.SCAN_JOB`);
+`"scan_source"` (`app.sync_source.SCAN_JOB_KIND`);
 `POST /api/sources/{id}/scan` and `scan-all` keep working and now pull remote sources too.
 
 ## 5. `api/main.py`
@@ -97,36 +98,22 @@ for module in (system, sources, imports, assets, upload, remote_sources):
 
 # in lifespan, after build_services:
 app.state.integrations = services.integrations
-app.state.session_user_hook = session_user_id_from_cookie   # see §6
 ```
 
-## 6. Authentication hook (the only auth coupling)
+## 6. Authentication (no hooks since fix/backend, B18)
 
-`api/routes/upload.py` resolves the caller like this (`current_user_id`):
+The `app.state.session_user_hook` / `uploader_hook` pair is gone (it failed open when unset).
+One dependency in `api/deps.py`, `session_or_device_user`, resolves the caller of
+`/api/upload` and `/api/upload/check`:
 
-1. `Authorization` header present → it must be `Bearer <device token>` for an active device,
-   else **401** (a bad token never falls back to the session).
-2. Otherwise → `app.state.session_user_hook(request)`; `None` → **401**.
+1. `Authorization` header present → it must be `Bearer <device token>` of an unrevoked device
+   whose account is active, else **401** (a bad token never falls back to the session).
+2. Otherwise the `pa_session` cookie; none or expired → **401**.
 
-Device management (`/api/devices`) and `/api/remote-sources` use `session_user_required`:
-session only, never a device token.
-
-Connect core auth by setting the hook to a function `(Request) -> int | None` that returns the
-signed-in user's id from the `pa_session` cookie (or `None`), e.g.
-
-```python
-def session_user_id_from_cookie(request: Request) -> int | None:
-    user = auth.optional_user(request)        # whatever core auth exposes; must not raise 401
-    return None if user is None or user.disabled else user.id
-```
-
-Two follow-ups once roles exist:
-- `api/routes/remote_sources.py`: replace `SessionOnlyUser` with core's admin dependency
-  (adding sources is admin-only per api-v1).
-- Guests are view + download only: if they must not upload, reject role `guest` in
-  `current_user_id` (or in the hook, returning `None` for guests on upload routes).
-
-Tests use `app.state.session_user_hook` with an `X-Test-User` header (tests/api/test_upload_api.py).
+`require_not_guest` (the same one used by albums, people and the share directory) then refuses
+guests with **403**. Device management (`/api/devices`) is session-only (`session_only_user`).
+An admin password reset revokes the user's device tokens. Tests sign in for real
+(tests/api/test_upload_api.py).
 
 ## 7. Inbox privacy (needs core's access model)
 

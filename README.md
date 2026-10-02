@@ -7,7 +7,12 @@ format and size we need, make simple non-destructive edits, and turn selections 
 print-ready photo books. AI (a local LLM) is optional and
 plugs in through one well-defined socket.
 
-> Status: **M1 done**: import from any number of folders into one de-duplicated library, with a simple browse page. Next: M2 (browse, share, download). Start with [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Status: **M1 and M2 done** — import from many folders into one de-duplicated library; accounts,
+> per-folder access, albums, downloads, edits, trash; web app on top. Integrated and hardened
+> after the M2 QA: phone/browser uploads with device tokens, rclone sources, local-ML API
+> (search, similar photos, people, tags — needs `just models`), album print to PDF, restic
+> backups. Performance: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md). Next: the M3 web views for
+> the ML features. Start with [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Principles in one breath
 

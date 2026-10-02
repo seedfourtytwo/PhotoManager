@@ -1,5 +1,14 @@
 # Wiring the ops branch (feat/ops) into main
 
+> **Status (2026-10-02, fix/backend): wired.** Everything here runs in the app: `api/services.py`
+> builds it from the one `Settings` and the one `Database`. This page stays as the record of how
+> the branch was integrated; where it differs from the code, the code and ARCHITECTURE.md win.
+
+Since fix/backend: the backup store shares the app's `Database`; the periodic check only
+*enqueues* `backup_due`, and backups, restore tests and source scans run on the long-job lane
+(`app.worker.Lanes`), so previews never wait behind them; a local repository may not overlap
+a source folder (and no source may overlap a repository).
+
 Everything on `feat/ops` is new files plus the justfile/.gitignore; nothing in
 `api/main.py`, `api/services.py`, `__main__.py`, `ports/__init__.py`,
 `sqlite_repository.py` or existing migrations/routes was edited. These are the exact steps.
@@ -48,7 +57,7 @@ def build_services(settings: Settings) -> Services:
         repo,
         {
             PREVIEW_JOB: ...,
-            SCAN_JOB: ...,
+            SCAN_JOB_KIND: ...,
             **ops.backup.job_handlers(),           # "backup_run", "backup_restore_test"
         },
         clock,

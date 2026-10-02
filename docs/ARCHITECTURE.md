@@ -43,7 +43,13 @@ An import-linter check enforces this in CI.
 
 ## 3. Data model
 
-Built in M1 + M2 (migrations `0001`–`0012`, numbered SQL files; see TECH_DECISIONS):
+Built (numbered SQL migrations in `adapters/migrations/`; see TECH_DECISIONS). M1 + M2 core:
+`0001`–`0012`; `0013` ai_log; `0014` remote sources, inboxes, devices; `0015` local ML (embeddings,
+faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, foreign keys on
+`inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
+`asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
+`taken_at` and the removal of degenerate crops. `ANALYZE` runs after migrating, `PRAGMA
+optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -72,29 +78,35 @@ date_change(id, asset_id, old_taken_at, old_tz_offset_min, old_date_source, new_
             changed_by, changed_at)
 purged_hash(content_hash PK, purged_at)                               -- never re-imported
 import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …)
+inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0014, FK 0017
+device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
+       created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
+ai_log(id, capability, model, attempt, ok, duration_ms, error, request_json, response_json)
+backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, schedule,
+              quiet_window, retention_json, enabled, created_at)                     -- 0016
+backup_run(id, target_id → backup_target ON DELETE CASCADE, kind, status, started_at, …)
+ml_task, clip_embedding, face, person, tag, asset_tag, asset_ml_flag                 -- 0015
 ```
 
 Still planned (later milestones, first cut):
 
 ```
 user_group(id, name);  user_group_member(group_id, user_id)
-device(id, user_id, name, platform, last_sync_at, sync_cursor)   -- phone app installs
-backup_target(id, kind[local|rclone], label, repo_url, schedule_cron, retention_json, enabled)
-backup_run(id, target_id, started_at, finished_at, status, snapshot_id, bytes_added, error)
 export_job(id, user_id, scope_json, options_json, status, bytes_done, bytes_total, path)
-tag(id, name, kind[auto|manual]);  asset_tag(asset_id, tag_id, score, by[user|model])
-person(id, name, cover_face_id);   face(id, asset_id, bbox, embedding_rowid, person_id, quality)
 album_page(id, album_id, position, layout_id, caption)
 album_slot(page_id, slot_index, asset_id, crop_json)            -- crop never alters the original
 theme(id, name, tokens_json);  layout(id, name, slots_json)     -- data, not code
-ai_log(id, capability, request_json, response_json, model, created_at)
-vec_clip   USING vec0(embedding float[512])   -- rowid = asset.id
-vec_face   USING vec0(embedding float[512])   -- rowid = face.id
 ```
 
 The SQLite adapter is one `SqliteRepository` composed of per-area mixins
 (`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_albums`, `sqlite_edits`,
-`sqlite_enrich`, `sqlite_trash`) sharing one connection and lock (`sqlite_base`).
+`sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
+on the process's ONE `Database` (`adapters/sqlite_database.py`, B16/B26): a single writer
+connection behind a single lock for every write and transaction (transactions nest by joining
+the outer one), and a read-only WAL connection per thread for reads, so reads never wait for a
+write. A read inside a transaction uses the writer and sees its own rows. A source of any kind
+(folder, rclone, inbox) is created by one method, `SourceRegistry.add_source`, with the access
+the domain rule `default_source_access` gives its kind.
 
 ## 4. Key flows
 
@@ -121,7 +133,9 @@ visibility rule, keeps only photos with ≥ download → for each: the untouched
 `ImageRenderer.render_variant(original, RenderSpec(recipe, format, max_edge, quality,
 keep_metadata))` via libvips; location / all metadata are stripped by ExifTool on a temporary
 copy in `data/tmp` (never on the library file) → a **streamed, stored ZIP** (`zipstream-ng`),
-so a 2 GB year export needs no archive on disk. Skipped photos are counted in `X-Skipped`. Above a size threshold it becomes an `export_job` with
+so a 2 GB year export needs no archive on disk. Skipped photos are counted in `X-Skipped`; a
+photo that fails while the ZIP streams is left out and listed in a final `manifest.txt`.
+Size estimates start from each photo's real bytes (calibrated factors, PERFORMANCE.md). Above a size threshold it becomes an `export_job` with
 progress. Naming and folder layout are pure domain functions (unit-tested).
 
 ### Edit recipe
@@ -177,6 +191,17 @@ into `AlbumPlan` (pydantic) and **validated by domain rules** (every asset exist
 see it, layouts exist) before it is shown as a proposal. Invalid output → one retry → error.
 The LLM never writes to the database directly.
 
+### Jobs and lanes
+The queue is the `job` table; `app.worker.Lanes` runs it on three kinds of threads (B24, C28):
+the **quick lane** (one thread: geocode, group, purge, ML, edited renders), the **long lane**
+(one thread: `scan_source` — rclone pulls and folder imports —, `backup_run`,
+`backup_restore_test`, `backup_due`) and a **preview pool** (max(1, cores − 2) threads). Each
+claims only its kinds, atomically, so a backup or a big import never starves previews and
+uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering)
+or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
+Domain errors (`domain/errors.py`) fail a job without retries; anything else is retried 3×.
+ML jobs are planned only when their model files are installed.
+
 ## 5. Performance budget (10k photos on the laptop)
 
 | Operation | Budget |
@@ -187,6 +212,8 @@ The LLM never writes to the database directly.
 | Semantic search | < 500 ms p95 |
 | Full import + thumbnails of 10k photos | < 30 min |
 | CLIP + faces for 10k photos on the RTX 2070 | < 1 h (CPU fallback: overnight OK) |
+
+Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md).
 
 ## 6. Deployment path
 
@@ -211,17 +238,27 @@ The LLM never writes to the database directly.
 - Passwords: argon2id. Sessions: HTTP-only, SameSite=strict cookies.
 - Source credentials live in rclone's own encrypted config, never in `library.db`.
 - AI calls only go to the configured base URL; each request is logged in `ai_log`.
-- **Visibility is one function in the repository layer:** `visible_assets_cte(viewer)` in
-  `adapters/sqlite_library.py` is a SQL CTE `vis(asset_id, level)` = assets with at least one
-  `asset_source` whose source grants the user (or everyone) a level or that the user owns, ∪
-  assets in albums the user owns or that are shared with them (always `view`: download and
-  edit only ever come from sources), ∪ every source for admins (edit) — where a private photo
-  only counts grants through sources its marker (`private_by`) does not own (the marker keeps
-  all of theirs; albums never reach it), and trashed items are left out; the level is the highest grant, capped at download for
-  guests. Timeline, facets, calendar, map, albums, detail, images and downloads all start from
-  it; the UI never filters for security. Covered by a table-driven API test
-  (`tests/api/test_visibility.py`: users × sources × albums × private × roles).
+- **Visibility is one function in the repository layer:** `visibility(viewer)` in
+  `adapters/sqlite_library.py` gives two SQL pieces over the photo `a`: a condition (is it
+  visible, and live or in the trash) and the viewer's level. A grant is a source that gives the
+  user (or everyone) a level, a source the user owns (edit), or an album the user owns or is a
+  member of (always `view`: download and edit only ever come from sources); admins have edit
+  through every source. A private photo only counts grants through sources its marker
+  (`private_by`) does not own — the marker keeps all of theirs, albums never reach it. Guests
+  are capped at download. The condition is correlated `EXISTS` per photo (C25), so a timeline
+  page stops at its `LIMIT` on the timeline index; admins get a cheaper check (only someone
+  else's private photos need a look). Timeline, facets, calendar, map, albums, detail, images,
+  downloads, uploads' hash check and ML candidates all use it; the UI never filters for
+  security. Safety nets: `tests/api/test_visibility.py` (users × sources × albums × private ×
+  roles × trash) and `tests/adapters/test_visibility_rule.py` (random libraries checked against
+  the previous set-based rule).
 - Sessions: random 256-bit token in the `pa_session` cookie (HttpOnly, SameSite=Strict, Secure
   over HTTPS); only its SHA-256 is stored. Every `/api` route except health, setup and login
-  needs a session; source, scan, import, job and user routes are admin-only.
+  needs a session; source, scan, import, job, access-list and user routes are admin-only.
+  Upload routes take the session **or** a device token through one fail-closed dependency
+  (`api/deps.py`). Changing a password ends the user's other sessions; an admin reset ends all
+  of them and revokes the user's device tokens. First-run setup and the last-admin rule are
+  atomic (one `BEGIN IMMEDIATE` transaction each).
+- Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`;
+  every error body, the cross-site guard's included, is `{"detail": sentence}`.
 - Download and edit endpoints check the access *level*, not just visibility.

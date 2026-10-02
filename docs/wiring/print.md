@@ -1,7 +1,11 @@
 # Wiring: album → print (FEATURES §5.3, §5.4, §6)
 
-The print engine lives on `feat/print` and works on its own. No route, service or migration uses
-it yet. This page says what the integrator has to add.
+> **Status (2026-10-02, fix/backend): wired.** Everything here runs in the app: `api/services.py`
+> builds it from the one `Settings` and the one `Database`. This page stays as the record of how
+> the branch was integrated; where it differs from the code, the code and ARCHITECTURE.md win.
+
+The engine is `app/print_job.py` (photos + options → PDF; was `print_album.py`) and
+`app/album_printer.py` (library → print renditions → print job; was `album_print.py`).
 
 ## What exists
 
