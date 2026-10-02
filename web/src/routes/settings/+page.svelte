@@ -84,7 +84,7 @@
 
 	<section aria-labelledby="s-account">
 		<h2 id="s-account">Account</h2>
-		<p>
+		<p class="who">
 			{session.user?.display_name}
 			<span class="quiet">· {session.user?.username} · {session.user?.role}</span>
 		</p>
@@ -118,52 +118,76 @@
 
 <style>
 	.page {
-		padding: 1rem 0.75rem 2rem;
-		max-width: 32rem;
+		padding: var(--s-5) var(--page-x) var(--s-7);
+		max-width: 46rem;
 	}
-	h2 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 2rem 0 0.5rem;
+	h1 {
+		margin-bottom: var(--s-5);
 	}
-	fieldset {
-		border: 0;
-		padding: 0;
-		margin: 0 0 1rem;
+	/* Sections read like a book's margin heads: the title in the left margin, the settings
+	   beside it; on a phone the title sits above. */
+	.page :global(section) {
+		display: grid;
+		grid-template-columns: 11rem minmax(0, 1fr);
+		column-gap: var(--s-5);
+		align-items: start;
+		padding: var(--s-5) 0;
+		border-top: 1px solid var(--hairline);
 	}
-	legend {
-		padding: 0;
-		margin-bottom: 0.25rem;
+	.page :global(section > h2) {
+		grid-column: 1;
+		grid-row: 1;
+		padding-top: var(--s-1);
 	}
-	.choice {
-		display: inline-flex;
-		gap: 0.35rem;
-		align-items: center;
-		margin-right: 1rem;
-		color: var(--ink);
+	.page :global(section > :not(h2)) {
+		grid-column: 2;
+	}
+	.page :global(section > fieldset:first-of-type),
+	.page :global(section > :nth-child(2)) {
+		margin-top: 0;
+	}
+	.who {
+		margin: var(--s-1) 0 var(--s-4);
 	}
 	form {
 		display: grid;
-		gap: 0.75rem;
+		gap: 0;
 	}
 	form label {
 		display: grid;
-		gap: 0.15rem;
+		gap: var(--s-1);
+		margin-bottom: var(--s-4);
+		font-size: var(--fs-12);
+		font-weight: 500;
+	}
+	form label input {
+		font-size: var(--fs-14);
+		font-weight: 400;
+		color: var(--ink);
+		max-width: 20rem;
 	}
 	form button {
 		justify-self: start;
 	}
 	.signout {
 		justify-self: start;
-		padding-left: 0;
+		margin: var(--s-4) 0 0 calc(-1 * var(--s-2));
+		color: var(--ink-2);
 	}
 	.version {
-		margin-top: 2rem;
+		margin-top: var(--s-6);
 	}
-	.signout {
-		margin-top: 1.5rem;
-		color: var(--ink-2);
+	@media (max-width: 639px) {
+		.page :global(section) {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.page :global(section > h2),
+		.page :global(section > :not(h2)) {
+			grid-column: 1;
+			grid-row: auto;
+		}
+		.page :global(section > h2) {
+			margin-bottom: var(--s-3);
+		}
 	}
 </style>

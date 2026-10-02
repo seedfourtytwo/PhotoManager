@@ -46,7 +46,7 @@
 <svelte:head><title>Set up · Photos</title></svelte:head>
 
 <h1>Welcome</h1>
-<p class="quiet">
+<p class="quiet lede">
 	Create the first account. It can manage people, folders and everything else. Others get their
 	accounts from you — there is no public sign-up.
 </p>
@@ -64,7 +64,7 @@
 			aria-describedby="pw-hint"
 		/>
 	</label>
-	<p id="pw-hint" class="quiet small">At least {MIN_PASSWORD} characters.</p>
+	<p id="pw-hint" class="quiet small hint">At least {MIN_PASSWORD} characters.</p>
 	<label>
 		Password again
 		<input bind:value={confirm} type="password" autocomplete="new-password" required />
@@ -74,20 +74,44 @@
 </form>
 
 <style>
+	h1 {
+		font-size: var(--fs-40);
+		font-weight: 350;
+		letter-spacing: -0.015em;
+	}
+	.lede {
+		margin: var(--s-3) 0 0;
+		line-height: var(--lh-text);
+	}
 	form {
 		display: grid;
-		gap: 0.75rem;
-		margin-top: 1.5rem;
+		gap: var(--s-1);
+		margin-top: var(--s-6);
 	}
 	label {
 		display: grid;
-		gap: 0.15rem;
+		gap: var(--s-1);
+		margin-bottom: var(--s-3);
+		font-size: var(--fs-12);
+		font-weight: 500;
+	}
+	label input {
+		font-size: var(--fs-16);
+		font-weight: 400;
+		color: var(--ink);
+	}
+	.hint {
+		margin: calc(-1 * var(--s-2)) 0 var(--s-3);
 	}
 	button {
 		justify-self: start;
+		min-height: 2.5rem;
+		margin-top: var(--s-3);
 	}
 	p[role='alert'] {
 		color: var(--ink);
-		margin: 0;
+		margin: 0 0 var(--s-2);
+		padding-left: var(--s-3);
+		border-left: 2px solid var(--ink);
 	}
 </style>

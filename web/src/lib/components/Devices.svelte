@@ -75,7 +75,7 @@
 
 <section aria-labelledby="s-devices">
 	<h2 id="s-devices">Phones and devices</h2>
-	<p class="quiet small">
+	<p class="quiet small intro">
 		A device token lets a phone send its new photos here on its own (for example with Apple
 		Shortcuts while charging). It can only upload, into your own uploads; it cannot see or delete
 		anything.
@@ -148,28 +148,27 @@
 {/if}
 
 <style>
-	h2 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 2rem 0 0.5rem;
+	.intro {
+		margin: var(--s-1) 0 var(--s-2);
+		line-height: var(--lh-text);
+		max-width: var(--measure);
 	}
 	h3 {
+		margin: var(--s-5) 0 var(--s-1);
 		font-size: var(--fs-14);
-		margin: 1rem 0 0.25rem;
+		color: var(--ink);
 	}
 	ul {
 		list-style: none;
-		margin: 0.5rem 0;
+		margin: var(--s-2) 0;
 		padding: 0;
 	}
 	li {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.25rem 0.75rem;
+		gap: var(--s-1) var(--s-3);
 		align-items: baseline;
-		padding: 0.35rem 0;
+		padding: var(--s-2) 0;
 		border-bottom: 1px solid var(--hairline);
 	}
 	li.off span:first-child {
@@ -180,26 +179,33 @@
 		color: var(--ink-2);
 	}
 	.add {
-		padding-left: 0;
+		justify-self: start;
+		margin-left: calc(-1 * var(--s-2));
 		color: var(--ink-2);
 	}
 	.token {
-		font-family: ui-monospace, monospace;
-		font-size: var(--fs-12);
+		font-family: var(--font-mono);
+		font-size: var(--fs-12) !important;
 		color: var(--ink);
 	}
 	.copy {
-		padding-left: 0;
+		margin-left: calc(-1 * var(--s-2));
 		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	p.small {
+		margin: var(--s-2) 0;
+		line-height: var(--lh-text);
 	}
 	ol {
-		padding-left: 1.25rem;
-		margin: 0.25rem 0;
+		padding-left: var(--s-5);
+		margin: var(--s-1) 0;
+		line-height: var(--lh-text);
 	}
 	ol li {
 		display: list-item;
 		border: 0;
-		padding: 0.1rem 0;
+		padding: var(--s-1) 0;
 	}
 	.plain {
 		list-style: none;

@@ -32,6 +32,7 @@
 <svelte:head><title>Sign in · Photos</title></svelte:head>
 
 <h1>Photos</h1>
+<p class="quiet lede">Sign in to the family library.</p>
 <form onsubmit={submit}>
 	<label>User name <input bind:value={username} autocomplete="username" required /></label>
 	<label>
@@ -47,20 +48,46 @@
 </form>
 
 <style>
+	/* The same italic wordmark as the rail: the front door of the album. */
+	h1 {
+		font-style: italic;
+		font-size: var(--fs-40);
+		font-weight: 350;
+		letter-spacing: -0.015em;
+	}
+	.lede {
+		margin: var(--s-3) 0 0;
+		line-height: var(--lh-text);
+	}
 	form {
 		display: grid;
-		gap: 0.75rem;
-		margin-top: 1.5rem;
+		gap: var(--s-1);
+		margin-top: var(--s-6);
 	}
 	label {
 		display: grid;
-		gap: 0.15rem;
+		gap: var(--s-1);
+		margin-bottom: var(--s-3);
+		font-size: var(--fs-12);
+		font-weight: 500;
+	}
+	label input {
+		font-size: var(--fs-16);
+		font-weight: 400;
+		color: var(--ink);
+	}
+	.hint {
+		margin: calc(-1 * var(--s-2)) 0 var(--s-3);
 	}
 	button {
 		justify-self: start;
-		padding-left: 0;
+		min-height: 2.5rem;
+		margin-top: var(--s-3);
 	}
 	p[role='alert'] {
-		margin: 0;
+		color: var(--ink);
+		margin: 0 0 var(--s-2);
+		padding-left: var(--s-3);
+		border-left: 2px solid var(--ink);
 	}
 </style>
