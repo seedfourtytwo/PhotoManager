@@ -8,7 +8,7 @@ import pytest
 from photo_assistant.adapters.filesystem import DiskLibraryStore
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
 from photo_assistant.api.ml_services import build_ml_services
-from photo_assistant.api.ml_settings import MlSettings
+from photo_assistant.api.settings import MlSettings, Settings
 from photo_assistant.app.ml_jobs import AUTO_TAG, DETECT_FACES, EMBED_CLIP, TaskStatus
 from photo_assistant.app.worker import Worker
 from tests.factories import NOW, new_asset
@@ -22,7 +22,7 @@ class Clock:
 
 
 def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    default = MlSettings(_env_file=None)  # type: ignore[call-arg]
+    default = MlSettings()
     root = Path("/data")
     assert default.clip_dir(root) == Path("/data/models/clip/ViT-B-32__openai")
     assert default.face_dir(root) == Path("/data/models/insightface/buffalo_l")
@@ -30,7 +30,7 @@ def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("PA_ML_FACE_MODEL", "yunet_sface")
     monkeypatch.setenv("PA_ML_MODELS_DIR", "/models")
     monkeypatch.setenv("PA_ML_FACE_MIN_FACES", "5")
-    custom = MlSettings(_env_file=None)  # type: ignore[call-arg]
+    custom = Settings(_env_file=None).ml  # type: ignore[call-arg]  # read through Settings
     assert custom.face_dir(root) == Path("/models/opencv")
     assert custom.cluster_params().max_distance == 0.6
     assert custom.cluster_params().min_faces == 5

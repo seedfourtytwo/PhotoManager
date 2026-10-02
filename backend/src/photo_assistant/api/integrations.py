@@ -23,7 +23,7 @@ from photo_assistant.adapters.sqlite_integrations import (
     SqliteRemoteSources,
 )
 from photo_assistant.adapters.upload_spool import DiskUploadSpool
-from photo_assistant.api.integration_settings import IntegrationSettings
+from photo_assistant.api.settings import IntegrationSettings
 from photo_assistant.app.devices import DeviceTokens
 from photo_assistant.app.sync_source import Importer, SyncSource
 from photo_assistant.app.upload import UploadInbox, UploadSettings

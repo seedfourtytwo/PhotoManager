@@ -14,7 +14,7 @@ from photo_assistant.adapters.faces_opencv import YuNetSFaceAnalyzer
 from photo_assistant.adapters.ml_store import SqliteMlStore, open_ml_store
 from photo_assistant.adapters.onnx_clip import OnnxClip
 from photo_assistant.adapters.sqlite_database import Database
-from photo_assistant.api.ml_settings import MlSettings
+from photo_assistant.api.settings import MlSettings
 from photo_assistant.app.ml_jobs import (
     AUTO_TAG,
     CLUSTER_FACES,

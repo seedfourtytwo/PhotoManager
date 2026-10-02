@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
 from photo_assistant.api.deps import admin_user
-from photo_assistant.api.integration_settings import IntegrationSettings
 from photo_assistant.api.integrations import build_integrations
 from photo_assistant.api.routes import remote_sources
+from photo_assistant.api.settings import IntegrationSettings
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.model import ImportReport, RunStatus
 

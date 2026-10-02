@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
 from photo_assistant.api.deps import admin_user
 from photo_assistant.api.ops_services import OpsServices, build_ops_services
-from photo_assistant.api.ops_settings import OpsSettings
 from photo_assistant.api.routes import backup
+from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.access import Role, User
 
 pytestmark = [

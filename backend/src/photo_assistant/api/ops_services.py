@@ -15,7 +15,7 @@ from photo_assistant.adapters.restic_backup import ResticBackup
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
-from photo_assistant.api.ops_settings import OpsSettings
+from photo_assistant.api.settings import OpsSettings
 from photo_assistant.app.backup import BackupConfig, BackupService
 from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer

@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from photo_assistant.api.integration_settings import IntegrationSettings
 from photo_assistant.api.main import create_app
+from photo_assistant.api.settings import IntegrationSettings
 from tests.api.conftest import (
     BASE,
     PASSWORD,

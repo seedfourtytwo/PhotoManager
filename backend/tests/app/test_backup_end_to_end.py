@@ -7,7 +7,7 @@ import pytest
 import pyvips  # type: ignore[import-untyped]
 
 from photo_assistant.api.ops_services import build_ops_services
-from photo_assistant.api.ops_settings import OpsSettings
+from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.backup import BackupRunStatus, NewBackupTarget
 from tests.conftest import snapshot_tree
 from tests.fixtures.expected import IMPORTED

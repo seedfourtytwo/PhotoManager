@@ -15,9 +15,9 @@ from fastapi.testclient import TestClient
 from photo_assistant.adapters.filesystem import Blake3Hasher
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.deps import SESSION_COOKIE
-from photo_assistant.api.integration_settings import IntegrationSettings
 from photo_assistant.api.integrations import Integrations
 from photo_assistant.api.main import create_app
+from photo_assistant.api.settings import IntegrationSettings
 from tests.api.conftest import BASE, PASSWORD, make_settings, services_of
 from tests.factories import NOW, new_asset
 
