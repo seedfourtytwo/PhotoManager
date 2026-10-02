@@ -32,6 +32,7 @@
 </script>
 
 <nav aria-label="Main">
+	<p class="mark" aria-hidden="true">Photos</p>
 	<ul class="main">
 		{#each main as link (link.href)}
 			<li>
@@ -67,9 +68,17 @@
 		box-sizing: border-box;
 		display: flex;
 		flex-direction: column;
-		justify-content: space-between;
-		padding: 1rem 0.5rem;
+		padding: var(--s-4) var(--s-3);
 		border-right: 1px solid var(--hairline);
+	}
+	.mark {
+		margin: 0 0 var(--s-5);
+		padding: var(--s-1) var(--s-2) 0;
+		font-family: var(--font-text);
+		font-style: italic;
+		font-size: var(--fs-20);
+		line-height: 1;
+		color: var(--ink);
 	}
 	ul {
 		list-style: none;
@@ -77,28 +86,40 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 2px;
+	}
+	.rest {
+		margin-top: auto;
 	}
 	a,
 	button {
 		display: block;
 		width: 100%;
 		text-align: left;
-		padding: 0.4rem 0.5rem;
+		padding: var(--s-2);
 		color: var(--ink-2);
 		text-decoration: none;
 		box-sizing: border-box;
+		border-radius: var(--r-1);
+		line-height: var(--lh-tight);
 	}
 	a[aria-current='page'],
 	.more.current {
 		color: var(--ink);
+		font-weight: 600;
 	}
-	a:hover,
-	button:hover {
-		color: var(--ink);
+	@media (hover: hover) {
+		@media (hover: hover) {
+			a:hover,
+			button:hover {
+				color: var(--ink);
+				background: var(--tint);
+			}
+		}
 	}
 	.rest a {
 		font-size: var(--fs-12);
+		padding-block: var(--s-1);
 	}
 	.more-item {
 		display: none;
@@ -114,10 +135,13 @@
 			right: 0;
 			height: auto;
 			z-index: 20;
-			padding: 0 0 env(safe-area-inset-bottom);
+			padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 			background: var(--bg);
 			border-right: 0;
 			border-top: 1px solid var(--hairline);
+		}
+		.mark {
+			display: none;
 		}
 		.main {
 			flex-direction: row;
@@ -134,29 +158,39 @@
 		.main button {
 			text-align: center;
 			font-size: var(--fs-12);
+			font-weight: 500;
 			min-height: var(--bar);
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			padding: 0 0.25rem;
+			padding: 0 var(--s-1);
+			border-radius: 0;
+			letter-spacing: 0.01em;
+		}
+		.main a[aria-current='page'],
+		.main .more.current {
+			font-weight: 650;
 		}
 		.rest {
 			display: none;
 			position: absolute;
-			right: 0;
-			bottom: 100%;
+			right: var(--s-2);
+			bottom: calc(100% + var(--s-2));
 			min-width: 12rem;
-			background: var(--bg);
-			border-top: 1px solid var(--hairline);
-			border-left: 1px solid var(--hairline);
-			padding: 0.25rem 0;
+			margin: 0;
+			background: var(--raised);
+			border: 1px solid var(--hairline);
+			border-radius: var(--r-2);
+			padding: var(--s-1);
 		}
 		.rest.open {
 			display: flex;
 		}
 		.rest a {
-			font-size: var(--fs-14);
-			padding: 0.65rem 1rem;
+			font-size: var(--fs-16);
+			padding: var(--s-3) var(--s-4);
+			min-height: var(--target);
+			box-sizing: border-box;
 		}
 	}
 </style>

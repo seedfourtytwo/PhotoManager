@@ -223,57 +223,65 @@
 			class="edge prev"
 			aria-label="Previous photo"
 			disabled={index === 0}
-			onclick={() => go(-1)}>‹</button
+			onclick={() => go(-1)}
+			><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.5 12l7.5 7.5" /></svg></button
 		>
 		<button
 			type="button"
 			class="edge next"
 			aria-label="Next photo"
 			disabled={index >= items.length - 1}
-			onclick={() => go(1)}>›</button
+			onclick={() => go(1)}
+			><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5 16.5 12 9 19.5" /></svg></button
 		>
 
 		<div class="top" role="toolbar" aria-label="Photo actions">
 			<button type="button" onclick={onclose}>Close</button>
 			<span class="spacer"></span>
-			{#if trash}
-				<button type="button" onclick={() => onrestore?.(asset)}>Restore</button>
-			{:else}
-				<button
-					type="button"
-					aria-pressed={asset.favourite}
-					aria-busy={busy === 'favourite'}
-					onclick={() => toggle('favourite')}
-				>
-					{asset.favourite ? '♥ Favourite' : 'Favourite'}
-				</button>
-				{#if canPrivate}
+			<div class="actions">
+				{#if trash}
+					<button type="button" onclick={() => onrestore?.(asset)}>Restore</button>
+				{:else}
 					<button
 						type="button"
-						aria-pressed={asset.private}
-						aria-busy={busy === 'private'}
-						title="Hidden from people who see it only through your folders or albums"
-						onclick={() => toggle('private')}>Private</button
+						aria-pressed={asset.favourite}
+						aria-busy={busy === 'favourite'}
+						onclick={() => toggle('favourite')}
 					>
+						{#if asset.favourite}<svg class="heart" viewBox="0 0 16 16" aria-hidden="true"
+								><path
+									d="M8 13.6S2.2 10.1 2.2 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.8 1.2c0 4-5.8 7.5-5.8 7.5z"
+								/></svg
+							>{/if}Favourite
+					</button>
+					{#if canPrivate}
+						<button
+							type="button"
+							aria-pressed={asset.private}
+							aria-busy={busy === 'private'}
+							title="Hidden from people who see it only through your folders or albums"
+							onclick={() => toggle('private')}>Private</button
+						>
+					{/if}
+					{#if viewOnly}
+						<button type="button" disabled aria-describedby="loupe-why">Download</button>
+						<span class="why" id="loupe-why" title="Downloading needs access to the photo's folder"
+							>view only</span
+						>
+					{:else}
+						<button type="button" disabled={!detail} onclick={() => (dialog = 'download')}
+							>Download</button
+						>
+					{/if}
+					{#if canEdit}
+						<button type="button" onclick={() => (dialog = 'edit')}>Edit</button>
+						<button type="button" onclick={() => (dialog = 'date')}>Fix date</button>
+					{/if}
+					{#if similarReady}
+						<button type="button" onclick={moreLikeThis}>More like this</button>
+					{/if}
 				{/if}
-				{#if viewOnly}
-					<button type="button" disabled aria-describedby="loupe-why">Download</button>
-					<span class="why" id="loupe-why" title="Downloading needs access to the photo's folder"
-						>view only</span
-					>
-				{:else}
-					<button type="button" disabled={!detail} onclick={() => (dialog = 'download')}
-						>Download</button
-					>
-				{/if}
-				{#if canEdit}
-					<button type="button" onclick={() => (dialog = 'edit')}>Edit</button>
-					<button type="button" onclick={() => (dialog = 'date')}>Fix date</button>
-				{/if}
-				{#if similarReady}
-					<button type="button" onclick={moreLikeThis}>More like this</button>
-				{/if}
-			{/if}
+			</div>
 			<button type="button" aria-pressed={info} onclick={() => (info = !info)}>Info</button>
 			{#if canFullscreen}
 				<button type="button" class="fullscreen" onclick={toggleFullscreen}>Full screen</button>
@@ -289,7 +297,7 @@
 							? '+'
 							: '−'}{Math.abs(asset.tz_offset_minutes) / 60}{/if}
 				</p>
-				{#if placeLabel(asset.place)}<p>{placeLabel(asset.place)}</p>{/if}
+				{#if placeLabel(asset.place)}<p class="place">{placeLabel(asset.place)}</p>{/if}
 				{#if trash && 'trashed_at' in asset}
 					<p class="quiet small">In the trash since {formatWhen(String(asset.trashed_at))}</p>
 				{/if}
@@ -307,7 +315,9 @@
 						</p>
 					{/if}
 					{#if detail.camera_model}
-						<p>{detail.camera_make ? `${detail.camera_make} · ` : ''}{detail.camera_model}</p>
+						<p class="camera">
+							{detail.camera_make ? `${detail.camera_make} · ` : ''}{detail.camera_model}
+						</p>
 					{/if}
 					<p class="quiet small">
 						{detail.width} × {detail.height} · {formatBytes(
@@ -364,6 +374,8 @@
 {/if}
 
 <style>
+	/* The loupe: the photo takes everything but one quiet band of words above it (and, on a
+	   phone, one below it, in thumb reach). Nothing is drawn over the photo. */
 	.loupe {
 		position: fixed;
 		inset: 0;
@@ -379,6 +391,7 @@
 		background: var(--bg);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
 		outline: none;
 	}
 	.loupe.info {
@@ -386,7 +399,10 @@
 	}
 	.stage {
 		position: relative;
+		grid-row: 2;
+		grid-column: 1;
 		min-width: 0;
+		margin: 0 var(--s-6) var(--s-4);
 		/* Every gesture on the photo is ours (swipes); nothing scrolls behind a modal anyway. */
 		touch-action: none;
 	}
@@ -400,16 +416,32 @@
 		-webkit-user-drag: none;
 	}
 	.edge {
-		position: fixed;
+		position: absolute;
+		grid-row: 2;
 		top: 50%;
 		transform: translateY(-50%);
-		font-size: 2.5rem;
-		line-height: 1;
-		padding: 1.5rem 0.75rem;
-		color: var(--ink);
-		opacity: 0.7;
-		transition: opacity 300ms;
-		min-height: 0;
+		width: var(--s-6);
+		height: 6rem;
+		padding: 0;
+		display: grid;
+		place-items: center;
+		color: var(--ink-2);
+		border-radius: 0;
+		transition: opacity var(--motion) var(--ease);
+	}
+	@media (hover: hover) {
+		.edge:hover {
+			color: var(--ink);
+		}
+	}
+	.edge svg {
+		width: 22px;
+		height: 22px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.5;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 	.edge:disabled {
 		visibility: hidden;
@@ -424,41 +456,39 @@
 		right: var(--margin);
 	}
 	.top {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
+		grid-row: 1;
+		grid-column: 1;
 		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		padding: 0.5rem;
-		transition: opacity 300ms;
+		align-items: center;
+		gap: 2px;
+		padding: var(--s-2) var(--s-3);
+		min-height: 3rem;
+		box-sizing: border-box;
+		transition: opacity var(--motion) var(--ease);
 	}
-	.info .top {
-		right: var(--margin);
+	.actions {
+		display: contents;
 	}
-	/* Words over the photo stay legible without a box around them. */
-	.top button,
-	.top .why,
-	.edge {
-		color: var(--ink);
-		text-shadow:
-			0 0 2px var(--bg),
-			0 0 6px var(--bg),
-			0 0 12px var(--bg);
+	.top button {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s-1);
+		white-space: nowrap;
 	}
 	.top button[aria-pressed='true'] {
 		text-decoration: underline;
-		text-underline-offset: 0.25em;
+		text-underline-offset: 0.35em;
 		text-decoration-thickness: 1px;
 	}
-	.top button:disabled {
-		color: var(--ink-2);
+	.heart {
+		width: 13px;
+		height: 13px;
+		fill: currentColor;
 	}
 	.why {
 		font-size: var(--fs-12);
-		margin: 0 0.5rem 0 -0.25rem;
-		color: var(--ink-2) !important;
+		margin: 0 var(--s-2) 0 calc(-1 * var(--s-1));
+		color: var(--ink-2);
 	}
 	.spacer {
 		flex: 1;
@@ -469,25 +499,35 @@
 	.idle .top:not(:has(:focus-visible)) {
 		opacity: 0;
 	}
+	/* The sidenote: a margin caption, set like the words under a print in an album. */
 	.sidenote {
+		grid-row: 1 / 3;
+		grid-column: 2;
 		overflow-y: auto;
-		padding: 3.25rem 1rem 1rem;
+		padding: var(--s-7) var(--s-4) var(--s-4);
 		border-left: 1px solid var(--hairline);
 		font-size: var(--fs-14);
 	}
 	.sidenote p {
-		margin: 0 0 0.35rem;
+		margin: 0 0 var(--s-1);
 	}
 	.date {
 		font-family: var(--font-text);
+		font-size: var(--fs-20);
+		line-height: var(--lh-tight);
+		margin-bottom: var(--s-1) !important;
+	}
+	.place {
+		font-family: var(--font-text);
+		font-style: italic;
 		font-size: var(--fs-16);
+		margin-top: var(--s-3) !important;
+	}
+	.camera {
+		margin-top: var(--s-3) !important;
 	}
 	h3 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 1rem 0 0.25rem;
+		margin: var(--s-5) 0 var(--s-1);
 	}
 	ul {
 		list-style: none;
@@ -495,38 +535,69 @@
 		padding: 0;
 	}
 	li {
-		margin-bottom: 0.25rem;
+		margin-bottom: var(--s-1);
 		overflow-wrap: anywhere;
 	}
 	.keys {
-		margin-top: 1.5rem !important;
+		margin-top: var(--s-6) !important;
 	}
 	@media (max-width: 1023px) {
+		.loupe,
 		.loupe.info {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.info .top,
+		.stage {
+			margin: 0 0 calc(var(--bar) + env(safe-area-inset-bottom));
+		}
+		.top {
+			padding: env(safe-area-inset-top) var(--s-1) 0;
+		}
 		.info .next {
 			right: 0;
 		}
-		/* Phone: info slides up over the lower part of the photo. */
-		.sidenote {
+		/* Phone: the actions in a bar at the bottom, in thumb reach; one line, scrolling
+		   sideways if a long label ever needs it. */
+		.actions {
 			position: fixed;
 			left: 0;
 			right: 0;
 			bottom: 0;
-			max-height: 50dvh;
+			z-index: 2;
+			display: flex;
+			justify-content: space-between;
+			gap: 0;
+			padding: 0 var(--s-1) env(safe-area-inset-bottom);
+			min-height: var(--bar);
 			background: var(--bg);
+			overflow-x: auto;
+			scrollbar-width: none;
+		}
+		.why {
+			align-self: center;
+		}
+		/* Phone: info is a sheet over the lower part of the photo, above the actions. */
+		.sidenote {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: calc(var(--bar) + env(safe-area-inset-bottom));
+			max-height: 50dvh;
+			background: var(--raised);
 			border-left: 0;
-			border-top: 1px solid var(--hairline);
-			padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+			border-radius: var(--r-2) var(--r-2) 0 0;
+			padding: var(--s-4) var(--s-4) var(--s-4);
+			z-index: 1;
 		}
 		.edge {
-			font-size: 2rem;
-			padding: 1rem 0.4rem;
+			width: var(--target);
+			height: 5rem;
+		}
+		.edge svg {
+			width: 18px;
+			height: 18px;
 		}
 		.keys,
-		.fullscreen {
+		.top .fullscreen {
 			display: none;
 		}
 	}

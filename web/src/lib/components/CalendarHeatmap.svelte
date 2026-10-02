@@ -63,7 +63,7 @@
 	{/each}
 	{#if map.years.length}
 		<p class="quiet small legend">
-			Each square is a day, Monday at the top. Darker ink, more photos; the darkest day has {count.format(
+			Each square is a day, Monday at the top. Stronger ink, more photos; the busiest day has {count.format(
 				map.max
 			)}.
 		</p>
@@ -74,17 +74,19 @@
 	.years {
 		max-width: 60rem;
 		overflow-x: auto;
+		padding-bottom: var(--s-2);
 	}
 	section {
-		margin: 0.75rem 0 1.25rem;
+		margin: var(--s-4) 0 var(--s-5);
 	}
 	h2 {
-		font-size: var(--fs-14);
-		margin-bottom: 0.25rem;
+		font-size: var(--fs-20);
+		margin-bottom: var(--s-2);
 	}
 	h2 span {
+		font-family: var(--font-ui);
 		font-size: var(--fs-12);
-		margin-left: 0.35rem;
+		margin-left: var(--s-2);
 	}
 	svg {
 		display: block;
@@ -95,7 +97,7 @@
 	}
 
 	.month {
-		font-size: 9px;
+		font-size: 8.5px;
 		fill: var(--ink-2);
 		font-family: var(--font-ui);
 	}
@@ -112,9 +114,10 @@
 	}
 	.empty {
 		fill: var(--hairline);
-		opacity: 0.6;
+		opacity: 0.7;
 	}
 	.legend {
-		margin-top: 1.5rem;
+		margin-top: var(--s-5);
+		max-width: var(--measure);
 	}
 </style>

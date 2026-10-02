@@ -13,6 +13,7 @@
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let points = $state<MapPoint[]>([]);
+	let loaded = $state(false);
 	let located = $state.raw<Map<Id, AssetOut>>(new Map());
 	let chosen = $state<Cluster | null>(null);
 	let width = $state(0);
@@ -45,7 +46,11 @@
 		chosen = null;
 		api
 			.map(f)
-			.then((p) => !stale && (points = p))
+			.then((p) => {
+				if (stale) return;
+				points = p;
+				loaded = true;
+			})
 			.catch((e: unknown) => notice.error(e));
 		void loadLocated(f, () => stale);
 		return () => (stale = true);
@@ -253,7 +258,15 @@
 			</div>
 		</section>
 	{:else if points.length}
-		<p class="quiet small">Choose a dot to see its photos.</p>
+		<p class="quiet hint">Choose a dot to see its photos.</p>
+	{:else if loaded}
+		<div class="empty-state">
+			<p>No photos with a location here.</p>
+			<p>
+				Photos appear on the map when the camera saved where they were taken. Loosen a filter to see
+				more.
+			</p>
+		</div>
 	{/if}
 </div>
 
@@ -269,25 +282,33 @@
 
 <style>
 	.page {
-		padding: 0 0.75rem 2rem;
+		padding: 0 var(--page-x) var(--s-6);
 	}
 	header {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 0.25rem 1rem;
-		padding: 1rem 0 0.5rem;
+		gap: var(--s-1) var(--s-4);
+		padding: var(--s-5) 0 var(--s-3);
 	}
 	header p {
 		margin: 0;
 		flex: 1;
+		font-size: var(--fs-12);
 	}
 	.tools {
 		display: flex;
 		flex-wrap: wrap;
+		gap: 0 var(--s-1);
+		margin-right: calc(-1 * var(--s-2));
 	}
 	.tools button {
 		color: var(--ink-2);
+	}
+	@media (hover: hover) {
+		.tools button:hover {
+			color: var(--ink);
+		}
 	}
 	.map {
 		border: 1px solid var(--hairline);
@@ -299,15 +320,19 @@
 		touch-action: none;
 		cursor: grab;
 	}
+	svg:active {
+		cursor: grabbing;
+	}
 	.sea {
 		fill: var(--bg);
 	}
 	.land {
-		fill: var(--hairline);
+		fill: color-mix(in srgb, var(--ink) 11%, var(--bg));
 	}
+	/* One ink for every place; the chosen dot takes the accent (it is the selection). */
 	.dot {
 		fill: var(--ink);
-		fill-opacity: 0.75;
+		fill-opacity: 0.8;
 		stroke: var(--bg);
 	}
 	.dot.chosen,
@@ -322,16 +347,56 @@
 		pointer-events: none;
 	}
 	.n {
-		fill: var(--ink-2);
+		fill: var(--ink);
 		dominant-baseline: middle;
 		font-family: var(--font-ui);
+		paint-order: stroke;
+		stroke: var(--bg);
+		stroke-width: 0.6px;
+	}
+	.hint {
+		margin: var(--s-3) 0;
 	}
 	.chosen h2 {
-		font-size: var(--fs-14);
-		margin: 1rem 0 0.5rem;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 var(--s-2);
+		margin: var(--s-5) 0 var(--s-3);
+	}
+	.chosen h2 .quiet {
+		font-family: var(--font-ui);
+		font-size: var(--fs-12);
 	}
 	.chosen h2 button {
 		color: var(--ink-2);
+		font-family: var(--font-ui);
 		font-size: var(--fs-14);
+	}
+	@media (hover: hover) {
+		.chosen h2 button:hover {
+			color: var(--ink);
+		}
+	}
+	.chosen p {
+		margin: 0 0 var(--s-3);
+	}
+	@media (max-width: 639px) {
+		.page {
+			padding: 0 var(--gutter) var(--s-6);
+		}
+		header,
+		.chosen h2,
+		.chosen p,
+		.hint {
+			padding-inline: var(--s-2);
+		}
+		.tools {
+			flex-basis: 100%;
+			margin: 0 0 0 calc(-1 * var(--s-2));
+		}
+		.map {
+			border-inline: 0;
+		}
 	}
 </style>

@@ -76,7 +76,7 @@
 <div class="page">
 	<header>
 		<h1>Trash</h1>
-		<p class="quiet">
+		<p class="prose">
 			Photos stay here for 30 days, then the library copy is removed. Your source folders are never
 			touched. Open a photo to see it full size; select photos (the circle, or a long press) to
 			restore several.
@@ -91,7 +91,12 @@
 		{/if}
 	</header>
 
-	{#if items && list.length === 0}<p class="quiet">The trash is empty.</p>{/if}
+	{#if items && list.length === 0}
+		<div class="empty-state">
+			<p>The trash is empty.</p>
+			<p>Photos you move to the trash wait here for 30 days before they go.</p>
+		</div>
+	{/if}
 
 	<div bind:clientWidth={width}>
 		<PhotoGrid
@@ -147,19 +152,32 @@
 
 <style>
 	.page {
-		padding: 0 0.75rem 2rem;
+		padding: 0 var(--page-x) var(--s-7);
 	}
 	header {
-		padding: 1rem 0 0.75rem;
+		padding: var(--s-5) 0 var(--s-4);
 	}
 	header p {
-		margin: 0.25rem 0;
-		max-width: 40rem;
+		margin: var(--s-3) 0 0;
 	}
 	.tools {
-		margin-left: -0.5rem;
+		display: flex;
+		gap: 0 2px;
+		margin: var(--s-2) 0 0 calc(-1 * var(--s-2));
 	}
 	.tools button {
 		color: var(--ink-2);
+	}
+	.empty-state {
+		padding-top: var(--s-4);
+	}
+	@media (max-width: 639px) {
+		.page {
+			padding: 0 var(--gutter) var(--s-7);
+		}
+		header,
+		.empty-state {
+			padding-inline: var(--s-2);
+		}
 	}
 </style>

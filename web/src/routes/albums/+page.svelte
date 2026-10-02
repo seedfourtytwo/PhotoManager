@@ -41,9 +41,13 @@
 	</header>
 
 	{#if albums && albums.length === 0}
-		<p class="quiet">
-			No albums yet. Select photos in the library and choose “Add to album”, or start an empty one.
-		</p>
+		<div class="empty-state">
+			<p>No albums yet.</p>
+			<p>
+				Select photos in the <a href="/">library</a> and choose “Add to album”{#if session.canEdit},
+					or start an empty one with New album{/if}.
+			</p>
+		</div>
 	{/if}
 
 	<ul class="albums">
@@ -77,35 +81,42 @@
 
 <style>
 	.page {
-		padding: 0 0.75rem 2rem;
+		padding: 0 var(--page-x) var(--s-7);
 	}
 	header {
 		display: flex;
 		align-items: baseline;
-		gap: 1rem;
-		padding: 1rem 0 0.75rem;
+		gap: var(--s-4);
+		padding: var(--s-5) 0 var(--s-5);
 	}
 	header button {
 		color: var(--ink-2);
+	}
+	@media (hover: hover) {
+		header button:hover {
+			color: var(--ink);
+		}
 	}
 	.albums {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-		gap: 1.5rem 0.75rem;
+		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+		gap: var(--s-6) var(--s-5);
 	}
 	a {
 		display: grid;
-		gap: 0.2rem;
+		gap: var(--s-1);
 		text-decoration: none;
+		border-radius: 0;
 	}
 	/* The cover is the one place we crop: a user-chosen album frame (rule 2). */
 	.cover {
 		aspect-ratio: 4 / 3;
 		background: var(--hairline);
 		overflow: hidden;
+		margin-bottom: var(--s-2);
 	}
 	.cover img {
 		width: 100%;
@@ -115,16 +126,26 @@
 	}
 	.title {
 		font-family: var(--font-text);
-		font-size: var(--fs-16);
+		font-size: var(--fs-20);
+		line-height: var(--lh-tight);
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.75rem;
+	@media (hover: hover) {
+		a:hover .title {
+			text-decoration: underline;
+			text-decoration-thickness: 1px;
+			text-underline-offset: 0.2em;
+		}
+	}
+	a:focus-visible {
+		outline-offset: var(--s-1);
 	}
 	@media (max-width: 639px) {
 		.albums {
 			grid-template-columns: 1fr 1fr;
+			gap: var(--s-5) var(--s-3);
+		}
+		.title {
+			font-size: var(--fs-16);
 		}
 	}
 </style>

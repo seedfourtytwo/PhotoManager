@@ -206,7 +206,11 @@
 				{:else}
 					<span class="visually-hidden">{describePhoto(item)} (preview not ready)</span>
 				{/if}
-				{#if item.favourite}<span class="fav" aria-hidden="true">♥</span>{/if}
+				{#if item.favourite}<svg class="fav" viewBox="0 0 16 16" aria-hidden="true"
+						><path
+							d="M8 13.6S2.2 10.1 2.2 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.8 1.2c0 4-5.8 7.5-5.8 7.5z"
+						/></svg
+					>{/if}
 				<span class="check" aria-hidden="true"></span>
 			</button>
 		{/if}
@@ -224,13 +228,22 @@
 		top: 0;
 		padding: 0;
 		min-height: 0;
+		border-radius: 0;
 		background: var(--hairline);
 		overflow: hidden;
 		-webkit-touch-callout: none;
 		user-select: none;
+		transition: none;
+	}
+	@media (hover: hover) {
+		.tile:hover {
+			background: var(--hairline);
+		}
 	}
 	.tile:focus-visible {
+		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+		border-radius: 0;
 		z-index: 1;
 	}
 	img {
@@ -240,53 +253,62 @@
 		object-fit: fill; /* the box already has the photo's true aspect ratio */
 		pointer-events: none;
 	}
-	/* Selection: the accent, as an inset frame; the photo stays uncropped. */
+	/* Selection: the accent as an inset frame (a hairline of shade keeps it visible on any
+	   photo); the photo itself stays uncropped and undimmed. */
 	.tile.selected::after {
 		content: '';
 		position: absolute;
 		inset: 0;
-		box-shadow: inset 0 0 0 3px var(--accent);
+		box-shadow:
+			inset 0 0 0 3px var(--accent),
+			inset 0 0 0 4px rgb(0 0 0 / 0.25);
 	}
 	.check {
 		position: absolute;
-		top: 6px;
-		left: 6px;
-		width: 18px;
-		height: 18px;
+		top: var(--s-2);
+		left: var(--s-2);
+		width: 20px;
+		height: 20px;
 		border-radius: 50%;
 		box-sizing: border-box;
-		border: 1.5px solid rgb(255 255 255 / 0.9);
-		background: rgb(0 0 0 / 0.15);
+		border: 1.5px solid #fff;
+		background: rgb(0 0 0 / 0.18) center / 14px no-repeat;
+		box-shadow: 0 0 0 1px rgb(0 0 0 / 0.2);
 		opacity: 0;
-		transition: opacity var(--motion);
+		transition: opacity var(--motion) var(--ease);
 	}
 	/* The circle appears where it helps — under the mouse or keyboard focus — and stays on
 	   selected photos; unselected photos stay clean while selecting. */
 	@media (hover: hover) {
-		.tile:hover .check {
-			opacity: 1;
+		@media (hover: hover) {
+			.tile:hover .check {
+				opacity: 1;
+			}
 		}
 	}
 	.tile:focus-visible .check {
 		opacity: 1;
 	}
 	.tile.selected .check {
-		background: var(--accent);
+		background-color: var(--accent);
+		background-image: var(--check);
 		border-color: var(--accent);
 		opacity: 1;
 	}
 	.fav {
 		position: absolute;
-		right: 5px;
-		bottom: 2px;
-		color: #fff;
-		font-size: 12px;
-		text-shadow: 0 0 2px rgb(0 0 0 / 0.6);
+		right: var(--s-1);
+		bottom: var(--s-1);
+		width: 14px;
+		height: 14px;
+		fill: #fff;
+		filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.55));
 	}
 	@media (hover: none) {
 		.check {
-			width: 22px;
-			height: 22px;
+			width: 24px;
+			height: 24px;
+			background-size: 16px;
 		}
 	}
 </style>

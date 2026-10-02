@@ -70,19 +70,31 @@
 </Dialog>
 
 <style>
+	p {
+		margin: 0 0 var(--s-3);
+	}
 	.list {
 		display: grid;
-		gap: 0.35rem;
+		gap: 0;
 		max-height: 50dvh;
 		overflow-y: auto;
 	}
 	label {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--s-2);
 		align-items: center;
+		min-height: 2rem;
 		color: var(--ink);
 	}
+	label .small {
+		margin-left: auto;
+	}
 	.title {
-		margin-left: 1.5rem;
+		margin: 0 0 var(--s-2) var(--s-5);
+	}
+	@media (pointer: coarse) {
+		label {
+			min-height: var(--target);
+		}
 	}
 </style>

@@ -1,6 +1,7 @@
 /**
  * Screenshots of every screen from the mock library (synthetic images only), written to
  * docs/screenshots/integrated/ (or SHOT_DIR). Run with `pnpm screenshots`; skipped otherwise.
+ * THEME=light writes the key screens in the light theme to docs/screenshots/integrated/light/.
  */
 import type { Page } from '@playwright/test';
 import {
@@ -13,15 +14,41 @@ import {
 	test
 } from './helpers.ts';
 
-test.use({ colorScheme: 'dark' });
+const THEME = process.env.THEME === 'light' ? 'light' : 'dark';
+test.use({ colorScheme: THEME });
 test.skip(!process.env.SCREENSHOTS, 'set SCREENSHOTS=1 (pnpm screenshots)');
 
-const DIR = process.env.SHOT_DIR ?? '../docs/screenshots/integrated';
+const DIR =
+	process.env.SHOT_DIR ??
+	(THEME === 'light' ? '../docs/screenshots/integrated/light' : '../docs/screenshots/integrated');
+/** The light set: the screens where the theme matters most. */
+const LIGHT = new Set([
+	'02-login',
+	'03-library',
+	'04-loupe',
+	'04b-loupe-info',
+	'05-filters',
+	'06-selection',
+	'07-download',
+	'08-calendar',
+	'09-map',
+	'10-albums',
+	'11-album',
+	'14-admin',
+	'16-settings',
+	'19-people',
+	'20-print'
+]);
+
+test.beforeEach(async ({ page }) => {
+	await page.addInitScript((theme) => localStorage.setItem('pa.theme', theme), THEME);
+});
 
 async function shot(page: Page, name: string, project: string, fullPage = false) {
+	if (THEME === 'light' && !LIGHT.has(name)) return;
+	if (!isPhone(page)) await page.mouse.move(0, 0);
 	await page.waitForLoadState('networkidle');
 	await page.waitForTimeout(500);
-	if (!isPhone(page)) await page.mouse.move(0, 0);
 	await page.screenshot({ path: `${DIR}/${project}-${name}.png`, fullPage });
 }
 

@@ -43,38 +43,54 @@
 
 <style>
 	dialog {
-		background: var(--bg);
+		background: var(--raised);
 		color: var(--ink);
 		border: 1px solid var(--hairline);
-		padding: 1.25rem;
-		width: min(26rem, calc(100vw - 2rem));
-		max-height: calc(100dvh - 4rem);
+		border-radius: var(--r-2);
+		padding: var(--s-5);
+		width: min(28rem, calc(100vw - 2 * var(--s-4)));
+		max-height: calc(100dvh - 2 * var(--s-7));
 		box-sizing: border-box;
 		overflow-y: auto;
+		transition:
+			opacity var(--motion) var(--ease),
+			translate var(--motion) var(--ease);
+	}
+	@starting-style {
+		dialog[open] {
+			opacity: 0;
+			translate: 0 var(--s-2);
+		}
 	}
 	dialog.wide {
-		width: min(36rem, calc(100vw - 2rem));
+		width: min(36rem, calc(100vw - 2 * var(--s-4)));
 	}
 	dialog::backdrop {
 		background: var(--scrim);
 	}
 	h2 {
-		font-family: var(--font-text);
-		font-size: var(--fs-20);
-		margin-bottom: 1rem;
+		margin-bottom: var(--s-4);
 	}
 	.actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: 0.5rem;
-		margin-top: 1.25rem;
+		align-items: center;
+		gap: var(--s-2);
+		margin-top: var(--s-5);
 	}
+	/* Phone: a bottom sheet, in thumb reach. */
 	@media (max-width: 639px) {
 		dialog {
 			margin: auto 0 0;
 			width: 100vw;
 			max-width: 100vw;
-			border-width: 1px 0 0;
+			max-height: 90dvh;
+			border-width: 0;
+			border-radius: var(--r-2) var(--r-2) 0 0;
+			padding: var(--s-5) var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom));
+		}
+		.actions {
+			margin-top: var(--s-5);
 		}
 	}
 </style>

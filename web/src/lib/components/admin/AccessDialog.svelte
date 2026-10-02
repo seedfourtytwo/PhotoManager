@@ -99,11 +99,22 @@
 		display: grid;
 		grid-template-columns: 8rem 1fr auto;
 		align-items: center;
-		gap: 0.5rem;
-		margin: 0.35rem 0;
+		gap: var(--s-3);
+		margin: var(--s-1) 0;
 		color: var(--ink);
 	}
 	.row button {
 		color: var(--ink-2);
+	}
+	p {
+		margin: var(--s-3) 0 0;
+	}
+	@media (max-width: 639px) {
+		.row {
+			grid-template-columns: 1fr auto;
+		}
+		.row > :first-child {
+			grid-column: 1 / -1;
+		}
 	}
 </style>

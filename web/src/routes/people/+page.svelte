@@ -34,7 +34,10 @@
 	{/if}
 
 	{#if people && people.length === 0}
-		<p class="quiet">No people yet. Faces are grouped here once photos have been analysed.</p>
+		<div class="empty-state">
+			<p>No people yet.</p>
+			<p>Faces are grouped here once photos have been analysed; then you can name them.</p>
+		</div>
 	{/if}
 
 	{#each [{ title: 'Named', list: named }, { title: 'Not named yet', list: unnamed }] as group (group.title)}
@@ -57,40 +60,57 @@
 
 <style>
 	.page {
-		padding: 1rem 0.75rem 2rem;
+		padding: var(--s-5) var(--page-x) var(--s-7);
 	}
 	.note {
-		max-width: 40rem;
+		max-width: var(--measure);
+		margin: var(--s-2) 0 0;
 	}
 	code {
 		font-size: var(--fs-12);
 		color: var(--ink);
 	}
 	h2 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 1.25rem 0 0.5rem;
+		margin: var(--s-6) 0 var(--s-3);
 	}
-	/* Small multiples: identical squares, names next to them. */
+	/* Small multiples: identical squares, names beneath them like captions. */
 	.people {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-		gap: 1rem 0.75rem;
+		grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+		gap: var(--s-5) var(--s-3);
 	}
 	a {
 		display: grid;
-		gap: 0.2rem;
+		gap: var(--s-1);
 		text-decoration: none;
 	}
+	a :global(:first-child) {
+		margin-bottom: var(--s-1);
+	}
 	.name {
-		font-size: var(--fs-14);
+		font-family: var(--font-text);
+		font-size: var(--fs-16);
+		line-height: var(--lh-tight);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.name.quiet {
+		font-style: italic;
+	}
+	@media (hover: hover) {
+		a:hover .name {
+			text-decoration: underline;
+			text-decoration-thickness: 1px;
+			text-underline-offset: 0.2em;
+		}
+	}
+	@media (max-width: 639px) {
+		.people {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
 	}
 </style>

@@ -93,12 +93,12 @@
 <svelte:head><title>{person?.name ?? 'Person'} · Photos</title></svelte:head>
 
 <div class="page">
-	<p class="small"><a href="/people" class="quiet">People</a></p>
+	<p class="small crumb"><a href="/people">People</a></p>
 	{#if error}
 		<p class="quiet">{error}</p>
 	{:else if person}
 		<header>
-			<FaceCrop face={person.cover} size={64} />
+			<FaceCrop face={person.cover} size={72} />
 			<div>
 				<h1 class:quiet={!person.name}>{person.name ?? 'Someone'}</h1>
 				<p class="quiet small">
@@ -185,33 +185,42 @@
 
 <style>
 	.page {
-		padding: 1rem 0.75rem 2rem;
+		padding: var(--s-5) var(--page-x) var(--s-7);
+	}
+	.crumb {
+		margin: 0;
+	}
+	.crumb a {
+		color: var(--ink-2);
 	}
 	header {
 		display: flex;
-		gap: 1rem;
+		gap: var(--s-4);
 		align-items: center;
-		margin: 0.5rem 0 0.75rem;
+		margin: var(--s-4) 0 var(--s-2);
 	}
 	header p {
-		margin: 0.1rem 0;
+		margin: var(--s-1) 0 0;
 	}
 	h1 {
-		font-size: var(--fs-28);
+		font-size: var(--fs-40);
+		font-weight: 350;
+		letter-spacing: -0.015em;
+	}
+	h1.quiet {
+		font-style: italic;
 	}
 	.tools {
-		margin-left: -0.5rem;
+		display: flex;
+		gap: 0 2px;
+		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
 	}
 	.tools button {
 		color: var(--ink-2);
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-	}
 	.choose {
 		list-style: none;
-		margin: 0.5rem 0 0;
+		margin: var(--s-2) 0 0;
 		padding: 0;
 		max-height: 50dvh;
 		overflow-y: auto;
@@ -219,11 +228,23 @@
 	.choose label {
 		display: flex;
 		align-items: center;
-		gap: 0.6rem;
-		padding: 0.25rem 0;
+		gap: var(--s-3);
+		padding: var(--s-1) 0;
 		color: var(--ink);
 	}
 	.choose .small {
 		margin-left: auto;
+	}
+	@media (max-width: 639px) {
+		.page {
+			padding: var(--s-4) var(--gutter) var(--s-7);
+		}
+		.crumb,
+		header {
+			padding-inline: var(--s-2);
+		}
+		h1 {
+			font-size: var(--fs-28);
+		}
 	}
 </style>

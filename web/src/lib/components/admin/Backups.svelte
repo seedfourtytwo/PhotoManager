@@ -208,18 +208,9 @@
 {/if}
 
 <style>
-	header {
-		display: flex;
-		gap: 1rem;
-		align-items: baseline;
-	}
 	header button,
 	.actions button {
 		color: var(--ink-2);
-	}
-	h2 {
-		font-size: var(--fs-16);
-		margin: 1.5rem 0 0.5rem;
 	}
 	ul {
 		list-style: none;
@@ -227,52 +218,66 @@
 		padding: 0;
 	}
 	li {
-		padding: 0.6rem 0;
+		padding: var(--s-3) 0;
 		border-bottom: 1px solid var(--hairline);
 	}
+	li:last-child {
+		border-bottom: 0;
+	}
 	li p {
-		margin: 0.15rem 0;
+		margin: var(--s-1) 0 0;
 	}
 	li.off .name span:first-child {
 		color: var(--ink-2);
 	}
 	.name {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--s-1) var(--s-3);
 		align-items: baseline;
 		flex-wrap: wrap;
 		overflow-wrap: anywhere;
 	}
+	.name span:first-child {
+		font-weight: 600;
+	}
+	.name .small {
+		font-family: var(--font-mono);
+	}
 	.status {
 		color: var(--ink-2);
 	}
+	/* Needs attention: full ink and an ink rule beside it — value, not a warning colour. */
 	.status.attention {
 		color: var(--ink);
+		border-left: 2px solid var(--ink);
+		padding-left: var(--s-2);
 	}
 	.actions {
-		margin-left: -0.5rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 2px;
+		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
 	}
 	table {
 		border-collapse: collapse;
 		font-size: var(--fs-12);
-		margin-top: 0.25rem;
+		margin-top: var(--s-2);
 	}
 	th {
 		text-align: left;
-		font-weight: 400;
+		font-weight: 600;
 		color: var(--ink-2);
-		padding-right: 1rem;
+		padding: 0 var(--s-4) var(--s-1) 0;
+		border-bottom: 1px solid var(--hairline);
 	}
 	td {
-		padding: 0.1rem 1rem 0.1rem 0;
+		padding: var(--s-1) var(--s-4) var(--s-1) 0;
 		vertical-align: top;
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.6rem;
-	}
 	#schedule-help {
-		margin: -0.4rem 0 0.6rem;
+		margin: calc(-1 * var(--s-3)) 0 var(--s-4);
+	}
+	p {
+		margin: 0 0 var(--s-3);
 	}
 </style>

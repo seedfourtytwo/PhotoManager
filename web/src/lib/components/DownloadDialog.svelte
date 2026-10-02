@@ -310,37 +310,17 @@
 
 <style>
 	.summary {
-		margin: 0 0 0.5rem;
-	}
-	fieldset {
-		border: 0;
-		padding: 0;
-		margin: 0.9rem 0 0;
-	}
-	legend {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		padding: 0;
-		margin-bottom: 0.25rem;
-	}
-	.choice {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		margin: 0.15rem 1rem 0.15rem 0;
-		color: var(--ink);
+		margin: 0 0 var(--s-2);
 	}
 	.note {
-		margin: 0.35rem 0 0;
+		margin: var(--s-1) 0 0;
 	}
 	.row {
 		display: grid;
 		grid-template-columns: 5rem auto 1fr;
 		align-items: center;
-		gap: 0.5rem;
-		margin-top: 0.4rem;
+		gap: var(--s-2);
+		margin-top: var(--s-1);
 	}
 	.row select,
 	.row input[type='number'] {
@@ -349,5 +329,8 @@
 	.value {
 		min-width: 2rem;
 		color: var(--ink);
+	}
+	fieldset .small {
+		margin: var(--s-1) 0 0;
 	}
 </style>
