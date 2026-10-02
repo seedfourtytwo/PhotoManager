@@ -46,7 +46,8 @@ def restore(services: ServicesDep, viewer: ViewerDep, body: IdsIn) -> Restored:
 
 
 @router.post("/trash/empty", dependencies=ADMIN_ONLY, status_code=status.HTTP_200_OK)
-def empty(services: ServicesDep, body: OptionalIds | None = None) -> Purged:
-    """Remove the library copy and derivatives for good; sources are never touched."""
+def empty(services: ServicesDep, viewer: ViewerDep, body: OptionalIds | None = None) -> Purged:
+    """Remove the library copy and derivatives for good; sources are never touched. Only
+    what the caller sees in the trash is purged (never someone's private photo)."""
     ids = body.ids if body is not None else None
-    return Purged(purged=services.trash.empty(ids))
+    return Purged(purged=services.trash.empty(viewer, ids))

@@ -49,8 +49,15 @@ class TrashMixin(SqliteBase):
             params.append(utc_text(trashed_before))
         return [asset_from_row(r) for r in self._all(sql + " ORDER BY id", params)]
 
-    def purge_asset(self, asset: Asset, now: datetime) -> None:
+    def purge_asset(self, asset: Asset, now: datetime) -> bool:
+        """One transaction: re-check the photo is still trashed, then remove its rows.
+        False when a restore got there first (nothing is changed)."""
         with self._transaction():
+            still_trashed = self._conn.execute(
+                "SELECT 1 FROM asset WHERE id = ? AND trashed_at IS NOT NULL", (asset.id,)
+            ).fetchone()
+            if still_trashed is None:
+                return False
             for table in _DEPENDENTS:
                 self._conn.execute(f"DELETE FROM {table} WHERE asset_id = ?", (asset.id,))
             self._conn.execute(
@@ -64,6 +71,7 @@ class TrashMixin(SqliteBase):
                 (asset.content_hash, utc_text(now)),
             )
             self._conn.execute("DELETE FROM asset WHERE id = ?", (asset.id,))
+        return True
 
     def is_purged_hash(self, content_hash: str) -> bool:
         return (

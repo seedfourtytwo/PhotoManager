@@ -72,9 +72,9 @@ def test_purge_removes_library_copy_and_derivatives_and_remembers_the_hash(world
     assert asset is not None
     original = store.absolute(asset.library_path)
     assert not original.stat().st_mode & stat.S_IWUSR
-    assert trash.empty([a]) == 0, "only photos in the trash are purged"
+    assert trash.empty(ADMIN, [a]) == 0, "only photos in the trash are purged"
     trash.trash([a], user_id=1)
-    assert trash.empty(None) == 1
+    assert trash.empty(ADMIN, None) == 1
     assert not original.exists()
     assert not store.absolute("derived/thumb/1.webp").exists()
     assert not store.absolute("derived/preview/1.webp").exists()
@@ -100,3 +100,66 @@ def test_store_refuses_to_remove_anything_outside_the_library(world) -> None:  #
     with pytest.raises(ValueError, match="library"):
         store.remove("tmp/whatever")
     store.remove("originals/2020/01/missing.jpg")  # missing is fine
+
+
+# --- QA A2: a restore that lands while the purge runs must win -------------------------------
+
+
+class RestoreDuringPurge:
+    """The repository, except that a restore lands right after the purge picked its photos."""
+
+    def __init__(self, repo: SqliteRepository, restore: list[int]) -> None:
+        self._repo = repo
+        self._restore = restore
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._repo, name)
+
+    def purge_candidates(self, ids, trashed_before):  # type: ignore[no-untyped-def]
+        found = self._repo.purge_candidates(ids, trashed_before)
+        self._repo.restore_assets(self._restore)
+        return found
+
+
+def test_a_photo_restored_while_the_trash_is_emptied_is_kept_with_its_files(world) -> None:  # type: ignore[no-untyped-def]
+    repo, store, clock, _ = world
+    kept, gone = library_photo(repo, store, 1), library_photo(repo, store, 2)
+    Trash(repo, store, clock).trash([kept, gone], user_id=1)
+    racing = Trash(RestoreDuringPurge(repo, [kept]), store, clock)  # type: ignore[arg-type]
+    assert racing.empty(ADMIN, None) == 1
+    asset = repo.get_asset(kept)
+    assert asset is not None, "the restored photo must survive"
+    assert store.absolute(asset.library_path).is_file()
+    assert store.absolute("derived/thumb/1.webp").is_file()
+    assert not repo.is_purged_hash(asset.content_hash)
+    assert repo.get_asset(gone) is None
+
+
+def test_concurrent_restores_and_purges_never_leave_a_photo_without_its_original(world) -> None:  # type: ignore[no-untyped-def]
+    import threading
+
+    repo, store, _, trash = world
+    ids = [library_photo(repo, store, n) for n in range(1, 41)]
+    trash.trash(ids, user_id=1)
+    start = threading.Barrier(2)
+
+    def purge() -> None:
+        start.wait()
+        trash.empty(ADMIN, None)
+
+    def restore() -> None:
+        start.wait()
+        for asset_id in ids:
+            trash.restore([asset_id])
+
+    threads = [threading.Thread(target=purge), threading.Thread(target=restore)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for n, asset_id in enumerate(ids, start=1):
+        asset = repo.get_asset(asset_id)
+        if asset is None:
+            assert repo.is_purged_hash(new_asset(n).content_hash)
+            continue
+        assert store.absolute(asset.library_path).is_file(), f"photo {n} lost its original"
