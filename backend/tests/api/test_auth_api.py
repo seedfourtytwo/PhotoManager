@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
-from tests.api.conftest import BASE, PASSWORD, add_user, login, make_settings
+from tests.api.conftest import BASE, PASSWORD, add_user, login, make_settings, user_id_of
 
 OPEN_ROUTES = {
     ("GET", "/api/health"),
@@ -75,6 +75,30 @@ def test_login_is_rate_limited(admin: TestClient) -> None:
         assert r.status_code == 401
     blocked = other.post("/api/auth/login", json={"username": "admin", "password": PASSWORD})
     assert blocked.status_code == 429
+
+
+def test_an_admin_unlocks_a_rate_limited_account(admin: TestClient) -> None:
+    lea = add_user(admin, "lea")
+    lea_id = user_id_of(admin, "lea")
+    other = TestClient(admin.app, base_url=BASE)
+    for _ in range(10):
+        other.post("/api/auth/login", json={"username": "lea", "password": "nope nope!"})
+    assert (
+        other.post("/api/auth/login", json={"username": "lea", "password": PASSWORD}).status_code
+        == 429
+    )
+    assert lea.post(f"/api/users/{lea_id}/unlock").status_code == 403, "members can't unlock"
+    unlocked = admin.post(f"/api/users/{lea_id}/unlock")
+    assert unlocked.status_code == 204 and unlocked.content == b""
+    ok = other.post("/api/auth/login", json={"username": "lea", "password": PASSWORD})
+    assert ok.status_code == 200
+    assert admin.post("/api/users/999/unlock").status_code == 404
+    assert admin.post(f"/api/users/{lea_id}/unlock").status_code == 204, "nothing to clear is fine"
+
+
+def test_guests_cannot_unlock(admin: TestClient) -> None:
+    guest = add_user(admin, "gus", "guest")
+    assert guest.post(f"/api/users/{user_id_of(admin, 'admin')}/unlock").status_code == 403
 
 
 def test_change_password(admin: TestClient) -> None:

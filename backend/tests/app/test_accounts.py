@@ -96,6 +96,23 @@ def test_ten_failures_in_fifteen_minutes_block_that_user_from_that_address(
     accounts.login("c", GOOD, "10.0.0.9")
 
 
+def test_an_admin_unlock_clears_the_failures_from_every_address(accounts: Accounts) -> None:
+    admin, _ = accounts.setup("c", "C", GOOD)
+    lea = accounts.create_user("lea", "Léa", GOOD, Role.MEMBER)
+    for ip, name in (("10.0.0.9", "lea"), ("10.0.0.8", "LEA"), ("10.0.0.9", "c")):
+        for _ in range(10):
+            with pytest.raises(InvalidCredentialsError):
+                accounts.login(name, "wrong password!", ip)
+    accounts.unlock(lea.id)
+    accounts.login("lea", GOOD, "10.0.0.9")
+    accounts.login("Lea", GOOD, "10.0.0.8")
+    with pytest.raises(TooManyAttemptsError):
+        accounts.login("c", GOOD, "10.0.0.9")  # someone else stays blocked
+    with pytest.raises(NotFoundError):
+        accounts.unlock(999)
+    assert admin.role is Role.ADMIN
+
+
 def test_sessions_expire_after_thirty_idle_days_and_use_keeps_them_alive(
     accounts: Accounts, clock: MovableClock
 ) -> None:

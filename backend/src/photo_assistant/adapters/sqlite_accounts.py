@@ -160,3 +160,7 @@ class AccountsMixin(SqliteBase):
 
     def clear_login_failures(self, username: str, ip: str) -> None:
         self._write("DELETE FROM login_failure WHERE username = ? AND ip = ?", (username, ip))
+
+    def clear_all_login_failures(self, username: str) -> None:
+        # the column is COLLATE NOCASE: "Lea" and "lea" are the same account
+        self._write("DELETE FROM login_failure WHERE username = ?", (username,))

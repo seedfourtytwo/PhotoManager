@@ -168,6 +168,14 @@ class Accounts:
         assert updated is not None
         return updated
 
+    def unlock(self, user_id: int) -> None:
+        """Lift the failed-login block on this account, from every address (v1.3): for the
+        person who mistyped their password ten times and can't wait 15 minutes."""
+        user = self._store.get_user(user_id)
+        if user is None:
+            raise NotFoundError()
+        self._store.clear_all_login_failures(user.username)
+
     def _guard_last_admin(self, user: User, patch: UserPatch) -> None:
         is_active_admin = user.role is Role.ADMIN and not user.disabled
         stays = (patch.role in (None, Role.ADMIN)) and not patch.disabled

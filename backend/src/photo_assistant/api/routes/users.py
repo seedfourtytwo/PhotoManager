@@ -42,3 +42,9 @@ def update_user(services: ServicesDep, user_id: int, body: UserPatchIn) -> UserO
         password=body.password,
     )
     return UserOut.of(services.accounts.update_user(user_id, patch))
+
+
+@router.post("/{user_id}/unlock", status_code=status.HTTP_204_NO_CONTENT, dependencies=ADMIN_ONLY)
+def unlock_user(services: ServicesDep, user_id: int) -> None:
+    """Clear the login rate limit for this account (v1.3); 404 for an unknown id."""
+    services.accounts.unlock(user_id)
