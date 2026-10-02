@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import type { AssetDetail, AssetOut, Id } from '$lib/api';
+	import type { AssetDetail, AssetOut } from '$lib/api';
 	import { api, library, notice, session, viewport } from '$lib/app.svelte';
 	import { dateSourceLabel, formatShort, formatTaken } from '$lib/dates';
 	import { formatBytes } from '$lib/format';
@@ -37,7 +37,6 @@
 	let dialog = $state<'download' | 'date' | 'edit' | null>(null);
 	let root: HTMLDialogElement | undefined = $state();
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
-	let owners = $state.raw<Map<Id, Id | null>>(new Map());
 	let similarReady = $state(false);
 	/** Per-photo actions in flight: a second click while one runs is ignored. */
 	let busy = $state<'favourite' | 'private' | null>(null);
@@ -48,19 +47,10 @@
 
 	const canEdit = $derived(session.canEdit && detail?.level === 'edit');
 	const viewOnly = $derived(detail?.level === 'view');
-	const canPrivate = $derived.by(() => {
-		if (!detail || trash) return false;
-		if (session.isAdmin) return true;
-		const me = session.user?.id;
-		if (detail.owner_id !== undefined) return detail.owner_id === me;
-		return detail.origins.some((o) => owners.get(o.source_id) === me);
-	});
+	// v1.2: marking a photo private needs edit on it (from a source, or as an admin).
+	const canPrivate = $derived(!trash && canEdit);
 
 	onMount(() => {
-		library
-			.sources()
-			.then((list) => (owners = new Map(list.map((s) => [s.id, s.owner_id]))))
-			.catch(() => undefined);
 		library
 			.ml()
 			.then((status) => (similarReady = !!status?.clip.ready))
@@ -262,7 +252,7 @@
 						type="button"
 						aria-pressed={asset.private}
 						aria-busy={busy === 'private'}
-						title="Only you see a private photo"
+						title="Hidden from people who see it only through your folders or albums"
 						onclick={() => toggle('private')}>Private</button
 					>
 				{/if}

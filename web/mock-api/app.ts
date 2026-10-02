@@ -267,6 +267,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 
 	/** A running import run whose counts grow, like the real one's (live progress). */
 	function importProgress(sourceId: number, age: number) {
+		if (state.sources.find((s) => s.id === sourceId)?.path.includes('gone')) return;
 		const seen = Math.max(1, Math.round(((age - 800) / 2200) * 11));
 		let run = state.reports.find((r) => r.source_id === sourceId && r.status === 'running');
 		if (!run) {
@@ -728,10 +729,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		[
 			'GET',
 			/^\/api\/sources$/,
-			() =>
+			(ctx) =>
 				ok(
 					state.sources.map((s) => ({
 						...s,
+						// v1.2: paths only for admins; a folder that has gone says so.
+						path: ctx.user?.role === 'admin' ? s.path : null,
+						problem: s.path.includes('gone') ? 'folder not found' : null,
 						asset_count: state.assets.filter(
 							(a) => a.trashed_at === null && a.sources.some((o) => o.source_id === s.id)
 						).length
@@ -1039,9 +1043,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					else set.delete(asset.id);
 				}
 				if (body.private !== undefined) {
-					const owner = state.sources.find((s) => s.id === asset.sources[0].source_id)?.owner_id;
-					if (me(ctx).role !== 'admin' && owner !== me(ctx).id)
-						throw new HttpError(403, 'Only the owner can make a photo private.');
+					// v1.2: the marker needs edit on the photo (the mock hides it from all others).
+					needLevel(me(ctx), asset, 'edit');
 					asset.private_owner = body.private ? me(ctx).id : null;
 				}
 				return ok(toOut(me(ctx), asset));

@@ -110,15 +110,17 @@
 		}
 	}
 
-	/** Put removed photos back exactly where they were: add them, then restore the order. */
+	/**
+	 * Put removed photos back exactly where they were: each at its old index, smallest first
+	 * (contract v1.2; positions count the photos you see, so this works for editors too).
+	 */
 	async function undoRemove(ids: Id[], before: Id[]) {
 		try {
-			await api.addToAlbum(id, ids);
-			const now = new Set((await api.album(id)).items.map((a) => a.id));
-			await api.reorderAlbum(
-				id,
-				before.filter((x) => now.has(x)).concat([...now].filter((x) => !before.includes(x)))
-			);
+			const back = ids
+				.map((photo) => ({ photo, at: before.indexOf(photo) }))
+				.filter((p) => p.at >= 0)
+				.sort((a, b) => a.at - b.at);
+			for (const { photo, at } of back) await api.addToAlbum(id, [photo], at);
 			await load();
 			notice.show('Put back.');
 		} catch (e) {

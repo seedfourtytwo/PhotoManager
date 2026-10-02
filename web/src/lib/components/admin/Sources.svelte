@@ -126,7 +126,8 @@
 			<li class:off={!source.enabled}>
 				<div class="name">
 					<span>{source.label}</span>
-					<span class="quiet small path">{source.path}</span>
+					<span class="quiet small path">{source.path ?? ''}</span>
+					{#if source.problem}<span class="problem small">{source.problem}</span>{/if}
 				</div>
 				<div class="quiet small">
 					{count.format(source.asset_count)} photos{#if !source.enabled}&nbsp;· disabled{/if}

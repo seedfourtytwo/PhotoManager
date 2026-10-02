@@ -76,7 +76,9 @@ test('a scan of a folder that has gone says “folder not found” on the folder
 	await dialog.getByLabel('Folder path on the server').fill('/media/usb-gone');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 	const row = page.getByRole('listitem').filter({ hasText: 'USB disk' });
-	await expect(row.getByText(/folder not found/i)).toBeVisible({ timeout: 10_000 });
+	await expect(row.getByText(/last import failed: folder not found/i)).toBeVisible({
+		timeout: 10_000
+	});
 	await row.getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: 'Last import · USB disk' });
 	await expect(report.getByText(/failed/i).first()).toBeVisible();

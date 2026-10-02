@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import type { AssetOut, Id } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
@@ -23,19 +22,11 @@
 	let dialog = $state<'album' | 'download' | 'date' | null>(null);
 	/** One bulk action at a time: a double click must not trash or toggle twice. */
 	let busy = $state(false);
-	let ownsSources = $state(false);
 	const ids = $derived(selected.map((a) => a.id));
 	const allFavourite = $derived(selected.length > 0 && selected.every((a) => a.favourite));
 	const allHidden = $derived(selected.length > 0 && selected.every((a) => a.hidden));
 	const allPrivate = $derived(selected.length > 0 && selected.every((a) => a.private));
 	const plural = (n: number) => `${n} photo${n === 1 ? '' : 's'}`;
-
-	onMount(() => {
-		library
-			.sources()
-			.then((list) => (ownsSources = list.some((s) => s.owner_id === session.user?.id)))
-			.catch(() => undefined);
-	});
 
 	async function once(run: () => Promise<void>) {
 		if (busy) return;
@@ -83,7 +74,7 @@
 			});
 		});
 
-	/** Private needs the owner (or an admin) photo by photo; the server says no for the rest. */
+	/** Private needs edit on each photo (v1.2); the server says no for the rest. */
 	const setPrivate = () =>
 		once(async () => {
 			const value = !allPrivate;
@@ -100,7 +91,9 @@
 			const refused = ids.length - done.length;
 			notice.show(
 				`${value ? 'Made' : 'Unmarked'} ${plural(done.length)} private.` +
-					(refused ? ` ${refused} ${refused === 1 ? 'is' : 'are'} not yours to change.` : '')
+					(refused
+						? ` ${refused} you may only view ${refused === 1 ? 'was' : 'were'} left as they are.`
+						: '')
 			);
 		});
 
@@ -132,7 +125,7 @@
 		{
 			label: allPrivate ? 'Not private' : 'Make private',
 			run: setPrivate,
-			hidden: !session.isAdmin && !ownsSources
+			hidden: !session.canEdit
 		},
 		...extra,
 		{ label: 'Move to trash', run: trash, hidden: !session.canEdit }

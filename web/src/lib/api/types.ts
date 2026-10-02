@@ -39,11 +39,14 @@ export type Level = 'view' | 'download' | 'edit';
 export type Source = {
 	id: Id;
 	label: string;
-	path: string;
+	/** The folder on the server; null for everyone but admins (v1.2). */
+	path: string | null;
 	enabled: boolean;
 	kind: string;
 	owner_id: Id | null;
 	asset_count: number;
+	/** v1.2: "folder not found" when the folder is gone, else null (absent before v1.2). */
+	problem?: string | null;
 };
 export type SourceIn = { label: string; path: string };
 export type SourcePatch = Partial<{ enabled: boolean; label: string }>;
@@ -139,8 +142,6 @@ export type AssetDetail = AssetOut & {
 	origins: { source_id: Id; source_label: string; relative_path: string }[];
 	albums: { id: Id; title: string }[];
 	level: Level;
-	/** Not in the contract yet: who may make the photo private (owner or an admin). */
-	owner_id?: Id | null;
 };
 
 /** Query filters shared by /api/assets, /facets, /calendar, /map and download scopes. */
