@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { AssetOut } from '$lib/api';
-	import { api, notice } from '$lib/app.svelte';
+	import { api, library, notice } from '$lib/app.svelte';
 	import {
 		formatShort,
 		isValidLocal,
 		previewDateChange,
 		toMinutes,
+		undoDateChange,
 		type DateChangeSpec
 	} from '$lib/dates';
 	import Dialog from './Dialog.svelte';
@@ -35,16 +36,31 @@
 	const preview = $derived(change ? previewDateChange(items, change) : []);
 	const SHOWN = 5;
 
+	/** Undo: the previous dates, re-set (the server marks them as set by hand). */
+	async function putBack(requests: ReturnType<typeof undoDateChange>) {
+		try {
+			for (const request of requests) await api.changeDates(request);
+			notice.show('Dates put back.');
+			library.changed();
+			ondone();
+		} catch (e) {
+			notice.error(e);
+		}
+	}
+
 	async function save() {
 		if (!change) return;
 		busy = true;
 		error = '';
 		try {
 			const ids = items.map((a) => a.id);
+			const undo = undoDateChange(items, change);
 			const { updated } = await api.changeDates(
 				'set' in change ? { ids, set: change.set } : { ids, shift_minutes: change.shift_minutes }
 			);
-			notice.show(`Changed the date of ${updated} photo${updated === 1 ? '' : 's'}.`);
+			notice.show(`Changed the date of ${updated} photo${updated === 1 ? '' : 's'}.`, {
+				action: { label: 'Undo', run: () => void putBack(undo) }
+			});
 			ondone();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not change the date.';
@@ -56,8 +72,7 @@
 
 <Dialog title="Fix date" {onclose}>
 	<p class="quiet">
-		{items.length} photo{items.length === 1 ? '' : 's'}. The previous date is kept, so this can be
-		undone.
+		{items.length} photo{items.length === 1 ? '' : 's'}. You can undo the change right after.
 	</p>
 	<div class="modes" role="radiogroup" aria-label="How to change the date">
 		<label><input type="radio" bind:group={mode} value="shift" /> Shift by</label>

@@ -90,18 +90,37 @@
 		}
 	}
 
+	let removing = false;
 	async function removeSelected() {
+		if (removing) return;
+		removing = true;
 		const ids = [...selection.ids];
+		const before = items.map((a) => a.id);
 		try {
 			await api.removeFromAlbum(id, ids);
-			items = items.filter((a) => !selection.ids.has(a.id));
+			items = items.filter((a) => !ids.includes(a.id));
 			selection = EMPTY;
 			notice.show(`Removed ${ids.length} from the album. The photos stay in the library.`, {
-				action: {
-					label: 'Undo',
-					run: () => void api.addToAlbum(id, ids).then(load)
-				}
+				action: { label: 'Undo', run: () => void undoRemove(ids, before) }
 			});
+		} catch (e) {
+			notice.error(e);
+		} finally {
+			removing = false;
+		}
+	}
+
+	/** Put removed photos back exactly where they were: add them, then restore the order. */
+	async function undoRemove(ids: Id[], before: Id[]) {
+		try {
+			await api.addToAlbum(id, ids);
+			const now = new Set((await api.album(id)).items.map((a) => a.id));
+			await api.reorderAlbum(
+				id,
+				before.filter((x) => now.has(x)).concat([...now].filter((x) => !before.includes(x)))
+			);
+			await load();
+			notice.show('Put back.');
 		} catch (e) {
 			notice.error(e);
 		}

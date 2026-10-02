@@ -74,3 +74,18 @@ test('share an album with another person', async ({ page }) => {
 		{ user_id: 3, role: 'viewer' }
 	]);
 });
+
+test('remove from album, then Undo puts the photos back where they were', async ({ page }) => {
+	await page.goto('/albums/1');
+	const tiles = page.locator('.tile');
+	await expect(tiles.first()).toBeVisible();
+	const order = await tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-id')));
+	await selectTiles(page, [1, 3]);
+	await selectionAction(page, 'Remove from album');
+	await expect(tiles).toHaveCount(order.length - 2);
+	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+	await expect(tiles).toHaveCount(order.length);
+	await expect
+		.poll(() => tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-id'))))
+		.toEqual(order);
+});

@@ -123,6 +123,21 @@
 	const tracker = new LoupeTracker();
 	$effect(() => tracker.seen(loupeId));
 
+	/** How many photos the library shows for the chosen place (it may differ from the dot). */
+	let placeTotal = $state<number | null>(null);
+	$effect(() => {
+		const place = chosenPlace;
+		const f = filters;
+		placeTotal = null;
+		if (!place) return;
+		let stale = false;
+		api
+			.facets({ ...f, place })
+			.then((facets) => !stale && (placeTotal = facets.total))
+			.catch(() => undefined);
+		return () => (stale = true);
+	});
+
 	function choose(c: Cluster) {
 		chosen = c;
 		// Zoom towards dense clusters so they split; single places stay put.
@@ -211,15 +226,21 @@
 		<section class="chosen" aria-live="polite">
 			<h2>
 				{chosenPlace ?? 'Here'} <span class="quiet">{chosen.ids.length}</span>
-				{#if chosenPlace}
+				{#if chosenPlace && placeTotal !== null}
 					<button
 						type="button"
 						onclick={() =>
 							goto(`/${filtersToQuery({ ...filters, place: chosenPlace ?? undefined })}`)}
-						>Open in library</button
+						>Open all {placeTotal} from {chosenPlace} in the library</button
 					>
 				{/if}
 			</h2>
+			{#if chosenPlace && placeTotal !== null && placeTotal !== chosen.ids.length}
+				<p class="quiet small">
+					This dot holds {chosen.ids.length} photos; the library filters by place, so it shows all {placeTotal}
+					from {chosenPlace}.
+				</p>
+			{/if}
 			<div bind:clientWidth={gridWidth}>
 				<PhotoGrid
 					items={chosenItems}

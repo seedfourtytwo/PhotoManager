@@ -116,18 +116,48 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	await expect(page.getByRole('status')).toContainText('Back to the original');
 });
 
-test('trash: move, restore', async ({ page }) => {
+test('trash: move, see it with its thumbnail, open it full size, restore', async ({ page }) => {
 	const id = await page.locator('.tile').first().getAttribute('data-id');
 	await selectTiles(page, [0]);
 	await selectionAction(page, 'Move to trash');
 	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
 	await expect(page.locator(`.tile[data-id="${id}"]`)).toHaveCount(0);
 	await page.goto('/trash');
-	await expect(page.locator(`.tile[data-id="${id}"]`)).toBeVisible();
+	const tile = page.locator(`.tile[data-id="${id}"]`);
+	await expect(tile).toBeVisible();
+	await expect
+		.poll(() => tile.locator('img').evaluate((i: HTMLImageElement) => i.naturalWidth))
+		.toBeGreaterThan(0);
 	await expectAccessible(page);
-	await page.locator(`.tile[data-id="${id}"]`).click();
-	await page.getByRole('button', { name: 'Restore' }).click();
+	await tile.click();
+	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
+	await expect(loupe.locator('img.photo')).toBeVisible();
+	await expect
+		.poll(() => loupe.locator('img.photo').evaluate((i: HTMLImageElement) => i.naturalWidth))
+		.toBeGreaterThan(0);
+	await expect(loupe.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+	await loupe.getByRole('button', { name: 'Restore' }).click();
+	await expect(page.getByRole('status')).toContainText('Restored 1 photo');
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
+});
+
+test('fix date can be undone: the previous dates come back', async ({ page }) => {
+	await selectTiles(page, [0, 1]);
+	const before = await page
+		.locator('.tile.selected img')
+		.evaluateAll((els) => els.map((e) => e.getAttribute('alt')));
+	await selectionAction(page, 'Fix date');
+	const dialog = page.getByRole('dialog', { name: 'Fix date' });
+	await expect(dialog.getByText(/can be undone/)).toHaveCount(0);
+	await dialog.getByLabel('Set exactly').check();
+	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+	await dialog.getByRole('button', { name: 'Change date' }).click();
+	await expect(page.getByRole('status')).toContainText('Changed the date of 2 photos');
+	const undo = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
+	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+	expect((await undo).postDataJSON()).toHaveProperty('set');
+	await expect(page.getByRole('status')).toContainText('Dates put back');
+	for (const alt of before) await expect(page.getByAltText(alt!, { exact: true })).toBeVisible();
 });
 
 test('download: a server error or an expired session is said, not swallowed', async ({ page }) => {
