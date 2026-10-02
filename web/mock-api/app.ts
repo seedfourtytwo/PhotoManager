@@ -255,17 +255,42 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			if (job.status === 'done' || job.status === 'failed' || job.run_at === 0) continue;
 			const age = t - job.run_at;
 			if (age < 800) job.status = 'queued';
-			else if (age < 3000) job.status = 'running';
-			else {
+			else if (age < 3000) {
+				job.status = 'running';
+				if (job.kind === 'import') importProgress(Number(job.payload.source_id), age);
+			} else {
 				job.status = 'done';
 				if (job.kind === 'import') finishImport(Number(job.payload.source_id));
 			}
 		}
 	}
 
+	/** A running import run whose counts grow, like the real one's (live progress). */
+	function importProgress(sourceId: number, age: number) {
+		const seen = Math.max(1, Math.round(((age - 800) / 2200) * 11));
+		let run = state.reports.find((r) => r.source_id === sourceId && r.status === 'running');
+		if (!run) {
+			run = {
+				id: state.nextId.run++,
+				source_id: sourceId,
+				status: 'running',
+				started_at: nowIso(),
+				finished_at: null,
+				message: null,
+				summary: { imported: 0, duplicate: 0, already_known: 0, skipped: 0, failed: 0, ignored: 0, files_seen: 0 }, // prettier-ignore
+				items: []
+			};
+			state.reports.unshift(run);
+		}
+		run.summary = { ...run.summary, files_seen: seen, imported: Math.max(0, seen - 2) };
+	}
+
 	function finishImport(sourceId: number) {
 		const source = state.sources.find((s) => s.id === sourceId);
 		if (!source) return;
+		state.reports = state.reports.filter(
+			(r) => !(r.source_id === sourceId && r.status === 'running')
+		);
 		if (source.path.includes('gone')) {
 			// A folder that was there when added and has gone since (an unplugged disk).
 			const zero = { imported: 0, duplicate: 0, already_known: 0, skipped: 0, failed: 0 };

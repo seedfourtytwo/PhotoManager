@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { MIN_PASSWORD } from '$lib/api';
 	import { api, notice, session, settings, type Density, type Theme } from '$lib/app.svelte';
+	import Devices from '$lib/components/Devices.svelte';
 
 	let current = $state('');
 	let next = $state('');
@@ -31,9 +32,9 @@
 	}
 
 	const themes: [Theme, string][] = [
-		['system', 'Like the system'],
-		['dark', 'Dark'],
-		['light', 'Light']
+		['dark', 'Dark (best for photos)'],
+		['light', 'Light'],
+		['system', 'Like the system']
 	];
 	const densities: [Density, string][] = [
 		['compact', 'Small'],
@@ -110,7 +111,9 @@
 		<button type="button" class="signout" onclick={() => session.signOut()}>Sign out</button>
 	</section>
 
-	<p class="quiet small">Library server {version}</p>
+	{#if session.canEdit}<Devices />{/if}
+
+	<p class="quiet small version">Library server {version}</p>
 </div>
 
 <style>
@@ -155,6 +158,9 @@
 	.signout {
 		justify-self: start;
 		padding-left: 0;
+	}
+	.version {
+		margin-top: 2rem;
 	}
 	.signout {
 		margin-top: 1.5rem;

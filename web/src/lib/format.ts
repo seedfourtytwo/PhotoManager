@@ -12,3 +12,18 @@ export function formatBytes(bytes: number): string {
 	const digits = unit === 0 || value >= 100 ? 0 : 1;
 	return `${value.toFixed(digits)} ${UNITS[unit]}`;
 }
+
+const WHEN = new Intl.DateTimeFormat('en-GB', {
+	day: 'numeric',
+	month: 'short',
+	year: 'numeric',
+	hour: '2-digit',
+	minute: '2-digit'
+});
+
+/** "25 Sept 2026, 02:31" for server timestamps (with or without a zone); '' if unreadable. */
+export function formatWhen(iso: string | null | undefined): string {
+	if (!iso) return '';
+	const ms = Date.parse(iso);
+	return Number.isNaN(ms) ? '' : WHEN.format(ms);
+}
