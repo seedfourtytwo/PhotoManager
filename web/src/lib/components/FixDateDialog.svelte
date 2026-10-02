@@ -120,38 +120,51 @@
 </Dialog>
 
 <style>
+	p {
+		margin: 0;
+	}
 	.modes {
 		display: flex;
-		gap: 1.25rem;
-		margin: 0.75rem 0;
+		gap: 0 var(--s-5);
+		margin: var(--s-4) 0 var(--s-3);
 	}
 	.modes label {
 		color: var(--ink);
 		display: flex;
-		gap: 0.35rem;
+		gap: var(--s-2);
 		align-items: center;
+		min-height: 1.75rem;
 	}
 	.shift {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.75rem;
+		gap: var(--s-2) var(--s-4);
 		align-items: baseline;
 	}
+	.shift label {
+		white-space: nowrap;
+	}
 	.shift input {
-		width: 3.5rem;
+		width: 3rem;
 		text-align: right;
+		color: var(--ink);
 	}
 	.exact {
 		display: grid;
-		gap: 0.25rem;
+		gap: var(--s-1);
 	}
 	table {
-		margin-top: 1rem;
+		margin-top: var(--s-4);
 		border-collapse: collapse;
 		font-size: var(--fs-14);
 	}
 	td {
-		padding: 0.1rem 0.5rem 0.1rem 0;
+		padding: var(--s-1) var(--s-2) var(--s-1) 0;
 		white-space: nowrap;
+	}
+	@media (pointer: coarse) {
+		.modes label {
+			min-height: var(--target);
+		}
 	}
 </style>

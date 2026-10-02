@@ -201,8 +201,8 @@
 		<div class="group" role="group" aria-label="Rotate and flip">
 			<button type="button" onclick={() => rotate(-1)}>Rotate left</button>
 			<button type="button" onclick={() => rotate(1)}>Rotate right</button>
-			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'h'))}>Flip ↔</button>
-			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'v'))}>Flip ↕</button>
+			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'h'))}>Flip horizontal</button>
+			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'v'))}>Flip vertical</button>
 		</div>
 		<div class="group" role="group" aria-label="Crop ratio">
 			{#each RATIOS as r (r.label)}
@@ -260,7 +260,7 @@
 	.area {
 		display: grid;
 		place-items: center;
-		margin: 1.5rem;
+		margin: var(--s-5);
 		min-height: 0;
 		overflow: hidden;
 	}
@@ -342,32 +342,61 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.5rem 1.5rem;
-		padding: 0.5rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+		gap: var(--s-2) var(--s-5);
+		padding: var(--s-2) var(--s-4) calc(var(--s-3) + env(safe-area-inset-bottom));
 		border-top: 1px solid var(--hairline);
 	}
 	.group {
 		display: flex;
 		flex-wrap: wrap;
+		gap: 0 2px;
 	}
 	.group button[aria-pressed='true'] {
 		color: var(--ink);
 		text-decoration: underline;
-		text-underline-offset: 0.25em;
+		text-underline-offset: 0.35em;
+		text-decoration-thickness: 1px;
 	}
 	.group button[aria-pressed='false'] {
 		color: var(--ink-2);
 	}
+	.group button[aria-pressed='false']:hover {
+		color: var(--ink);
+	}
 	.end {
 		margin-left: auto;
+		gap: 0 var(--s-1);
 	}
 	.straighten {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: var(--s-2);
 	}
 	.value {
 		color: var(--ink);
-		min-width: 3.5rem;
+		min-width: 3rem;
+	}
+	@media (max-width: 639px) {
+		.area {
+			margin: var(--s-3);
+		}
+		.tools {
+			gap: var(--s-1) var(--s-3);
+			padding-inline: var(--s-2);
+		}
+		.group {
+			width: 100%;
+		}
+		.straighten {
+			width: 100%;
+			padding-left: var(--s-2);
+		}
+		.straighten input {
+			max-width: none;
+			flex: 1;
+		}
+		.end {
+			justify-content: flex-end;
+		}
 	}
 </style>

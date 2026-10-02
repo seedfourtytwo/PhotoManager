@@ -84,23 +84,33 @@
 </Dialog>
 
 <style>
+	p {
+		margin: 0 0 var(--s-2);
+	}
 	ul {
 		list-style: none;
 		padding: 0;
-		margin: 0.5rem 0;
+		margin: var(--s-3) 0;
 	}
 	li {
 		display: grid;
 		grid-template-columns: 1fr auto auto;
 		align-items: center;
-		gap: 0.5rem;
+		gap: var(--s-3);
+		border-bottom: 1px solid var(--hairline);
+	}
+	li select {
+		border-bottom: 0;
 	}
 	li button {
 		color: var(--ink-2);
 	}
 	.add {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--s-2);
 		align-items: center;
+	}
+	.add select {
+		flex: 1;
 	}
 </style>
