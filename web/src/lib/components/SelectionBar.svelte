@@ -55,41 +55,46 @@
 		z-index: 25;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.25rem 0.5rem;
+		gap: var(--s-2);
+		padding: var(--s-2) 0;
 		background: var(--bg);
 		border-top: 1px solid var(--hairline);
 	}
+	/* The count carries the accent: it names the selection the frames on the photos show. */
 	.count {
 		color: var(--accent);
+		font-weight: 600;
 		white-space: nowrap;
+		padding-right: var(--s-2);
 	}
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		flex: 1;
+		gap: 0 2px;
 	}
 	.clear {
 		color: var(--ink-2);
 	}
 	.more {
 		position: absolute;
-		right: 0;
-		bottom: 100%;
+		right: var(--s-2);
+		bottom: calc(100% + var(--s-2));
 		list-style: none;
 		margin: 0;
-		padding: 0.25rem 0;
-		background: var(--bg);
-		border-top: 1px solid var(--hairline);
-		border-left: 1px solid var(--hairline);
+		padding: var(--s-1);
+		background: var(--raised);
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-2);
 		min-width: 12rem;
 	}
 	.more button {
 		display: block;
 		width: 100%;
 		text-align: left;
-		padding: 0.5rem 1rem;
-		min-height: 2.75rem;
+		padding: var(--s-2) var(--s-4);
+		min-height: var(--target);
+		font-size: var(--fs-16);
 	}
 	@media (max-width: 1023px) {
 		.bar {
@@ -97,16 +102,25 @@
 			left: 0;
 			right: 0;
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom));
+			padding: 0 var(--s-2);
 		}
 	}
 	@media (max-width: 639px) {
+		.bar {
+			gap: 0;
+		}
+		.count {
+			padding: 0 var(--s-2);
+		}
 		.actions {
 			flex-wrap: nowrap;
 			min-width: 0;
+			overflow-x: auto;
+			scrollbar-width: none;
 		}
 		button {
 			white-space: nowrap;
-			padding-inline: 0.4rem;
+			padding-inline: var(--s-2);
 		}
 	}
 </style>

@@ -137,14 +137,18 @@
 	</ViewHeader>
 
 	{#if !loader.loading && !loader.error && loader.items.length === 0}
-		<p class="quiet empty">
+		<div class="empty-state">
 			{#if described}
-				No photos match these filters. <a href="/">Show everything</a>
+				<p>No photos match these filters.</p>
+				<p>Loosen a filter, or <a href="/">show everything</a>.</p>
 			{:else}
-				The library is empty. Upload some photos, or an admin can add a folder under
-				<a href="/admin">Admin</a>.
+				<p>The library is empty.</p>
+				<p>
+					Upload photos from this device, or an admin can add a folder of photos under
+					<a href="/admin">Admin</a>.
+				</p>
 			{/if}
-		</p>
+		</div>
 	{/if}
 
 	<Timeline
@@ -202,19 +206,16 @@
 
 <style>
 	.page {
-		padding: 0 0.75rem;
+		padding: 0 var(--page-x);
 	}
 	.page.scrub {
-		padding-right: 3.5rem;
-	}
-	.empty {
-		padding: 2rem 0;
+		padding-right: 4rem;
 	}
 	.scrubber {
 		position: fixed;
 		top: 0;
 		right: 0;
-		width: 3.25rem;
+		width: 3.5rem;
 		height: 100vh;
 		z-index: 4;
 	}

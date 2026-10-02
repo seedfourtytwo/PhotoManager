@@ -108,34 +108,47 @@
 <style>
 	.scrubber {
 		position: relative;
-		height: calc(100% - 2rem);
-		margin: 1rem 0;
+		height: calc(100% - 2 * var(--s-6));
+		margin: var(--s-6) 0;
 		cursor: ns-resize;
 		touch-action: none;
 		user-select: none;
 		font-size: var(--fs-12);
 		color: var(--ink-2);
 	}
+	/* A hairline spine with the years set against it, like an index on a book's edge. */
+	.scrubber::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		right: var(--s-2);
+		width: 1px;
+		background: var(--hairline);
+	}
 	.year {
 		position: absolute;
-		right: 0.35rem;
+		right: var(--s-4);
 		transform: translateY(-50%);
 		line-height: 1;
 	}
 	.now {
 		position: absolute;
-		right: 0;
-		width: 100%;
-		height: 1px;
+		right: calc(var(--s-2) - 4px);
+		width: 9px;
+		height: 2px;
+		margin-top: -1px;
 		background: var(--ink);
 	}
 	.hover {
 		position: absolute;
-		right: 100%;
+		right: calc(100% + var(--s-1));
 		transform: translateY(-50%);
 		white-space: nowrap;
-		background: var(--bg);
+		background: var(--raised);
 		color: var(--ink);
-		padding: 0.1rem 0.4rem;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-1);
+		padding: var(--s-1) var(--s-2);
 	}
 </style>

@@ -31,7 +31,7 @@
 	/** Tiles render within this many screens above and below the viewport. */
 	const OVERSCAN = 1.5;
 	/** Space taken by the sticky month label at the top of the screen. */
-	const LABEL = 40;
+	const LABEL = 48;
 	let width = $state(0);
 	const rowHeight = $derived(rowHeightFor(viewport.width, settings.density));
 	const groups = $derived(groupByMonth(loader.items));
@@ -295,29 +295,37 @@
 		min-height: 50vh;
 	}
 	section {
-		margin-bottom: 1rem;
+		margin-bottom: var(--s-4);
 	}
-	/* Quiet sticky date labels: words next to what they describe. */
+	/* Month headings: a chapter title in the album's serif, sticky, the count beside it. */
 	h2 {
 		position: sticky;
 		top: 0;
 		z-index: 2;
 		margin: 0;
-		padding: 0.6rem 0 0.4rem;
-		font-size: var(--fs-14);
+		padding: var(--s-4) 0 var(--s-2);
+		font-size: var(--fs-20);
 		background: var(--bg);
 	}
 	h2 span {
+		font-family: var(--font-ui);
 		font-size: var(--fs-12);
-		margin-left: 0.35rem;
+		margin-left: var(--s-2);
 	}
 	.status {
-		padding: 1rem 0;
+		padding: var(--s-4) 0;
 	}
 	.lasso {
 		position: fixed;
 		z-index: 30;
 		border: 1px solid var(--accent);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		pointer-events: none;
+	}
+	@media (max-width: 639px) {
+		h2 {
+			padding: var(--s-3) var(--s-2) var(--s-2);
+			font-size: var(--fs-16);
+		}
 	}
 </style>

@@ -21,7 +21,7 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<link rel="manifest" href="/manifest.webmanifest" />
-	<meta name="theme-color" content="#111111" />
+	<meta name="theme-color" content="#181817" />
 	<link rel="apple-touch-icon" href="/icon-192.png" />
 	<title>Photos</title>
 </svelte:head>
@@ -68,37 +68,53 @@
 		outline: none;
 	}
 	.bare {
-		max-width: 22rem;
-		margin: 15vh auto 0;
-		padding: 0 1rem;
+		max-width: 24rem;
+		margin: 0 auto;
+		padding: max(12vh, var(--s-7)) var(--s-5) var(--s-7);
 	}
 	.opening {
-		padding: 2rem;
+		padding: var(--s-6) var(--page-x);
+		font-family: var(--font-text);
+		font-style: italic;
+		font-size: var(--fs-16);
 	}
 	.skip:focus {
 		position: fixed;
-		top: 0.5rem;
-		left: 0.5rem;
+		top: var(--s-2);
+		left: var(--s-2);
 		width: auto;
 		height: auto;
 		clip-path: none;
 		z-index: 100;
-		background: var(--bg);
-		padding: 0.5rem;
+		background: var(--raised);
+		padding: var(--s-2) var(--s-3);
+		border-radius: var(--r-1);
 	}
+	/* Toast: one quiet line on a raised slip; actions sit inline as words. */
 	.notice {
 		position: fixed;
 		left: 50%;
-		bottom: 1rem;
+		bottom: var(--s-5);
 		transform: translateX(-50%);
 		margin: 0;
 		z-index: 60;
-		background: var(--bg);
+		display: flex;
+		align-items: center;
+		gap: var(--s-3);
+		background: var(--raised);
 		color: var(--ink);
-		padding: 0 0.75rem;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-2);
+		padding: var(--s-2) var(--s-4);
 		font-size: var(--fs-14);
-		max-width: min(40rem, 90vw);
-		text-align: center;
+		max-width: min(40rem, calc(100vw - 2 * var(--s-4)));
+		box-sizing: border-box;
+		width: max-content;
+	}
+	.notice button {
+		margin-right: calc(-1 * var(--s-2));
+		font-weight: 600;
+		white-space: nowrap;
 	}
 	.notice:not(.shown) {
 		display: none;
@@ -112,7 +128,7 @@
 			padding-bottom: calc(var(--bar) + env(safe-area-inset-bottom));
 		}
 		.notice {
-			bottom: calc(var(--bar) + 0.75rem);
+			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
 		}
 	}
 </style>

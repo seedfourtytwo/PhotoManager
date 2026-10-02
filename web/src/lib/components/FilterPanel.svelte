@@ -157,7 +157,7 @@
 						aria-pressed={filters.year === y.year}
 						onclick={() => set('year', filters.year === y.year ? undefined : y.year)}
 					>
-						<span class="label">{y.year}</span>
+						<span class="year">{y.year}</span>
 						<span class="bar" style:width={`${(y.count / maxYear) * 100}%`}></span>
 						<span class="n">{count.format(y.count)}</span>
 					</button>
@@ -305,10 +305,11 @@
 		height: 100dvh;
 		overflow-y: auto;
 		box-sizing: border-box;
-		padding: 1rem;
+		padding: var(--s-5) var(--s-4) var(--s-6);
 		border-left: 1px solid var(--hairline);
 		display: none;
 		font-size: var(--fs-14);
+		scrollbar-width: thin;
 	}
 	.panel.open {
 		display: block;
@@ -317,21 +318,29 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: baseline;
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--s-2);
 	}
 	h2 {
-		font-size: var(--fs-14);
+		font-size: var(--fs-20);
+		white-space: nowrap;
+	}
+	h2 .quiet {
+		font-family: var(--font-ui);
+		font-size: var(--fs-12);
+		margin-left: var(--s-1);
 	}
 	h3 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		margin: 1.25rem 0 0.25rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
+		margin: var(--s-5) 0 var(--s-1);
+	}
+	header span {
+		display: flex;
+		margin-right: calc(-1 * var(--s-2));
 	}
 	header button {
 		color: var(--ink-2);
-		padding: 0.25rem;
+	}
+	header button:hover {
+		color: var(--ink);
 	}
 	.done {
 		display: none;
@@ -341,7 +350,7 @@
 		box-sizing: border-box;
 	}
 	.total {
-		margin: 0.5rem 0 0;
+		margin: var(--s-2) 0 0;
 		font-size: var(--fs-12);
 	}
 	select {
@@ -349,16 +358,15 @@
 	}
 	.row {
 		display: grid;
-		grid-template-columns: 4rem 1fr;
+		grid-template-columns: 4.25rem 1fr;
 		align-items: baseline;
-		margin-top: 0.25rem;
 	}
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		color: var(--ink);
-		padding: 0.2rem 0;
+		gap: var(--s-2);
+		padding: var(--s-1) 0;
+		min-height: 1.75rem;
 	}
 	.n {
 		margin-left: auto;
@@ -373,30 +381,39 @@
 	/* Years as a small bar chart: zero-based, direct labels, one ink. */
 	.bars button {
 		display: grid;
-		grid-template-columns: 2.75rem 1fr 2.5rem;
+		grid-template-columns: 2.5rem 1fr 2.25rem;
 		align-items: center;
-		width: 100%;
-		gap: 0.5rem;
-		padding: 0.1rem 0;
+		width: calc(100% + 2 * var(--s-2));
+		margin: 0 calc(-1 * var(--s-2));
+		gap: var(--s-2);
+		padding: 0 var(--s-2);
 		min-height: 1.5rem;
 		color: var(--ink-2);
 	}
+	.bars button:hover {
+		color: var(--ink);
+	}
 	.bars button[aria-pressed='true'] {
 		color: var(--ink);
+		font-weight: 600;
 	}
 	.bars .bar {
 		height: 3px;
 		background: currentColor;
-		opacity: 0.6;
+		opacity: 0.55;
 		justify-self: start;
+	}
+	.bars button[aria-pressed='true'] .bar {
+		opacity: 1;
 	}
 	.bars .n {
 		text-align: right;
+		font-weight: 400;
 	}
 	.reopen {
 		position: fixed;
-		top: 0.75rem;
-		right: 0.75rem;
+		top: var(--s-4);
+		right: var(--s-4);
 		color: var(--ink-2);
 		z-index: 5;
 	}
@@ -418,12 +435,20 @@
 			right: 0;
 			bottom: 0;
 			height: auto;
-			max-height: 80dvh;
+			max-height: 85dvh;
 			z-index: 40;
-			background: var(--bg);
-			border-left: 0;
-			border-top: 1px solid var(--hairline);
-			padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+			background: var(--raised);
+			border: 0;
+			border-radius: var(--r-2) var(--r-2) 0 0;
+			padding: var(--s-4) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom));
+		}
+		.panel.sheet header {
+			position: sticky;
+			top: calc(-1 * var(--s-4));
+			margin: calc(-1 * var(--s-4)) calc(-1 * var(--s-4)) var(--s-2);
+			padding: var(--s-3) var(--s-4) var(--s-2);
+			background: var(--raised);
+			z-index: 1;
 		}
 		.collapse,
 		.reopen {
@@ -431,6 +456,11 @@
 		}
 		.done {
 			display: inline;
+			color: var(--ink) !important;
+			font-weight: 600;
+		}
+		.check {
+			min-height: var(--target);
 		}
 		.backdrop {
 			display: block;
@@ -439,6 +469,7 @@
 			background: var(--scrim);
 			z-index: 35;
 			width: 100%;
+			border-radius: 0;
 		}
 	}
 </style>
