@@ -15,6 +15,7 @@ from photo_assistant.adapters.filesystem import SystemClock
 from photo_assistant.adapters.ollama_ai import build_ai_provider
 from photo_assistant.adapters.rclone_sync import RcloneSync
 from photo_assistant.adapters.source_area_store import SourceAreaStore
+from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_integrations import (
     SqliteAILog,
     SqliteDevices,
@@ -61,7 +62,7 @@ def build_integrations(
     *,
     data_root: Path,
     settings: IntegrationSettings,
-    conn: sqlite3.Connection,
+    conn: Database | sqlite3.Connection,
     repo: Repository,
     importer: Importer,
     clock: Clock | None = None,

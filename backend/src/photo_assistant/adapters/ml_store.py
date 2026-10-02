@@ -1,14 +1,13 @@
 """MlStore on SQLite + sqlite-vec: embeddings, faces, people, tags (migration 0015).
 
 KNN is brute force with sqlite-vec's ``vec_distance_cosine`` over float32 BLOBs, restricted to
-a candidate set held in a temp table — the visible asset ids passed in by the caller. Use a
-connection of its own (``open_ml_store``) next to the repository's: each has its own lock.
+a candidate set held in a temp table — the visible asset ids passed in by the caller. It shares
+the process's one ``Database`` (writer and lock) with every other store.
 """
 
 import json
 import sqlite3
 import struct
-import threading
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,7 +15,7 @@ from typing import Any
 
 import sqlite_vec  # type: ignore[import-untyped]
 
-from photo_assistant.adapters.sqlite_repository import open_database
+from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
@@ -42,8 +41,8 @@ def load_sqlite_vec(conn: sqlite3.Connection) -> None:
 
 
 def open_ml_store(path: str | Path) -> "SqliteMlStore":
-    """A second connection to the library database (migrated), with sqlite-vec loaded."""
-    return SqliteMlStore(open_database(path))
+    """The ML store on its own Database (tools and tests; the app shares its Database)."""
+    return SqliteMlStore(Database.open(path))
 
 
 def _stored_face(row: sqlite3.Row) -> StoredFace:
@@ -52,16 +51,21 @@ def _stored_face(row: sqlite3.Row) -> StoredFace:
 
 
 class SqliteMlStore:
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
-        self._conn.row_factory = sqlite3.Row
-        self._lock = threading.RLock()
-        load_sqlite_vec(conn)
-        conn.execute("CREATE TEMP TABLE IF NOT EXISTS ml_candidates (asset_id INTEGER PRIMARY KEY)")
+    """On the process's one ``Database``. Every query runs on the writer under the one lock:
+    the KNN candidates live in a temp table, which belongs to a single connection."""
+
+    def __init__(self, db: Database | sqlite3.Connection) -> None:
+        self._db = db if isinstance(db, Database) else Database.of(db)
+        self._conn = self._db.writer
+        self._lock = self._db.lock
+        with self._lock:
+            load_sqlite_vec(self._conn)
+            self._conn.execute(
+                "CREATE TEMP TABLE IF NOT EXISTS ml_candidates (asset_id INTEGER PRIMARY KEY)"
+            )
 
     def close(self) -> None:
-        with self._lock:
-            self._conn.close()
+        self._db.close()
 
     def vec_version(self) -> str:
         return str(self._scalar("SELECT vec_version()"))

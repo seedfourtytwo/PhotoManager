@@ -1,6 +1,5 @@
 """Composition root: the one place that picks real adapters and wires them together."""
 
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +14,8 @@ from photo_assistant.adapters.geocoder import OfflineGeocoder
 from photo_assistant.adapters.ollama_ai import OllamaProvider
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.api.integrations import Integrations, build_integrations, with_source_areas
@@ -54,7 +54,7 @@ class Services:
     integrations: Integrations
     ml: MlServices
     ops: OpsServices
-    integrations_conn: sqlite3.Connection
+    db: Database  # the one library database: every store shares its writer and lock
     printer: AlbumPrinter
 
     def enqueue_enrichment(self) -> None:
@@ -73,15 +73,15 @@ class Services:
         self.ml.close()
         if isinstance(self.integrations.ai, OllamaProvider):
             self.integrations.ai.close()
-        self.integrations_conn.close()
         self.exiftool.close()
-        self.repo.close()
+        self.db.close()
 
 
 def build_services(settings: Settings) -> Services:
     root = settings.data_root.expanduser()
     root.mkdir(parents=True, exist_ok=True)
-    repo = SqliteRepository(open_database(root / "library.db", backup_dir=root / "db-backups"))
+    db = Database.open(root / "library.db", backup_dir=root / "db-backups")
+    repo = SqliteRepository(db)
     store = DiskLibraryStore(root)
     store.sweep_tmp()
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)
@@ -100,16 +100,15 @@ def build_services(settings: Settings) -> Services:
         ),
     )
     trash = Trash(repo, store, clock)
-    integrations_conn = open_database(root / "library.db")  # own connection; WAL
     integrations = build_integrations(
         data_root=root,
         settings=settings.integrations,
-        conn=integrations_conn,
+        conn=db,
         repo=repo,
         importer=importer,
         clock=clock,
     )
-    ml = build_ml_services(root, settings.ml, repo, store)
+    ml = build_ml_services(root, settings.ml, repo, store, db)
 
     def scan(payload: dict[str, object]) -> object:
         # rclone sources are pulled into staging/ first; every kind is then imported
@@ -136,6 +135,7 @@ def build_services(settings: Settings) -> Services:
         queue=repo,
         housekeeping=housekeeping,
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
+        db=db,
     )
     worker = Worker(
         repo,
@@ -181,6 +181,6 @@ def build_services(settings: Settings) -> Services:
         integrations,
         ml,
         ops,
-        integrations_conn,
+        db,
         printer,
     )

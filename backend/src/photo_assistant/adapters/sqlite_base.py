@@ -1,17 +1,17 @@
 """Shared plumbing for the SQLite adapter: one connection, one lock, small query helpers.
 
 The repository is split by area into mixins (accounts, library queries, albums, …) that all
-inherit this base, so they share the connection and the lock and compose into one object.
+inherit this base, so they share the process's one ``Database`` and compose into one object.
 """
 
 import base64
 import json
 import sqlite3
-import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 
+from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.media_types import MediaKind
 from photo_assistant.domain.model import Asset
@@ -58,22 +58,25 @@ def decode_cursor(cursor: str) -> tuple[str, int]:
 
 
 class SqliteBase:
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
-        self._lock = threading.RLock()
+    """Shared helpers over the process's one ``Database``: writes and transactions on its
+    writer under its lock, reads on this thread's reader (see sqlite_database.py)."""
+
+    def __init__(self, db: Database | sqlite3.Connection) -> None:
+        self._db = db if isinstance(db, Database) else Database.of(db)
+        self._conn = self._db.writer
+        self._lock = self._db.lock
 
     def close(self) -> None:
-        with self._lock:
-            self._conn.close()
+        self._db.close()
 
     def _one(self, sql: str, params: Params = ()) -> sqlite3.Row | None:
-        with self._lock:
-            row: sqlite3.Row | None = self._conn.execute(sql, params).fetchone()
+        with self._db.reading() as conn:
+            row: sqlite3.Row | None = conn.execute(sql, params).fetchone()
             return row
 
     def _all(self, sql: str, params: Params = ()) -> list[sqlite3.Row]:
-        with self._lock:
-            return self._conn.execute(sql, params).fetchall()
+        with self._db.reading() as conn:
+            return conn.execute(sql, params).fetchall()
 
     def _write(self, sql: str, params: Params = ()) -> int:
         """Run one statement; returns the new row id (0 when none)."""

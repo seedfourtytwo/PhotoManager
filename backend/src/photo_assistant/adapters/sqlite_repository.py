@@ -1,14 +1,9 @@
-"""SQLite implementation of the Repository port, plus the tiny migration runner.
-
-Migrations are numbered ``.sql`` files in ``migrations/``; ``PRAGMA user_version`` records the
-last one applied. Before migrating an existing database, a consistent snapshot is written with
-SQLite's online backup API (FEATURES 11.6).
-"""
+"""SQLite implementation of the Repository port (the migration runner and the shared
+connections live in ``sqlite_database``; ``open_database`` is re-exported here)."""
 
 import json
 import sqlite3
-from datetime import UTC, datetime
-from importlib import resources
+from datetime import datetime
 from pathlib import Path
 
 from photo_assistant.adapters.sqlite_access import AccessMixin
@@ -20,6 +15,8 @@ from photo_assistant.adapters.sqlite_base import (
     decode_cursor,
     encode_cursor,
 )
+from photo_assistant.adapters.sqlite_database import Database, open_database
+from photo_assistant.adapters.sqlite_database import migrations as _migrations
 from photo_assistant.adapters.sqlite_edits import EditsMixin
 from photo_assistant.adapters.sqlite_enrich import EnrichMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
@@ -35,44 +32,7 @@ from photo_assistant.domain.model import (
 )
 from photo_assistant.ports import DuplicateAssetError, Fingerprint, Job, Page, RenderedImage
 
-__all__ = ["DuplicateAssetError", "SqliteRepository", "open_database"]
-
-
-def _migrations() -> list[tuple[int, str]]:
-    folder = resources.files("photo_assistant.adapters") / "migrations"
-    found = []
-    for entry in folder.iterdir():
-        if entry.name.endswith(".sql"):
-            found.append((int(entry.name.split("_", 1)[0]), entry.read_text()))
-    return sorted(found)
-
-
-def _snapshot(conn: sqlite3.Connection, backup_dir: Path, version: int) -> None:
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
-    target = sqlite3.connect(backup_dir / f"library-v{version}-{stamp}.db")
-    with target:
-        conn.backup(target)
-    target.close()
-
-
-def open_database(path: str | Path, backup_dir: Path | None = None) -> sqlite3.Connection:
-    """Open (creating if needed) and migrate. ``":memory:"`` is fine for tests."""
-    is_file = str(path) != ":memory:"
-    existed = is_file and Path(path).exists()
-    conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    if is_file:
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA busy_timeout = 5000")
-    current = conn.execute("PRAGMA user_version").fetchone()[0]
-    pending = [(n, sql) for n, sql in _migrations() if n > current]
-    if pending and existed and backup_dir is not None:
-        _snapshot(conn, backup_dir, current)
-    for number, sql in pending:
-        conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {number};\nCOMMIT;")
-    return conn
+__all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
 
 
 def _iso(value: datetime) -> str:
@@ -89,7 +49,8 @@ class SqliteRepository(
     TrashMixin,
     SqliteBase,
 ):
-    """Thread-safe enough for one API process plus a worker thread (one lock, WAL mode)."""
+    """Thread-safe: writes share the process's one writer and lock, reads use per-thread
+    WAL readers (``sqlite_database.Database``)."""
 
     def restore_from(self, snapshot: Path) -> None:
         """Replace the whole library database with a snapshot, in place (test mode only: the
@@ -404,12 +365,13 @@ class SqliteRepository(
 
     def claim_next_job(self, now: datetime) -> Job | None:
         """Atomic across processes: one statement picks and marks the job."""
-        row = self._one(
-            """UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
-               WHERE id = (SELECT id FROM job WHERE status = 'queued' ORDER BY id LIMIT 1)
-               RETURNING id, kind, payload_json, attempts""",
-            (_iso(now),),
-        )
+        with self._lock:  # a write (UPDATE … RETURNING): on the writer
+            row = self._conn.execute(
+                """UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
+                   WHERE id = (SELECT id FROM job WHERE status = 'queued' ORDER BY id LIMIT 1)
+                   RETURNING id, kind, payload_json, attempts""",
+                (_iso(now),),
+            ).fetchone()
         if row is None:
             return None
         return Job(row["id"], row["kind"], json.loads(row["payload_json"]), row["attempts"])

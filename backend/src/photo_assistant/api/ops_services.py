@@ -13,7 +13,7 @@ from photo_assistant.adapters.filesystem import Blake3Hasher, SystemClock
 from photo_assistant.adapters.library_files import LocalFileTree, SqliteLibraryIndex
 from photo_assistant.adapters.restic_backup import ResticBackup
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
-from photo_assistant.adapters.sqlite_repository import open_database
+from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
 from photo_assistant.api.ops_settings import OpsSettings
 from photo_assistant.app.backup import BackupConfig, BackupService
@@ -46,10 +46,11 @@ def build_backup_service(
     ops: OpsSettings,
     queue: JobQueue | None = None,
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
+    db: Database | None = None,
 ) -> tuple[BackupService, SqliteBackupStore]:
+    """``db``: the app's one Database; None (the CLI) opens the library database here."""
     database = data_root / DATABASE
-    # Own connection (WAL); migrations are a no-op when the main services opened it first.
-    store = SqliteBackupStore(open_database(database, backup_dir=data_root / "db-backups"))
+    store = SqliteBackupStore(db or Database.open(database, backup_dir=data_root / "db-backups"))
     service = BackupService(
         store=store,
         engine=ResticBackup(binary=ops.restic_binary, cache_dir=ops.restic_cache_dir),
@@ -73,11 +74,12 @@ def build_ops_services(
     queue: JobQueue | None = None,
     housekeeping: Sequence[PeriodicTask] = (),
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
+    db: Database | None = None,
 ) -> OpsServices:
     """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering).
     ``source_roots``: the library's source folders (backups may not overlap them)."""
     ops = ops or OpsSettings()
-    backup, store = build_backup_service(data_root, ops, queue, source_roots)
+    backup, store = build_backup_service(data_root, ops, queue, source_roots, db)
     tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, backup.run_due)]
     return OpsServices(
         backup, store, Periodic([*(tasks if ops.backup_enabled else []), *housekeeping])

@@ -1,18 +1,18 @@
 """SQLite storage for the integrations: AI log, remote-source config, inboxes, device tokens.
 
-Kept apart from ``SqliteRepository`` so these features can land independently. Give it its own
-connection to the same database file (WAL mode lets both work side by side).
+Kept apart from ``SqliteRepository`` so these features can land independently; built on the
+same ``Database`` (one writer, one lock) as every other store.
 """
 
 import json
 import sqlite3
-import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.access import Level
 from photo_assistant.domain.model import Source
 from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
@@ -27,20 +27,23 @@ _DOWNLOAD, _EDIT = int(Level.DOWNLOAD), int(Level.EDIT)
 
 
 class _Store:
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
-        self._lock = threading.RLock()
+    """On the process's one ``Database``: its writer and lock, per-thread readers."""
+
+    def __init__(self, db: Database | sqlite3.Connection) -> None:
+        self._db = db if isinstance(db, Database) else Database.of(db)
+        self._conn = self._db.writer
+        self._lock = self._db.lock
 
     def _one(self, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row | None:
-        with self._lock:
-            cur = self._conn.execute(sql, params)
+        with self._db.reading() as conn:
+            cur = conn.execute(sql, params)
             cur.row_factory = sqlite3.Row
             row: sqlite3.Row | None = cur.fetchone()
             return row
 
     def _all(self, sql: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with self._lock:
-            cur = self._conn.execute(sql, params)
+        with self._db.reading() as conn:
+            cur = conn.execute(sql, params)
             cur.row_factory = sqlite3.Row
             return cur.fetchall()
 
