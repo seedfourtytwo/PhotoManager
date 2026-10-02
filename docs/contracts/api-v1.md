@@ -146,7 +146,7 @@ renders via libvips with the edit recipe applied.
 | GET | `/api/albums/{id}` | – | `AlbumSummary + {items: AssetOut[]}` in album order |
 | PATCH | `/api/albums/{id}` | `{title?, description?, cover_asset_id?}` | `AlbumSummary` |
 | DELETE | `/api/albums/{id}` | – | `204` (owner/admin; photos stay in the library) |
-| POST | `/api/albums/{id}/items` | `{asset_ids, position?}` | `{count}` |
+| POST | `/api/albums/{id}/items` | `{asset_ids, position?}` | `{count}` — `position` is an index in the items **you** see (default: the end); photos already in the album are skipped, not moved. Undo of a removal: post each photo back at its old index, smallest first (v1.2: a removed cover comes back as the cover) |
 | DELETE | `/api/albums/{id}/items` | `{asset_ids}` | `{count}` |
 | PUT | `/api/albums/{id}/order` | `{asset_ids}` (full order) | `204` |
 | GET/PUT | `/api/albums/{id}/members` | `[{user_id, role:"viewer"|"editor"}]` | same |

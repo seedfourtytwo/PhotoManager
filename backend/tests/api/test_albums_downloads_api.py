@@ -222,3 +222,49 @@ def test_size_estimates_are_within_a_factor_of_two_of_the_real_files(
     with zipfile.ZipFile(io.BytesIO(admin.post("/api/downloads", json=body).content)) as z:
         actual = sum(i.file_size for i in z.infolist())
     assert actual / 2 <= estimate <= actual * 2, (estimate, actual)
+
+
+# --- QA A15: "Remove from album" -> Undo puts the photos back where they were -------------------
+
+
+def test_undo_of_a_removal_restores_the_order_and_the_cover(
+    admin: TestClient, ids: list[int]
+) -> None:
+    a, b, c, d = ids
+    album = admin.post("/api/albums", json={"title": "T", "asset_ids": ids}).json()["id"]
+    assert admin.patch(f"/api/albums/{album}", json={"cover_asset_id": b}).is_success
+    admin.request("DELETE", f"/api/albums/{album}/items", json={"asset_ids": [b, d]})
+    assert item_ids(admin, album) == [a, c]
+    # undo: put each photo back at the index it had, smallest first
+    for asset_id, position in ((b, 1), (d, 3)):
+        added = admin.post(
+            f"/api/albums/{album}/items", json={"asset_ids": [asset_id], "position": position}
+        )
+        assert added.json() == {"count": 1}
+    assert item_ids(admin, album) == ids
+    assert (
+        admin.get(f"/api/albums/{album}")
+        .json()["cover"]["url"]
+        .startswith(f"/api/assets/{b}/thumb")
+    ), "the chosen cover comes back with its photo"
+
+
+def test_positions_count_the_photos_you_see_so_an_undo_never_reorders_others(
+    admin: TestClient, ids: list[int], tmp_path: Path
+) -> None:
+    a, b, c, _ = ids
+    write_photo(tmp_path / "hidden" / "h.jpg", seed=77)
+    hidden_source = import_folder(admin, tmp_path / "hidden", "hidden")
+    h = asset_id_of(admin, hidden_source, "h.jpg")
+    assert admin.patch(f"/api/assets/{h}/state", json={"private": True}).is_success
+    lea = add_user(admin, "lea")
+    album = admin.post("/api/albums", json={"title": "T", "asset_ids": [a, h, b, c]}).json()["id"]
+    lea_id = user_id_of(admin, "lea")
+    admin.put(f"/api/albums/{album}/members", json=[{"user_id": lea_id, "role": "editor"}])
+    assert item_ids(lea, album) == [a, b, c], "lea doesn't see h"
+
+    lea.request("DELETE", f"/api/albums/{album}/items", json={"asset_ids": [b]})
+    lea.post(f"/api/albums/{album}/items", json={"asset_ids": [b], "position": 1})
+
+    assert item_ids(lea, album) == [a, b, c]
+    assert item_ids(admin, album) == [a, h, b, c], "the hidden photo kept its place"

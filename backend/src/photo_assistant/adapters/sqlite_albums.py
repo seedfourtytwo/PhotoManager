@@ -132,13 +132,15 @@ class AlbumsMixin(SqliteBase):
         )
 
     def add_album_items(
-        self, album_id: int, asset_ids: Sequence[int], position: int | None, now: datetime
+        self, album_id: int, asset_ids: Sequence[int], before: int | None, now: datetime
     ) -> int:
-        """Insert (at ``position``, default the end); photos already in the album are skipped."""
+        """Insert just before the photo ``before`` (default, or not in the album: at the end);
+        photos already in the album are skipped. Anchoring on a photo rather than an index
+        keeps photos other members see but the caller doesn't in place (QA A15)."""
         with self._transaction():
             current = self.album_asset_ids(album_id)
             new = [i for i in dict.fromkeys(asset_ids) if i not in set(current)]
-            at = len(current) if position is None else max(0, min(position, len(current)))
+            at = current.index(before) if before in current else len(current)
             self._conn.executemany(
                 "INSERT INTO album_item (album_id, asset_id, position) VALUES (?, ?, 0)",
                 [(album_id, asset_id) for asset_id in new],
@@ -155,11 +157,8 @@ class AlbumsMixin(SqliteBase):
                     "DELETE FROM album_item WHERE album_id = ? AND asset_id = ?",
                     (album_id, asset_id),
                 ).rowcount
-            self._conn.execute(
-                "UPDATE album SET cover_asset_id = NULL WHERE id = ? AND cover_asset_id NOT IN "
-                "(SELECT asset_id FROM album_item WHERE album_id = ?)",
-                (album_id, album_id),
-            )
+            # the chosen cover is kept: it shows again if its photo comes back (an undo); a
+            # cover that is not in the album is ignored when the summary is read
             self._touch(album_id, now)
         return removed
 

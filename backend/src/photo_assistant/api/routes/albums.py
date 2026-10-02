@@ -107,9 +107,14 @@ def delete_album(services: ServicesDep, viewer: ViewerDep, album_id: int) -> Res
 def add_items(
     services: ServicesDep, viewer: ViewerDep, album_id: int, body: AlbumItemsIn
 ) -> Counted:
+    """``position`` counts the photos *you* see in the album (the index the web shows)."""
     _editable(services, viewer, album_id)
     ids = _visible_ids(services, viewer, body.asset_ids)
-    added = services.repo.add_album_items(album_id, ids, body.position, services.clock.now())
+    before = None
+    if body.position is not None:
+        shown = [v.id for v in services.repo.album_views(viewer, album_id)]
+        before = shown[body.position] if body.position < len(shown) else None
+    added = services.repo.add_album_items(album_id, ids, before, services.clock.now())
     return Counted(count=added)
 
 
