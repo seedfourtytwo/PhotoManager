@@ -295,7 +295,7 @@
 		min-height: 50vh;
 	}
 	section {
-		margin-bottom: var(--s-4);
+		margin-bottom: var(--s-2);
 	}
 	/* Month headings: a chapter title in the album's serif, sticky, the count beside it. */
 	h2 {

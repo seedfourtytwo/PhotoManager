@@ -138,7 +138,7 @@
 			bind:value={q}
 			oninput={onSearch}
 			type="search"
-			placeholder="Search names, places, cameras, albums"
+			placeholder="Names, places, cameras, albums"
 			aria-label="Search"
 		/>
 	</label>
@@ -332,7 +332,7 @@
 	h3 {
 		margin: var(--s-5) 0 var(--s-1);
 	}
-	header span {
+	header > span {
 		display: flex;
 		margin-right: calc(-1 * var(--s-2));
 	}
