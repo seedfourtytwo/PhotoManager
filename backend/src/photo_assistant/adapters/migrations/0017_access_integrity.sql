@@ -24,3 +24,56 @@ DELETE FROM edit_recipe
 -- Capture times are wall-clock to the second everywhere (QA A12): mtime-based dates were
 -- stored with microseconds.
 UPDATE asset SET taken_at = substr(taken_at, 1, 19) WHERE length(taken_at) > 19;
+
+-- Foreign keys the M2 integrations left out (B19). SQLite can't add them to a table, so the
+-- tables are rebuilt; rows pointing at nothing (none expected) are dropped on the way.
+CREATE TABLE inbox_new (
+    user_id    INTEGER PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+    source_id  INTEGER NOT NULL UNIQUE REFERENCES source(id)
+);
+INSERT INTO inbox_new (user_id, source_id)
+    SELECT user_id, source_id FROM inbox
+     WHERE user_id IN (SELECT id FROM user) AND source_id IN (SELECT id FROM source);
+DROP TABLE inbox;
+ALTER TABLE inbox_new RENAME TO inbox;
+
+CREATE TABLE device_new (
+    id            INTEGER PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    name          TEXT    NOT NULL,
+    platform      TEXT    NOT NULL DEFAULT 'other',
+    token_hash    TEXT    NOT NULL UNIQUE,
+    created_at    TEXT    NOT NULL,
+    last_used_at  TEXT,
+    revoked_at    TEXT,
+    last_sync_at  TEXT,
+    sync_cursor   TEXT
+);
+INSERT INTO device_new SELECT * FROM device WHERE user_id IN (SELECT id FROM user);
+DROP TABLE device;
+ALTER TABLE device_new RENAME TO device;
+CREATE INDEX device_by_user ON device (user_id, id);
+
+CREATE TABLE backup_run_new (
+    id             INTEGER PRIMARY KEY,
+    target_id      INTEGER NOT NULL REFERENCES backup_target(id) ON DELETE CASCADE,
+    kind           TEXT    NOT NULL DEFAULT 'backup',
+    status         TEXT    NOT NULL,
+    started_at     TEXT    NOT NULL,
+    finished_at    TEXT,
+    snapshot_id    TEXT,
+    bytes_added    INTEGER,
+    files_new      INTEGER,
+    files_changed  INTEGER,
+    repo_bytes     INTEGER,
+    error          TEXT,
+    details        TEXT
+);
+INSERT INTO backup_run_new SELECT * FROM backup_run
+ WHERE target_id IN (SELECT id FROM backup_target);
+DROP TABLE backup_run;
+ALTER TABLE backup_run_new RENAME TO backup_run;
+CREATE INDEX backup_run_by_target ON backup_run (target_id, kind, id DESC);
+
+-- The timeline reads live photos newest first (C25): a partial index walks them in order.
+CREATE INDEX asset_live_timeline ON asset (taken_at DESC, id DESC) WHERE trashed_at IS NULL;

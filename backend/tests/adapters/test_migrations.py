@@ -118,3 +118,77 @@ def test_an_upgraded_library_reopens_without_a_second_snapshot(tmp_path: Path) -
     open_database(db, backup_dir=tmp_path / "backups").close()
     open_database(db, backup_dir=tmp_path / "backups").close()
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
+
+
+def _make_v16_library(db: Path) -> None:
+    """A library as M2 left it (version 16): accounts, an inbox, devices, a backup target with
+    runs, a private photo, a degenerate crop and an mtime date with microseconds."""
+    conn = sqlite3.connect(db)
+    for number, sql in _migrations():
+        if number <= 16:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO user (id, username, display_name, password_hash, role)
+            VALUES (1, 'c', 'C', 'x', 'admin'), (2, 'lea', 'Lea', 'x', 'member');
+        INSERT INTO source (id, label, root, owner_id) VALUES (1, 'Pictures', '/p', 1);
+        INSERT INTO source (id, kind, label, root, owner_id) VALUES (2, 'inbox', 'Up', '/i/2', 2);
+        INSERT INTO inbox (user_id, source_id) VALUES (2, 2);
+        INSERT INTO device (user_id, name, token_hash, created_at)
+            VALUES (2, 'phone', 'h1', '2026-09-01T00:00:00'), (2, 'pad', 'h2', '2026-09-01');
+        INSERT INTO asset (id, content_hash, kind, mime_type, byte_size, width, height, taken_at,
+                date_source, library_path, imported_at, first_source_id, private)
+            VALUES (1, 'a', 'photo', 'image/jpeg', 1, 4, 3, '2020-01-01T10:00:00.729120',
+                    'file_mtime', 'originals/a.jpg', '2026-09-01', 2, 1),
+                   (2, 'b', 'photo', 'image/jpeg', 1, 4, 3, '2020-01-01T11:00:00',
+                    'exif', 'originals/b.jpg', '2026-09-01', 1, 0);
+        INSERT INTO asset_source (asset_id, source_id, relative_path) VALUES (1, 2, 'a.jpg'),
+            (2, 1, 'b.jpg');
+        INSERT INTO edit_recipe (asset_id, recipe_json, updated_by, updated_at)
+            VALUES (2, '{"rotate": 0, "crop": {"x": 0, "y": 0, "w": 1e-12, "h": 0.5}}', 1, 'x');
+        INSERT INTO backup_target (id, label, kind, repository, password_file, retention_json,
+                created_at) VALUES (1, 'Disk', 'local', '/b', '/pw', '{}', '2026-09-01');
+        INSERT INTO backup_run (target_id, status, started_at) VALUES (1, 'succeeded', 'x'),
+            (1, 'failed', 'y');
+        """
+    )
+    conn.close()
+
+
+def test_a_v16_library_upgrades_with_foreign_keys_and_its_data(tmp_path: Path) -> None:
+    """0017 (fix/backend): FKs on inbox/device/backup_run, private_by, cleaned recipes."""
+    db = tmp_path / "library.db"
+    _make_v16_library(db)
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert [tuple(r) for r in conn.execute("SELECT user_id, source_id FROM inbox")] == [(2, 2)]
+    assert conn.execute("SELECT COUNT(*) FROM device").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM backup_run").fetchone()[0] == 2
+    # private photos keep their meaning: private to the owner of their first source (lea)
+    assert conn.execute("SELECT private_by FROM asset WHERE id = 1").fetchone()[0] == 2
+    assert conn.execute("SELECT taken_at FROM asset WHERE id = 1").fetchone()[0] == (
+        "2020-01-01T10:00:00"
+    )
+    assert conn.execute("SELECT COUNT(*) FROM edit_recipe").fetchone()[0] == 0
+    assert conn.execute("SELECT edit_version FROM asset WHERE id = 2").fetchone()[0] == 1
+    indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert {"device_by_user", "backup_run_by_target", "asset_live_timeline"} <= indexes
+    # the new foreign keys cascade
+    conn.execute("DELETE FROM backup_target WHERE id = 1")
+    assert conn.execute("SELECT COUNT(*) FROM backup_run").fetchone()[0] == 0
+    for table in ("inbox", "device"):
+        keys = conn.execute(f"PRAGMA foreign_key_list({table})").fetchall()
+        assert ("user", "user_id", "CASCADE") in {
+            (k["table"], k["from"], k["on_delete"]) for k in keys
+        }
+    conn.execute(
+        "INSERT INTO user (id, username, display_name, password_hash, role) "
+        "VALUES (3, 'gone', 'Gone', 'x', 'member')"
+    )
+    conn.execute(
+        "INSERT INTO device (user_id, name, token_hash, created_at) VALUES (3, 'x', 'h3', 'x')"
+    )
+    conn.execute("DELETE FROM user WHERE id = 3")
+    assert conn.execute("SELECT COUNT(*) FROM device WHERE user_id = 3").fetchone()[0] == 0
