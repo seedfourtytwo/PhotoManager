@@ -156,7 +156,7 @@
 		<p class="quiet">{error} <a href="/albums">All albums</a></p>
 	{:else if album}
 		<header>
-			<p class="small"><a href="/albums" class="quiet">Albums</a></p>
+			<p class="small crumb"><a href="/albums">Albums</a></p>
 			<h1>{album.title}</h1>
 			{#if album.description}<p class="quiet desc">{album.description}</p>{/if}
 			<p class="quiet small">
@@ -259,35 +259,67 @@
 
 <style>
 	.page {
-		padding: 0 0.75rem 2rem;
+		padding: 0 var(--page-x) var(--s-7);
 	}
+	/* The album opens like a book's title page: a display serif, its caption beneath. */
 	header {
-		padding: 0.75rem 0 0.75rem;
+		padding: var(--s-5) 0 var(--s-4);
 	}
 	header p {
-		margin: 0.15rem 0;
+		margin: 0;
+	}
+	.crumb a {
+		color: var(--ink-2);
 	}
 	h1 {
-		font-size: var(--fs-28);
+		font-size: var(--fs-40);
+		font-weight: 350;
+		letter-spacing: -0.015em;
+		margin: var(--s-4) 0 var(--s-2);
+		max-width: 20ch;
 	}
 	.desc {
 		font-family: var(--font-text);
+		font-style: italic;
+		font-size: var(--fs-20);
+		margin-bottom: var(--s-1) !important;
+		max-width: var(--measure);
 	}
 	.tools {
 		display: flex;
 		flex-wrap: wrap;
-		margin: 0.5rem 0 0 -0.5rem;
+		gap: 0 2px;
+		margin: var(--s-4) 0 0 calc(-1 * var(--s-2));
 	}
 	.tools button,
 	.tools a {
 		color: var(--ink-2);
 	}
-	.tools button[aria-pressed='true'] {
+	.tools button:hover,
+	.tools a:hover {
 		color: var(--ink);
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.75rem;
+	.tools button[aria-pressed='true'] {
+		color: var(--ink);
+		text-decoration: underline;
+		text-underline-offset: 0.35em;
+		text-decoration-thickness: 1px;
+	}
+	[role='note'] {
+		margin-top: var(--s-2);
+	}
+	@media (max-width: 639px) {
+		.page {
+			padding: 0 var(--gutter) var(--s-7);
+		}
+		header {
+			padding-inline: var(--s-2);
+		}
+		h1 {
+			font-size: var(--fs-28);
+		}
+		.desc {
+			font-size: var(--fs-16);
+		}
 	}
 </style>

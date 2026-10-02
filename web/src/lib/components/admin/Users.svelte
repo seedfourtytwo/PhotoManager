@@ -212,11 +212,6 @@
 		color: var(--ink-2);
 		text-decoration: line-through;
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.75rem;
-	}
 	@media (max-width: 639px) {
 		table,
 		tbody,

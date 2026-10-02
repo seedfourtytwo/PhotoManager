@@ -183,11 +183,6 @@
 		padding-left: 0;
 		color: var(--ink-2);
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.6rem;
-	}
 	.token {
 		font-family: ui-monospace, monospace;
 		font-size: var(--fs-12);

@@ -128,14 +128,20 @@
 	{:else if result || similar}
 		<p class="quiet small meta" aria-live="polite">{summary}</p>
 		{#if items.length === 0}
-			<p class="quiet">Nothing found. Try fewer words, or a place or a year.</p>
+			<div class="empty-state">
+				<p>Nothing found.</p>
+				<p>Try fewer words, or a place or a year.</p>
+			</div>
 		{/if}
 		<JustifiedGrid {items} onopen={openPhoto} label="Search results" />
 	{:else}
-		<p class="quiet small">
-			Try <a href="/search?q=beach">beach</a>, <a href="/search?q=date%3A2019">date:2019</a> or
-			<a href="/search?q=place%3AParis">place:Paris</a>.
-		</p>
+		<div class="empty-state">
+			<p>Find photos by what is in them, when and where.</p>
+			<p>
+				Try <a href="/search?q=beach">beach</a>, <a href="/search?q=date%3A2019">date:2019</a> or
+				<a href="/search?q=place%3AParis">place:Paris</a>.
+			</p>
+		</div>
 	{/if}
 </div>
 
@@ -158,38 +164,50 @@
 
 <style>
 	.page {
-		padding: 1rem 0.75rem 2rem;
+		padding: var(--s-5) var(--page-x) var(--s-7);
 	}
 	form {
 		display: flex;
-		gap: 0.5rem;
-		align-items: baseline;
-		margin: 0.75rem 0 0.5rem;
+		gap: var(--s-3);
+		align-items: center;
+		margin: var(--s-4) 0 var(--s-2);
 		max-width: 40rem;
 	}
+	/* The query is written in the album's hand: a serif line to write on. */
 	input {
 		flex: 1;
+		font-family: var(--font-text);
+		font-size: var(--fs-20) !important;
+		padding-block: var(--s-1);
+	}
+	input::placeholder {
 		font-size: var(--fs-16);
+		font-style: italic;
 	}
 	.hint,
 	.source {
 		max-width: 40rem;
+		margin: var(--s-2) 0;
 	}
 	code {
 		font-size: var(--fs-12);
 		color: var(--ink);
 	}
 	.meta {
-		margin: 0.75rem 0 0.5rem;
+		margin: var(--s-4) 0 var(--s-2);
 	}
 	@media (max-width: 639px) {
 		.page {
-			padding: 0.75rem var(--gutter) 2rem;
+			padding: var(--s-4) var(--gutter) var(--s-7);
 		}
 		h1,
 		form,
-		p {
-			padding-inline: 0.5rem;
+		p,
+		.empty-state {
+			padding-inline: var(--s-2);
+		}
+		input::placeholder {
+			font-size: var(--fs-14);
 		}
 	}
 </style>

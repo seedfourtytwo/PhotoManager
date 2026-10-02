@@ -277,9 +277,4 @@
 	.problem {
 		color: var(--ink);
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.75rem;
-	}
 </style>

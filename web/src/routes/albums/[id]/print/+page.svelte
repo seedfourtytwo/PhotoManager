@@ -102,7 +102,7 @@
 <svelte:head><title>Print {album?.title ?? 'album'} · Photos</title></svelte:head>
 
 <div class="page">
-	<p class="small"><a class="quiet" href={`/albums/${id}`}>{album?.title ?? 'Album'}</a></p>
+	<p class="small crumb"><a href={`/albums/${id}`}>{album?.title ?? 'Album'}</a></p>
 	<h1>Print {album ? `“${album.title}”` : ''}</h1>
 
 	{#if error}
@@ -138,7 +138,7 @@
 				</p>
 
 				<section aria-labelledby="p-res" class="issues">
-					<h2 id="p-res">Resolution</h2>
+					<h3 id="p-res">Resolution</h3>
 					{#if plan && plan.issues.length === 0}
 						<p class="quiet small">Every photo has enough pixels for this size.</p>
 					{/if}
@@ -188,76 +188,65 @@
 
 <style>
 	.page {
-		padding: 1rem 0.75rem 3rem;
+		padding: var(--s-5) var(--page-x) var(--s-7);
+	}
+	.crumb {
+		margin: 0;
+	}
+	.crumb a {
+		color: var(--ink-2);
 	}
 	h1 {
-		font-size: var(--fs-28);
-		margin-bottom: 1rem;
+		margin: var(--s-4) 0 var(--s-5);
 	}
 	.layout {
 		display: grid;
-		grid-template-columns: 18rem minmax(0, 1fr);
-		gap: 2rem;
+		grid-template-columns: 17rem minmax(0, 1fr);
+		gap: var(--s-6);
 		align-items: start;
 	}
 	.choices {
 		display: grid;
-		gap: 0.6rem;
+		gap: var(--s-2);
 		position: sticky;
-		top: 1rem;
+		top: var(--s-4);
 	}
-	.field {
+	.choices > fieldset {
+		margin: var(--s-2) 0;
 		display: grid;
-		gap: 0.15rem;
 	}
-	fieldset {
-		border: 0;
-		padding: 0;
+	.choices > .field {
 		margin: 0;
-		display: grid;
-		gap: 0.25rem;
-	}
-	legend {
-		color: var(--ink-2);
-		margin-bottom: 0.25rem;
-		padding: 0;
-	}
-	.choice {
-		display: flex;
-		align-items: center;
-		gap: 0.45rem;
-		color: var(--ink);
 	}
 	.swatch {
 		display: inline-grid;
 		place-items: center;
-		width: 1.6rem;
-		height: 1.2rem;
+		width: 1.75rem;
+		height: 1.25rem;
 		font-family: var(--font-text);
 		font-size: var(--fs-12);
-		border: 1px solid var(--hairline);
+		box-shadow: 0 0 0 1px var(--hairline);
 	}
 	.summary {
-		margin: 0.25rem 0 0;
+		margin: var(--s-1) 0 0;
 	}
-	h2 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 0.5rem 0 0.25rem;
+	.issues h3 {
+		margin: var(--s-4) 0 var(--s-1);
+	}
+	.issues p {
+		margin: 0;
 	}
 	.issues ul {
 		list-style: none;
-		margin: 0 0 0.5rem;
+		margin: 0 0 var(--s-2);
 		padding: 0;
 		font-size: var(--fs-12);
 	}
 	.issues li {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--s-2);
 		align-items: center;
-		padding: 0.15rem 0;
+		padding: var(--s-1) 0;
 	}
 	.issues img {
 		width: 2.5rem;
@@ -267,19 +256,21 @@
 	}
 	.primary {
 		justify-self: start;
+		margin-top: var(--s-3);
 	}
-	/* Small multiples: every page at the same scale, labelled underneath. */
+	/* Small multiples: every page at the same scale, labelled underneath. Pages are paper,
+	   so they sit on the screen as objects: a hairline edge, no shadow. */
 	.pages {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-		gap: 1.25rem 1rem;
+		gap: var(--s-5) var(--s-4);
 	}
 	.pages li {
 		display: grid;
-		gap: 0.25rem;
+		gap: var(--s-2);
 		justify-items: center;
 	}
 	.pages img {

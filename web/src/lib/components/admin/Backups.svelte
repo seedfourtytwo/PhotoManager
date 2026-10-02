@@ -267,11 +267,6 @@
 		padding: 0.1rem 1rem 0.1rem 0;
 		vertical-align: top;
 	}
-	.field {
-		display: grid;
-		gap: 0.15rem;
-		margin-bottom: 0.6rem;
-	}
 	#schedule-help {
 		margin: -0.4rem 0 0.6rem;
 	}
