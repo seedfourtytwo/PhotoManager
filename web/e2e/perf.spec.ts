@@ -63,6 +63,19 @@ test('library grid on a 10k library', async ({ page }, info) => {
 	const long = await page.evaluate(() => (window as unknown as { __long: number[] }).__long);
 	const nodesScrolled = await page.evaluate(() => document.getElementsByTagName('*').length);
 	const tiles = await page.locator('.tile').count();
+
+	// 3. The same 30 screens back up: everything is loaded, so this is rendering alone.
+	await page.evaluate(() => ((window as unknown as { __long: number[] }).__long = []));
+	const upStart = Date.now();
+	await page.evaluate(async () => {
+		for (let i = 0; i < 30 * 12; i++) {
+			window.scrollBy(0, -window.innerHeight / 12);
+			await new Promise((r) => requestAnimationFrame(r));
+		}
+	});
+	const upMs = Date.now() - upStart;
+	await page.waitForTimeout(500);
+	const longUp = await page.evaluate(() => (window as unknown as { __long: number[] }).__long);
 	await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 
 	const result = {
@@ -76,7 +89,10 @@ test('library grid on a 10k library', async ({ page }, info) => {
 		scroll30ScreensMs: scrollMs,
 		longTasksWhileScrolling: long.length,
 		longTaskTotalMs: Math.round(long.reduce((a, b) => a + b, 0)),
-		longestTaskMs: Math.round(Math.max(0, ...long))
+		longestTaskMs: Math.round(Math.max(0, ...long)),
+		scrollBackUp30ScreensMs: upMs,
+		longTasksScrollingBackUp: longUp.length,
+		longTaskTotalMsBackUp: Math.round(longUp.reduce((a, b) => a + b, 0))
 	};
 	console.log(`PERF ${JSON.stringify(result)}`);
 	expect(firstThumbs).toBeGreaterThan(0);

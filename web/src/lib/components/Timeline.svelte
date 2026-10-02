@@ -11,6 +11,7 @@
 		neighbour,
 		rowHeightFor,
 		visibleRange,
+		type Layout,
 		type NavKey
 	} from '$lib/timeline';
 	import PhotoGrid from './PhotoGrid.svelte';
@@ -34,16 +35,33 @@
 	let width = $state(0);
 	const rowHeight = $derived(rowHeightFor(viewport.width, settings.density));
 	const groups = $derived(groupByMonth(loader.items));
-	const layouts = $derived(
-		groups.map((g) =>
-			justify(
-				g.items.map((a) => aspect(a)),
-				width,
-				rowHeight,
-				GAP
-			)
-		)
-	);
+	// Pages only add photos at the end, so earlier months keep their layout: cache them by
+	// month, photo count, width and row height (a new page then lays out one or two months).
+	let cache = new Map<string, Layout>();
+	const layouts = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a plain memo, not state
+		const next = new Map<string, Layout>();
+		const out = groups.map((g) => {
+			// Sizes change with edits (a rotation), so they are part of the key.
+			const sizes = g.items.reduce(
+				(h, a) => (h * 31 + (a.width ?? 0) * 7 + (a.height ?? 0)) % 1e9,
+				0
+			);
+			const key = `${g.key}|${g.items.length}|${sizes}|${width}|${rowHeight}`;
+			const layout =
+				cache.get(key) ??
+				justify(
+					g.items.map((a) => aspect(a)),
+					width,
+					rowHeight,
+					GAP
+				);
+			next.set(key, layout);
+			return layout;
+		});
+		cache = next;
+		return out;
+	});
 	const selecting = $derived(selection.ids.size > 0);
 	const count = new Intl.NumberFormat('en-GB');
 
@@ -54,9 +72,12 @@
 	let gridTops: number[] = [];
 	let windows = $state.raw<[number, number][]>([]);
 	let lastMonth: string | null = null;
+	/** The band (timeline coordinates) the current windows were computed for. */
+	let band: [number, number] | null = null;
 	let frame = 0;
 
 	function measure() {
+		band = null; // offsets may have moved: recompute the windows on the next update
 		if (!wrapper) return;
 		const grids = wrapper.querySelectorAll<HTMLElement>('section > .grid');
 		gridTops = [...grids].map((g) => g.offsetTop);
@@ -66,12 +87,17 @@
 		if (!wrapper || width <= 0 || gridTops.length !== groups.length) return;
 		const top = wrapper.getBoundingClientRect().top; // wrapper top in viewport coordinates
 		const vh = window.innerHeight;
-		const from = -top - OVERSCAN * vh;
-		const to = -top + vh + OVERSCAN * vh;
-		const next = layouts.map((layout, g) =>
-			visibleRange(layout.boxes, from - gridTops[g], to - gridTops[g])
-		);
-		if (next.some((w, g) => w[0] !== windows[g]?.[0] || w[1] !== windows[g]?.[1])) windows = next;
+		// Hysteresis: the rendered band moves only when less than half a screen of it is left
+		// above or below, so scrolling changes the DOM about once per screen, not every frame.
+		const margin = (OVERSCAN - 0.5) * vh;
+		if (!band || -top - margin < band[0] || -top + vh + margin > band[1]) {
+			band = [-top - OVERSCAN * vh, -top + vh + OVERSCAN * vh];
+			const [from, to] = band;
+			const next = layouts.map((layout, g) =>
+				visibleRange(layout.boxes, from - gridTops[g], to - gridTops[g])
+			);
+			if (next.some((w, g) => w[0] !== windows[g]?.[0] || w[1] !== windows[g]?.[1])) windows = next;
+		}
 
 		// The month whose grid is under the sticky label.
 		let month: string | null = null;
