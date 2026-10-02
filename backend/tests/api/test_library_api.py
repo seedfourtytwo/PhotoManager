@@ -41,7 +41,7 @@ def test_add_list_and_disable_sources(client: TestClient, source_guard: Path) ->
 
 def test_sources_are_validated(client: TestClient, source_guard: Path, tmp_path: Path) -> None:
     missing = client.post("/api/sources", json={"label": "x", "path": str(tmp_path / "nope")})
-    assert missing.status_code == 422 and "not a folder" in missing.json()["detail"]
+    assert missing.status_code == 422 and "folder not found" in missing.json()["detail"]
     inside = client.post("/api/sources", json={"label": "x", "path": str(tmp_path / "data")})
     assert inside.status_code == 422 and "library" in inside.json()["detail"]
     parent = client.post("/api/sources", json={"label": "x", "path": str(tmp_path)})

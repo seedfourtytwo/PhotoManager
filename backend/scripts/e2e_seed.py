@@ -75,7 +75,8 @@ def seed_people(services: Services, sources: dict[str, int], db: Path) -> None:
     brittany = near(conn, BRITTANY, 12)
     every_23rd = [r[0] for r in conn.execute("SELECT id FROM asset ORDER BY id")][::23]
     conn.close()
-    album = repo.create_album(user_ids["admin"], "Summers at the house", "Dordogne, every August", now)
+    admin = user_ids["admin"]
+    album = repo.create_album(admin, "Summers at the house", "Dordogne, every August", now)
     repo.add_album_items(album, summers, None, now)
     repo.set_album_members(album, [(partner, AlbumRole.EDITOR)], now)
     other = repo.create_album(partner, "Brittany", "", now)
