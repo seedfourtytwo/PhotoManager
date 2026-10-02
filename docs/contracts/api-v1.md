@@ -118,7 +118,7 @@ One recipe per photo, shared by everyone (needs `edit`). Originals never change.
 
 ## Downloads
 
-| POST | `/api/downloads/estimate` | `DownloadRequest` | `{count, bytes}` |
+| POST | `/api/downloads/estimate` | `DownloadRequest` | `{count, bytes}` — from each photo's real size: exact for untouched originals, calibrated factors for conversions (v1.2; see docs/PERFORMANCE.md) |
 |---|---|---|---|
 | POST | `/api/downloads` | `DownloadRequest` | streamed `application/zip` |
 | GET | `/api/assets/{id}/download` | query: `format, quality, max_edge, strip_location` | the single file |

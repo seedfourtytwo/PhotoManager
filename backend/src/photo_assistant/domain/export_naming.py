@@ -1,5 +1,7 @@
 """Downloads: options, file names and folders inside a ZIP, size estimates (FEATURES 4b)."""
 
+import itertools
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -12,8 +14,27 @@ from photo_assistant.domain.edit_recipe import fit_within
 FORMATS = ("original", "jpeg", "png", "webp")
 MAX_EDGE = 20000  # pixels; larger requests overflowed libvips (QA A6)
 _EXTENSIONS = {"jpeg": ".jpg", "png": ".png", "webp": ".webp"}
-# Rough bytes per pixel, measured on photos: good enough to warn "this is 2 GB".
-_BYTES_PER_PIXEL = {"jpeg": 0.45, "webp": 0.3, "png": 2.5}
+# Size estimates start from the photo's real bytes (QA A14: bytes-per-pixel guesses were 10-30x
+# too high on the synthetic library, and wrong for any photo that compresses unusually).
+# Calibration: docs/PERFORMANCE.md §Download estimates (VipsRenderer, 48 synthetic photos,
+# 800-4000 px, q90; WebP and PNG factors set between those and typical camera photos).
+# Bytes of a q90 JPEG with the same pixels, per byte of the source file:
+_AS_JPEG = {
+    "image/jpeg": 1.0,
+    "image/heic": 2.0,  # HEIC/AVIF/WebP keep the same picture in about half the bytes
+    "image/heif": 2.0,
+    "image/avif": 2.0,
+    "image/webp": 1.6,
+    "image/png": 2.0,
+}
+_AS_JPEG_OTHER = 0.25  # RAW and TIFF hold far more bytes than any JPEG of them
+# Output bytes per byte of q90 JPEG, same pixels:
+_FORMAT_FACTOR = {"jpeg": 0.95, "webp": 0.4, "png": 3.7}
+# Bytes shrink more slowly than pixels when a photo is made smaller (more detail per pixel):
+# bytes ~ pixels ** exponent (fitted on the 200/1024/2048 px renders).
+_SCALE_EXPONENT = {"jpeg": 0.55, "webp": 0.5, "png": 0.8}
+# JPEG/WebP size relative to quality 90 (piecewise linear between these points):
+_QUALITY_CURVE = ((1, 0.1), (50, 0.35), (75, 0.55), (90, 1.0), (95, 1.5), (100, 3.0))
 _UNSAFE = re.compile(r"[\x00-\x1f\x7f/\\:*?\"<>|]")
 
 
@@ -99,15 +120,31 @@ def unique_names(names: list[str]) -> list[str]:
     return result
 
 
+def _quality_factor(quality: int) -> float:
+    for (q0, f0), (q1, f1) in itertools.pairwise(_QUALITY_CURVE):
+        if quality <= q1:
+            return f0 + (f1 - f0) * (quality - q0) / (q1 - q0)
+    return _QUALITY_CURVE[-1][1]
+
+
 def estimate_bytes(
-    byte_size: int, width: int | None, height: int | None, options: ExportOptions
+    byte_size: int,
+    mime_type: str | None,
+    source_size: tuple[int, int] | None,
+    shown_size: tuple[int, int] | None,
+    output_format: str,
+    options: ExportOptions,
 ) -> int:
-    if options.untouched or width is None or height is None:
+    """Expected size of one download. ``source_size``: the file's pixels; ``shown_size``: after
+    the edit recipe; ``output_format``: jpeg | png | webp, or original (sent untouched)."""
+    if output_format == "original" or source_size is None or shown_size is None:
         return byte_size
-    fmt = options.format if options.format != "original" else "jpeg"
-    w, h = fit_within(width, height, options.max_edge)
-    quality = options.quality / 90 if fmt != "png" else 1.0
-    return max(1, round(w * h * _BYTES_PER_PIXEL[fmt] * quality))
+    w, h = fit_within(*shown_size, options.max_edge)
+    pixels = max(1, source_size[0] * source_size[1])
+    as_jpeg = byte_size * _AS_JPEG.get(mime_type or "", _AS_JPEG_OTHER)
+    quality = 1.0 if output_format == "png" else _quality_factor(options.quality)
+    scale: float = math.pow(min(1.0, (w * h) / pixels), _SCALE_EXPONENT[output_format])
+    return max(1, round(as_jpeg * _FORMAT_FACTOR[output_format] * quality * scale))
 
 
 def skipped_manifest(failed: list[tuple[str, str]]) -> str:

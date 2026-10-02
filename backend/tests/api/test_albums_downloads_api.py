@@ -209,3 +209,16 @@ def test_a_photo_that_fails_is_left_out_of_the_zip_and_listed_in_its_manifest(
         assert "1 photo could not be included" in manifest and "IMG_1" in manifest
     fine = admin.post("/api/downloads", json={"ids": [ids[0]], "format": "jpeg"})
     assert zip_names(fine.content) == ["IMG_0.jpg"], "no manifest when nothing failed"
+
+
+@pytest.mark.parametrize("fmt", ["original", "jpeg", "webp", "png"])
+@pytest.mark.parametrize("max_edge", [None, 200])
+def test_size_estimates_are_within_a_factor_of_two_of_the_real_files(
+    admin: TestClient, ids: list[int], fmt: str, max_edge: int | None
+) -> None:
+    """QA A14 (E2E): estimates were 10 to 30 times too high."""
+    body = {"ids": ids, "format": fmt, "max_edge": max_edge}
+    estimate = admin.post("/api/downloads/estimate", json=body).json()["bytes"]
+    with zipfile.ZipFile(io.BytesIO(admin.post("/api/downloads", json=body).content)) as z:
+        actual = sum(i.file_size for i in z.infolist())
+    assert actual / 2 <= estimate <= actual * 2, (estimate, actual)

@@ -76,11 +76,22 @@ def test_original_untouched_only_without_changes() -> None:
     assert not ExportOptions(format="jpeg").untouched
 
 
-def test_estimates() -> None:
-    assert estimate_bytes(5_000_000, 4000, 3000, ExportOptions()) == 5_000_000
-    small = estimate_bytes(5_000_000, 4000, 3000, ExportOptions(format="jpeg", max_edge=1000))
-    big = estimate_bytes(5_000_000, 4000, 3000, ExportOptions(format="jpeg"))
-    assert 0 < small < big
-    png = estimate_bytes(5_000_000, 4000, 3000, ExportOptions(format="png"))
-    assert png > big
-    assert estimate_bytes(100, None, None, ExportOptions(format="jpeg")) == 100
+def test_estimates_start_from_the_real_bytes() -> None:
+    size = (4000, 3000)
+
+    def est(fmt: str, out: str | None = None, mime: str = "image/jpeg", **kw: object) -> int:
+        return estimate_bytes(
+            5_000_000, mime, size, size, out or fmt, ExportOptions(format=fmt, **kw)
+        )  # type: ignore[arg-type]
+
+    assert est("original") == 5_000_000, "sent untouched"
+    jpeg = est("jpeg")
+    assert 4_000_000 < jpeg < 5_500_000, "re-encoding a JPEG at q90 keeps about its size"
+    assert 0 < est("jpeg", max_edge=1000) < jpeg
+    assert est("original", out="jpeg", max_edge=1000) == est("jpeg", max_edge=1000)
+    assert est("webp") < jpeg < est("png")
+    assert est("jpeg", quality=50) < jpeg < est("jpeg", quality=100)
+    assert est("jpeg", mime="image/heic") > jpeg, "HEIC holds the same picture in fewer bytes"
+    assert (
+        estimate_bytes(100, "image/jpeg", None, None, "jpeg", ExportOptions(format="jpeg")) == 100
+    )

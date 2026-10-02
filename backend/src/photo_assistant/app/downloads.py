@@ -61,8 +61,10 @@ class Downloads:
     def estimate(self, views: Sequence[AssetView], options: ExportOptions) -> int:
         total = 0
         for v in views:
-            width, height = v.display_size or (None, None)
-            total += estimate_bytes(v.asset.byte_size, width, height, options)
+            a = v.asset
+            source = (a.width, a.height) if a.width and a.height else None
+            fmt = self.output_format(v, options)
+            total += estimate_bytes(a.byte_size, a.mime_type, source, v.display_size, fmt, options)
         return total
 
     def plan(
