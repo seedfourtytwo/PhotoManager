@@ -65,3 +65,34 @@ def test_grouping_hashes_thumbnails_and_groups_near_duplicates(
     groups = {v.id: v.group_id for v in repo.list_all_views(ADMIN, AssetFilter())}
     assert groups == {ids[0]: ids[0], ids[1]: ids[0], ids[2]: None, lonely: None}
     assert grouper({}) == 0, "idempotent"
+
+
+def test_new_photos_regroup_only_their_own_stretch_of_time(
+    repo: SqliteRepository, tmp_path: Path
+) -> None:
+    """C29: a new photo next to an old one joins its group; photos hours away aren't read."""
+    early = [datetime(2024, 1, 1, 10, 0, s) for s in (0, 30)]
+    far = datetime(2024, 1, 1, 18, 0, 0)
+    grouper = GroupSimilar(repo, FakeHasher(), lambda rel: tmp_path / rel)
+    a = repo.add_asset(new_asset(1, taken_at=early[0], camera_model="x"), NOW)
+    repo.set_thumbnail(a, RenderedImage("thumbs/similar-a.webp", 10, 10))
+    lone = repo.add_asset(new_asset(2, taken_at=far, camera_model="y"), NOW)
+    repo.set_thumbnail(lone, RenderedImage("thumbs/other.webp", 10, 10))
+    grouper({})
+    b = repo.add_asset(new_asset(3, taken_at=early[1], camera_model="z"), NOW)
+    repo.set_thumbnail(b, RenderedImage("thumbs/similar-b.webp", 10, 10))
+
+    read: list[int] = []
+    real = repo.shots_in
+
+    def spy(runs):  # type: ignore[no-untyped-def]
+        found = real(runs)
+        read.extend(s.asset_id for s in found)
+        return found
+
+    repo.shots_in = spy  # type: ignore[method-assign]
+    assert grouper({}) == 2, "a and b now form a group"
+    assert sorted(read) == [a, b], "the photo hours away was not regrouped"
+    groups = {v.id: v.group_id for v in repo.list_all_views(ADMIN, AssetFilter())}
+    assert groups == {a: a, b: a, lone: None}
+    assert grouper({"full": True}) == 0, "a full regroup agrees"

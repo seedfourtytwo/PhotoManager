@@ -30,6 +30,7 @@ from photo_assistant.api.schemas import (
     YearCount,
 )
 from photo_assistant.api.services import Services
+from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.date_fix import new_capture_times
 from photo_assistant.ports.library import AssetView
@@ -118,6 +119,7 @@ def fix_dates(services: ServicesDep, viewer: ViewerDep, body: DatesIn) -> Update
     local_now = services.clock.now().astimezone().replace(tzinfo=None)
     changes = new_capture_times(old, body.set, body.shift_minutes, local_now)  # DateFixError: 422
     updated = services.repo.change_dates(changes, viewer.user_id, services.clock.now())
+    services.repo.enqueue_once(GROUP_JOB, FULL_REGROUP)  # moved photos may change groups
     return Updated(updated=updated)
 
 

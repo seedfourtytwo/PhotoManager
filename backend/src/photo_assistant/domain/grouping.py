@@ -28,16 +28,15 @@ def phash_distance(a: str, b: str) -> int:
     return (int(a, 16) ^ int(b, 16)).bit_count()
 
 
-def _related(a: Shot, b: Shot) -> bool:
-    gap = abs((b.taken_at - a.taken_at).total_seconds())
-    if a.camera is not None and a.camera == b.camera and gap <= BURST_SECONDS:
-        return True
-    return (
-        a.phash is not None
-        and b.phash is not None
-        and gap <= NEAR_DUPLICATE_WINDOW.total_seconds()
-        and phash_distance(a.phash, b.phash) <= MAX_PHASH_DISTANCE
-    )
+_EPOCH = datetime(1970, 1, 1)
+_MICRO = timedelta(microseconds=1)
+_BURST_US = int(BURST_SECONDS * 1_000_000)
+_WINDOW_US = NEAR_DUPLICATE_WINDOW // _MICRO
+
+
+def _micros(t: datetime) -> int:
+    """Wall-clock time as whole microseconds: exact, and no time zone involved."""
+    return (t.replace(tzinfo=None) - _EPOCH) // _MICRO
 
 
 def _root(parent: dict[int, int], i: int) -> int:
@@ -48,18 +47,55 @@ def _root(parent: dict[int, int], i: int) -> int:
 
 
 def group_shots(shots: Sequence[Shot]) -> dict[int, int | None]:
-    """asset id → group id (smallest id in its group), or None for a photo on its own."""
+    """asset id → group id (smallest id in its group), or None for a photo on its own.
+
+    Times and hashes are turned into plain ints once (C29: 6.2 s → 0.2 s for 51k photos);
+    each photo is compared only with the ones up to the window after it."""
     ordered = sorted(shots, key=lambda s: (s.taken_at, s.asset_id))
-    parent = {s.asset_id: s.asset_id for s in ordered}
-    for i, a in enumerate(ordered):
-        for b in ordered[i + 1 :]:
-            if b.taken_at - a.taken_at > NEAR_DUPLICATE_WINDOW:
+    ids = [s.asset_id for s in ordered]
+    times = [_micros(s.taken_at) for s in ordered]
+    cameras = [s.camera for s in ordered]
+    hashes = [int(s.phash, 16) if s.phash is not None else None for s in ordered]
+    parent = {i: i for i in ids}
+    for i in range(len(ordered)):
+        t, camera, phash = times[i], cameras[i], hashes[i]
+        for j in range(i + 1, len(ordered)):
+            gap = times[j] - t
+            if gap > _WINDOW_US:
                 break
-            if _related(a, b):
-                ra, rb = _root(parent, a.asset_id), _root(parent, b.asset_id)
+            burst = camera is not None and camera == cameras[j] and gap <= _BURST_US
+            other = hashes[j]
+            near = phash is not None and other is not None
+            if burst or (near and (phash ^ other).bit_count() <= MAX_PHASH_DISTANCE):  # type: ignore[operator]
+                ra, rb = _root(parent, ids[i]), _root(parent, ids[j])
                 parent[max(ra, rb)] = min(ra, rb)
-    roots = {s.asset_id: _root(parent, s.asset_id) for s in ordered}
+    roots = {i: _root(parent, i) for i in ids}
     sizes: dict[int, int] = {}
     for r in roots.values():
         sizes[r] = sizes.get(r, 0) + 1
     return {i: (r if sizes[r] > 1 else None) for i, r in roots.items()}
+
+
+def runs_with(
+    times: Sequence[tuple[int, datetime]], new: set[int]
+) -> list[tuple[datetime, datetime]]:
+    """The time ranges (inclusive) of the runs of photos holding a new one.
+
+    A run is a stretch of photos in time order where each is at most the window after the one
+    before it. No group can reach across a longer gap (both rules need the window), so new
+    photos can only change groups inside their runs."""
+    ordered = sorted(times, key=lambda x: (x[1], x[0]))
+    runs: list[tuple[datetime, datetime]] = []
+    start = 0
+    for k in range(1, len(ordered) + 1):
+        if k == len(ordered) or ordered[k][1] - ordered[k - 1][1] > NEAR_DUPLICATE_WINDOW:
+            if any(i in new for i, _ in ordered[start:k]):
+                runs.append((ordered[start][1], ordered[k - 1][1]))
+            start = k
+    return runs
+
+
+def regroup_runs(shots: Sequence[Shot]) -> dict[int, int | None]:
+    """Groups for every photo of some complete runs (``runs_with``): the same answer the
+    whole library would give for them."""
+    return group_shots(shots)

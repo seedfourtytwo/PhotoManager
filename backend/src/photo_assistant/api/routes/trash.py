@@ -18,6 +18,7 @@ from photo_assistant.api.schemas import (
     Trashed,
     TrashedOut,
 )
+from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
 from photo_assistant.domain.access import Level
 
 router = APIRouter(prefix="/api", tags=["trash"], dependencies=LOGGED_IN)
@@ -27,7 +28,9 @@ router = APIRouter(prefix="/api", tags=["trash"], dependencies=LOGGED_IN)
 def trash_assets(services: ServicesDep, viewer: ViewerDep, body: IdsIn) -> Trashed:
     """Move photos to the trash (needs edit on every one). Sources are never touched."""
     require_views(services, viewer, body.ids, Level.EDIT)
-    return Trashed(trashed=services.trash.trash(body.ids, viewer.user_id))
+    trashed = services.trash.trash(body.ids, viewer.user_id)
+    services.repo.enqueue_once(GROUP_JOB, FULL_REGROUP)  # groups lose members
+    return Trashed(trashed=trashed)
 
 
 @router.get("/trash")
@@ -42,7 +45,9 @@ def list_trash(services: ServicesDep, viewer: ViewerDep) -> list[TrashedOut]:
 @router.post("/trash/restore")
 def restore(services: ServicesDep, viewer: ViewerDep, body: IdsIn) -> Restored:
     require_views(services, viewer, body.ids, Level.EDIT, trashed=True)
-    return Restored(restored=services.trash.restore(body.ids))
+    restored = services.trash.restore(body.ids)
+    services.repo.enqueue_once(GROUP_JOB, FULL_REGROUP)  # and get them back
+    return Restored(restored=restored)
 
 
 @router.post("/trash/empty", dependencies=ADMIN_ONLY, status_code=status.HTTP_200_OK)

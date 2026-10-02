@@ -378,14 +378,17 @@ class SqliteRepository(
             "INSERT INTO job (kind, payload_json) VALUES (?, ?)", (kind, json.dumps(payload))
         )
 
-    def enqueue_once(self, kind: str) -> int | None:
+    def enqueue_once(self, kind: str, payload: dict[str, object] | None = None) -> int | None:
+        """Queue unless the same job (kind and payload) is already waiting."""
+        body = json.dumps(payload or {}, sort_keys=True)
         with self._transaction():
             waiting = self._conn.execute(
-                "SELECT 1 FROM job WHERE kind = ? AND status = 'queued'", (kind,)
+                "SELECT 1 FROM job WHERE kind = ? AND payload_json = ? AND status = 'queued'",
+                (kind, body),
             ).fetchone()
             if waiting:
                 return None
-            return self._write("INSERT INTO job (kind, payload_json) VALUES (?, '{}')", (kind,))
+            return self._write("INSERT INTO job (kind, payload_json) VALUES (?, ?)", (kind, body))
 
     def claim_next_job(
         self,

@@ -1,6 +1,7 @@
 """Ports for background enrichment: offline reverse geocoding, perceptual hashing."""
 
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -31,6 +32,14 @@ class EnrichmentStore(Protocol):
     def set_phash(self, asset_id: int, phash: str) -> None: ...
     def shots(self) -> list[Shot]:
         """Every photo in the library (not trashed), for grouping."""
+        ...
+
+    def shot_times(self) -> list[tuple[int, datetime]]:
+        """(asset id, taken_at) of every photo not trashed: finds the runs to regroup."""
+        ...
+
+    def shots_in(self, runs: Sequence[tuple[datetime, datetime]]) -> list[Shot]:
+        """The photos (not trashed) taken within any of these inclusive time ranges."""
         ...
 
     def set_groups(self, groups: dict[int, int | None]) -> int:

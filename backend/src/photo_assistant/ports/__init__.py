@@ -237,7 +237,7 @@ class Repository(SourceRegistry, Protocol):
 
     # job queue
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...
-    def enqueue_once(self, kind: str) -> int | None:
+    def enqueue_once(self, kind: str, payload: dict[str, object] | None = None) -> int | None:
         """Queue a payload-less job unless one of that kind is already waiting."""
         ...
 

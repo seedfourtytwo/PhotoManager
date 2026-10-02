@@ -53,6 +53,29 @@ class EnrichMixin(SqliteBase):
             for r in rows
         ]
 
+    def shot_times(self) -> list[tuple[int, datetime]]:
+        rows = self._all("SELECT id, taken_at FROM asset WHERE trashed_at IS NULL")
+        return [(int(r["id"]), datetime.fromisoformat(r["taken_at"])) for r in rows]
+
+    def shots_in(self, runs: Sequence[tuple[datetime, datetime]]) -> list[Shot]:
+        found: list[Shot] = []
+        for start, end in runs:  # each range walks the timeline index
+            rows = self._all(
+                """SELECT id, taken_at, camera_model, phash FROM asset
+                   WHERE trashed_at IS NULL AND taken_at BETWEEN ? AND ?""",
+                (start.isoformat(), end.isoformat()),
+            )
+            found += [
+                Shot(
+                    int(r["id"]),
+                    datetime.fromisoformat(r["taken_at"]),
+                    r["camera_model"],
+                    r["phash"],
+                )
+                for r in rows
+            ]
+        return found
+
     def set_groups(self, groups: dict[int, int | None]) -> int:
         with self._transaction():
             changed = 0

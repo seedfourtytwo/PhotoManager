@@ -7,13 +7,14 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from photo_assistant.domain.grouping import group_shots
+from photo_assistant.domain.grouping import group_shots, regroup_runs, runs_with
 from photo_assistant.ports.enrich import EnrichmentStore, Geocoder, PerceptualHasher
 
 log = logging.getLogger(__name__)
 
 GEOCODE_JOB = "geocode"
 GROUP_JOB = "group"
+FULL_REGROUP: dict[str, object] = {"full": True}  # payload: regroup the whole library
 
 
 class GeocodeAssets:
@@ -51,15 +52,26 @@ class GroupSimilar:
         self._batch = batch
 
     def __call__(self, payload: dict[str, object]) -> int:
-        self._hash_missing()
-        return self._repo.set_groups(group_shots(self._repo.shots()))
+        """``{}``: hash the new photos and regroup only the stretches of time they landed in
+        (C29). ``{"full": true}``: regroup the whole library."""
+        new = self._hash_missing()
+        if payload.get("full"):
+            return self._repo.set_groups(group_shots(self._repo.shots()))
+        if not new:
+            return 0
+        runs = runs_with(self._repo.shot_times(), new)
+        return self._repo.set_groups(regroup_runs(self._repo.shots_in(runs)))
 
-    def _hash_missing(self) -> None:
+    def _hash_missing(self) -> set[int]:
+        """Hash every photo that has a thumbnail but no hash yet; returns their ids."""
+        seen: set[int] = set()
         after = 0
         while todo := self._repo.assets_without_phash(after, self._batch):
             for asset_id, thumb in todo:
+                seen.add(asset_id)
                 try:
                     self._repo.set_phash(asset_id, self._hasher.phash(self._absolute(thumb)))
                 except OSError:
                     log.warning("cannot hash thumbnail", extra={"asset_id": asset_id})
             after = todo[-1][0]
+        return seen

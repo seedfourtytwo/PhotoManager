@@ -319,3 +319,21 @@ def test_a_missing_thumbnail_size_is_measured_and_stored_on_first_serve(lib: Lib
     assert lib.admin.get(f"/api/assets/{asset_id}/thumb").status_code == 200
     measured = repo.get_asset(asset_id)
     assert measured is not None and measured.thumb_size == (120, 80)
+
+
+def test_changing_dates_or_the_trash_queues_a_full_regroup(lib: Lib) -> None:
+    """C29: new photos regroup only their stretch of time; moved or removed ones need it all."""
+    c, ids = lib.admin, lib.ids
+    repo = services_of(c).repo
+
+    def full_regroups() -> int:
+        return sum(1 for j in repo.list_jobs("queued") if j["kind"] == "group" and j["payload"])
+
+    c.post("/api/assets/dates", json={"ids": [ids["winter"]], "shift_minutes": 60})
+    assert full_regroups() == 1
+    c.request("DELETE", "/api/assets", json={"ids": [ids["paris1"]]})
+    c.post("/api/trash/restore", json={"ids": [ids["paris1"]]})
+    assert full_regroups() == 1, "one is enough while it waits"
+    services_of(c).worker.run_until_idle()
+    groups = {a["id"]: a["group_id"] for a in c.get("/api/assets").json()["items"]}
+    assert groups[ids["paris1"]] == groups[ids["paris2"]] is not None
