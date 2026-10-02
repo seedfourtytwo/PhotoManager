@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 from starlette.types import Scope
@@ -39,17 +40,26 @@ from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import Settings, get_settings
 from photo_assistant.domain.errors import DomainError
 
+IMMUTABLE_BUILD = "public, max-age=31536000, immutable"
+# Compressed: JSON and the web build. Never: what is compressed already, or streamed files
+# (photos, ZIPs, PDFs, originals) — gzip would only cost CPU (C30).
+_NOT_GZIPPED = (*DEFAULT_EXCLUDED_CONTENT_TYPES, "application/pdf", "application/octet-stream")
+
 
 class SinglePageApp(StaticFiles):
-    """Serve the built web app; unknown paths get index.html so client routing works."""
+    """Serve the built web app; unknown paths get index.html so client routing works.
+    Files under ``_app/immutable/`` carry a content hash in their name: cached for good."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except HTTPException as exc:
             if exc.status_code != 404 or path.startswith("api/"):
                 raise
             return await super().get_response("index.html", scope)
+        if path.startswith("_app/immutable/"):
+            response.headers["Cache-Control"] = IMMUTABLE_BUILD
+        return response
 
 
 def _mount_web(app: FastAPI, web_dir: Path | None) -> None:
@@ -128,6 +138,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.test_mode:
         app.include_router(testing.router)
     _mount_web(app, settings.web_dir)
+    app.add_middleware(
+        GZipMiddleware, minimum_size=1024, compresslevel=6, exclude_content_types=_NOT_GZIPPED
+    )
     app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     return app
