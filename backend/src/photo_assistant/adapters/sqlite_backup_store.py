@@ -17,6 +17,7 @@ from photo_assistant.domain.backup import (
     Retention,
     RunKind,
     RunOutcome,
+    TargetSettings,
 )
 from photo_assistant.ports.backup import AssetFile
 
@@ -119,6 +120,18 @@ class SqliteBackupStore:
 
     def set_target_enabled(self, target_id: int, enabled: bool) -> None:
         self._write("UPDATE backup_target SET enabled = ? WHERE id = ?", (int(enabled), target_id))
+
+    def set_target_settings(self, target_id: int, settings: TargetSettings) -> None:
+        self._write(
+            """UPDATE backup_target SET schedule = ?, quiet_window = ?, retention_json = ?
+               WHERE id = ?""",
+            (
+                settings.schedule,
+                settings.quiet_window,
+                json.dumps(settings.retention.as_dict()),
+                target_id,
+            ),
+        )
 
     # --- runs ------------------------------------------------------------------------------
 

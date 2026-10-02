@@ -8,6 +8,7 @@ from photo_assistant.domain.backup import (
     RestoreTestReport,
     Retention,
     TargetKind,
+    TargetSettings,
     target_kind,
 )
 from photo_assistant.domain.schedule import InvalidScheduleError
@@ -52,3 +53,12 @@ def test_restore_report_summary_lists_at_most_five_failures() -> None:
     assert summary.count("missing") == 5
     assert RestoreTestReport("b" * 64, ()).ok
     assert not RestoreTestReport(None, ()).ok
+
+
+def test_settings_are_validated_with_the_schedule_language() -> None:
+    settings = TargetSettings("weekly sun 03:00", "22:00-06:00", Retention(1, 0, 0))
+    assert settings.schedule == "weekly sun 03:00"
+    with pytest.raises(InvalidScheduleError, match="schedule"):
+        TargetSettings("now and then", None, Retention())
+    with pytest.raises(InvalidScheduleError, match="quiet window"):
+        TargetSettings("hourly", "22:00", Retention())

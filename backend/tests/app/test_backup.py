@@ -19,6 +19,7 @@ from photo_assistant.domain.backup import (
     NewBackupTarget,
     Retention,
     RunKind,
+    TargetSettings,
 )
 from photo_assistant.ports.backup import AssetFile, BackupError, WrongPasswordError
 from tests.fakes_backup import (
@@ -201,6 +202,18 @@ def test_disabled_targets_and_quiet_windows_are_respected(world: World) -> None:
     assert [r.target_id for r in world.service.run_due()] == [hourly]
     with pytest.raises(UnknownTargetError):
         world.service.set_enabled(999, enabled=True)
+
+
+def test_changed_settings_move_the_next_run(world: World) -> None:
+    target_id = world.target(schedule="daily 02:30")
+    changed = world.service.change_settings(
+        target_id, TargetSettings("weekly sun 03:00", "01:00-05:00", Retention(3, 0, 0))
+    )
+    assert changed.schedule == "weekly sun 03:00" and changed.retention == Retention(3, 0, 0)
+    (status,) = world.service.status()
+    assert status.next_run_at == datetime(2026, 10, 4, 3, 0, tzinfo=UTC)
+    with pytest.raises(UnknownTargetError):
+        world.service.change_settings(999, TargetSettings("manual", None, Retention()))
 
 
 def test_status_shows_next_run_size_and_overdue(world: World) -> None:

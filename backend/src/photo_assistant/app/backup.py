@@ -29,6 +29,7 @@ from photo_assistant.domain.backup import (
     RunKind,
     RunOutcome,
     TargetKind,
+    TargetSettings,
     TargetStatus,
 )
 from photo_assistant.domain.library_paths import nested_or_same
@@ -149,6 +150,12 @@ class BackupService:
     def set_enabled(self, target_id: int, enabled: bool) -> None:
         self.target(target_id)
         self._store.set_target_enabled(target_id, enabled)
+
+    def change_settings(self, target_id: int, settings: TargetSettings) -> BackupTarget:
+        """New schedule, quiet window and retention; the next run follows them at once."""
+        self.target(target_id)
+        self._store.set_target_settings(target_id, settings)
+        return self.target(target_id)
 
     def recover_interrupted(self) -> int:
         """Call once at startup, before the worker: runs left 'running' were cut off."""

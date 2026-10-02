@@ -8,12 +8,18 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from photo_assistant.api.deps import ADMIN_ONLY
 from photo_assistant.api.ops_services import OpsServices
 from photo_assistant.app.backup import BackupService, UnknownTargetError
-from photo_assistant.domain.backup import BackupRun, NewBackupTarget, Retention, TargetStatus
+from photo_assistant.domain.backup import (
+    BackupRun,
+    NewBackupTarget,
+    Retention,
+    TargetSettings,
+    TargetStatus,
+)
 from photo_assistant.domain.schedule import InvalidScheduleError
 
 
@@ -41,8 +47,39 @@ class TargetIn(BaseModel):
     retention: RetentionIn = Field(default_factory=RetentionIn)
 
 
+class RetentionPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    daily: int | None = Field(default=None, ge=0)
+    weekly: int | None = Field(default=None, ge=0)
+    monthly: int | None = Field(default=None, ge=0)
+
+
 class TargetPatch(BaseModel):
-    enabled: bool
+    """Only the fields sent change (v1.3); ``quiet_window: null`` means "any time"."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    schedule: str | None = None
+    quiet_window: str | None = None
+    retention: RetentionPatch | None = None
+
+    def settings(self, current: TargetSettings) -> TargetSettings | None:
+        """The new settings, or None when none were sent. Raises on bad values."""
+        sent = self.model_fields_set & {"schedule", "quiet_window", "retention"}
+        if not sent:
+            return None
+        if "schedule" in sent and self.schedule is None:
+            raise InvalidScheduleError("the schedule can't be empty: use 'manual' to pause it")
+        kept = current.retention.as_dict()
+        if self.retention is not None:
+            kept |= self.retention.model_dump(exclude_none=True)
+        return TargetSettings(
+            self.schedule if self.schedule is not None else current.schedule,
+            self.quiet_window if "quiet_window" in sent else current.quiet_window,
+            Retention(**kept),
+        )
 
 
 class RunOut(BaseModel):
@@ -158,7 +195,14 @@ def add_backup(service: BackupDep, body: TargetIn) -> TargetOut:
 @router.patch("/{target_id}")
 def patch_backup(service: BackupDep, target_id: int, body: TargetPatch) -> TargetOut:
     _known(service, target_id)
-    service.set_enabled(target_id, body.enabled)
+    try:
+        settings = body.settings(service.target(target_id).settings)
+    except (ValueError, InvalidScheduleError) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    if settings is not None:
+        service.change_settings(target_id, settings)
+    if body.enabled is not None:
+        service.set_enabled(target_id, body.enabled)
     return _status_of(service, target_id)
 
 

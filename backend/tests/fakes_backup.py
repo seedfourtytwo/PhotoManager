@@ -14,6 +14,7 @@ from photo_assistant.domain.backup import (
     Retention,
     RunKind,
     RunOutcome,
+    TargetSettings,
 )
 from photo_assistant.ports.backup import (
     AssetFile,
@@ -57,6 +58,15 @@ class InMemoryBackupStore:
     def set_target_enabled(self, target_id: int, enabled: bool) -> None:
         if target_id in self.targets:
             self.targets[target_id] = replace(self.targets[target_id], enabled=enabled)
+
+    def set_target_settings(self, target_id: int, settings: TargetSettings) -> None:
+        if target_id in self.targets:
+            self.targets[target_id] = replace(
+                self.targets[target_id],
+                schedule=settings.schedule,
+                quiet_window=settings.quiet_window,
+                retention=settings.retention,
+            )
 
     def start_run(self, target_id: int, kind: RunKind, started_at: datetime) -> int:
         run_id = next(self._ids)

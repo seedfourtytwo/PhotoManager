@@ -75,6 +75,19 @@ class NewBackupTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class TargetSettings:
+    """What an admin may change on an existing target (v1.3): when it runs and what it keeps."""
+
+    schedule: str
+    quiet_window: str | None
+    retention: Retention
+
+    def __post_init__(self) -> None:
+        parse_schedule(self.schedule)  # InvalidScheduleError
+        parse_window(self.quiet_window)
+
+
+@dataclass(frozen=True, slots=True)
 class BackupTarget:
     id: int
     label: str
@@ -93,6 +106,10 @@ class BackupTarget:
     @property
     def parsed_schedule(self) -> Schedule:
         return parse_schedule(self.schedule)
+
+    @property
+    def settings(self) -> TargetSettings:
+        return TargetSettings(self.schedule, self.quiet_window, self.retention)
 
 
 @dataclass(frozen=True, slots=True)

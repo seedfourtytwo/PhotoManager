@@ -134,3 +134,48 @@ def test_validation_and_unknown_targets(env: Env) -> None:
 def test_status_lookup_for_a_vanished_target(env: Env) -> None:
     with pytest.raises(backup.HTTPException):
         backup._status_of(env.ops.backup, 12345)
+
+
+# --- v1.3: schedule, quiet window and retention can be changed ---------------------------------
+
+
+def test_patch_changes_schedule_window_and_retention(env: Env) -> None:
+    target = _add(env, quiet_window="22:00-06:00", retention={"daily": 3})
+    url = f"/api/backups/{target['id']}"
+    changed = env.client.patch(
+        url, json={"schedule": "weekly sun 03:00", "retention": {"weekly": 2}}
+    )
+    assert changed.status_code == 200, changed.text
+    body = changed.json()
+    assert body["schedule"] == "weekly sun 03:00" and body["quiet_window"] == "22:00-06:00"
+    assert body["retention"] == {"daily": 3, "weekly": 2, "monthly": 12}, "only what was sent"
+    assert body["enabled"] is True
+    cleared = env.client.patch(url, json={"quiet_window": None, "enabled": False}).json()
+    assert cleared["quiet_window"] is None and cleared["enabled"] is False
+    assert cleared["schedule"] == "weekly sun 03:00"
+    assert env.client.patch(url, json={}).json() == cleared, "nothing sent, nothing changed"
+    manual = env.client.patch(url, json={"schedule": "manual", "enabled": True}).json()
+    assert manual["next_run_at"] is None and manual["enabled"] is True
+
+
+@pytest.mark.parametrize(
+    ("patch", "word"),
+    [
+        ({"schedule": "now and then"}, "schedule"),
+        ({"schedule": None}, "schedule"),
+        ({"quiet_window": "night"}, "quiet window"),
+        ({"quiet_window": "22:00-22:00"}, "empty"),
+        ({"retention": {"daily": 0, "weekly": 0, "monthly": 0}}, "retention"),
+        ({"retention": {"daily": -1}}, "greater than or equal"),
+        ({"label": "renamed"}, "extra"),
+    ],
+)
+def test_patch_refuses_bad_settings_and_changes_nothing(
+    env: Env, patch: dict[str, object], word: str
+) -> None:
+    target = _add(env)
+    response = env.client.patch(f"/api/backups/{target['id']}", json=patch)
+    assert response.status_code == 422 and word in str(response.json()["detail"])
+    (listed,) = env.client.get("/api/backups").json()
+    assert listed["schedule"] == target["schedule"] and listed["retention"] == target["retention"]
+    assert listed["label"] == "Disk"

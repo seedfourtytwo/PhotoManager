@@ -16,6 +16,7 @@ from photo_assistant.domain.backup import (
     Retention,
     RunKind,
     RunOutcome,
+    TargetSettings,
 )
 from photo_assistant.ports.backup import AssetFile, BackupError, BackupStore
 from tests.factories import new_asset
@@ -67,6 +68,21 @@ def test_targets_round_trip(store: BackupStore) -> None:
     store.set_target_enabled(created.id, False)
     assert [t.enabled for t in store.list_targets()] == [False]
     assert store.get_target(999) is None
+
+
+def test_target_settings_can_be_changed(store: BackupStore) -> None:
+    created = store.add_target(_target(), T0)
+    store.set_target_settings(
+        created.id, TargetSettings("hourly", "22:00-06:00", Retention(0, 0, 3))
+    )
+    changed = store.get_target(created.id)
+    assert changed is not None
+    assert (changed.schedule, changed.quiet_window) == ("hourly", "22:00-06:00")
+    assert changed.retention == Retention(0, 0, 3)
+    assert (changed.label, changed.enabled, changed.created_at) == ("Disk", True, T0)
+    store.set_target_settings(created.id, TargetSettings("manual", None, Retention()))
+    again = store.get_target(created.id)
+    assert again is not None and again.quiet_window is None and again.schedule == "manual"
 
 
 def test_run_lifecycle(store: BackupStore) -> None:
