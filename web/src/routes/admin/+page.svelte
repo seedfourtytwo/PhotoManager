@@ -142,24 +142,43 @@
 
 <style>
 	.page {
-		padding: 1rem 0.75rem 3rem;
-		max-width: 56rem;
+		padding: var(--s-5) var(--page-x) var(--s-7);
+		max-width: 60rem;
 	}
+	/* Something needs the admin: an ink rule in the margin, not a coloured box. */
 	.banner {
-		margin: 0.5rem 0;
-		padding: 0.5rem 0;
-		border-top: 1px solid var(--ink-2);
-		border-bottom: 1px solid var(--ink-2);
+		margin: var(--s-4) 0 0;
+		padding: var(--s-2) var(--s-3);
+		border-left: 2px solid var(--ink);
+		background: var(--tint);
+		color: var(--ink);
+		max-width: var(--measure);
 	}
 	.status {
-		margin: 0.25rem 0 1rem;
+		margin: var(--s-3) 0 var(--s-5);
+		font-size: var(--fs-12);
 	}
 	.working {
 		color: var(--ink);
 	}
-	h2 {
-		font-size: var(--fs-16);
-		margin: 1.5rem 0 0.5rem;
+	/* Every admin area is a section: a serif title with its actions on the same line. */
+	.page :global(section) {
+		border-top: 1px solid var(--hairline);
+		padding: var(--s-5) 0 var(--s-4);
+	}
+	.page :global(section h2) {
+		font-size: var(--fs-20);
+		margin: 0 var(--s-2) var(--s-2) 0;
+	}
+	.page :global(section > header) {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 2px;
+		margin-bottom: var(--s-2);
+	}
+	.page :global(section > header h2) {
+		margin-bottom: 0;
 	}
 	ul {
 		list-style: none;
@@ -169,10 +188,13 @@
 	li {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.25rem 0.75rem;
+		gap: var(--s-1) var(--s-3);
 		align-items: baseline;
-		padding: 0.35rem 0;
+		padding: var(--s-2) 0;
 		border-bottom: 1px solid var(--hairline);
+	}
+	li:last-child {
+		border-bottom: 0;
 	}
 	li button,
 	.quiet-button {
@@ -180,7 +202,11 @@
 		margin-left: auto;
 	}
 	.quiet-button {
-		margin-left: -0.5rem;
+		margin-left: calc(-1 * var(--s-2));
+	}
+	section p {
+		margin: 0 0 var(--s-2);
+		max-width: var(--measure);
 	}
 	code {
 		font-size: var(--fs-12);

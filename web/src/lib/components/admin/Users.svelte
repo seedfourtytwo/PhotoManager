@@ -174,18 +174,9 @@
 {/if}
 
 <style>
-	header {
-		display: flex;
-		gap: 1rem;
-		align-items: baseline;
-	}
 	header button,
 	td button {
 		color: var(--ink-2);
-	}
-	h2 {
-		font-size: var(--fs-16);
-		margin: 1rem 0 0.5rem;
 	}
 	table {
 		border-collapse: collapse;
@@ -193,20 +184,27 @@
 	}
 	th {
 		text-align: left;
-		font-weight: 400;
+		font-weight: 600;
 		font-size: var(--fs-12);
 		color: var(--ink-2);
 		border-bottom: 1px solid var(--hairline);
-		padding: 0.25rem 0.5rem 0.25rem 0;
+		padding: var(--s-1) var(--s-3) var(--s-1) 0;
 	}
 	td {
-		padding: 0.25rem 0.5rem 0.25rem 0;
+		padding: var(--s-1) var(--s-3) var(--s-1) 0;
+		border-bottom: 1px solid var(--hairline);
+	}
+	tr:last-child td {
+		border-bottom: 0;
+	}
+	td select {
+		border-bottom: 0;
 	}
 	.state {
-		margin-right: 0.25rem;
+		margin-right: var(--s-1);
 	}
 	.hint {
-		margin: -0.5rem 0 0.75rem;
+		margin: calc(-1 * var(--s-3)) 0 var(--s-4);
 	}
 	tr.off td:first-child {
 		color: var(--ink-2);
@@ -223,8 +221,18 @@
 			display: none;
 		}
 		tr {
-			padding: 0.5rem 0;
+			padding: var(--s-2) 0;
 			border-bottom: 1px solid var(--hairline);
+		}
+		td {
+			border: 0;
+			padding: 0;
+		}
+		td:first-child {
+			font-weight: 600;
+		}
+		td button {
+			margin-left: calc(-1 * var(--s-2));
 		}
 	}
 </style>

@@ -74,12 +74,13 @@
 
 <style>
 	.state {
-		margin: 0.75rem 0 0;
+		margin: var(--s-4) 0 0;
 	}
+	/* The counts as a row of figures, each labelled above. */
 	.summary {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
-		gap: 0.5rem;
+		grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+		gap: var(--s-3) var(--s-4);
 		margin: 0;
 	}
 	dt {
@@ -89,23 +90,23 @@
 	dd {
 		margin: 0;
 		font-size: var(--fs-20);
+		line-height: var(--lh-tight);
 	}
 	h3 {
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 1.25rem 0 0.25rem;
+		margin: var(--s-5) 0 var(--s-1);
 	}
 	table {
 		border-collapse: collapse;
 		width: 100%;
+		font-size: var(--fs-12);
 	}
 	td {
-		padding: 0.15rem 0.75rem 0.15rem 0;
+		padding: var(--s-1) var(--s-3) var(--s-1) 0;
 		vertical-align: top;
+		border-bottom: 1px solid var(--hairline);
 	}
 	.path {
+		font-family: var(--font-mono);
 		overflow-wrap: anywhere;
 	}
 </style>

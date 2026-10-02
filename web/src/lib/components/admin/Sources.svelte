@@ -232,22 +232,9 @@
 {/if}
 
 <style>
-	header {
-		display: flex;
-		gap: 0.5rem;
-		align-items: baseline;
-		flex-wrap: wrap;
-	}
-	header h2 {
-		margin-right: 0.5rem;
-	}
 	header button,
 	.actions button {
 		color: var(--ink-2);
-	}
-	h2 {
-		font-size: var(--fs-16);
-		margin: 1rem 0 0.5rem;
 	}
 	ul {
 		list-style: none;
@@ -255,26 +242,40 @@
 		padding: 0;
 	}
 	li {
-		padding: 0.6rem 0;
+		padding: var(--s-3) 0;
 		border-bottom: 1px solid var(--hairline);
+	}
+	li:last-child {
+		border-bottom: 0;
 	}
 	li.off .name span:first-child {
 		color: var(--ink-2);
 	}
 	.name {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--s-1) var(--s-3);
 		align-items: baseline;
 		flex-wrap: wrap;
+		margin-bottom: var(--s-1);
+	}
+	.name span:first-child {
+		font-weight: 600;
 	}
 	.path {
+		font-family: var(--font-mono);
 		overflow-wrap: anywhere;
 	}
 	.actions {
-		margin-left: -0.5rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 2px;
+		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
 	}
 	.live,
 	.problem {
 		color: var(--ink);
+	}
+	p {
+		margin: 0 0 var(--s-3);
 	}
 </style>
