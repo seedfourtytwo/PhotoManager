@@ -109,7 +109,8 @@ def test_an_uploaded_photo_is_private_to_the_uploader(admin: TestClient) -> None
     assert max_.get("/api/assets").json()["items"] == []
     (inbox,) = [s for s in lea.get("/api/sources").json() if s["kind"] == "inbox"]
     assert inbox["owner_id"] == user_id_of(admin, "lea")
-    assert lea.get(f"/api/sources/{inbox['id']}/access").json() == {
+    assert lea.get(f"/api/sources/{inbox['id']}/access").status_code == 403, "admin-only"
+    assert admin.get(f"/api/sources/{inbox['id']}/access").json() == {
         "everyone": None,
         "users": [{"user_id": user_id_of(admin, "lea"), "level": "edit"}],
     }
