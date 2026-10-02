@@ -77,6 +77,38 @@ def test_preview_job_renders_from_the_library_copy(repo: SqliteRepository, tmp_p
     assert store.absolute(asset.preview_path).is_file()
 
 
+def test_a_preview_job_also_repairs_a_missing_thumbnail_from_the_same_decode(
+    repo: SqliteRepository, tmp_path: Path
+) -> None:
+    """C28: decode once, write both (the import's thumbnail went missing)."""
+    store = DiskLibraryStore(tmp_path / "data")
+    source = tmp_path / "photo.jpg"
+    from tests.synthetic import write_photo
+
+    write_photo(source, seed=3, size=(400, 300))
+    digest = Blake3Hasher().hash_file(source)
+    library_path = f"originals/2020/01/{digest}.jpg"
+    store.store_original(source, library_path, digest)
+    asset_id = repo.add_asset(new_asset(content_hash=digest, library_path=library_path), NOW)
+
+    class OneDecode(VipsRenderer):
+        decodes = 0
+
+        def render(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            OneDecode.decodes += 1
+            return super().render(*args, **kwargs)
+
+        def render_pair(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            OneDecode.decodes += 1
+            return super().render_pair(*args, **kwargs)
+
+    GeneratePreview(repo, store, OneDecode(), max_edge=200, thumb_edge=80)({"asset_id": asset_id})
+    asset = repo.get_asset(asset_id)
+    assert asset is not None and asset.thumb_path and asset.preview_path
+    assert asset.thumb_size == (80, 60) and OneDecode.decodes == 1
+    assert store.absolute(asset.thumb_path).is_file()
+
+
 def test_preview_for_a_missing_asset_is_an_error(repo: SqliteRepository, tmp_path: Path) -> None:
     job = GeneratePreview(repo, DiskLibraryStore(tmp_path), VipsRenderer())
     with pytest.raises(LookupError, match="no asset"):
@@ -171,3 +203,37 @@ def test_run_until_idle_drains_every_lane(repo: SqliteRepository) -> None:
     )
     assert lanes.run_until_idle() == 2
     assert sorted(done) == ["backup", "p"]
+
+
+def test_previews_run_on_a_pool_of_threads(tmp_path: Path) -> None:
+    """C28: previews in parallel (max(1, cores - 2) threads); two meet at a barrier."""
+    from photo_assistant.app.worker import Lanes
+
+    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    together = threading.Barrier(2, timeout=5)
+    met: list[int] = []
+
+    def preview(payload: dict[str, object]) -> None:
+        together.wait()  # only passes if both previews run at the same time
+        met.append(int(str(payload["asset_id"])))
+
+    repo.enqueue("preview", {"asset_id": 1})
+    repo.enqueue("preview", {"asset_id": 2})
+    lanes = Lanes(
+        repo,
+        {"preview": preview},
+        FixedClock(),
+        long_kinds=set(),
+        pooled={"preview": 2},
+        poll_seconds=0.01,
+    )
+    lanes.start()
+    try:
+        for _ in range(500):
+            if len(repo.list_jobs("done")) == 2:
+                break
+            threading.Event().wait(0.01)
+    finally:
+        lanes.stop()
+    assert sorted(met) == [1, 2]
+    assert len(repo.list_jobs("done")) == 2

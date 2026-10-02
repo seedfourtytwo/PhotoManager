@@ -19,8 +19,13 @@ _ROTATIONS = {90: "d90", 180: "d180", 270: "d270"}
 _MAX_DECODE_EDGE = 100_000
 
 
+# libwebp's effort 0-6: 2 halves a 2048 px preview's encode time against the default 4
+# (413 -> 225 ms per 12 MP photo on the dev machine) for a few percent more bytes (C28).
+WEBP_EFFORT = 2
+
+
 def _save_webp(image: pyvips.Image, path: str, spec: RenderSpec) -> None:
-    image.webpsave(path, Q=spec.quality, strip=not spec.keep_metadata)
+    image.webpsave(path, Q=spec.quality, strip=not spec.keep_metadata, effort=WEBP_EFFORT)
 
 
 def _save_jpeg(image: pyvips.Image, path: str, spec: RenderSpec) -> None:
@@ -94,6 +99,31 @@ class VipsRenderer:
             source, destination, RenderSpec(max_edge=max_edge, quality=self._quality)
         )
 
+    def render_pair(
+        self, source: Path, big: Path, big_edge: int, small: Path, small_edge: int
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        """A preview and a thumbnail (WebP) from ONE decode of ``source`` (C28): the small one
+        is shrunk from the big one in memory. Returns both sizes."""
+        image = self._load(source, RenderSpec(max_edge=big_edge)).copy_memory()
+        if image.interpretation not in ("srgb", "b-w"):
+            image = image.colourspace("srgb")
+        spec = RenderSpec(quality=self._quality)
+        self._save(image, big, spec)
+        scale = min(1.0, small_edge / max(image.width, image.height))
+        thumb = image.resize(scale) if scale < 1 else image
+        self._save(thumb, small, spec)
+        return (int(image.width), int(image.height)), (int(thumb.width), int(thumb.height))
+
+    @staticmethod
+    def _save(image: pyvips.Image, destination: Path, spec: RenderSpec) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        partial = destination.with_name(f".{uuid.uuid4().hex}.partial{destination.suffix}")
+        try:
+            _SAVERS[spec.format](image, str(partial), spec)
+            partial.replace(destination)
+        finally:
+            partial.unlink(missing_ok=True)
+
     def dimensions(self, image: Path) -> tuple[int, int]:
         header = pyvips.Image.new_from_file(str(image))  # reads the header only
         return int(header.width), int(header.height)
@@ -115,13 +145,7 @@ class VipsRenderer:
             image = image.resize(spec.max_edge / max(image.width, image.height))
         if image.interpretation not in ("srgb", "b-w"):
             image = image.colourspace("srgb")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        partial = destination.with_name(f".{uuid.uuid4().hex}.partial{destination.suffix}")
-        try:
-            saver(image, str(partial), spec)
-            partial.replace(destination)
-        finally:
-            partial.unlink(missing_ok=True)
+        self._save(image, destination, spec)
         return int(image.width), int(image.height)
 
     @staticmethod

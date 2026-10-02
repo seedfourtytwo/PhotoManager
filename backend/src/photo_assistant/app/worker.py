@@ -130,37 +130,57 @@ class Lanes:
         clock: Clock,
         *,
         long_kinds: Collection[str],
+        pooled: Mapping[str, int] | None = None,
         poll_seconds: float = 1.0,
     ) -> None:
+        """``pooled``: job kinds that get a pool of threads of their own, e.g. previews with
+        max(1, cores - 2) threads (C28)."""
         self.long_kinds = frozenset(long_kinds)
-        quick = {k: h for k, h in handlers.items() if k not in self.long_kinds}
+        pools = dict(pooled or {})
+        own = self.long_kinds | set(pools)
+        quick = {k: h for k, h in handlers.items() if k not in own}
         slow = {k: h for k, h in handlers.items() if k in self.long_kinds}
-        self.quick = Worker(
-            repo, quick, clock, poll_seconds=poll_seconds, excluding=self.long_kinds
-        )
+        self.quick = Worker(repo, quick, clock, poll_seconds=poll_seconds, excluding=own)
         self.long = Worker(
             repo, slow, clock, poll_seconds=poll_seconds, only=self.long_kinds, name="pa-long-jobs"
         )
+        self.pool = [
+            Worker(
+                repo,
+                {kind: handlers[kind]},
+                clock,
+                poll_seconds=poll_seconds,
+                only={kind},
+                name=f"pa-{kind}-{n}",
+            )
+            for kind, size in pools.items()
+            if kind in handlers
+            for n in range(max(1, size))
+        ]
+
+    @property
+    def _workers(self) -> list[Worker]:
+        return [self.quick, self.long, *self.pool]
 
     @property
     def kinds(self) -> set[str]:
-        return self.quick.kinds | self.long.kinds
+        return set().union(*(w.kinds for w in self._workers))
 
     def run_until_idle(self) -> int:
-        """Both lanes, until neither finds a job (follow-ups may cross lanes)."""
+        """Every lane, until none finds a job (follow-ups may cross lanes)."""
         total = 0
-        while ran := self.quick.run_until_idle() + self.long.run_until_idle():
+        while ran := sum(w.run_until_idle() for w in self._workers):
             total += ran
         return total
 
     def start(self) -> None:
-        self.quick.start()
-        self.long.start()
+        for worker in self._workers:
+            worker.start()
 
     def stop(self, timeout: float = 10.0) -> None:
-        self.quick.stop(timeout)
-        self.long.stop(timeout)
+        for worker in self._workers:
+            worker.stop(timeout)
 
     @property
     def is_running(self) -> bool:
-        return self.quick.is_running or self.long.is_running
+        return any(w.is_running for w in self._workers)

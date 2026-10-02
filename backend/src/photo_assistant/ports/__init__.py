@@ -71,6 +71,12 @@ class ImageRenderer(Protocol):
         """Write an orientation-corrected WebP fitting a square box. Returns its size."""
         ...
 
+    def render_pair(
+        self, source: Path, big: Path, big_edge: int, small: Path, small_edge: int
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        """Two WebP sizes (preview and thumbnail) from one decode; returns both sizes."""
+        ...
+
     def dimensions(self, image: Path) -> tuple[int, int]:
         """Width and height of an image file, as stored (no orientation applied)."""
         ...

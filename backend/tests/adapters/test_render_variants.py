@@ -154,3 +154,35 @@ def test_a_tiny_crop_at_the_edge_and_a_huge_max_edge_still_render(
     assert size == (1, 1)
     spec = RenderSpec(corner, max_edge=10**9, format="jpeg")
     assert renderer.render_variant(source, tmp_path / "big.jpg", spec) == (1, 1)
+
+
+def test_a_pair_is_decoded_once_and_written_at_both_sizes(
+    renderer: VipsRenderer, tmp_path: Path
+) -> None:
+    """C28: a thumbnail and a preview from one decode."""
+    source = halves(tmp_path / "in.jpg", "red", "blue", size=(1200, 800))
+    big, small = renderer.render_pair(source, tmp_path / "p.webp", 600, tmp_path / "t.webp", 150)
+    assert (big, small) == ((600, 400), (150, 100))
+    with Image.open(tmp_path / "p.webp") as p, Image.open(tmp_path / "t.webp") as t:
+        assert p.size == (600, 400) and t.size == (150, 100)
+    assert is_red(pixel(tmp_path / "t.webp", 0.5, 0.1)) and is_blue(
+        pixel(tmp_path / "t.webp", 0.5, 0.9)
+    )
+
+
+def test_webp_derivatives_use_the_fast_encoder_effort(
+    renderer: VipsRenderer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C28: effort 2 halves the preview encode time (413 -> 225 ms per 12 MP photo)."""
+    import pyvips  # type: ignore[import-untyped]
+
+    seen: list[dict[str, object]] = []
+    real = pyvips.Image.webpsave
+
+    def spy(self, path, **kwargs):  # type: ignore[no-untyped-def]
+        seen.append(kwargs)
+        return real(self, path, **kwargs)
+
+    monkeypatch.setattr(pyvips.Image, "webpsave", spy)
+    renderer.render(halves(tmp_path / "in.jpg", "red", "blue"), tmp_path / "o.webp", 50)
+    assert seen and all(k["effort"] == 2 for k in seen)

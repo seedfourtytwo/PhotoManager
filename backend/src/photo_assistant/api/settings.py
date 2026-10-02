@@ -203,6 +203,7 @@ class Settings(BaseSettings):
     worker_enabled: bool = True
     worker_poll_seconds: float = 1.0
     vips_concurrency: int = 2  # the laptop does other work too (FEATURES 11.7)
+    preview_workers: int = 0  # threads rendering previews; 0 = max(1, cores - 2) (C28)
     log_level: str = "INFO"
     # Host names the server answers to. Add the Tailscale name when remote access arrives (M6).
     allowed_hosts: list[str] = ["127.0.0.1", "localhost"]
@@ -218,7 +219,11 @@ class Settings(BaseSettings):
     ops: OpsSettings = Field(default_factory=OpsSettings)
     face_cluster_every_hours: float = 24.0
     # E2E only: adds POST /__test/reset. Refused unless the server stays on this machine.
-    test_mode: bool = False  # global face clustering (deferred faces get people)
+    test_mode: bool = False
+
+    def preview_threads(self) -> int:
+        """Preview renders in parallel: leave two cores to the import and the web server."""
+        return self.preview_workers or max(1, (os.cpu_count() or 1) - 2)
 
 
 @lru_cache

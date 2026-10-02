@@ -142,7 +142,7 @@ def build_services(settings: Settings) -> Services:
         {
             # ML jobs read the preview, so they are planned once it exists
             PREVIEW_JOB: ml.planner.after(
-                GeneratePreview(repo, store, renderer, settings.preview_edge)
+                GeneratePreview(repo, store, renderer, settings.preview_edge, settings.thumb_edge)
             ),
             SCAN_JOB_KIND: scan,  # one handler: pulls rclone sources, then imports any kind
             GEOCODE_JOB: GeocodeAssets(repo, OfflineGeocoder()),
@@ -155,6 +155,7 @@ def build_services(settings: Settings) -> Services:
         # backups, restore tests and source scans (rclone pulls, whole-folder imports) run on a
         # lane of their own: previews, uploads and the rest never wait behind them (B24)
         long_kinds={SCAN_JOB_KIND, *LONG_JOBS},
+        pooled={PREVIEW_JOB: settings.preview_threads()},
         poll_seconds=settings.worker_poll_seconds,
     )
     hasher = Argon2Hasher(settings.argon2_time_cost, settings.argon2_memory_kib)
