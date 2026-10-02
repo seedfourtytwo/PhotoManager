@@ -1,6 +1,7 @@
 """Composition root: the one place that picks real adapters and wires them together."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader, ExifToolStripper
@@ -27,7 +28,7 @@ from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
 from photo_assistant.app.backup import LONG_JOBS
 from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.downloads import Downloads
-from photo_assistant.app.editing import Editor
+from photo_assistant.app.editing import RENDER_EDIT_JOB, Editor
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, GroupSimilar
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
@@ -128,6 +129,11 @@ def build_services(settings: Settings) -> Services:
             lambda: repo.enqueue_once(CLUSTER_FACES),
         ),
         PeriodicTask("optimize database", 6 * 3600, repo.optimize),
+        PeriodicTask(
+            "prune finished jobs",
+            24 * 3600,
+            lambda: repo.prune_done_jobs(clock.now() - timedelta(days=7)),
+        ),
     ]
     ops = build_ops_services(
         root,
@@ -136,6 +142,14 @@ def build_services(settings: Settings) -> Services:
         housekeeping=housekeeping,
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
         db=db,
+    )
+    editor = Editor(
+        repo,
+        store,
+        renderer,
+        thumb_edge=settings.thumb_edge,
+        preview_edge=settings.preview_edge,
+        queue=repo,
     )
     worker = Lanes(
         repo,
@@ -148,6 +162,7 @@ def build_services(settings: Settings) -> Services:
             GEOCODE_JOB: GeocodeAssets(repo, OfflineGeocoder()),
             GROUP_JOB: GroupSimilar(repo, ImageHashPhash(), lambda rel: store.absolute(rel)),
             PURGE_JOB: trash.purge_expired,
+            RENDER_EDIT_JOB: editor.render_edits,
             **ml.handlers,
             **ops.backup.job_handlers(),
         },
@@ -160,13 +175,6 @@ def build_services(settings: Settings) -> Services:
     )
     hasher = Argon2Hasher(settings.argon2_time_cost, settings.argon2_memory_kib)
     accounts = Accounts(repo, hasher, clock)
-    editor = Editor(
-        repo,
-        store,
-        renderer,
-        thumb_edge=settings.thumb_edge,
-        preview_edge=settings.preview_edge,
-    )
     downloads = Downloads(store, renderer, ExifToolStripper(), root / "tmp")
     renditions = PrintRenditions(store, renderer, lambda view: editor.image_for(view, "preview"))
     printer = AlbumPrinter(renditions, lambda stamp: TypstPrintRenderer(timestamp=stamp))

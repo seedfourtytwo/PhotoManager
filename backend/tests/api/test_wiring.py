@@ -57,6 +57,7 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
         "trash purge",
         "cluster faces",
         "optimize database",
+        "prune finished jobs",
     ]
 
 
@@ -196,7 +197,9 @@ def test_import_then_everything_downstream_runs(admin: TestClient, tmp_path: Pat
     shutil.copy(FIXTURES / "IMG_1002.JPG", folder / "a.jpg")
     import_folder(admin, folder, "Pics")
     jobs = services_of(admin).repo.list_jobs()
-    assert {j["kind"] for j in jobs} >= {"scan_source", "preview", "embed_clip", "detect_faces"}
+    kinds = {j["kind"] for j in jobs}
+    assert kinds >= {"scan_source", "preview", "geocode", "group"}
+    assert not kinds & {"embed_clip", "detect_faces", "auto_tag"}, "no models in tests (C31)"
     assert all(j["status"] == "done" for j in jobs), jobs
 
 

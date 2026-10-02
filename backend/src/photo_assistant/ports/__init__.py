@@ -72,9 +72,16 @@ class ImageRenderer(Protocol):
         ...
 
     def render_pair(
-        self, source: Path, big: Path, big_edge: int, small: Path, small_edge: int
+        self,
+        source: Path,
+        big: Path,
+        big_edge: int,
+        small: Path,
+        small_edge: int,
+        recipe: Recipe | None = None,
     ) -> tuple[tuple[int, int], tuple[int, int]]:
-        """Two WebP sizes (preview and thumbnail) from one decode; returns both sizes."""
+        """Two WebP sizes (preview and thumbnail) from one decode, the recipe applied;
+        returns both sizes."""
         ...
 
     def dimensions(self, image: Path) -> tuple[int, int]:

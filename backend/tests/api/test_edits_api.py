@@ -80,3 +80,21 @@ def test_editing_needs_edit_access(admin: TestClient, photo: int) -> None:
     assert lea.put(f"/api/assets/{photo}/edit", json={"rotate": 90}).status_code == 403
     assert lea.delete(f"/api/assets/{photo}/edit").status_code == 403
     assert admin.get("/api/assets/999/edit").status_code == 404
+
+
+def test_saving_a_recipe_queues_both_edited_renders(admin: TestClient, photo: int) -> None:
+    """C31: the edited thumbnail and preview are rendered in the background, from one decode,
+    instead of on the first (slow) request."""
+    from tests.api.conftest import services_of
+
+    services = services_of(admin)
+    assert admin.put(f"/api/assets/{photo}/edit", json={"rotate": 90}).is_success
+    queued = [j for j in services.repo.list_jobs("queued") if j["kind"] == "render_edit"]
+    assert [j["payload"] for j in queued] == [{"asset_id": photo}]
+    services.worker.run_until_idle()
+    edited = sorted(
+        p.name.rsplit("-", 1)[-1] for p in services.store.absolute("derived/edited").rglob("*.webp")
+    )
+    assert edited == ["preview.webp", "thumb.webp"]
+    assert admin.put(f"/api/assets/{photo}/edit", json={}).is_success  # a revert
+    assert not [j for j in services.repo.list_jobs("queued") if j["kind"] == "render_edit"]

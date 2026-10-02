@@ -10,11 +10,16 @@ from typing import Protocol
 
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.library_paths import edited_relpath
+from photo_assistant.domain.model import Asset
 from photo_assistant.ports import ImageRenderer, LibraryStore, RenderedImage, RenderSpec
+from photo_assistant.ports.backup import JobQueue
 from photo_assistant.ports.library import AssetView
+
+RENDER_EDIT_JOB = "render_edit"
 
 
 class EditStore(Protocol):
+    def get_asset(self, asset_id: int) -> Asset | None: ...
     def get_recipe(self, asset_id: int) -> Recipe | None: ...
     def save_recipe(self, asset_id: int, recipe: Recipe, user_id: int, now: datetime) -> None: ...
     def delete_recipe(self, asset_id: int) -> None: ...
@@ -30,11 +35,13 @@ class Editor:
         *,
         thumb_edge: int = 640,
         preview_edge: int = 2048,
+        queue: JobQueue | None = None,
     ) -> None:
         self._edits = edits
         self._store = store
         self._renderer = renderer
         self._edges = {"thumb": thumb_edge, "preview": preview_edge}
+        self._queue = queue
 
     def recipe_of(self, asset_id: int) -> Recipe:
         return self._edits.get_recipe(asset_id) or Recipe()
@@ -45,7 +52,31 @@ class Editor:
             self.revert(asset_id)
         else:
             self._edits.save_recipe(asset_id, recipe, user_id, now)
+            if self._queue is not None:  # render both sizes now, not on the first request
+                self._queue.enqueue(RENDER_EDIT_JOB, {"asset_id": asset_id})
         return recipe
+
+    def render_edits(self, payload: dict[str, object]) -> None:
+        """Job (C31): the edited thumbnail and preview of a photo, from one decode. Nothing to
+        do if the recipe was reverted (or changed again: that save queued its own job)."""
+        asset_id = int(str(payload["asset_id"]))
+        asset, recipe = self._edits.get_asset(asset_id), self._edits.get_recipe(asset_id)
+        if asset is None or recipe is None:
+            return
+        paths = {
+            kind: self._store.absolute(str(edited_relpath(kind, asset.content_hash, recipe.key)))
+            for kind in ("thumb", "preview")
+        }
+        if all(p.is_file() for p in paths.values()):
+            return
+        self._renderer.render_pair(
+            self._store.absolute(asset.library_path),
+            paths["preview"],
+            self._edges["preview"],
+            paths["thumb"],
+            self._edges["thumb"],
+            recipe,
+        )
 
     def revert(self, asset_id: int) -> None:
         self._edits.delete_recipe(asset_id)

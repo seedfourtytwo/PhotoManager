@@ -88,7 +88,10 @@ def build_ml_services(
         AUTO_TAG: AutoTag(embed, store, clip, ml.tag_params()),
     }
     tasks = {EMBED_CLIP: clip.name, DETECT_FACES: faces.name, AUTO_TAG: clip.name}
-    planner = MlJobPlanner(repo, tasks if ml.enabled else {})
+    model_of = {EMBED_CLIP: clip, AUTO_TAG: clip, DETECT_FACES: faces}
+    planner = MlJobPlanner(
+        repo, tasks if ml.enabled else {}, ready=lambda task: model_of[task].status().ready
+    )
     return MlServices(
         settings=ml,
         store=store,

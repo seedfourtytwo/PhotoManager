@@ -50,15 +50,18 @@ def setup(root: Path, ml: MlSettings) -> tuple:
 
 
 def test_without_models_jobs_record_model_missing(tmp_path: Path) -> None:
-    repo, services, asset = setup(tmp_path, MlSettings(_env_file=None))  # type: ignore[call-arg]
+    repo, services, asset = setup(tmp_path, MlSettings())
     services.planner.for_asset(asset)
+    assert repo.list_jobs() == [], "C31: nothing queued without the model files"
+    for task in (EMBED_CLIP, DETECT_FACES, AUTO_TAG):  # e.g. queued before the files went away
+        repo.enqueue(task, {"asset_id": asset})
     Worker(repo, services.handlers, Clock()).run_until_idle()
     for task, model in [(EMBED_CLIP, "ViT-B-32__openai"), (DETECT_FACES, "buffalo_l"),
                         (AUTO_TAG, "ViT-B-32__openai")]:  # fmt: skip
         assert services.store.task_status(asset, task, model) == TaskStatus.MODEL_MISSING
     assert not repo.list_jobs("failed")
     assert not any(s.ready for s in services.status().values())
-    assert services.backfill() == 3  # all three are re-queued (+ one global clustering)
+    assert services.backfill() == 0, "backfill too waits for the files (just models)"
     services.close()
 
 

@@ -100,11 +100,21 @@ class VipsRenderer:
         )
 
     def render_pair(
-        self, source: Path, big: Path, big_edge: int, small: Path, small_edge: int
+        self,
+        source: Path,
+        big: Path,
+        big_edge: int,
+        small: Path,
+        small_edge: int,
+        recipe: Recipe | None = None,
     ) -> tuple[tuple[int, int], tuple[int, int]]:
-        """A preview and a thumbnail (WebP) from ONE decode of ``source`` (C28): the small one
-        is shrunk from the big one in memory. Returns both sizes."""
-        image = self._load(source, RenderSpec(max_edge=big_edge)).copy_memory()
+        """A preview and a thumbnail (WebP) from ONE decode of ``source`` (C28), with the edit
+        recipe applied if any: the small one is shrunk from the big one. Returns both sizes."""
+        image = self._load(source, RenderSpec(recipe=recipe, max_edge=big_edge)).copy_memory()
+        if recipe is not None:
+            image = apply_recipe(image, recipe)
+        if max(image.width, image.height) > big_edge:
+            image = image.resize(big_edge / max(image.width, image.height))
         if image.interpretation not in ("srgb", "b-w"):
             image = image.colourspace("srgb")
         spec = RenderSpec(quality=self._quality)

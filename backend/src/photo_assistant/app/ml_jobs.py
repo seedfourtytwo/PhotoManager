@@ -214,13 +214,22 @@ class AutoTag:
 class MlJobPlanner:
     """Queues ML work. ``models`` maps each enabled per-asset task to its model name."""
 
-    def __init__(self, repo: Repository, models: Mapping[str, str]) -> None:
+    def __init__(
+        self,
+        repo: Repository,
+        models: Mapping[str, str],
+        ready: Callable[[str], bool] = lambda task: True,
+    ) -> None:
+        """``ready(task)``: is that task's model installed? (C31: no jobs that can only fail;
+        ``just ml-backfill`` queues the work once the files are there.)"""
         self._repo = repo
         self._models = {task: models[task] for task in PER_ASSET_TASKS if task in models}
+        self._ready = ready
 
     def for_asset(self, asset_id: int) -> None:
         for task in self._models:
-            self._repo.enqueue(task, {"asset_id": asset_id})
+            if self._ready(task):
+                self._repo.enqueue(task, {"asset_id": asset_id})
 
     def after(self, handler: Handler) -> Handler:
         """Wrap the preview handler so ML runs once the large rendition exists."""
@@ -242,13 +251,15 @@ class MlJobPlanner:
             if page.next_cursor is None:
                 break
             cursor = page.next_cursor
-        if DETECT_FACES in self._models:
+        if DETECT_FACES in self._models and self._ready(DETECT_FACES):
             self._repo.enqueue(CLUSTER_FACES, {})
         return count
 
     def _queue_unfinished(self, store: MlStore, asset_id: int) -> int:
         queued = 0
         for task, model in self._models.items():
+            if not self._ready(task):
+                continue
             if store.task_status(asset_id, task, model) != TaskStatus.DONE:
                 self._repo.enqueue(task, {"asset_id": asset_id})
                 queued += 1

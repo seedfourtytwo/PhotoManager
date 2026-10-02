@@ -15,6 +15,8 @@ from photo_assistant.app.search import SemanticSearch, SimilarPhotos
 from photo_assistant.domain.faces import BoundingBox, Face
 from tests.api.conftest import add_user, asset_id_of, import_folder, services_of
 from tests.ml.fakes import FakeClip
+from tests.ml.test_face_adapters import buffalo
+from tests.ml.test_onnx_clip import make_clip_folder
 from tests.synthetic import write_photo
 
 pytestmark = pytest.mark.integration
@@ -57,7 +59,7 @@ def test_status_says_models_are_not_installed(admin: TestClient, library: dict[s
     assert body["clip"]["ready"] is False and body["faces"]["ready"] is False
     assert "just models" in body["clip"]["detail"]
     assert body["models_installed"] is False
-    assert body["counts"]["embed_clip"] == {"model_missing": 3}
+    assert "embed_clip" not in body["counts"], "C31: no jobs queued without the model files"
 
 
 def test_search_falls_back_to_text_search(admin: TestClient, library: dict[str, int]) -> None:
@@ -108,7 +110,7 @@ def test_backfill_is_admin_only(admin: TestClient, library: dict[str, int]) -> N
     lea = add_user(admin, "lea")
     assert lea.post("/api/ml/backfill").status_code == 403
     body = admin.post("/api/ml/backfill").json()
-    assert body["queued"] >= 1
+    assert body["queued"] == 0, "nothing to queue until the model files are there (C31)"
     assert "models not installed" in body["detail"]
 
 
@@ -182,8 +184,15 @@ def test_guests_cannot_change_people(admin: TestClient, library: dict[str, int])
 
 
 @pytest.mark.skipif(shutil.which("vips") is None, reason="needs libvips")
-def test_preview_jobs_plan_ml_analysis_after_import(
+def test_preview_jobs_plan_ml_analysis_after_import_only_with_models(
     admin: TestClient, library: dict[str, int]
 ) -> None:
     kinds = {j["kind"] for j in services_of(admin).repo.list_jobs()}
+    assert not {"embed_clip", "detect_faces", "auto_tag"} & kinds, "no models: nothing planned"
+    services = services_of(admin)
+    models = services.settings.ml.models_root(services.settings.data_root)
+    make_clip_folder(models / "clip" / services.settings.ml.clip_model)  # tiny synthetic models
+    buffalo(models / "insightface" / "buffalo_l")
+    services.ml.planner.for_asset(library["beach"])
+    kinds = {j["kind"] for j in services.repo.list_jobs("queued")}
     assert {"embed_clip", "detect_faces", "auto_tag"} <= kinds

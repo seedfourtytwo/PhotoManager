@@ -331,3 +331,16 @@ def test_backfill_queues_only_unfinished_work_then_one_global_clustering(
     assert (DETECT_FACES, {"asset_id": fresh}) in jobs
     assert all(payload != {"asset_id": done} for _, payload in jobs)
     assert jobs[-1] == (CLUSTER_FACES, {})
+
+
+def test_planner_queues_nothing_for_a_model_that_is_not_installed(
+    repo: SqliteRepository,
+) -> None:
+    """C31: without model files, ML jobs would only fail; don't queue them (just ml-backfill
+    queues the work once the models are there)."""
+    installed = {EMBED_CLIP, AUTO_TAG}
+    planner = MlJobPlanner(
+        repo, {EMBED_CLIP: "c", DETECT_FACES: "f", AUTO_TAG: "c"}, ready=installed.__contains__
+    )
+    planner.for_asset(4)
+    assert queued(repo) == [(EMBED_CLIP, {"asset_id": 4}), (AUTO_TAG, {"asset_id": 4})]

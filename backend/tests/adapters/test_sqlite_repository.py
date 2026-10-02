@@ -262,3 +262,21 @@ def test_source_fingerprint_round_trip(repo: SqliteRepository) -> None:
     assert repo.fingerprint_of(source.id, "a.jpg") == (asset_id, Fingerprint(123, 456, 789))
     assert repo.fingerprint_of(source.id, "b.jpg") is None
     assert repo.previous_path_in_source(asset_id, source.id, exclude="x.jpg") == "a.jpg"
+
+
+def test_done_jobs_older_than_a_week_are_pruned(repo: SqliteRepository) -> None:
+    """C31: the job table would otherwise grow by several rows per photo forever."""
+    from datetime import timedelta
+
+    old, recent, failed = (repo.enqueue(k, {}) for k in ("old", "recent", "failed"))
+    for _ in (old, recent, failed):
+        repo.claim_next_job(NOW)
+    repo.complete_job(old)
+    repo.complete_job(recent)
+    repo.fail_job(failed, "boom", retry=False)
+    repo._write(
+        "UPDATE job SET updated_at = ? WHERE id IN (?, ?)",
+        ((NOW - timedelta(days=8)).isoformat(), old, failed),
+    )
+    assert repo.prune_done_jobs(NOW - timedelta(days=7)) == 1
+    assert {j["kind"] for j in repo.list_jobs()} == {"recent", "failed"}, "failures are kept"

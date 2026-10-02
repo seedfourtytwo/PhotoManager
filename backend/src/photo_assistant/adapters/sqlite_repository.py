@@ -416,6 +416,12 @@ class SqliteRepository(
             return None
         return Job(row["id"], row["kind"], json.loads(row["payload_json"]), row["attempts"])
 
+    def prune_done_jobs(self, finished_before: datetime) -> int:
+        """Forget finished jobs (C31): failures stay until someone looks at them."""
+        return self._count(
+            "DELETE FROM job WHERE status = 'done' AND updated_at < ?", (_iso(finished_before),)
+        )
+
     def complete_job(self, job_id: int) -> None:
         self._write("UPDATE job SET status = 'done', error = NULL WHERE id = ?", (job_id,))
 
