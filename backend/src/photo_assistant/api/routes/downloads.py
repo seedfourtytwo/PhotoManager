@@ -1,7 +1,9 @@
 """Downloads: one photo, or many as a streamed ZIP (contract: Downloads)."""
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -14,6 +16,12 @@ from photo_assistant.api.schemas import DownloadRequest, Estimate
 from photo_assistant.api.services import Services
 from photo_assistant.app.downloads import MEDIA_TYPES, Entry, downloadable
 from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.archive_name import (
+    album_zip_name,
+    ascii_fallback,
+    filters_zip_name,
+    ids_zip_name,
+)
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions
 from photo_assistant.ports.library import AssetView
 
@@ -54,35 +62,42 @@ _BODY_SCHEMA = {
 }
 
 
-def _scope(
-    services: Services, viewer: Viewer, body: DownloadRequest
-) -> tuple[list[AssetView], int]:
-    """The photos asked for that you can see, and how many were asked for in total."""
+@dataclass(frozen=True, slots=True)
+class _Scope:
+    views: list[AssetView]  # the photos asked for that you can see
+    asked: int  # how many were asked for
+    zip_name: str  # named after the album, the filters or the count (v1.3)
+
+
+def _scope(services: Services, viewer: Viewer, body: DownloadRequest) -> _Scope:
     given = [s is not None for s in (body.ids, body.album_id, body.filters)]
     if sum(given) != 1:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "give exactly one of ids, album_id or filters"
         )
     if body.ids is not None:
-        return services.repo.views_by_ids(viewer, body.ids), len(set(body.ids))
+        asked = len(set(body.ids))
+        return _Scope(services.repo.views_by_ids(viewer, body.ids), asked, ids_zip_name(asked))
     if body.album_id is not None:
-        if services.repo.album_info(viewer, body.album_id) is None:
+        album = services.repo.album_info(viewer, body.album_id)
+        if album is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "album not found")
         views = services.repo.album_views(viewer, body.album_id)
-        return views, len(views)
+        return _Scope(views, len(views), album_zip_name(album.title))
     assert body.filters is not None
-    views = services.repo.list_all_views(viewer, checked(body.filters.to_filter()))
-    return views, len(views)
+    asset_filter = checked(body.filters.to_filter())
+    views = services.repo.list_all_views(viewer, asset_filter)
+    return _Scope(views, len(views), filters_zip_name(asset_filter))
 
 
 def _entries(
     services: Services, viewer: Viewer, body: DownloadRequest
-) -> tuple[list[Entry], int, ExportOptions]:
-    views, asked = _scope(services, viewer, body)
-    allowed = downloadable(views)
+) -> tuple[list[Entry], _Scope, ExportOptions]:
+    scope = _scope(services, viewer, body)
+    allowed = downloadable(scope.views)
     options = body.options()
     names = [services.repo.first_origin_name(v.id) or "photo" for v in allowed]
-    return services.downloads.plan(allowed, names, options), asked - len(allowed), options
+    return services.downloads.plan(allowed, names, options), scope, options
 
 
 @router.post("/downloads/estimate")
@@ -94,14 +109,14 @@ def estimate(services: ServicesDep, viewer: ViewerDep, body: DownloadRequest) ->
 
 @router.post("/downloads", openapi_extra=_BODY_SCHEMA)
 def download_zip(services: ServicesDep, viewer: ViewerDep, body: DownloadBody) -> StreamingResponse:
-    entries, skipped, options = _entries(services, viewer, body)
+    entries, scope, options = _entries(services, viewer, body)
     files = ((e.name, services.downloads.content(e.view, options)) for e in entries)
     return StreamingResponse(
         zip_stream(files),
         media_type="application/zip",
         headers={
-            "Content-Disposition": 'attachment; filename="photos.zip"',
-            "X-Skipped": str(skipped),
+            "Content-Disposition": _attachment(scope.zip_name),
+            "X-Skipped": str(scope.asked - len(entries)),
         },
     )
 
@@ -133,8 +148,8 @@ def download_one(
 
 
 def _attachment(name: str) -> str:
-    """RFC 6266 with a UTF-8 fallback, so names like 'beach day 🌊.jpg' survive."""
-    from urllib.parse import quote
-
-    ascii_name = name.encode("ascii", "replace").decode().replace('"', "_")
-    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
+    """RFC 6266: ``filename*`` carries the real UTF-8 name ('beach day 🌊.jpg'), ``filename``
+    an ASCII stand-in for clients that ignore it."""
+    return (
+        f"attachment; filename=\"{ascii_fallback(name)}\"; filename*=UTF-8''{quote(name, safe='')}"
+    )

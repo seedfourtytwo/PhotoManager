@@ -268,3 +268,33 @@ def test_positions_count_the_photos_you_see_so_an_undo_never_reorders_others(
 
     assert item_ids(lea, album) == [a, b, c]
     assert item_ids(admin, album) == [a, h, b, c], "the hidden photo kept its place"
+
+
+# --- v1.3: the ZIP is named after what it holds ------------------------------------------------
+
+
+def _disposition(response: object) -> str:
+    return response.headers["content-disposition"]  # type: ignore[attr-defined, no-any-return]
+
+
+def test_the_zip_is_named_after_its_album_filters_or_count(
+    admin: TestClient, ids: list[int]
+) -> None:
+    album = admin.post(
+        "/api/albums", json={"title": 'Été à "Paris" / 2019', "asset_ids": [ids[0]]}
+    ).json()["id"]
+    by_album = _disposition(admin.post("/api/downloads", json={"album_id": album}))
+    assert by_album == (
+        'attachment; filename="Ete a _Paris_ _ 2019.zip"; '
+        "filename*=UTF-8''%C3%89t%C3%A9%20%C3%A0%20_Paris_%20_%202019.zip"
+    )
+    by_filter = admin.post("/api/downloads", json={"filters": {"year": 2019, "place": "Paris"}})
+    assert 'filename="photos-2019-paris.zip"' in _disposition(by_filter)
+    by_ids = admin.post("/api/downloads", json={"ids": [*ids[:3], ids[0]]})
+    assert "filename*=UTF-8''photos-3.zip" in _disposition(by_ids)
+    form = admin.post(
+        "/api/downloads",
+        data={"request": '{"filters": {}}'},
+        headers={"Sec-Fetch-Site": "same-origin"},
+    )
+    assert 'filename="photos-all.zip"' in _disposition(form)
