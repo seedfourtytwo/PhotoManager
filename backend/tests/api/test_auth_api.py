@@ -146,3 +146,41 @@ def test_m1_admin_routes_are_admin_only(admin: TestClient, role: str, tmp_path: 
     assert user.get("/api/jobs").status_code == 403
     assert user.post("/api/jobs/1/retry").status_code == 403
     assert user.post("/api/users", json={}).status_code == 403
+
+
+# --- QA A4: a new password ends the other sessions; an admin reset also revokes devices -------
+
+NEW_PASSWORD = "another long password"
+
+
+def test_changing_your_password_ends_your_other_sessions_but_keeps_this_one(
+    admin: TestClient,
+) -> None:
+    here = add_user(admin, "lea")
+    elsewhere = login(admin.app, "lea")  # type: ignore[arg-type]
+    changed = here.post(
+        "/api/auth/password", json={"current_password": PASSWORD, "new_password": NEW_PASSWORD}
+    )
+    assert changed.status_code == 204
+    assert here.get("/api/auth/me").status_code == 200, "the session that changed it stays"
+    assert elsewhere.get("/api/auth/me").status_code == 401, "a stolen session is cut off"
+    assert admin.get("/api/auth/me").status_code == 200, "other people's sessions are untouched"
+
+
+def test_an_admin_password_reset_ends_every_session_and_revokes_device_tokens(
+    admin: TestClient,
+) -> None:
+    lea = add_user(admin, "lea")
+    token = lea.post("/api/devices", json={"name": "phone", "platform": "ios"}).json()["token"]
+    bearer = {"Authorization": f"Bearer {token}"}
+    assert lea.post("/api/upload/check", json={"hashes": []}, headers=bearer).status_code == 200
+    lea_id = lea.get("/api/auth/me").json()["id"]
+
+    assert admin.patch(f"/api/users/{lea_id}", json={"password": NEW_PASSWORD}).is_success
+
+    assert lea.get("/api/auth/me").status_code == 401
+    fresh = TestClient(admin.app, base_url=BASE)  # type: ignore[arg-type]
+    assert fresh.post("/api/upload/check", json={"hashes": []}, headers=bearer).status_code == 401
+    lea_again = login(admin.app, "lea", NEW_PASSWORD)  # type: ignore[arg-type]
+    assert [d["revoked"] for d in lea_again.get("/api/devices").json()] == [True]
+    assert admin.get("/api/auth/me").status_code == 200

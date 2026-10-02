@@ -36,7 +36,7 @@ Conventions
 | POST | `/api/auth/login` | `{username, password}` | `200 User` + session; `401`; `429` after 10 fails/15 min per username+IP |
 | POST | `/api/auth/logout` | – | `204` |
 | GET | `/api/auth/me` | – | `User` |
-| POST | `/api/auth/password` | `{current_password, new_password}` | `204`; `400` if current wrong |
+| POST | `/api/auth/password` | `{current_password, new_password}` | `204`; `400` if current wrong. Ends every **other** session of the user; this one stays (v1.2) |
 
 `User = {id, username, display_name, role: "admin"|"member"|"guest", disabled: bool}`.
 Passwords ≥ 10 characters. Sessions expire after 30 days idle.
@@ -46,7 +46,7 @@ Passwords ≥ 10 characters. Sessions expire after 30 days idle.
 | GET | `/api/users` | – | `User[]` |
 |---|---|---|---|
 | POST | `/api/users` | `{username, display_name, password, role}` | `201 User` |
-| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, password?}` | `User`; cannot remove the last admin (`409`) |
+| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, password?}` | `User`; cannot remove the last admin (`409`). A `password` reset ends **all** the user's sessions and revokes their device tokens (v1.2) |
 
 ## Sources (existing, plus access)
 

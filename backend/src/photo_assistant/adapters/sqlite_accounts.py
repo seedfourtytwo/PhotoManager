@@ -109,8 +109,16 @@ class AccountsMixin(SqliteBase):
     def delete_session(self, token_hash: str) -> None:
         self._write("DELETE FROM session WHERE token_hash = ?", (token_hash,))
 
-    def delete_sessions_of(self, user_id: int) -> None:
-        self._write("DELETE FROM session WHERE user_id = ?", (user_id,))
+    def delete_sessions_of(self, user_id: int, keep: str | None = None) -> None:
+        self._write(
+            "DELETE FROM session WHERE user_id = ? AND token_hash IS NOT ?", (user_id, keep)
+        )
+
+    def revoke_devices_of(self, user_id: int, now: datetime) -> None:
+        self._write(
+            "UPDATE device SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+            (now.isoformat(), user_id),
+        )
 
     # --- failed logins ---------------------------------------------------------------------
 

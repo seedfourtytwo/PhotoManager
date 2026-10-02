@@ -127,6 +127,9 @@ class Accounts:
         if patch.password is not None:
             _check_password(patch.password)
             self._store.set_password_hash(user_id, self._hasher.hash(patch.password))
+            # an admin reset is for a lost or leaked password: nothing the old one opened stays
+            self._store.delete_sessions_of(user_id)
+            self._store.revoke_devices_of(user_id, self._clock.now())
         self._store.update_user(
             user_id, display_name=patch.display_name, role=patch.role, disabled=patch.disabled
         )
@@ -186,9 +189,12 @@ class Accounts:
     def logout(self, token: str) -> None:
         self._store.delete_session(_token_hash(token))
 
-    def change_password(self, user: User, current: str, new: str) -> None:
+    def change_password(self, user: User, current: str, new: str, keep_token: str) -> None:
+        """Every other session of this user ends (a thief's included); ``keep_token``, the
+        session making the change, stays signed in."""
         found = self._store.find_user_by_username(user.username)
         if found is None or not self._hasher.verify(found[1], current):
             raise InvalidCredentialsError()
         _check_password(new)
         self._store.set_password_hash(user.id, self._hasher.hash(new))
+        self._store.delete_sessions_of(user.id, keep=_token_hash(keep_token))

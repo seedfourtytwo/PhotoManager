@@ -116,13 +116,17 @@ def test_logout_ends_the_session(accounts: Accounts) -> None:
 
 
 def test_change_password_checks_the_current_one(accounts: Accounts) -> None:
-    user, _ = accounts.setup("c", "C", GOOD)
+    user, token = accounts.setup("c", "C", GOOD)
+    _, other = accounts.login("c", GOOD, "2.2.2.2")
     with pytest.raises(InvalidCredentialsError):
-        accounts.change_password(user, "not it at all", "another good one")
+        accounts.change_password(user, "not it at all", "another good one", token)
     with pytest.raises(AccountError, match="10 characters"):
-        accounts.change_password(user, GOOD, "short")
-    accounts.change_password(user, GOOD, "another good one")
+        accounts.change_password(user, GOOD, "short", token)
+    assert accounts.authenticate(other) is not None, "failed attempts change nothing"
+    accounts.change_password(user, GOOD, "another good one", token)
     accounts.login("c", "another good one", "1.1.1.1")
+    assert accounts.authenticate(token) is not None
+    assert accounts.authenticate(other) is None
 
 
 def test_admin_creates_and_updates_users(accounts: Accounts) -> None:

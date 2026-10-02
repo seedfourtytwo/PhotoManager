@@ -73,9 +73,13 @@ def me(user: CurrentUser) -> UserOut:
 
 
 @router.post("/auth/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(services: ServicesDep, user: CurrentUser, body: NewPassword) -> None:
+def change_password(
+    services: ServicesDep, user: CurrentUser, body: NewPassword, request: Request
+) -> None:
+    """Ends every other session of this user; this one stays signed in."""
+    token = request.cookies.get(SESSION_COOKIE, "")
     try:
-        services.accounts.change_password(user, body.current_password, body.new_password)
+        services.accounts.change_password(user, body.current_password, body.new_password, token)
     except InvalidCredentialsError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "the current password is wrong") from exc
     except AccountError as exc:
