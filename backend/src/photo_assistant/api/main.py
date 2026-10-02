@@ -4,7 +4,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -36,6 +37,7 @@ from photo_assistant.api.routes import (
 from photo_assistant.api.security import CrossSiteGuard
 from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import Settings, get_settings
+from photo_assistant.domain.errors import DomainError
 
 
 class SinglePageApp(StaticFiles):
@@ -59,6 +61,12 @@ def _install_services(app: FastAPI, services: Services) -> None:
     app.state.services = services
     app.state.integrations = services.integrations
     app.state.ops = services.ops
+
+
+async def _domain_error(request: Request, exc: Exception) -> JSONResponse:
+    """THE error handler: every DomainError becomes its status and ``{"detail": message}``."""
+    assert isinstance(exc, DomainError)
+    return JSONResponse({"detail": str(exc)}, status_code=exc.status)
 
 
 def _check_test_mode(settings: Settings) -> None:
@@ -97,6 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependencies=[Depends(path_ids_in_range)],
     )
     app.state.settings = settings
+    app.add_exception_handler(DomainError, _domain_error)
     for module in (
         system,
         auth,

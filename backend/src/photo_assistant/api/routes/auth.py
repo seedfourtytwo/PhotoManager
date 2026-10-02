@@ -5,10 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from photo_assistant.api.deps import SESSION_COOKIE, CurrentUser, ServicesDep
 from photo_assistant.api.schemas import Credentials, NewPassword, SetupIn, UserOut
 from photo_assistant.app.accounts import (
-    AccountError,
-    AlreadySetUpError,
     InvalidCredentialsError,
-    TooManyAttemptsError,
 )
 from photo_assistant.domain.access import SESSION_IDLE_LIMIT
 
@@ -34,12 +31,7 @@ def setup_state(services: ServicesDep) -> dict[str, bool]:
 
 @router.post("/setup", status_code=status.HTTP_201_CREATED)
 def setup(services: ServicesDep, body: SetupIn, request: Request, response: Response) -> UserOut:
-    try:
-        user, token = services.accounts.setup(body.username, body.display_name, body.password)
-    except AlreadySetUpError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except AccountError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    user, token = services.accounts.setup(body.username, body.display_name, body.password)
     _set_session(request, response, token)
     return UserOut.of(user)
 
@@ -49,12 +41,7 @@ def login(
     services: ServicesDep, body: Credentials, request: Request, response: Response
 ) -> UserOut:
     ip = request.client.host if request.client else "unknown"
-    try:
-        user, token = services.accounts.login(body.username, body.password, ip)
-    except TooManyAttemptsError as exc:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
-    except InvalidCredentialsError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    user, token = services.accounts.login(body.username, body.password, ip)  # 401 / 429
     _set_session(request, response, token)
     return UserOut.of(user)
 
@@ -80,7 +67,5 @@ def change_password(
     token = request.cookies.get(SESSION_COOKIE, "")
     try:
         services.accounts.change_password(user, body.current_password, body.new_password, token)
-    except InvalidCredentialsError as exc:
+    except InvalidCredentialsError as exc:  # signed in already: a wrong field, not a 401
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "the current password is wrong") from exc
-    except AccountError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc

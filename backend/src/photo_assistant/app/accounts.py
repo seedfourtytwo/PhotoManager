@@ -19,6 +19,8 @@ from photo_assistant.domain.access import (
     too_many_failures,
     username_problem,
 )
+from photo_assistant.domain.errors import ConflictError, InvalidError
+from photo_assistant.domain.errors import NotFoundError as DomainNotFound
 from photo_assistant.ports import Clock
 from photo_assistant.ports.accounts import (
     AccountStore,
@@ -31,36 +33,48 @@ from photo_assistant.ports.accounts import (
 _TOUCH_EVERY = timedelta(minutes=1)  # don't write to the database on every request
 
 
-class AccountError(ValueError):
-    """A request about accounts that can't be done; the message says why."""
+class AccountError(InvalidError):
+    """A request about accounts that can't be done; the message says why (422 by default)."""
 
 
 class InvalidCredentialsError(AccountError):
+    status = 401
+
     def __init__(self) -> None:
         super().__init__("wrong user name or password")
 
 
 class TooManyAttemptsError(AccountError):
+    status = 429
+
     def __init__(self) -> None:
         super().__init__("too many failed logins; wait 15 minutes and try again")
 
 
 class AlreadySetUpError(AccountError):
+    status = ConflictError.status
+
     def __init__(self) -> None:
         super().__init__("this library already has accounts; log in instead")
 
 
 class LastAdminError(AccountError):
+    status = ConflictError.status
+
     def __init__(self) -> None:
         super().__init__("the library needs at least one active admin")
 
 
 class NameTakenError(AccountError):
+    status = ConflictError.status
+
     def __init__(self, username: str) -> None:
         super().__init__(f"the user name '{username}' is taken")
 
 
 class NotFoundError(AccountError):
+    status = DomainNotFound.status
+
     def __init__(self) -> None:
         super().__init__("no such user")
 

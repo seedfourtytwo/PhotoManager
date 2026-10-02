@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from photo_assistant.adapters.sqlite_access import UnknownUserError
 from photo_assistant.api.deps import LOGGED_IN, MemberUser, ServicesDep, ViewerDep
 from photo_assistant.api.schemas import (
     AlbumDetail,
@@ -159,8 +158,5 @@ def put_members(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "the owner is not listed as a member"
         )
     members = [(m.user_id, AlbumRole(m.role)) for m in body]
-    try:
-        services.repo.set_album_members(album_id, members, services.clock.now())
-    except UnknownUserError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    services.repo.set_album_members(album_id, members, services.clock.now())  # unknown: 422
     return get_members(services, viewer, album_id)

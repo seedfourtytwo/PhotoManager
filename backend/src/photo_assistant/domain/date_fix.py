@@ -4,9 +4,10 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from photo_assistant.domain.capture_time import EARLIEST_PLAUSIBLE
+from photo_assistant.domain.errors import InvalidError
 
 
-class DateFixError(ValueError):
+class DateFixError(InvalidError):
     """The requested date change can't be applied; the message says why."""
 
 

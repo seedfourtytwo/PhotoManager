@@ -31,7 +31,7 @@ from photo_assistant.api.schemas import (
 )
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Viewer
-from photo_assistant.domain.date_fix import DateFixError, new_capture_times
+from photo_assistant.domain.date_fix import new_capture_times
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api/assets", tags=["assets"], dependencies=LOGGED_IN)
@@ -115,11 +115,8 @@ def fix_dates(services: ServicesDep, viewer: ViewerDep, body: DatesIn) -> Update
         )
     views = require_views(services, viewer, body.ids, Level.EDIT)
     old = [(v.id, v.asset.taken_at) for v in views]
-    try:
-        local_now = services.clock.now().astimezone().replace(tzinfo=None)
-        changes = new_capture_times(old, body.set, body.shift_minutes, local_now)
-    except DateFixError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    local_now = services.clock.now().astimezone().replace(tzinfo=None)
+    changes = new_capture_times(old, body.set, body.shift_minutes, local_now)  # DateFixError: 422
     updated = services.repo.change_dates(changes, viewer.user_id, services.clock.now())
     return Updated(updated=updated)
 

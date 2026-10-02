@@ -12,13 +12,15 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from photo_assistant.domain.errors import InvalidError
+
 MAX_STRAIGHTEN = 15.0
 MIN_CROP = 0.001  # a crop keeps at least 1/1000 of the width and height (QA A6)
 QUARTER_TURNS = (0, 90, 180, 270)
 _EPSILON = 1e-9
 
 
-class InvalidRecipeError(ValueError):
+class InvalidRecipeError(InvalidError):
     """The recipe can't be applied; the message says which part is wrong."""
 
 

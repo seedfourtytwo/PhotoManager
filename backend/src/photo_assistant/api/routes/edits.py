@@ -1,11 +1,11 @@
 """One edit recipe per photo, shared by everyone who may edit it (contract: Assets)."""
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Response, status
 
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep, require_view
 from photo_assistant.api.schemas import RecipeIO
 from photo_assistant.domain.access import Level
-from photo_assistant.domain.edit_recipe import InvalidRecipeError, Recipe
+from photo_assistant.domain.edit_recipe import Recipe
 
 router = APIRouter(prefix="/api/assets", tags=["edits"], dependencies=LOGGED_IN)
 
@@ -19,10 +19,7 @@ def get_recipe(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Recip
 @router.put("/{asset_id}/edit")
 def put_recipe(services: ServicesDep, viewer: ViewerDep, asset_id: int, body: RecipeIO) -> RecipeIO:
     require_view(services, viewer, asset_id, Level.EDIT)
-    try:
-        recipe = Recipe.from_dict(body.model_dump())
-    except InvalidRecipeError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    recipe = Recipe.from_dict(body.model_dump())  # InvalidRecipeError: 422
     saved = services.editor.save(asset_id, recipe, viewer.user_id, services.clock.now())
     return RecipeIO.of(saved)
 

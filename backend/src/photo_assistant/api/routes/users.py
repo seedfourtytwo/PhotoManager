@@ -1,14 +1,10 @@
 """Account administration (admin only), and the small directory every member may read."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
 from photo_assistant.api.deps import ADMIN_ONLY, MemberUser, ServicesDep
 from photo_assistant.api.schemas import DirectoryEntry, NewUser, UserOut, UserPatchIn
 from photo_assistant.app.accounts import (
-    AccountError,
-    LastAdminError,
-    NameTakenError,
-    NotFoundError,
     UserPatch,
 )
 from photo_assistant.domain.access import Role
@@ -32,14 +28,8 @@ def list_users(services: ServicesDep) -> list[UserOut]:
 
 @router.post("", status_code=status.HTTP_201_CREATED, dependencies=ADMIN_ONLY)
 def create_user(services: ServicesDep, body: NewUser) -> UserOut:
-    try:
-        user = services.accounts.create_user(
-            body.username, body.display_name, body.password, body.role
-        )
-    except NameTakenError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except AccountError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    """409 for a taken name, 422 for a bad one (account errors carry their status)."""
+    user = services.accounts.create_user(body.username, body.display_name, body.password, body.role)
     return UserOut.of(user)
 
 
@@ -51,11 +41,4 @@ def update_user(services: ServicesDep, user_id: int, body: UserPatchIn) -> UserO
         disabled=body.disabled,
         password=body.password,
     )
-    try:
-        return UserOut.of(services.accounts.update_user(user_id, patch))
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except LastAdminError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except AccountError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return UserOut.of(services.accounts.update_user(user_id, patch))

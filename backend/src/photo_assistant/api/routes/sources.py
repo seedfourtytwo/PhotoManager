@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
 
-from photo_assistant.adapters.sqlite_access import UnknownUserError
 from photo_assistant.api.deps import (
     ADMIN_ONLY,
     LOGGED_IN,
@@ -76,10 +75,7 @@ def patch_source(
     if body.enabled is not None:
         services.repo.set_source_enabled(source_id, body.enabled)
     if body.owner_id is not None:
-        try:
-            services.repo.set_source_owner(source_id, body.owner_id)
-        except UnknownUserError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        services.repo.set_source_owner(source_id, body.owner_id)  # unknown user: 422
     return _out(services, viewer, source_id)
 
 
@@ -99,10 +95,7 @@ def put_access(services: ServicesDep, source_id: int, body: Access) -> Access:
     require_source(services, source_id)
     users = [(u.user_id, Level.parse(u.level)) for u in body.users]
     everyone = Level.parse(body.everyone) if body.everyone else None
-    try:
-        services.repo.set_access(source_id, everyone, users)
-    except UnknownUserError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    services.repo.set_access(source_id, everyone, users)  # unknown user: 422
     return get_access(services, source_id)
 
 

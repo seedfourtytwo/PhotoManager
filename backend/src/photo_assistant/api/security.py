@@ -1,4 +1,4 @@
-"""Keep other websites out (there is no login until M2, so this matters).
+"""Keep other websites out (defence in depth next to the SameSite=Strict session cookie).
 
 - Host allow-list (Starlette's TrustedHostMiddleware) defeats DNS rebinding: a malicious page
   whose domain resolves to 127.0.0.1 still sends its own name in the Host header.
@@ -9,7 +9,7 @@
 
 from urllib.parse import urlsplit
 
-from starlette.responses import PlainTextResponse
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -23,7 +23,7 @@ class CrossSiteGuard:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and self._refuse(scope):
-            response = PlainTextResponse("cross-site request refused", status_code=403)
+            response = JSONResponse({"detail": "cross-site request refused"}, status_code=403)
             await response(scope, receive, send)
             return
         await self.app(scope, receive, send)

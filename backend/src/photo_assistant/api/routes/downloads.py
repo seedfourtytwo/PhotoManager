@@ -14,7 +14,7 @@ from photo_assistant.api.schemas import DownloadRequest, Estimate
 from photo_assistant.api.services import Services
 from photo_assistant.app.downloads import MEDIA_TYPES, Entry, downloadable
 from photo_assistant.domain.access import Level, Viewer
-from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, OptionsError
+from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api", tags=["downloads"], dependencies=LOGGED_IN)
@@ -117,12 +117,9 @@ def download_one(
     strip_location: bool = False,
 ) -> StreamingResponse:
     view = require_view(services, viewer, asset_id, Level.DOWNLOAD)
-    try:
-        options = ExportOptions(
-            format=fmt, quality=quality, max_edge=max_edge, strip_location=strip_location
-        )
-    except OptionsError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    options = ExportOptions(  # OptionsError: 422
+        format=fmt, quality=quality, max_edge=max_edge, strip_location=strip_location
+    )
     name = services.repo.first_origin_name(asset_id) or "photo"
     entry = services.downloads.plan([view], [name], options)[0]
     out_format = services.downloads.output_format(view, options)

@@ -10,6 +10,7 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 
 from photo_assistant.domain.edit_recipe import fit_within
+from photo_assistant.domain.errors import InvalidError
 
 FORMATS = ("original", "jpeg", "png", "webp")
 MAX_EDGE = 20000  # pixels; larger requests overflowed libvips (QA A6)
@@ -49,7 +50,7 @@ class Folders(StrEnum):
     MONTH = "month"
 
 
-class OptionsError(ValueError):
+class OptionsError(InvalidError):
     """Download options that can't be honoured."""
 
 

@@ -5,10 +5,11 @@ from collections.abc import Sequence
 from photo_assistant.adapters.sqlite_base import SqliteBase
 from photo_assistant.adapters.sqlite_library import SOURCE_VISIBLE, visible_assets_cte
 from photo_assistant.domain.access import Level, SourceAccess, Viewer
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.model import Source
 
 
-class UnknownUserError(ValueError):
+class UnknownUserError(InvalidError):
     """An access list or album membership names an account that does not exist."""
 
 
