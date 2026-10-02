@@ -3,6 +3,8 @@ connections live in ``sqlite_database``; ``open_database`` is re-exported here).
 
 import json
 import sqlite3
+import uuid
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +23,7 @@ from photo_assistant.adapters.sqlite_edits import EditsMixin
 from photo_assistant.adapters.sqlite_enrich import EnrichMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
 from photo_assistant.adapters.sqlite_trash import TrashMixin
+from photo_assistant.domain.access import SourceAccess, default_source_access
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -75,17 +78,36 @@ class SqliteRepository(
             row["owner_id"],
         )
 
-    def add_source(self, label: str, root: str, owner_id: int | None = None) -> Source:
-        """New sources are open to everyone at download level (contract default)."""
+    def add_source(
+        self,
+        label: str,
+        root: str | Callable[[int], str],
+        owner_id: int | None = None,
+        *,
+        kind: str = "folder",
+        access: SourceAccess | None = None,
+        config: Mapping[str, object] | None = None,
+    ) -> Source:
+        """THE way to create a source of any kind (B17), in one transaction (or the caller's).
+
+        ``root`` may depend on the new id (remote sources pull into ``staging/<id>``);
+        ``access`` defaults to the domain rule for the kind (``default_source_access``)."""
+        grants = access or default_source_access(kind, owner_id)
         try:
             with self._transaction():
+                placeholder = root if isinstance(root, str) else f"pending:{uuid.uuid4().hex}"
                 source_id = self._write(
-                    "INSERT INTO source (label, root, owner_id) VALUES (?, ?, ?)",
-                    (label, root, owner_id),
+                    """INSERT INTO source (kind, label, root, owner_id, config_json)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (kind, label, placeholder, owner_id, json.dumps(config) if config else None),
                 )
-                self.grant_default_access(source_id)
+                if not isinstance(root, str):
+                    self._write(
+                        "UPDATE source SET root = ? WHERE id = ?", (root(source_id), source_id)
+                    )
+                self._grant(source_id, grants)
         except sqlite3.IntegrityError as exc:
-            raise ValueError(f"folder is already a source: {root}") from exc
+            raise ValueError(f"folder is already a source: {placeholder}") from exc
         source = self.get_source(source_id)
         assert source is not None
         return source

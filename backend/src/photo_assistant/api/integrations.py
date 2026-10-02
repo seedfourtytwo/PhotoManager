@@ -68,11 +68,11 @@ def build_integrations(
     clock: Clock | None = None,
 ) -> Integrations:
     clock = clock or SystemClock()
-    remote_sources = SqliteRemoteSources(conn)
+    remote_sources = SqliteRemoteSources(conn, repo)
     rclone = RcloneSync(settings.rclone_binary, settings.rclone_config)
     ai_log = SqliteAILog(conn)
     upload = UploadInbox(
-        inbox=SqliteInboxes(conn),
+        inbox=SqliteInboxes(conn, repo),
         library=repo,
         spool=DiskUploadSpool(data_root / "tmp"),
         clock=clock,

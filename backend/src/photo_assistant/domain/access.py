@@ -77,6 +77,23 @@ class Viewer:
         return cls(user.id, user.role)
 
 
+@dataclass(frozen=True, slots=True)
+class SourceAccess:
+    everyone: Level | None
+    users: tuple[tuple[int, Level], ...] = ()
+
+
+INBOX_KIND = "inbox"
+
+
+def default_source_access(kind: str, owner_id: int | None) -> SourceAccess:
+    """Who may see a new source (contract): everyone may download a folder or remote source;
+    an upload inbox is private to its owner, who may edit."""
+    if kind == INBOX_KIND and owner_id is not None:
+        return SourceAccess(None, ((owner_id, Level.EDIT),))
+    return SourceAccess(Level.DOWNLOAD)
+
+
 def album_grant(role: AlbumRole) -> Level:
     """Albums grant view only, whatever the album role: download and edit come only from
     sources (owner decision after QA: an album must never unlock more than its photos'

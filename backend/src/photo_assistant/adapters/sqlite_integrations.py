@@ -6,24 +6,22 @@ same ``Database`` (one writer, one lock) as every other store.
 
 import json
 import sqlite3
-import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 from photo_assistant.adapters.sqlite_database import Database
-from photo_assistant.domain.access import Level
+from photo_assistant.domain.access import INBOX_KIND
 from photo_assistant.domain.model import Source
 from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
+from photo_assistant.ports import SourceRegistry
 from photo_assistant.ports.ai import AICall
 from photo_assistant.ports.upload import Device
 
 RCLONE_KIND = "rclone"
-INBOX_KIND = "inbox"
-# source_access levels (core's Level): remote sources get the contract default for new
-# sources (everyone may download); an inbox is private: only its owner, who may edit.
-_DOWNLOAD, _EDIT = int(Level.DOWNLOAD), int(Level.EDIT)
+# who may see a new source is one domain rule (access.default_source_access), applied by the
+# repository's add_source: remote sources like any folder, an inbox private to its owner
 
 
 class _Store:
@@ -53,15 +51,9 @@ class _Store:
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
-        """Several writes as one (the connection is in autocommit mode)."""
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        """Several writes as one; inside another transaction it joins that one."""
+        with self._db.transaction():
+            yield
 
 
 def _source(row: sqlite3.Row) -> Source:
@@ -111,24 +103,28 @@ class SqliteAILog(_Store):
         ]
 
 
-class SqliteRemoteSources(_Store):
+class _SourceCreator(_Store):
+    """A store that registers sources through the one ``SourceRegistry`` (B17)."""
+
+    def __init__(
+        self, db: Database | sqlite3.Connection, sources: SourceRegistry | None = None
+    ) -> None:
+        super().__init__(db)
+        # default: the repository on the same Database (one writer, one lock)
+        from photo_assistant.adapters.sqlite_repository import SqliteRepository
+
+        self._sources: SourceRegistry = sources or SqliteRepository(self._db)
+
+
+class SqliteRemoteSources(_SourceCreator):
     def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
-        # The root must be unique and depends on the id: insert a placeholder, then set it.
-        with self._transaction():
-            cur = self._write(
-                "INSERT INTO source (kind, label, root, config_json) VALUES (?, ?, ?, ?)",
-                (RCLONE_KIND, label, f"rclone-pending:{uuid.uuid4().hex}", "{}"),
-            )
-            source_id = int(cur.lastrowid or 0)
-            self._write(
-                "UPDATE source SET root = ?, config_json = ? WHERE id = ?",
-                (str(staging_root / str(source_id)), json.dumps(config.to_mapping()), source_id),
-            )
-            self._write(
-                "INSERT INTO source_access (source_id, user_id, level) VALUES (?, NULL, ?)",
-                (source_id, _DOWNLOAD),
-            )
-        return source_id
+        """A source of kind rclone pulled into ``staging/<its id>`` (default access)."""
+        return self._sources.add_source(
+            label,
+            lambda source_id: str(staging_root / str(source_id)),
+            kind=RCLONE_KIND,
+            config=config.to_mapping(),
+        ).id
 
     def remote_config(self, source_id: int) -> RemoteConfig | None:
         row = self._one("SELECT kind, config_json FROM source WHERE id = ?", (source_id,))
@@ -143,7 +139,7 @@ class SqliteRemoteSources(_Store):
         self._write("UPDATE source SET root = ? WHERE id = ?", (root, source_id))
 
 
-class SqliteInboxes(_Store):
+class SqliteInboxes(_SourceCreator):
     def ensure_inbox_source(self, user_id: int, root: str) -> Source:
         with self._lock:
             row = self._one(
@@ -160,19 +156,12 @@ class SqliteInboxes(_Store):
             return _source(row)
 
     def _create(self, user_id: int, root: str) -> Source:
+        """Inside the caller's transaction: the source and its inbox row, or neither."""
         name = self._one("SELECT display_name FROM user WHERE id = ?", (user_id,))
         label = f"Uploads ({name['display_name'] if name else f'user {user_id}'})"
-        cur = self._write(
-            "INSERT INTO source (kind, label, root, owner_id) VALUES (?, ?, ?, ?)",
-            (INBOX_KIND, label, root, user_id),
-        )
-        source_id = int(cur.lastrowid or 0)
-        self._write("INSERT INTO inbox (user_id, source_id) VALUES (?, ?)", (user_id, source_id))
-        self._write(
-            "INSERT INTO source_access (source_id, user_id, level) VALUES (?, ?, ?)",
-            (source_id, user_id, _EDIT),
-        )
-        row = self._one("SELECT * FROM source WHERE id = ?", (source_id,))
+        source = self._sources.add_source(label, root, user_id, kind=INBOX_KIND)
+        self._write("INSERT INTO inbox (user_id, source_id) VALUES (?, ?)", (user_id, source.id))
+        row = self._one("SELECT * FROM source WHERE id = ?", (source.id,))
         assert row is not None
         return _source(row)
 

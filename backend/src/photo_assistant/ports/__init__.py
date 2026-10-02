@@ -1,13 +1,13 @@
 """Protocol interfaces the app layer depends on. Adapters implement them; tests fake them."""
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from photo_assistant.domain.access import Viewer
+from photo_assistant.domain.access import SourceAccess, Viewer
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.model import (
     Asset,
@@ -150,9 +150,24 @@ class Job:
     attempts: int
 
 
-class Repository(Protocol):
+class SourceRegistry(Protocol):
+    def add_source(
+        self,
+        label: str,
+        root: str | Callable[[int], str],
+        owner_id: int | None = None,
+        *,
+        kind: str = "folder",
+        access: SourceAccess | None = None,
+        config: Mapping[str, object] | None = None,
+    ) -> Source:
+        """The one way to create a source (any kind); access defaults to the domain rule.
+        Raises ValueError if its folder is already a source."""
+        ...
+
+
+class Repository(SourceRegistry, Protocol):
     # sources
-    def add_source(self, label: str, root: str, owner_id: int | None = None) -> Source: ...
     def get_source(self, source_id: int) -> Source | None: ...
     def list_sources(self) -> list[Source]: ...
     def set_source_enabled(self, source_id: int, enabled: bool) -> None: ...

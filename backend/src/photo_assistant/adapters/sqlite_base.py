@@ -95,12 +95,6 @@ class SqliteBase:
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
-        """All or nothing. Not re-entrant: callers inside must use the plain helpers."""
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        """All or nothing; inside another transaction it joins that one."""
+        with self._db.transaction():
+            yield

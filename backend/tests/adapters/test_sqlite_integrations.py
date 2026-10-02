@@ -137,3 +137,31 @@ def test_revoked_devices_no_longer_authenticate(conn: sqlite3.Connection) -> Non
     assert not devices.revoke_device(1, phone.id, NOW)  # already revoked
     assert devices.user_for_token_hash("h1", NOW) is None
     assert devices.list_devices(1)[0].revoked_at == NOW
+
+
+# --- B17: one way to create a source ---------------------------------------------------------
+
+
+def test_every_kind_of_source_is_created_by_the_one_repository_method(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Folder, remote and inbox sources all go through ``add_source`` (one access rule)."""
+    repo = SqliteRepository(conn)
+    kinds: list[str] = []
+    real = repo.add_source
+
+    def spy(*args, **kwargs):  # type: ignore[no-untyped-def]
+        kinds.append(kwargs.get("kind", "folder"))
+        return real(*args, **kwargs)
+
+    repo.add_source = spy  # type: ignore[method-assign]
+    folder = repo.add_source("Pictures", "/pictures", 1)
+    remote = SqliteRemoteSources(conn, repo).add_remote_source(
+        "Mega", RemoteConfig("mega", "Camera"), tmp_path / "staging"
+    )
+    inbox = SqliteInboxes(conn, repo).ensure_inbox_source(7, str(tmp_path / "inbox" / "7"))
+    assert kinds == ["folder", "rclone", "inbox"]
+    assert repo.get_access(folder.id) == (Level.DOWNLOAD, [])
+    assert repo.get_access(remote) == (Level.DOWNLOAD, [])
+    assert repo.get_access(inbox.id) == (None, [(7, Level.EDIT)])
+    assert repo.get_source(remote).root == str(tmp_path / "staging" / str(remote))  # type: ignore[union-attr]

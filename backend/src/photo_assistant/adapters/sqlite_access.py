@@ -4,10 +4,8 @@ from collections.abc import Sequence
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
 from photo_assistant.adapters.sqlite_library import SOURCE_VISIBLE, visible_assets_cte
-from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.access import Level, SourceAccess, Viewer
 from photo_assistant.domain.model import Source
-
-DEFAULT_EVERYONE = Level.DOWNLOAD  # contract: new sources are {everyone: "download"}
 
 
 class UnknownUserError(ValueError):
@@ -15,11 +13,16 @@ class UnknownUserError(ValueError):
 
 
 class AccessMixin(SqliteBase):
-    def grant_default_access(self, source_id: int) -> None:
-        self._write(
-            "INSERT INTO source_access (source_id, user_id, level) VALUES (?, NULL, ?)",
-            (source_id, int(DEFAULT_EVERYONE)),
-        )
+    def _grant(self, source_id: int, access: SourceAccess) -> None:
+        """A new source's access list (inside ``add_source``'s transaction)."""
+        rows: list[tuple[int | None, Level]] = list(access.users)
+        if access.everyone is not None:
+            rows.append((None, access.everyone))
+        for user_id, level in rows:
+            self._write(
+                "INSERT INTO source_access (source_id, user_id, level) VALUES (?, ?, ?)",
+                (source_id, user_id, int(level)),
+            )
 
     def get_access(self, source_id: int) -> tuple[Level | None, list[tuple[int, Level]]]:
         rows = self._all(

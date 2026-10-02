@@ -161,6 +161,23 @@ class Database:
         else:
             yield self._reader()
 
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """All or nothing on the writer (BEGIN IMMEDIATE). Nested calls join the outer
+        transaction, so one store's write can be part of another's (e.g. an inbox row and
+        the source it belongs to)."""
+        with self.lock:
+            if self.writer.in_transaction:
+                yield self.writer
+                return
+            self.writer.execute("BEGIN IMMEDIATE")
+            try:
+                yield self.writer
+            except BaseException:
+                self.writer.execute("ROLLBACK")
+                raise
+            self.writer.execute("COMMIT")
+
     def close(self) -> None:
         """Close every connection. Idempotent: every store sharing it may call it."""
         with self._guard:
