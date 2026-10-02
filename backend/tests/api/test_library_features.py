@@ -2,6 +2,7 @@
 
 import os
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,7 +10,16 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import add_user, asset_id_of, import_folder, services_of
+from photo_assistant.api.main import create_app
+from tests.api.conftest import (
+    BASE,
+    PASSWORD,
+    add_user,
+    asset_id_of,
+    import_folder,
+    make_settings,
+    services_of,
+)
 from tests.conftest import snapshot_tree
 from tests.synthetic import write_photo
 
@@ -27,9 +37,7 @@ class Lib:
     ids: dict[str, int]
 
 
-@pytest.fixture
-def lib(admin: TestClient, tmp_path: Path) -> Lib:
-    folder = tmp_path / "photos"
+def _build_lib(admin: TestClient, folder: Path) -> Lib:
     specs = {
         "paris1": dict(taken=datetime(2019, 7, 4, 18, 30, 0), gps=PARIS, camera="Pixel 7"),
         "paris2": dict(taken=datetime(2019, 7, 4, 18, 30, 2), gps=PARIS, camera="Pixel 7"),
@@ -46,14 +54,31 @@ def lib(admin: TestClient, tmp_path: Path) -> Lib:
     return Lib(admin, source, folder, ids)
 
 
+@pytest.fixture
+def lib(admin: TestClient, tmp_path: Path) -> Lib:
+    """A fresh library for tests that change it."""
+    return _build_lib(admin, tmp_path / "photos")
+
+
+@pytest.fixture(scope="module")
+def shared_lib(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Lib]:
+    """One library for the read-only tests (built once per module: imports are the slow part).
+    Tests taking it must not change it."""
+    root = tmp_path_factory.mktemp("shared")
+    with TestClient(create_app(make_settings(root / "data")), base_url=BASE) as admin:
+        setup = {"username": "admin", "display_name": "C", "password": PASSWORD}
+        assert admin.post("/api/setup", json=setup).status_code == 201
+        yield _build_lib(admin, root / "photos")
+
+
 def listed(client: TestClient, **params: object) -> list[int]:
     response = client.get("/api/assets", params={"limit": 500, **params})
     assert response.status_code == 200, response.text
     return [a["id"] for a in response.json()["items"]]
 
 
-def test_filters_narrow_the_timeline(lib: Lib) -> None:
-    c, ids = lib.admin, lib.ids
+def test_filters_narrow_the_timeline(shared_lib: Lib) -> None:
+    c, ids = shared_lib.admin, shared_lib.ids
     assert listed(c, year=2019) == [ids["quimper"], ids["paris2"], ids["paris1"]]
     assert listed(c, year=2019, month=7) == [ids["paris2"], ids["paris1"]]
     assert listed(c, **{"from": "2019-08-01", "to": "2021-01-15"}) == [
@@ -64,13 +89,13 @@ def test_filters_narrow_the_timeline(lib: Lib) -> None:
     assert set(listed(c, has_location="true")) == {ids["paris1"], ids["paris2"], ids["quimper"]}
     assert set(listed(c, has_location="false")) == {ids["winter"], ids["nodate"]}
     assert listed(c, guessed_date="true") == [ids["nodate"]]
-    assert listed(c, source_id=lib.source) == listed(c)
+    assert listed(c, source_id=shared_lib.source) == listed(c)
     assert listed(c, source_id=999) == []
     assert c.get("/api/assets", params={"month": 7}).status_code == 400
 
 
-def test_places_are_geocoded_offline_and_filterable(lib: Lib) -> None:
-    c, ids = lib.admin, lib.ids
+def test_places_are_geocoded_offline_and_filterable(shared_lib: Lib) -> None:
+    c, ids = shared_lib.admin, shared_lib.ids
     detail = c.get(f"/api/assets/{ids['paris1']}").json()
     assert detail["place"] == {"country": "France", "region": "Ile-de-France", "city": "Paris"}
     assert c.get(f"/api/assets/{ids['winter']}").json()["place"] is None
@@ -88,8 +113,8 @@ def test_search_finds_album_titles(lib: Lib) -> None:
     assert listed(c, q="holidays") == [ids["winter"]]
 
 
-def test_cursor_pagination_works_with_filters(lib: Lib) -> None:
-    c, seen, cursor = lib.admin, [], None
+def test_cursor_pagination_works_with_filters(shared_lib: Lib) -> None:
+    c, seen, cursor = shared_lib.admin, [], None
     while True:
         params: dict[str, object] = {"limit": 1, "has_location": "true"}
         if cursor:
@@ -102,8 +127,8 @@ def test_cursor_pagination_works_with_filters(lib: Lib) -> None:
     assert seen == listed(c, has_location="true")
 
 
-def test_facets_calendar_and_map(lib: Lib) -> None:
-    c, ids = lib.admin, lib.ids
+def test_facets_calendar_and_map(shared_lib: Lib) -> None:
+    c, ids = shared_lib.admin, shared_lib.ids
     facets = c.get("/api/assets/facets").json()
     assert facets["total"] == 5 and facets["guessed_dates"] == 1
     assert facets["years"] == [
@@ -111,7 +136,7 @@ def test_facets_calendar_and_map(lib: Lib) -> None:
         {"year": 2021, "count": 1},
         {"year": 2019, "count": 3},
     ]
-    assert facets["sources"] == [{"id": lib.source, "label": "photos", "count": 5}]
+    assert facets["sources"] == [{"id": shared_lib.source, "label": "photos", "count": 5}]
     assert {"name": "iPhone 12", "count": 2} in facets["cameras"]
     assert {"name": "France", "count": 3} in facets["places"]
     assert {"name": "Paris", "count": 2} in facets["places"]
@@ -124,8 +149,8 @@ def test_facets_calendar_and_map(lib: Lib) -> None:
     assert abs(points[0]["lat"]) > 0
 
 
-def test_bursts_share_a_group(lib: Lib) -> None:
-    c, ids = lib.admin, lib.ids
+def test_bursts_share_a_group(shared_lib: Lib) -> None:
+    c, ids = shared_lib.admin, shared_lib.ids
     first = c.get(f"/api/assets/{ids['paris1']}").json()
     assert first["group_id"] == min(ids["paris1"], ids["paris2"])
     assert c.get(f"/api/assets/{ids['winter']}").json()["group_id"] is None
@@ -231,8 +256,8 @@ def test_trash_empty_with_ids_and_without_body(lib: Lib) -> None:
 HUGE = 2**63  # one past SQLite's largest integer
 
 
-def test_ids_beyond_sqlite_integers_are_not_found_or_unprocessable(lib: Lib) -> None:
-    c = lib.admin
+def test_ids_beyond_sqlite_integers_are_not_found_or_unprocessable(shared_lib: Lib) -> None:
+    c = shared_lib.admin
     for path in (
         f"/api/assets/{HUGE}",
         f"/api/assets/{HUGE * 4}/thumb",
@@ -252,8 +277,8 @@ def test_ids_beyond_sqlite_integers_are_not_found_or_unprocessable(lib: Lib) -> 
     assert c.get("/api/assets", params={"source_id": HUGE}).status_code == 400
 
 
-def test_the_last_day_of_the_calendar_is_a_valid_upper_bound(lib: Lib) -> None:
-    c = lib.admin
+def test_the_last_day_of_the_calendar_is_a_valid_upper_bound(shared_lib: Lib) -> None:
+    c = shared_lib.admin
     everything = listed(c)
     assert listed(c, **{"to": "9999-12-31"}) == everything
     assert c.get("/api/calendar", params={"to": "9999-12-31"}).status_code == 200

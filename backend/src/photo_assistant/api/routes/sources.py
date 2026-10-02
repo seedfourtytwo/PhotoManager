@@ -20,7 +20,8 @@ from photo_assistant.api.schemas import (
     SourcePatch,
     UserAccess,
 )
-from photo_assistant.api.services import SCAN_JOB, Services
+from photo_assistant.api.services import Services
+from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.model import Source
 
@@ -103,7 +104,7 @@ def put_access(services: ServicesDep, source_id: int, body: Access) -> Access:
 def scan_all(services: ServicesDep) -> list[Queued]:
     repo = services.repo
     return [
-        Queued(job_id=repo.enqueue(SCAN_JOB, {"source_id": s.id}), source_id=s.id)
+        Queued(job_id=repo.enqueue(SCAN_JOB_KIND, {"source_id": s.id}), source_id=s.id)
         for s in repo.list_sources()
         if s.enabled
     ]
@@ -112,5 +113,5 @@ def scan_all(services: ServicesDep) -> list[Queued]:
 @router.post("/{source_id}/scan", status_code=status.HTTP_202_ACCEPTED, dependencies=ADMIN_ONLY)
 def scan_source(services: ServicesDep, source_id: int) -> Queued:
     require_source(services, source_id)
-    job_id = services.repo.enqueue(SCAN_JOB, {"source_id": source_id})
+    job_id = services.repo.enqueue(SCAN_JOB_KIND, {"source_id": source_id})
     return Queued(job_id=job_id, source_id=source_id)

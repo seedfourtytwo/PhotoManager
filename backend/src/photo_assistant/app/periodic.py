@@ -38,6 +38,7 @@ class Periodic:
 
     @property
     def task_names(self) -> list[str]:
+        """For inspection (the wiring test checks what the server schedules)."""
         return [t.name for t in self._tasks]
 
     def tick(self) -> list[str]:

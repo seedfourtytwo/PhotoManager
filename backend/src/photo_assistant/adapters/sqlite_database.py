@@ -17,14 +17,12 @@ planner's statistics.
 import sqlite3
 import threading
 import weakref
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from types import TracebackType
-
-ConnectionHook = Callable[[sqlite3.Connection], None]
 
 
 def migrations() -> list[tuple[int, str]]:
@@ -102,7 +100,6 @@ class Database:
         self._path = path
         self._local = threading.local()
         self._readers: list[sqlite3.Connection] = []
-        self._hooks: list[ConnectionHook] = []
         self._guard = threading.Lock()
         self._closed = False
 
@@ -129,14 +126,6 @@ class Database:
     def path(self) -> Path | None:
         return self._path
 
-    def add_hook(self, hook: ConnectionHook) -> None:
-        """Run ``hook`` on every connection (e.g. load an extension), now and later."""
-        with self._guard:
-            self._hooks.append(hook)
-            connections = [self.writer, *self._readers]
-        for conn in connections:
-            hook(conn)
-
     def _reader(self) -> sqlite3.Connection:
         conn: sqlite3.Connection | None = getattr(self._local, "conn", None)
         if conn is None:
@@ -145,8 +134,6 @@ class Database:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA busy_timeout = 5000")
             with self._guard:
-                for hook in self._hooks:
-                    hook(conn)
                 self._readers.append(conn)
             self._local.conn = conn
         return conn

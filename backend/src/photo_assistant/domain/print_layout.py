@@ -266,7 +266,8 @@ def cover_crop(
 
 
 def contain_frame(image_aspect: float, slot: Rect) -> Rect:
-    """The largest frame with the image's aspect that fits in the slot, centred."""
+    """The largest frame with the image's aspect that fits in the slot, centred: the
+    "contain" rule the Typst template applies (kept as the tests' oracle for it)."""
     if image_aspect > slot.aspect:
         h = slot.w / image_aspect
         return Rect(slot.x, slot.y + (slot.h - h) / 2, slot.w, h)

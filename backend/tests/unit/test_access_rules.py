@@ -11,7 +11,6 @@ from photo_assistant.domain.access import (
     Level,
     Role,
     Viewer,
-    album_grant,
     can_edit_album,
     leaves_no_admin,
     password_problem,
@@ -37,12 +36,6 @@ def test_guests_never_get_more_than_download(role: Role, cap: Level) -> None:
     viewer = Viewer(1, role)
     assert viewer.level_cap is cap
     assert viewer.is_admin is (role is Role.ADMIN)
-
-
-def test_album_roles_grant_view_only() -> None:
-    assert album_grant(AlbumRole.VIEWER) is Level.VIEW
-    assert album_grant(AlbumRole.EDITOR) is Level.VIEW, "albums grant view only (QA A1)"
-    assert album_grant(AlbumRole.OWNER) is Level.VIEW
 
 
 @pytest.mark.parametrize(

@@ -66,7 +66,8 @@ def test_setup_gives_ownerless_sources_to_the_first_admin(
 ) -> None:
     source = repo.add_source("Old", "/old")
     user, _ = accounts.setup("c", "C", GOOD)
-    assert repo.source_owner(source.id) == user.id
+    claimed = repo.get_source(source.id)
+    assert claimed is not None and claimed.owner_id == user.id
 
 
 def test_passwords_are_hashed_and_checked(accounts: Accounts, repo: SqliteRepository) -> None:

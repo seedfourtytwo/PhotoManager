@@ -122,10 +122,6 @@ class SqliteRepository(
     def set_source_enabled(self, source_id: int, enabled: bool) -> None:
         self._write("UPDATE source SET enabled = ? WHERE id = ?", (int(enabled), source_id))
 
-    def source_owner(self, source_id: int) -> int | None:
-        source = self.get_source(source_id)
-        return source.owner_id if source else None
-
     # --- assets ----------------------------------------------------------------------------
 
     _asset = staticmethod(asset_from_row)

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from photo_assistant.app.print_album import (
+from photo_assistant.app.print_job import (
     InvalidPagesError,
     PrintBlockedError,
     PrintOptions,

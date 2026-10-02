@@ -14,14 +14,14 @@ from pydantic import BaseModel
 
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep
 from photo_assistant.api.services import Services
-from photo_assistant.app.album_print import (
+from photo_assistant.app.album_printer import (
     AlbumPrintBlockedError,
     AlbumToPrint,
     Issue,
     ManualPage,
     PrintRequest,
 )
-from photo_assistant.app.print_album import EmptyAlbumError, InvalidPagesError
+from photo_assistant.app.print_job import EmptyAlbumError, InvalidPagesError
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.print_layout import (
     LAYOUTS,

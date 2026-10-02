@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.app.print_album import (
+from photo_assistant.app.print_job import (
     EmptyAlbumError,
     InvalidPagesError,
     PrintBlockedError,

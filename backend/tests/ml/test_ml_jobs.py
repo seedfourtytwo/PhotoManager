@@ -110,7 +110,12 @@ def test_undecodable_image_is_recorded_as_unreadable(
 def test_a_deleted_asset_is_nothing_to_do(
     repo: SqliteRepository, store: SqliteMlStore, library: FakeLibrary
 ) -> None:
-    EmbedClip(repo, library, store, FakeClip())({"asset_id": 999})  # no exception
+    """A photo purged while its job waited: the job ends quietly and records nothing."""
+    clip = FakeClip()
+    EmbedClip(repo, library, store, clip)({"asset_id": 999})
+    assert store.task_status(999, EMBED_CLIP, clip.name) is None
+    assert store.clip_vector(999, clip.name) is None
+    assert store.task_counts() == {}
 
 
 def test_payload_must_name_an_asset(

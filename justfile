@@ -61,6 +61,11 @@ test: test-backend test-web
 test-backend:
     cd backend && uv run pytest --cov
 
+# Quick feedback while coding: backend tests without the integration ones (no exiftool, libvips,
+# restic or rclone runs). Not a substitute for `just check`.
+test-fast:
+    cd backend && uv run pytest -m "not integration" -q
+
 test-web:
     cd web && pnpm test
 

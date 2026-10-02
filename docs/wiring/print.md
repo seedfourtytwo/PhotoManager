@@ -10,7 +10,7 @@ it yet. This page says what the integrator has to add.
 | domain | `domain/print_layout.py` | trim presets, bleed 3 mm and safe margin 5 mm, layout templates (as data), `PageGeometry`, `auto_layout`, `place_page`, `cover_crop`, `effective_ppi`, `check_resolution` |
 | domain | `domain/print_theme.py` | `THEMES` (`quiet`, `warm`, `night`), `page_geometry(theme, trim)` |
 | port | `ports/printing.py` | `PrintRenderer` Protocol; `PrintJob`, `PrintPage`, `PrintSlot`, `PrintCover`; `PrintRenderError` |
-| app | `app/print_album.py` | `plan_print`, `print_album`, `preview_page`; `PrintPhoto`, `PrintOptions`; `PrintBlockedError`, `InvalidPagesError`, `EmptyAlbumError` |
+| app | `app/print_job.py` | `plan_print`, `print_album`, `preview_page`; `PrintPhoto`, `PrintOptions`; `PrintBlockedError`, `InvalidPagesError`, `EmptyAlbumError` |
 | adapter | `adapters/typst_print.py` + `typst_templates/album.typ` | `TypstPrintRenderer(timestamp=…)` |
 
 Layout ids: `full-bleed`, `single`, `two-side`, `two-stacked`, `three-grid`, `hero-two`,

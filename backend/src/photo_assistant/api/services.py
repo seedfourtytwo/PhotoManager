@@ -23,7 +23,7 @@ from photo_assistant.api.ml_services import MlServices, build_ml_services
 from photo_assistant.api.ops_services import OpsServices, build_ops_services
 from photo_assistant.api.settings import Settings
 from photo_assistant.app.accounts import Accounts
-from photo_assistant.app.album_print import AlbumPrinter, PrintRenditions
+from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
 from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import Editor
@@ -34,8 +34,6 @@ from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.worker import Worker
-
-SCAN_JOB = SCAN_JOB_KIND  # "scan_source": one handler pulls rclone sources, then imports
 
 
 @dataclass
@@ -144,7 +142,7 @@ def build_services(settings: Settings) -> Services:
             PREVIEW_JOB: ml.planner.after(
                 GeneratePreview(repo, store, renderer, settings.preview_edge)
             ),
-            SCAN_JOB: scan,
+            SCAN_JOB_KIND: scan,  # one handler: pulls rclone sources, then imports any kind
             GEOCODE_JOB: GeocodeAssets(repo, OfflineGeocoder()),
             GROUP_JOB: GroupSimilar(repo, ImageHashPhash(), lambda rel: store.absolute(rel)),
             PURGE_JOB: trash.purge_expired,

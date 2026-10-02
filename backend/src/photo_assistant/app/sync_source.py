@@ -30,7 +30,7 @@ from photo_assistant.ports.sync import (
 
 log = logging.getLogger(__name__)
 
-SCAN_JOB_KIND = "scan_source"  # the job kind api.services registers (SCAN_JOB)
+SCAN_JOB_KIND = "scan_source"  # the job kind api.services registers for every source kind
 # Retrying these at once can't help (and hammering a throttling provider makes it worse):
 # record them for the user and finish the job.
 _FINAL = (SyncAuthError, SyncNotFoundError, SyncRateLimitedError)

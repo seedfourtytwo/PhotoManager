@@ -32,7 +32,10 @@ def configure_logging(data_root: Path, level: str = "INFO") -> None:
     console = logging.StreamHandler()
     console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger("photo_assistant")
+    replaced = root.handlers[:]
     root.handlers[:] = [file_handler, console]
+    for handler in replaced:  # a second app in the same process (tests): don't leak files
+        handler.close()
     root.setLevel(level)
     root.propagate = False
 

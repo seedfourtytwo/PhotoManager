@@ -80,6 +80,3 @@ class AccessMixin(SqliteBase):
             )
             for r in rows
         ]
-
-    def source_visible_to(self, viewer: Viewer, source_id: int) -> bool:
-        return any(s.id == source_id for s, _ in self.sources_for(viewer))

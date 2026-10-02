@@ -220,10 +220,6 @@ class Settings(BaseSettings):
     # E2E only: adds POST /__test/reset. Refused unless the server stays on this machine.
     test_mode: bool = False  # global face clustering (deferred faces get people)
 
-    @property
-    def database_path(self) -> Path:
-        return self.data_root / "library.db"
-
 
 @lru_cache
 def get_settings() -> Settings:

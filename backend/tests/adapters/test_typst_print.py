@@ -15,7 +15,7 @@ import pyvips  # type: ignore[import-untyped]
 import typst
 
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
-from photo_assistant.app.print_album import PrintOptions, PrintPhoto, plan_print
+from photo_assistant.app.print_job import PrintOptions, PrintPhoto, plan_print
 from photo_assistant.domain.print_layout import BLEED_MM, MM_PER_INCH, Page
 from photo_assistant.domain.print_theme import BUNDLED_FONTS, THEMES
 from photo_assistant.ports.printing import PrintJob, PrintRenderer, PrintRenderError

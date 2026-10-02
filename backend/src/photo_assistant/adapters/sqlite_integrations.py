@@ -85,6 +85,7 @@ class SqliteAILog(_Store):
         )
 
     def recent(self, limit: int) -> list[dict[str, object]]:
+        """The latest AI calls, for inspection (tests; an admin view later, FEATURES 7)."""
         rows = self._all("SELECT * FROM ai_log ORDER BY id DESC LIMIT ?", (limit,))
         return [
             {
