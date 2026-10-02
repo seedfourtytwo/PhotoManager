@@ -34,6 +34,27 @@ describe('clusterPoints', () => {
 		expect(paris.bounds).toEqual({ south: 48.85, north: 48.86, west: 2.34, east: 2.35 });
 	});
 
+	it('merges clusters whose dots would overlap, so every dot stays clickable', () => {
+		// Two dense places one cell apart: as dots of radius 2*sqrt(n) they would overlap.
+		const near = [
+			...Array.from({ length: 40 }, (_, i) => ({ id: i, lat: 45, lon: 1 })),
+			...Array.from({ length: 30 }, (_, i) => ({ id: 100 + i, lat: 45, lon: 4.5 })),
+			{ id: 999, lat: -30, lon: 120 }
+		];
+		const radius = (n: number) => 2 * Math.sqrt(n);
+		const apart = clusterPoints(near, view, 3);
+		expect(apart).toHaveLength(3);
+		const merged = clusterPoints(near, view, 3, radius);
+		expect(merged.map((c) => c.ids.length)).toEqual([70, 1]);
+		for (const [i, a] of merged.entries())
+			for (const b of merged.slice(i + 1))
+				expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(
+					radius(a.ids.length) + radius(b.ids.length)
+				);
+		expect(merged[0].bounds).toEqual({ south: 45, north: 45, west: 1, east: 4.5 });
+		expect(merged[0].x).toBeCloseTo((40 * 181 + 30 * 184.5) / 70);
+	});
+
 	it('returns nothing for no points', () => {
 		expect(clusterPoints([], view, 10)).toEqual([]);
 	});

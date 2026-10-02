@@ -15,14 +15,52 @@ export type Cluster = {
 	bounds: { south: number; west: number; north: number; east: number };
 };
 
+function merge(a: Cluster, b: Cluster): Cluster {
+	const na = a.ids.length;
+	const nb = b.ids.length;
+	return {
+		x: (a.x * na + b.x * nb) / (na + nb),
+		y: (a.y * na + b.y * nb) / (na + nb),
+		ids: [...a.ids, ...b.ids],
+		bounds: {
+			south: Math.min(a.bounds.south, b.bounds.south),
+			north: Math.max(a.bounds.north, b.bounds.north),
+			west: Math.min(a.bounds.west, b.bounds.west),
+			east: Math.max(a.bounds.east, b.bounds.east)
+		}
+	};
+}
+
+/** Merge clusters until no two dots (of `radius(count)`) overlap: overlapping dots hide each
+ * other and steal each other's clicks. Few clusters on screen, so pairwise is fine. */
+function separate(clusters: Cluster[], radius: (count: number) => number): Cluster[] {
+	const out = [...clusters];
+	for (let merged = true; merged;) {
+		merged = false;
+		search: for (let i = 0; i < out.length; i++)
+			for (let j = i + 1; j < out.length; j++) {
+				const [a, b] = [out[i], out[j]];
+				if (Math.hypot(a.x - b.x, a.y - b.y) < radius(a.ids.length) + radius(b.ids.length)) {
+					out.splice(j, 1);
+					out[i] = merge(a, b);
+					merged = true;
+					break search;
+				}
+			}
+	}
+	return out;
+}
+
 /**
  * Bucket points into square cells of `cell` pixels; each cluster sits at its points' centroid.
+ * With `radius`, clusters whose dots would overlap are merged too.
  * Largest first, so small clusters draw on top and stay clickable.
  */
 export function clusterPoints(
 	points: readonly MapPoint[],
 	view: Viewport,
-	cell: number
+	cell: number,
+	radius?: (count: number) => number
 ): Cluster[] {
 	const buckets = new Map<string, { sx: number; sy: number; points: MapPoint[] }>();
 	for (const p of points) {
@@ -34,19 +72,20 @@ export function clusterPoints(
 		bucket.points.push(p);
 		buckets.set(key, bucket);
 	}
-	return [...buckets.values()]
-		.map(({ sx, sy, points: ps }) => ({
-			x: sx / ps.length,
-			y: sy / ps.length,
-			ids: ps.map((p) => p.id),
-			bounds: {
-				south: Math.min(...ps.map((p) => p.lat)),
-				north: Math.max(...ps.map((p) => p.lat)),
-				west: Math.min(...ps.map((p) => p.lon)),
-				east: Math.max(...ps.map((p) => p.lon))
-			}
-		}))
-		.sort((a, b) => b.ids.length - a.ids.length);
+	const clusters = [...buckets.values()].map(({ sx, sy, points: ps }) => ({
+		x: sx / ps.length,
+		y: sy / ps.length,
+		ids: ps.map((p) => p.id),
+		bounds: {
+			south: Math.min(...ps.map((p) => p.lat)),
+			north: Math.max(...ps.map((p) => p.lat)),
+			west: Math.min(...ps.map((p) => p.lon)),
+			east: Math.max(...ps.map((p) => p.lon))
+		}
+	}));
+	return (radius ? separate(clusters, radius) : clusters).sort(
+		(a, b) => b.ids.length - a.ids.length
+	);
 }
 
 /** Dot radius grows with the square root of the count, so area is proportional to photos. */

@@ -23,7 +23,13 @@
 	const vh = $derived(view.w / aspectRatio);
 	const pxPerUnit = $derived(width ? width / view.w : 1);
 	const clusters = $derived(
-		clusterPoints(points, { width: 360, height: 180 }, 22 / pxPerUnit).filter(
+		clusterPoints(
+			points,
+			{ width: 360, height: 180 },
+			22 / pxPerUnit,
+			// the drawn dot plus a little air, so dots never overlap or hide each other
+			(n) => (Math.max(clusterRadius(n, 2), 3) + 2) / pxPerUnit
+		).filter(
 			(c) =>
 				c.x >= view.x - 5 &&
 				c.x <= view.x + view.w + 5 &&
