@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from photo_assistant.domain.capture_time import DateSource, MetadataDates
 from photo_assistant.domain.media_types import MediaKind
+from photo_assistant.domain.recheck import Recheck
 
 # Ids are SQLite integers: anything larger can name nothing (QA A11: it used to be a 500).
 MAX_ID = 2**63 - 1
@@ -44,6 +45,7 @@ class Source:
     enabled: bool = True
     kind: str = "folder"
     owner_id: int | None = None
+    recheck: Recheck = Recheck.OFF  # checks itself again on a timer; off = only when asked
 
 
 @dataclass(frozen=True, slots=True)

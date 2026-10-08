@@ -134,6 +134,10 @@ class KeyVault(Protocol):
         """Raises PasswordFileError if the file is gone or unreadable."""
         ...
 
+    def holds(self, key_file: Path) -> bool:
+        """Is this path a file of the vault itself (symlinks and ``..`` resolved)?"""
+        ...
+
     def discard(self, key_file: Path) -> None: ...
 
 
@@ -148,8 +152,9 @@ class MirrorSignInError(MirrorError):
 @dataclass(frozen=True, slots=True)
 class MirrorReport:
     uploaded: int  # files that were not in the copy before
-    removed: int  # files the backup no longer has, deleted from the copy
+    removed: int  # files the backup no longer has, taken out of the copy
     bytes_sent: int
+    left_in_trash: int = 0  # of those, how many could only be trashed, not deleted for good
 
 
 class RepositoryMirror(Protocol):

@@ -38,10 +38,22 @@ def classify(filename: str) -> MediaKind:
     return MediaKind.UNSUPPORTED
 
 
+def is_picture(filename: str) -> bool:
+    """A photo or RAW file: what gets imported, and what an edit or a Live Photo belongs to."""
+    return classify(filename) in (MediaKind.PHOTO, MediaKind.RAW)
+
+
 def edited_original_name(filename: str) -> str | None:
     """iPhone exports edits as ``IMG_E1234.JPG`` next to ``IMG_1234.JPG``; return the latter."""
     match = _EDITED.match(PurePath(filename).name)
     return f"IMG_{match.group(1)}{match.group(2)}" if match else None
+
+
+def edited_original_stem(filename: str) -> str | None:
+    """``IMG_1234`` for ``IMG_E1234.JPG``: the original of an edit often has another
+    extension (the photo is ``IMG_1234.HEIC``, its edit a JPEG)."""
+    match = _EDITED.match(PurePath(filename).name)
+    return f"IMG_{match.group(1)}" if match else None
 
 
 # What remote pulls fetch (rclone filter): photos and RAW only; videos aren't imported yet.

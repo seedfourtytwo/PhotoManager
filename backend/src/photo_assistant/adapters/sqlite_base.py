@@ -1,4 +1,5 @@
-"""Shared plumbing for the SQLite adapter: one connection, one lock, small query helpers.
+"""Shared plumbing for the SQLite adapter: the one ``Database`` (one writer and lock, a reader
+per thread) and small query helpers.
 
 The repository is split by area into mixins (accounts, library queries, albums, …) that all
 inherit this base, so they share the process's one ``Database`` and compose into one object.
@@ -14,9 +15,16 @@ from datetime import datetime
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.media_types import MediaKind
-from photo_assistant.domain.model import Asset
+from photo_assistant.domain.model import Asset, Source
+from photo_assistant.domain.recheck import Recheck
 
 Params = Sequence[object] | Mapping[str, object]
+
+
+def iso_text(value: datetime) -> str:
+    """A timestamp as it is stored: exactly as given (a capture time is local, without a zone).
+    Instants that are compared as strings go through ``sqlite_accounts.utc_text`` instead."""
+    return value.isoformat()
 
 
 def asset_from_row(row: sqlite3.Row) -> Asset:
@@ -42,6 +50,18 @@ def asset_from_row(row: sqlite3.Row) -> Asset:
         preview_path=row["preview_path"],
         variant_of=row["variant_of"],
         thumb_size=(row["thumb_w"], row["thumb_h"]) if row["thumb_w"] else None,
+    )
+
+
+def source_from_row(row: sqlite3.Row) -> Source:
+    return Source(
+        row["id"],
+        row["label"],
+        row["root"],
+        bool(row["enabled"]),
+        row["kind"],
+        row["owner_id"],
+        Recheck(row["recheck"]),
     )
 
 

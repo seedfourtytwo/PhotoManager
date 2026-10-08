@@ -18,7 +18,8 @@ import from its library folder.
 ## Backend: Python 3.12 + FastAPI + uv
 
 **Why:** the whole ML/imaging ecosystem is Python-first (ONNX Runtime, pyvips, typst-py);
-FastAPI gives typed request/response models and an OpenAPI spec for a generated TS client;
+FastAPI gives typed request/response models and an OpenAPI spec (the web client's types are
+written by hand from `docs/contracts/api-v1.md`, not generated from it);
 it also matches C's Python learning goal. `uv` for fast, locked, reproducible envs.
 **Rejected:** Node/TS backend (weaker ML story), Go/Rust (slower iteration for a 2-person app).
 
@@ -26,8 +27,9 @@ it also matches C's Python learning goal. `uv` for fast, locked, reproducible en
 
 **Why:** one file, zero ops, trivially backed up, plenty for 10k–100k photos.
 sqlite-vec adds vector KNN inside the same DB for CLIP and face embeddings.
-**Risk:** sqlite-vec is pre-v1 and warns of breaking changes; pin the version and keep all
-vector access behind the `Repository` port. At 10k × 512-d, brute-force KNN is milliseconds,
+**Risk:** sqlite-vec is pre-v1 and warns of breaking changes; it is held to 0.1.x
+(`sqlite-vec~=0.1.9`) and all vector access is behind the `MlStore` port (`ports/ml.py`,
+`adapters/ml_store.py`). At 10k × 512-d, brute-force KNN is milliseconds,
 so we don't depend on its newer ANN indexes.
 **Migrations:** numbered SQL files + `PRAGMA user_version`, with an automatic snapshot of the
 database before any migration (FEATURES 11.6). Chosen over Alembic (built 2026-09-29): no ORM
@@ -35,7 +37,7 @@ in this codebase, and plain SQL keeps the schema readable.
 **Rejected:** Postgres + pgvector (Immich's choice — more ops than we need now).
 **Revisit if:** > 200k assets or many concurrent writers.
 
-## Imaging: libvips (pyvips) + ExifTool + pillow-heif
+## Imaging: libvips (pyvips) + ExifTool
 
 - **libvips** for thumbnails/previews: fast, low-memory streaming, handles HEIC with libheif.
 - **ExifTool** (via `pyexiftool`, one persistent process) — the reference for EXIF/XMP/
@@ -47,7 +49,7 @@ in this codebase, and plain SQL keeps the schema readable.
   appears in the library immediately. Previews follow in the background.
 - **HEIC needs the HEVC decoder plugin** (`libheif-plugin-libde265` on Ubuntu). Without it libvips
   only reads the small embedded preview; found by the real-data run, now checked by `just setup`
-  and installed in CI.
+  and `just doctor`, and in the CI file's package list.
 - Python libraries: `pyvips`, `pyexiftool` (one long-running ExifTool process), `blake3`.
 - Rescans skip files whose size and modification time are unchanged (stored per source file,
   migration 0002); changed files are re-hashed, so an edit is never missed.
@@ -56,7 +58,7 @@ in this codebase, and plain SQL keeps the schema readable.
 
 - **argon2-cffi** — argon2id PIN hashes (RFC 9106 low-memory profile: t=3, 64 MiB).
 - **reverse_geocoder** — used only for its bundled GeoNames cities file (population > 1000);
-  we build our own k-d tree over unit-sphere points with **scipy** (its dependency) and drop
+  we build our own k-d tree over unit-sphere points with **scipy** (declared; also its dependency) and drop
   places more than 50 km away. Fully offline. **pycountry** turns ISO codes into country
   names (offline data).
 - **imagehash** + **Pillow** — 64-bit pHash of each thumbnail for near-duplicates
@@ -78,8 +80,9 @@ CLIP, SCRFD and ArcFace directly — no `insightface` package, which pulls in a 
 chain), `numpy`, `tokenizers` (CLIP tokenizer.json), `sqlite-vec` (pinned; vector distance
 in SQL), `opencv-python-headless` (resize/warp for preprocessing and alignment, and the
 YuNet/SFace fallback); `onnx` as a dev dependency to build tiny synthetic models in tests.
-Models are fetched by `just models` into `<data_root>/models/`, never committed. Wiring and
-model-format assumptions: `docs/wiring/ml.md`.
+Models are fetched by `just models` into `<data_root>/models/`, never committed. Settings:
+`docs/guides/settings.md` (Local ML). The model-format assumptions are written in
+`adapters/onnx_clip.py` and checked against real models by `tests/ml/test_real_models.py`.
 
 ## AI socket: Ollama adapter (optional)
 
@@ -112,11 +115,16 @@ All sources are **pull-only** into `staging/`; the import step is the same for a
 **Why:** small bundles and fast rendering on phones; one responsive codebase for laptop and
 mobile; installable as a PWA (no app-store work). Built as static files served by FastAPI.
 - Virtualised justified grid (own component, tested) — the core performance piece.
-- Charts (calendar heat map, small multiples): D3 scales + hand-written SVG, no chart kit
-  with default chrome (see DESIGN_PRINCIPLES).
-- Map: MapLibre GL with a muted, self-hostable style (e.g. Protomaps PMTiles file) — no tile API keys.
-- API types are hand-written in `web/src/lib/api/types.ts` against `docs/contracts/api-v1.md`;
-  the mock API imports the same types.
+- No runtime dependencies at all (`web/package.json` has only `devDependencies`): everything
+  below is our own code.
+- Charts (calendar heat map, small multiples): hand-written SVG, no D3 and no chart kit with
+  default chrome (see DESIGN_PRINCIPLES).
+- Map: our own SVG. The land outline is one path generated from Natural Earth 1:110m
+  (`web/scripts/make-world.ts` → `web/src/lib/world.ts`), so there are no tiles and no keys.
+  MapLibre GL with a self-hosted PMTiles file was the plan and is not used.
+- API client and types written by hand (`web/src/lib/api/client.ts`, `types.ts`) from
+  `docs/contracts/api-v1.md`; a backend test checks every route in that contract exists
+  (`tests/api/test_contract.py`). Not generated: `openapi-typescript` is not used.
 **Rejected:** React (heavier, no clear gain here), native mobile apps (later, if ever).
 
 ## Print: Typst (via `typst` Python package)
@@ -131,7 +139,7 @@ LaTeX (heavy toolchain).
 consumer photo-book services accept sRGB PDFs. Confirm with the lab we pick (OPEN_QUESTIONS).
 **Fonts:** only the families compiled into Typst (Libertinus Serif, New Computer Modern,
 DejaVu Sans Mono), system fonts ignored: no downloads, identical output on laptop and server.
-Wiring: `docs/wiring/print.md`.
+Flow: `docs/ARCHITECTURE.md` (Album → print); routes: `docs/contracts/api-v1.md`.
 
 ## Download, convert and edit
 
@@ -188,13 +196,13 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 | Concern | Tool |
 |---|---|
 | Task runner | `just` |
-| Python lint/format/types | ruff, ruff format, mypy --strict (domain/app), pyright in editor OK |
-| Python tests | pytest, hypothesis, pytest-cov, syrupy (snapshots), import-linter; `httpx2` is the transport of Starlette ≥ 1.x's `TestClient` (with plain `httpx` it warns, an error under our warning filter) — kept on purpose (reviewed 2026-10-02, B20) |
+| Python lint/format/types | ruff, ruff format, mypy strict (the whole package), pyright in editor OK |
+| Python tests | pytest, hypothesis, pytest-cov, import-linter; PyYAML (reads `deploy/compose.yml` in the deploy tests); `httpx2` is the transport of Starlette ≥ 1.x's `TestClient` (with plain `httpx` it warns, an error under our warning filter) — kept on purpose (reviewed 2026-10-02, B20) |
 | Web lint/format/types | eslint, prettier, svelte-check, TypeScript strict |
-| Web tests | Vitest + Testing Library, Playwright (E2E, mobile + desktop viewports), axe-core |
-| Pre-commit | pre-commit (ruff, prettier, gitleaks, no large files) |
-| CI | GitHub Actions: lint → types → unit → integration (with exiftool/libvips in container) → E2E |
-| Versioning | Conventional Commits, release-please |
+| Web tests | Vitest in browser mode (`vitest-browser-svelte` on `@vitest/browser-playwright`), Playwright (E2E, mobile + desktop viewports), axe-core (`@axe-core/playwright`) |
+| Pre-commit | pre-commit (ruff, prettier + eslint, gitleaks, no large files) |
+| CI | GitHub Actions (`.github/workflows/ci.yml`), on every pull request and on main: backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step: `just e2e` and `just e2e-mock` run locally |
+| Versioning | Conventional Commits. No release tooling yet |
 
 ## Typefaces (decided 2026-10-08)
 

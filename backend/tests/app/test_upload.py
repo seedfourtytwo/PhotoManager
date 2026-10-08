@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -28,6 +28,15 @@ class FixedClock:
 class FakeLibrary:
     known: dict[str, int] = field(default_factory=dict)
     jobs: list[tuple[str, dict[str, object]]] = field(default_factory=list)
+    runs: dict[int, tuple[str, datetime]] = field(default_factory=dict)  # newest per source
+
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = 200
+    ) -> list[dict[str, object]]:
+        if source_id not in self.runs:
+            return []
+        status, started = self.runs[source_id]
+        return [{"status": status, "started_at": started.isoformat()}]
 
     def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
         return {h: self.known[h] for h in hashes if h in self.known}
@@ -42,7 +51,9 @@ class FakeInboxes:
     sources: dict[int, Source] = field(default_factory=dict)
 
     def ensure_inbox_source(self, user_id: int, root: str) -> Source:
-        self.sources.setdefault(user_id, Source(100 + user_id, "Uploads", root, kind="inbox"))
+        self.sources.setdefault(
+            user_id, Source(100 + user_id, "Uploads", root, kind="inbox", owner_id=user_id)
+        )
         return self.sources[user_id]
 
 
@@ -83,6 +94,37 @@ def test_a_photo_lands_in_the_users_inbox_under_the_month(world: World) -> None:
     assert list(world.tmp.iterdir()) == []
 
 
+class MeasuredSpool(DiskUploadSpool):
+    free = 0
+
+    def free_bytes(self) -> int:
+        return self.free
+
+
+def test_a_file_is_refused_while_the_disk_is_under_its_free_space_floor(tmp_path: Path) -> None:
+    gb = 1000**3
+    spool = MeasuredSpool(tmp_path / "tmp")
+    use_case = UploadInbox(
+        inbox=FakeInboxes(),
+        library=FakeLibrary(),
+        spool=spool,
+        clock=FixedClock(),
+        inbox_root=tmp_path / "inbox",
+        settings=UploadSettings(min_free_bytes=10 * gb),
+    )
+    spool.free = 10 * gb - 1
+    refused = use_case.no_room("IMG_1.JPG")
+    assert refused is not None and refused.outcome is UploadOutcome.REJECTED
+    assert refused.name == "IMG_1.JPG" and refused.reason is not None
+    assert "10.0 GB free" in refused.reason and "at least 10 GB" in refused.reason
+    spool.free = 10 * gb
+    assert use_case.no_room("IMG_1.JPG") is None, "exactly at the floor there is room"
+
+
+def test_without_a_floor_every_file_has_room(world: World) -> None:
+    assert world.use_case.no_room("IMG_1.JPG") is None
+
+
 def test_finishing_a_batch_enqueues_one_import_of_the_inbox(world: World) -> None:
     results = [
         world.use_case.accept(ME, f"{n}.jpg", _spooled(world, JPEG + bytes([n]))) for n in (1, 2)
@@ -91,6 +133,97 @@ def test_finishing_a_batch_enqueues_one_import_of_the_inbox(world: World) -> Non
     assert job == 1
     assert world.library.jobs == [("scan_source", {"source_id": 107})]
     assert world.inboxes.sources[7].root == str(world.inbox_root / "7")
+
+
+class OnceQueue:
+    """enqueue_once as the repository does it: nothing while the same job is waiting."""
+
+    def __init__(self) -> None:
+        self.waiting: list[tuple[str, dict[str, object]]] = []
+
+    def enqueue_once(self, kind: str, payload: dict[str, object] | None = None) -> int | None:
+        if (kind, payload or {}) in self.waiting:
+            return None
+        self.waiting.append((kind, payload or {}))
+        return len(self.waiting)
+
+
+def test_a_file_stored_by_a_request_that_died_is_picked_up_by_the_rescan(world: World) -> None:
+    """accept() moved it into the inbox; the server died before finish_batch queued the scan."""
+    world.use_case.accept(ME, "first-ever.jpg", _spooled(world, JPEG))
+    assert world.library.jobs == []
+    queue = OnceQueue()
+    sources = list(world.inboxes.sources.values())
+    assert world.use_case.rescan(sources, queue.enqueue_once) == 1
+    assert queue.waiting == [("scan_source", {"source_id": 107})]
+
+
+def test_rescans_never_pile_up_and_only_touch_enabled_inboxes(world: World) -> None:
+    queue = OnceQueue()
+    sources = [
+        Source(107, "Uploads (me)", str(world.inbox_root / "7"), kind="inbox", owner_id=7),
+        Source(108, "Uploads (off)", "/x", enabled=False, kind="inbox", owner_id=8),
+        Source(1, "Pictures", "/home/c/Pictures"),
+        Source(2, "Phone", "/staging/2", kind="rclone", owner_id=7),
+    ]
+    world.inboxes.sources[7] = sources[0]
+    world.use_case.accept(ME, "stranded.jpg", _spooled(world, JPEG))
+    assert world.use_case.rescan(sources, queue.enqueue_once) == 1
+    assert world.use_case.rescan(sources, queue.enqueue_once) == 0, "one is already waiting"
+    assert queue.waiting == [("scan_source", {"source_id": 107})]
+
+
+def _rescan(world: World) -> int:
+    return world.use_case.rescan(list(world.inboxes.sources.values()), OnceQueue().enqueue_once)
+
+
+def test_the_rescan_leaves_an_inbox_alone_once_an_import_has_looked_at_its_files(
+    world: World,
+) -> None:
+    """It runs every hour; a scan each time meant about 24 "nothing new" import reports per
+    inbox per day. Files stay in the inbox after import, so "not empty" is not the test."""
+    world.use_case.accept(ME, "a.jpg", _spooled(world, JPEG))
+    assert _rescan(world) == 1, "no import has run yet"
+    world.library.runs[107] = ("done", datetime.now(UTC) + timedelta(seconds=5))
+    assert _rescan(world) == 0, "the last import started after the newest file arrived"
+
+
+def test_the_rescan_picks_up_a_file_that_arrived_after_the_last_import_started(
+    world: World,
+) -> None:
+    world.library.runs[107] = ("done", datetime.now(UTC) - timedelta(hours=1))
+    world.inboxes.ensure_inbox_source(7, str(world.inbox_root / "7"))
+    assert _rescan(world) == 0, "an empty inbox has nothing waiting"
+    world.use_case.accept(ME, "stranded.jpg", _spooled(world, JPEG))
+    assert _rescan(world) == 1
+
+
+@pytest.mark.parametrize("status", ["failed", "paused_low_disk"])
+def test_the_rescan_tries_again_after_an_import_that_did_not_finish(
+    world: World, status: str
+) -> None:
+    world.use_case.accept(ME, "a.jpg", _spooled(world, JPEG))
+    world.library.runs[107] = (status, datetime.now(UTC) + timedelta(seconds=5))
+    assert _rescan(world) == 1
+
+
+def test_a_rescan_follows_a_moved_data_root(world: World) -> None:
+    class MovingInboxes(FakeInboxes):
+        def ensure_inbox_source(self, user_id: int, root: str) -> Source:
+            self.sources[user_id] = Source(107, "Uploads", root, kind="inbox", owner_id=user_id)
+            return self.sources[user_id]
+
+    inboxes = MovingInboxes()
+    use_case = UploadInbox(
+        inbox=inboxes,
+        library=world.library,
+        spool=DiskUploadSpool(world.tmp),
+        clock=FixedClock(),
+        inbox_root=world.inbox_root,
+    )
+    stale = Source(107, "Uploads", "/old/place/inbox/7", kind="inbox", owner_id=7)
+    use_case.rescan([stale], OnceQueue().enqueue_once)
+    assert inboxes.sources[7].root == str(world.inbox_root / "7")
 
 
 def test_nothing_stored_means_nothing_to_import(world: World) -> None:

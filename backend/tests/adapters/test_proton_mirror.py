@@ -112,10 +112,25 @@ def test_files_the_backup_dropped_are_deleted_for_good_on_proton(world: World) -
     (world.repo / "snapshots" / "s1").unlink()
     world.write("snapshots/s2", "snap two")
     report = world.run()
-    assert (report.uploaded, report.removed) == (1, 2)
+    assert (report.uploaded, report.removed, report.left_in_trash) == (1, 2, 0)
     assert world.remote() == world.local()
     assert json.loads(world.cloud.state_file.read_text())["trash"] == {}, "not left in the trash"
     assert world.run().removed == 0, "and not asked for again"
+
+
+def test_a_file_of_yours_in_the_trash_with_the_same_name_is_never_deleted(world: World) -> None:
+    world.run()
+    world.cloud.state = json.loads(world.cloud.state_file.read_text())
+    world.cloud.state["trash"] = {"yours": {"type": "file", "uid": "yours", "name": "pack1"}}
+    world.cloud.save()
+    (world.repo / "data" / "ab" / "pack1").unlink()
+    (world.repo / "snapshots" / "s1").unlink()
+    report = world.run()
+    assert (report.removed, report.left_in_trash) == (2, 1)
+    assert world.remote() == world.local(), "it is out of the copy all the same"
+    trash = json.loads(world.cloud.state_file.read_text())["trash"]
+    assert sorted(e["name"] for e in trash.values()) == ["pack1", "pack1"], "both still there"
+    assert "yours" in trash
 
 
 def test_only_files_inside_the_copy_are_ever_removed(world: World) -> None:

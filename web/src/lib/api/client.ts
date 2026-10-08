@@ -44,6 +44,7 @@ import type {
 	JobStatus,
 	AccountName,
 	LoginBody,
+	ManagedUser,
 	MapPoint,
 	MlStatus,
 	NewDevice,
@@ -85,6 +86,13 @@ export class ApiError extends Error {
 		this.status = status;
 	}
 }
+
+/**
+ * No answer from the library server: the network dropped, or something else answered in its
+ * place (a Wi-Fi sign-in page). Browsers only say "Failed to fetch" or "Unexpected token <".
+ */
+export const unreachable = () =>
+	new ApiError(0, 'The library server could not be reached. Check the connection and try again.');
 
 export type ApiOptions = {
 	/** Origin of the API, '' for same origin (the default; the dev server proxies /api). */
@@ -141,21 +149,30 @@ export function createApi(options: ApiOptions = {}) {
 	// Late-bound so tests that stub globalThis.fetch after creation still work.
 	const fetcher: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
 
+	const send = (path: string, init: RequestInit) =>
+		fetcher(`${base}${path}`, init).catch(() => {
+			throw unreachable();
+		});
+
 	async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
 		const init: RequestInit = { method, credentials: 'same-origin' };
 		if (body !== undefined) {
 			init.body = JSON.stringify(body);
 			init.headers = { 'content-type': 'application/json' };
 		}
-		const response = await fetcher(`${base}${path}`, init);
+		const response = await send(path, init);
 		if (!response.ok) {
 			if (response.status === 401 && path !== '/api/auth/login') options.onUnauthorized?.();
 			throw new ApiError(response.status, await readDetail(response));
 		}
 		if (response.status === 204 || response.headers.get('content-length') === '0')
 			return undefined as T;
-		const text = await response.text();
-		return (text ? JSON.parse(text) : undefined) as T;
+		try {
+			const text = await response.text();
+			return (text ? JSON.parse(text) : undefined) as T;
+		} catch {
+			throw unreachable();
+		}
 	}
 
 	/** A binary answer (a PDF): the body as a Blob plus its headers; errors as ApiError. */
@@ -165,12 +182,15 @@ export function createApi(options: ApiOptions = {}) {
 			init.body = JSON.stringify(body);
 			init.headers = { 'content-type': 'application/json' };
 		}
-		const response = await fetcher(`${base}${path}`, init);
+		const response = await send(path, init);
 		if (!response.ok) {
 			if (response.status === 401) options.onUnauthorized?.();
 			throw new ApiError(response.status, await readDetail(response));
 		}
-		return { blob: await response.blob(), headers: response.headers };
+		const blob = await response.blob().catch(() => {
+			throw unreachable();
+		});
+		return { blob, headers: response.headers };
 	}
 
 	const get = <T>(path: string) => request<T>('GET', path);
@@ -202,10 +222,11 @@ export function createApi(options: ApiOptions = {}) {
 		changePin: (body: PinBody) => request<void>('POST', '/api/auth/pin', body),
 
 		// users (admin)
-		users: () => get<User[]>('/api/users'),
-		createUser: (body: NewUser) => request<User>('POST', '/api/users', body),
-		updateUser: (id: Id, body: UserPatch) => request<User>('PATCH', `/api/users/${id}`, body),
-		/** v1.3: lift the failed-login block (429) on this account. */
+		users: () => get<ManagedUser[]>('/api/users'),
+		createUser: (body: NewUser) => request<ManagedUser>('POST', '/api/users', body),
+		updateUser: (id: Id, body: UserPatch) =>
+			request<ManagedUser>('PATCH', `/api/users/${id}`, body),
+		/** Lift the wait (429) and the lock (423) that wrong PINs put on this account. */
 		unlockUser: (id: Id) => request<void>('POST', `/api/users/${id}/unlock`),
 		/** v1.1: names to share albums with, for any member (not only admins). */
 		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
@@ -224,16 +245,9 @@ export function createApi(options: ApiOptions = {}) {
 		sourceAccess: (id: Id) => get<Access>(`/api/sources/${id}/access`),
 		setSourceAccess: (id: Id, body: Access) =>
 			request<Access>('PUT', `/api/sources/${id}/access`, body),
-		imports: (sourceId?: Id) =>
-			get<ImportRun[]>(
-				withQuery(
-					'/api/imports',
-					new URLSearchParams(sourceId === undefined ? {} : { source_id: String(sourceId) })
-				)
-			),
+		imports: (sourceId?: Id) => get<ImportRun[]>(query('/api/imports', { source_id: sourceId })),
 		importReport: (id: Id) => get<ImportReport>(`/api/imports/${id}`),
-		jobs: (status?: JobStatus) =>
-			get<Job[]>(withQuery('/api/jobs', new URLSearchParams(status ? { status } : {}))),
+		jobs: (status?: JobStatus) => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),
 
@@ -261,7 +275,6 @@ export function createApi(options: ApiOptions = {}) {
 		/** `edit: 'none'` (v1.1) gives the photo without its recipe: the editor's base image. */
 		previewUrl: (id: Id, options: { edit?: 'none' } = {}) =>
 			`${base}/api/assets/${id}/preview${options.edit ? `?edit=${options.edit}` : ''}`,
-		originalUrl: (id: Id) => `${base}/api/assets/${id}/original`,
 
 		// downloads
 		estimateDownload: (body: DownloadRequest) =>
@@ -367,9 +380,7 @@ export function createApi(options: ApiOptions = {}) {
 		setUpBackup: (body: BackupSetupIn) => request<BackupSetup>('POST', '/api/backups/setup', body),
 		backupRecovery: (id: Id) => get<BackupRecovery>(`/api/backups/${id}/recovery`),
 		confirmBackupKey: (id: Id) => request<BackupTarget>('POST', `/api/backups/${id}/key-saved`),
-		setBackupEnabled: (id: Id, enabled: boolean) =>
-			request<BackupTarget>('PATCH', `/api/backups/${id}`, { enabled }),
-		/** v1.3: change schedule, quiet window, retention (and/or enabled). */
+		/** Change schedule, quiet window, retention and/or enabled. */
 		updateBackup: (id: Id, body: BackupPatch) =>
 			request<BackupTarget>('PATCH', `/api/backups/${id}`, body),
 		runBackup: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/run`),
@@ -395,9 +406,7 @@ export function createApi(options: ApiOptions = {}) {
 		// Proton Drive sources (admin); the sign-in lives in Proton's tool on the server
 		proton: () => get<ProtonStatus>('/api/proton'),
 		protonFolders: (path: string) =>
-			get<{ path: string; folders: string[] }>(
-				`/api/proton/folders?path=${encodeURIComponent(path)}`
-			),
+			get<{ path: string; folders: string[] }>(query('/api/proton/folders', { path })),
 		createProtonFolder: (parent: string, name: string) =>
 			request<{ path: string; folders: string[] }>('POST', '/api/proton/folders', { parent, name }),
 		addProtonSource: (body: ProtonSourceIn) =>

@@ -248,23 +248,32 @@ class MlJobPlanner:
         return run_then_plan
 
     def backfill(self, store: MlStore, page_size: int = 500) -> int:
-        """Queue every unfinished (asset, task) — after `just models` or a model change."""
+        """Queue every unfinished (asset, task) — after `just models` or a model change.
+        Work that is already waiting is not queued again; returns how much was added."""
+        # read once: asking the queue per job (enqueue_once) scans every waiting job each time
+        waiting = {
+            (job["kind"], job["payload"].get("asset_id"))
+            for job in self._repo.list_jobs("queued")
+            if isinstance(job["payload"], dict)
+        }
         count, cursor = 0, None
         while True:
             page = self._repo.list_assets(page_size, cursor)
             for asset in page.items:
-                count += self._queue_unfinished(store, asset.id)
+                count += self._queue_unfinished(store, asset.id, waiting)
             if page.next_cursor is None:
                 break
             cursor = page.next_cursor
         if DETECT_FACES in self._models and self._ready(DETECT_FACES):
-            self._repo.enqueue(CLUSTER_FACES, {})
+            self._repo.enqueue_once(CLUSTER_FACES)
         return count
 
-    def _queue_unfinished(self, store: MlStore, asset_id: int) -> int:
+    def _queue_unfinished(
+        self, store: MlStore, asset_id: int, waiting: set[tuple[object, object]]
+    ) -> int:
         queued = 0
         for task, model in self._models.items():
-            if not self._ready(task):
+            if not self._ready(task) or (task, asset_id) in waiting:
                 continue
             if store.task_status(asset_id, task, model) != TaskStatus.DONE:
                 self._repo.enqueue(task, {"asset_id": asset_id})

@@ -161,10 +161,15 @@ def do_trash(state: dict[str, object], paths: list[str]) -> int:
 
 
 def do_delete(state: dict[str, object], paths: list[str]) -> int:
+    """As measured on v0.9.0: a trashed item is named by its *name*; its uid is refused."""
     trash: dict[str, dict[str, object]] = state.setdefault("trash", {})  # type: ignore[assignment]
     for path in paths:
-        if trash.pop(path.removeprefix("/trash/"), None) is None:
-            return missing(path)
+        name = path.removeprefix("/trash/")
+        uid = next((u for u, entry in trash.items() if entry["name"] == name), None)
+        if uid is None:
+            print("Trashed node not found", file=sys.stderr)
+            return 1
+        del trash[uid]
     print("[]")
     return 0
 
@@ -195,6 +200,10 @@ def read(state: dict[str, object], args: list[str]) -> int | None:
     match args:
         case ["photo", "timeline", "-d"]:
             print(json.dumps([node(p, "photo") for p in photos]))
+            return 0
+        case ["filesystem", "list", "/trash"]:
+            trashed: dict[str, dict[str, object]] = state.get("trash", {})  # type: ignore[assignment]
+            print(json.dumps([node(e, str(e["type"])) for e in trashed.values()]))
             return 0
         case ["filesystem", "list", path]:
             if path not in tree:

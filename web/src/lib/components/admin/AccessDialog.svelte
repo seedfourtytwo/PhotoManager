@@ -87,7 +87,7 @@
 			someone, stays visible to them there.
 		</p>
 	{:else}
-		<p class="quiet">Loading…</p>
+		<p class="quiet" role="status">Loading…</p>
 	{/if}
 	{#snippet actions()}
 		<button class="primary" type="button" disabled={!access} onclick={save}>Save</button>

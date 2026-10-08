@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -10,7 +11,8 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader
-from tests.api.conftest import add_user, asset_id_of, import_folder, user_id_of
+from photo_assistant.domain.access import Viewer
+from tests.api.conftest import add_user, asset_id_of, import_folder, services_of, user_id_of
 from tests.synthetic import write_photo
 
 pytestmark = pytest.mark.integration
@@ -151,6 +153,39 @@ def test_zip_converts_resizes_and_strips(admin: TestClient, ids: list[int], tmp_
         reader.close()
     assert meta.latitude is None and meta.camera_model == "Cam 0"
     assert not list((tmp_path / "data" / "tmp").glob("download-*")), "temp copies cleaned up"
+
+
+def test_a_zip_looks_up_its_file_names_once_and_an_estimate_not_at_all(
+    admin: TestClient, ids: list[int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One lookup per photo held the database for the whole selection before the first byte."""
+    repo = services_of(admin).repo
+    lookups: list[int] = []
+    batched = repo.first_origin_names
+
+    def counted(viewer: Viewer, asset_ids: Sequence[int]) -> dict[int, str]:
+        lookups.append(len(asset_ids))
+        return batched(viewer, asset_ids)
+
+    monkeypatch.setattr(repo, "first_origin_names", counted)
+    estimate = admin.post("/api/downloads/estimate", json={"ids": ids}).json()
+    assert estimate["count"] == 4 and estimate["bytes"] > 0
+    assert lookups == [], "an estimate needs no file names"
+    response = admin.post("/api/downloads", json={"ids": ids})
+    assert len(zip_names(response.content)) == 4
+    assert lookups == [4]
+
+
+def test_stripping_an_original_copies_it_without_loading_it_into_memory(
+    admin: TestClient, ids: list[int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(path: Path) -> bytes:
+        raise AssertionError(f"{path.name} was read into memory in one piece")
+
+    monkeypatch.setattr(Path, "read_bytes", refuse)
+    response = admin.post("/api/downloads", json={"ids": [ids[0]], "strip_location": True})
+    monkeypatch.undo()
+    assert zip_names(response.content) == ["IMG_0.jpg"]
 
 
 def test_single_download(admin: TestClient, ids: list[int]) -> None:

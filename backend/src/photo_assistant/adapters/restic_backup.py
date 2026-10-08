@@ -13,11 +13,13 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from photo_assistant.adapters.tool_runner import ToolMissingError, ToolTimeoutError, run_tool
 from photo_assistant.domain.backup import Retention, TargetKind, target_kind
 from photo_assistant.ports.backup import (
     BackupError,
@@ -46,6 +48,12 @@ _DROPPED_ENV = frozenset(
     }
 )
 
+# Questions about a repository are answered in seconds, even on a cloud remote; the commands
+# that move photos may run for a day on the first backup of a large library.
+QUICK_TIMEOUT = 300.0
+LONG_TIMEOUT = 24 * 3600.0
+_QUICK_COMMANDS = frozenset({"cat", "snapshots", "unlock", "stats"})
+
 # restic >= 0.17 has distinct exit codes; older versions only say it on stderr.
 _EXIT_NO_REPO, _EXIT_LOCKED, _EXIT_WRONG_PASSWORD, _EXIT_INCOMPLETE = 10, 11, 12, 3
 
@@ -53,6 +61,10 @@ _EXIT_NO_REPO, _EXIT_LOCKED, _EXIT_WRONG_PASSWORD, _EXIT_INCOMPLETE = 10, 11, 12
 def _tail(stderr: str) -> str:
     lines = [line for line in stderr.strip().splitlines() if not line.startswith("rclone: ")]
     return " ".join(lines[-3:])[:500] or "no details from restic"
+
+
+def _duration(seconds: float) -> str:
+    return f"{seconds / 3600:.0f} h" if seconds >= 3600 else f"{seconds:g} s"
 
 
 def classify_failure(code: int, stderr: str, repo: RepositoryRef) -> BackupError:
@@ -115,10 +127,21 @@ class ResticBackup:
         binary: str = "restic",
         extra_env: Mapping[str, str] | None = None,
         cache_dir: Path | None = None,
+        rclone_binary: str | None = None,
+        rclone_config: Path | None = None,
+        quick_timeout: float = QUICK_TIMEOUT,
+        long_timeout: float = LONG_TIMEOUT,
     ) -> None:
+        """``rclone_binary`` / ``rclone_config``: the rclone this app uses for its cloud
+        sources; None leaves restic's own choice (``rclone`` on PATH, rclone's default file)."""
         self._binary = binary
         self._extra_env = dict(extra_env or {})
         self._cache_dir = cache_dir
+        self._rclone_binary = rclone_binary
+        self._quick_timeout = quick_timeout
+        self._long_timeout = long_timeout
+        if rclone_config is not None:
+            self._extra_env.setdefault("RCLONE_CONFIG", str(rclone_config))
 
     # --- plumbing --------------------------------------------------------------------------
 
@@ -131,24 +154,25 @@ class ResticBackup:
         cmd = [self._binary, "--repo", repo.location, "--password-file", str(repo.password_file)]
         if self._cache_dir is not None:
             cmd += ["--cache-dir", str(self._cache_dir)]
+        if self._rclone_binary and target_kind(repo.location) is TargetKind.RCLONE:
+            # restic splits this value like a shell would: quote a path with spaces
+            cmd += ["-o", f"rclone.program={shlex.quote(self._rclone_binary)}"]
         return [*cmd, *args]
 
     def _run(
         self, repo: RepositoryRef, args: Sequence[str], cwd: Path | None = None
     ) -> subprocess.CompletedProcess[str]:
+        timeout = self._quick_timeout if args[0] in _QUICK_COMMANDS else self._long_timeout
         try:
-            done = subprocess.run(  # an argument list, never a shell
-                self._command(repo, args),
-                cwd=cwd,
-                env=self._env(),
-                capture_output=True,
-                text=True,
-                check=False,
-                stdin=subprocess.DEVNULL,
-            )
-        except FileNotFoundError as exc:
+            done = run_tool(self._command(repo, args), timeout=timeout, env=self._env(), cwd=cwd)
+        except ToolMissingError as exc:
             raise BackupToolMissingError(
                 f"'{self._binary}' is not installed: sudo apt install restic"
+            ) from exc
+        except ToolTimeoutError as exc:
+            raise BackupError(
+                f"restic did not answer within {_duration(timeout)} for {repo.location} "
+                f"('{args[0]}') and was stopped; check the connection to the backup, then retry"
             ) from exc
         if done.returncode != 0:
             raise classify_failure(done.returncode, done.stderr, repo)

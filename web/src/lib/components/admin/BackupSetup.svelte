@@ -170,6 +170,7 @@
 			</fieldset>
 			{#if choice === OTHER}
 				<FolderPicker
+					initial={folder}
 					onpick={(p) => {
 						folder = p.path;
 						folderPending = p.pending;

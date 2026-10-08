@@ -5,13 +5,22 @@ check the wiring itself rather than the features (the branches test those on the
 """
 
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
+from photo_assistant.api.services import (
+    AI_LOG_KEPT,
+    IMPORT_RUNS_KEPT_IN_DETAIL,
+    LOGIN_FAILURES_KEPT,
+)
 from photo_assistant.api.settings import IntegrationSettings
+from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, SESSION_IDLE_LIMIT
+from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
+from photo_assistant.ports.ai import AICall
 from tests.api.conftest import (
     BASE,
     PIN,
@@ -40,6 +49,15 @@ def _upload(client: TestClient, name: str = "IMG_1002.JPG", **kw: object) -> dic
 # --- composition ------------------------------------------------------------------------------
 
 
+def test_the_app_keeps_its_services_in_one_place(admin: TestClient) -> None:
+    """One accessor (deps.get_services): no second and third name for parts of the same object."""
+    state = admin.app.state  # type: ignore[attr-defined]
+    assert state.services is services_of(admin)
+    assert not hasattr(state, "integrations") and not hasattr(state, "ops")
+    assert admin.get("/api/backups").status_code == 200
+    assert admin.get("/api/proton").status_code == 200
+
+
 def test_the_worker_handles_every_job_kind_of_every_branch(admin: TestClient) -> None:
     kinds = services_of(admin).worker.kinds
     core = {"scan_source", "preview", "geocode", "group", "purge_trash"}
@@ -54,10 +72,14 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
     periodic = services_of(admin).ops.periodic
     assert periodic.task_names == [
         "due backups",
+        "due folder checks",
         "trash purge",
         "cluster faces",
         "optimize database",
         "prune finished jobs",
+        "prune old records",
+        "inbox rescan",
+        "requeue stale jobs",
     ]
 
 
@@ -67,6 +89,78 @@ def test_housekeeping_queues_the_purge_and_a_global_face_clustering(admin: TestC
     queued = {(j["kind"], str(j["payload"])) for j in services.repo.list_jobs()}
     assert ("purge_trash", "{}") in queued
     assert ("cluster_faces", "{}") in queued
+
+
+def test_housekeeping_prunes_the_tables_that_only_ever_grew(
+    admin: TestClient, tmp_path: Path
+) -> None:
+    services = services_of(admin)
+    repo, now = services.repo, services.clock.now()
+    count = lambda table: services.db.writer.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: E731
+    old_failure = now - LOGIN_FAILURES_KEPT - timedelta(hours=1)
+    repo.record_login_attempt("nobody", "10.0.0.9", old_failure, old_failure)
+    repo.record_login_attempt(
+        "nobody", "10.0.0.9", now - FAILED_LOGIN_WINDOW, now - FAILED_LOGIN_WINDOW
+    )
+    stale = now - SESSION_IDLE_LIMIT - timedelta(days=1)
+    repo.add_session("stale", user_id_of(admin, "admin"), stale)
+    for _ in range(2):
+        services.integrations.ai_log.record(AICall("caption", "m", {}, {}, True, 1, None, 1))
+    old_call = (now - AI_LOG_KEPT - timedelta(days=1)).isoformat()
+    services.db.writer.execute(
+        "UPDATE ai_log SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', ?) WHERE id = 1",
+        (old_call,),
+    )
+    source = repo.add_source("s", str(tmp_path / "s"))
+    report = ImportReport(source.id, RunStatus.DONE, [ItemResult("a.jpg", Outcome.SKIPPED)])
+    runs = [
+        repo.save_import_report(report, now, now) for _ in range(IMPORT_RUNS_KEPT_IN_DETAIL + 1)
+    ]
+
+    services.ops.periodic.tick()
+
+    assert count("login_failure") == 1, "the lockout still sees the recent one"
+    assert count("session") == 1, "the admin's own live session"
+    assert count("ai_log") == 1
+    assert count("import_item") == IMPORT_RUNS_KEPT_IN_DETAIL
+    assert admin.get("/api/auth/me").status_code == 200
+    oldest = admin.get(f"/api/imports/{runs[0]}").json()
+    assert oldest["items"] == []
+    assert oldest["summary"]["skipped"] == 1, "the counts outlive the file list"
+    newest = admin.get(f"/api/imports/{runs[-1]}").json()
+    assert len(newest["items"]) == 1 and newest["summary"] == oldest["summary"]
+
+
+def test_housekeeping_rescans_upload_inboxes_without_piling_up(admin: TestClient) -> None:
+    """ARCHITECTURE "Phone inbox": a periodic rescan is the safety net for a lost scan job."""
+    from photo_assistant.app.upload import UploadOutcome, UploadResult
+
+    services = services_of(admin)
+    repo = services.repo
+    user = repo.list_users()[0]
+    stored = [UploadResult("a.jpg", UploadOutcome.STORED)]
+    first = services.integrations.upload.finish_batch(user.id, stored)
+    claimed = repo.claim_next_job(services.clock.now(), only={"scan_source"})
+    assert claimed is not None and claimed.id == first
+    repo.complete_job(claimed.id)  # that scan ran; a later file lost its own
+    repo.add_source("Pictures", "/somewhere/else")
+
+    def waiting() -> list[object]:
+        return [j["payload"] for j in repo.list_jobs("queued") if j["kind"] == "scan_source"]
+
+    services.ops.periodic.tick()
+    assert waiting() == [], "nothing in the inbox is waiting: no scan, no empty import report"
+    inbox = repo.get_source(claimed.payload["source_id"])
+    assert inbox is not None
+    stranded = Path(inbox.root) / "2026-10" / "b.jpg"
+    stranded.parent.mkdir(parents=True)
+    stranded.write_bytes(JPEG)
+    services.ops.periodic._next_at["inbox rescan"] = 0.0  # due again
+    services.ops.periodic.tick()
+    assert waiting() == [claimed.payload], "the inbox only, not other sources"
+    services.ops.periodic._next_at["inbox rescan"] = 0.0  # due again
+    services.ops.periodic.tick()
+    assert len(waiting()) == 1, "never two scans of one inbox waiting"
 
 
 def test_an_m1_library_boots_and_its_sources_go_to_the_first_admin(tmp_path: Path) -> None:
@@ -219,7 +313,7 @@ def test_a_remote_source_shows_the_place_it_reads_not_its_working_folder(
 
     integrations = services_of(admin).integrations
     for label, config in (("P", RemoteConfig.proton("/photos")), ("M", RemoteConfig("mega", "x"))):
-        integrations.remote_sources.add_remote_source(label, config, integrations.staging_root)
+        integrations.remote_sources.add_remote_source(label, config, integrations.staging_root, 1)
     shown = {s["label"]: (s["kind"], s["path"]) for s in admin.get("/api/sources").json()}
     assert shown["P"] == ("proton", "/photos")
     assert shown["M"] == ("rclone", "mega:x")

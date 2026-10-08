@@ -5,9 +5,10 @@ only ever added or (by prune) removed. So mirroring is: upload what Proton lacks
 from Proton what the repository no longer has. Uploading comes first, so the copy never
 misses a file a snapshot needs.
 
-Only ever writes inside ``<remote folder>/<repository name>`` (tested), and never to the
-local repository. What was last known to be on Proton is kept in a small state file, so an
-ordinary run needs no listing; without it the copy on Proton is walked instead.
+Only ever writes inside ``<remote folder>/<repository name>`` (tested) — plus emptying its
+own files out of Proton's trash — and never to the local repository. What was last known to
+be on Proton is kept in a small state file, so an ordinary run needs no listing; without it
+the copy on Proton is walked instead.
 """
 
 import json
@@ -56,8 +57,12 @@ class ProtonMirror:
             if known is None:
                 known = self._walk(copy)
             sent = self._upload(repository, remote_folder)
-            stale = sorted(known - local)
-            removed = sum(self._remove(copy, relative) for relative in stale)
+            trashed = dict(
+                moved
+                for relative in sorted(known - local)
+                if (moved := self._trash(copy, relative))
+            )
+            deleted = self._delete_for_good(trashed)
         except SyncAuthError as exc:
             raise MirrorSignInError(str(exc)) from exc
         except SyncNotFoundError as exc:
@@ -65,7 +70,12 @@ class ProtonMirror:
         except SyncError as exc:
             raise MirrorError(f"the copy on Proton Drive failed: {exc}") from exc
         _write_state(state_file, copy, local)
-        return MirrorReport(uploaded=len(local - known), removed=removed, bytes_sent=sent)
+        return MirrorReport(
+            uploaded=len(local - known),
+            removed=len(trashed),
+            bytes_sent=sent,
+            left_in_trash=len(trashed) - deleted,
+        )
 
     def _upload(self, repository: Path, remote_folder: str) -> int:
         out = self._drive.run(
@@ -111,8 +121,9 @@ class ProtonMirror:
                     found.add(child.as_posix())
         return found
 
-    def _remove(self, copy: str, relative: str) -> int:
-        """Delete one file of the copy for good; 0 when it was gone already."""
+    def _trash(self, copy: str, relative: str) -> tuple[str, str] | None:
+        """Move one file of the copy to Proton's trash; its (uid, name), or None when it was
+        gone already."""
         parts = PurePosixPath(relative).parts
         if not parts or relative.startswith("/") or ".." in parts:
             raise MirrorError(f"refusing to remove '{relative}': not a file of the copy")
@@ -122,13 +133,34 @@ class ProtonMirror:
                 "uid"
             ]
         except SyncNotFoundError:
-            return 0
+            return None
         except (ValueError, KeyError, TypeError) as exc:
             raise MirrorError("Proton Drive answered with something unreadable") from exc
         self._drive.run(["filesystem", "trash", path, "--json"], _QUICK, path)
-        # by uid, not by name: exactly the file just trashed, whatever else is in the trash
-        self._drive.run(["filesystem", "delete", f"/trash/{uid}", "--json"], _QUICK, path)
-        return 1
+        return str(uid), parts[-1]
+
+    def _delete_for_good(self, trashed: dict[str, str]) -> int:
+        """Empty our files out of Proton's trash; how many. The tool names a trashed item by
+        its name only, so one is deleted only when it is the single item of that name in the
+        trash and carries the uid we trashed: never a file of the owner's. The rest stay in
+        the trash, which is harmless."""
+        if not trashed:
+            return 0
+        try:
+            nodes = json.loads(self._drive.run(["filesystem", "list", "/trash", "--json"], _QUICK))
+        except json.JSONDecodeError as exc:
+            raise MirrorError("Proton Drive answered with something unreadable") from exc
+        uids_by_name: dict[str, list[str]] = {}
+        for node in nodes:
+            name = node.get("name", {})
+            if name.get("ok"):
+                uids_by_name.setdefault(str(name.get("value")), []).append(str(node.get("uid")))
+        deleted = 0
+        for uid, name in trashed.items():
+            if uids_by_name.get(name) == [uid]:
+                self._drive.run(["filesystem", "delete", f"/trash/{name}", "--json"], _QUICK)
+                deleted += 1
+        return deleted
 
 
 def _read_state(state_file: Path, copy: str) -> set[str] | None:

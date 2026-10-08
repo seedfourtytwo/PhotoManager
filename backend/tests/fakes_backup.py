@@ -234,6 +234,9 @@ class FakeVault:
             raise PasswordFileError(f"the key file is gone: {key_file}")
         return key_file.read_text().strip()
 
+    def holds(self, key_file: Path) -> bool:
+        return key_file.parent == self.folder
+
     def discard(self, key_file: Path) -> None:
         key_file.unlink(missing_ok=True)
 
@@ -275,6 +278,7 @@ class FakeMirror:
         self.fail: BackupError | None = None
         self.absent: str | None = None
         self.calls: list[tuple[Path, str, Path]] = []
+        self.report = MirrorReport(uploaded=2, removed=1, bytes_sent=5_000_000)
 
     def probe(self, repository: Path, remote_folder: str) -> str | None:
         if self.fail:
@@ -285,4 +289,4 @@ class FakeMirror:
         self.calls.append((repository, remote_folder, state_file))
         if self.fail:
             raise self.fail
-        return MirrorReport(uploaded=2, removed=1, bytes_sent=5_000_000)
+        return self.report

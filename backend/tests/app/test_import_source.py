@@ -233,6 +233,61 @@ def test_edit_pairing_ignores_extension_case(world: World, tmp_path: Path) -> No
     assert edit.variant_of == world.repo.asset_id_for_source_path(source.id, "IMG_2001.JPG")
 
 
+def _variant_of(world: World, source_id: int, path: str) -> int | None:
+    asset = world.repo.get_asset(world.repo.asset_id_for_source_path(source_id, path) or 0)
+    assert asset is not None, path
+    return asset.variant_of
+
+
+def test_a_jpeg_edit_is_linked_to_its_heic_original(world: World, tmp_path: Path) -> None:
+    """What an iPhone really exports: IMG_1234.HEIC and the edit as IMG_E1234.JPG."""
+    folder = tmp_path / "src"
+    (folder / "other").mkdir(parents=True)
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1004.HEIC", folder / "IMG_2004.HEIC")
+    shutil.copy2(fixtures / "IMG_E1001.JPG", folder / "IMG_E2004.JPG")
+    shutil.copy2(fixtures / "IMG_1004.MOV", folder / "IMG_2005.MOV")  # a video is no original
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "IMG_E2005.JPG")
+    shutil.copy2(fixtures / "IMG_1002.JPG", folder / "other" / "IMG_2006.JPG")  # other folder
+    shutil.copy2(fixtures / "IMG_20180312_091500.jpg", folder / "IMG_E2006.JPG")
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    original = world.repo.asset_id_for_source_path(source.id, "IMG_2004.HEIC")
+    assert original is not None
+    assert _variant_of(world, source.id, "IMG_E2004.JPG") == original
+    assert _variant_of(world, source.id, "IMG_E2005.JPG") is None
+    assert _variant_of(world, source.id, "IMG_E2006.JPG") is None
+
+
+def test_an_edit_prefers_the_original_with_its_own_extension(world: World, tmp_path: Path) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1004.HEIC", folder / "IMG_2001.HEIC")
+    shutil.copy2(fixtures / "IMG_1001.JPG", folder / "IMG_2001.JPG")
+    shutil.copy2(fixtures / "IMG_E1001.JPG", folder / "IMG_E2001.JPG")
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    same_extension = world.repo.asset_id_for_source_path(source.id, "IMG_2001.JPG")
+    assert _variant_of(world, source.id, "IMG_E2001.JPG") == same_extension
+
+
+def test_an_edit_added_later_is_linked_to_an_original_imported_before(
+    world: World, tmp_path: Path
+) -> None:
+    folder = tmp_path / "src"
+    folder.mkdir()
+    fixtures = Path(__file__).parent.parent / "fixtures" / "photos"
+    shutil.copy2(fixtures / "IMG_1004.HEIC", folder / "IMG_2004.HEIC")
+    source = world.repo.add_source("s", str(folder))
+    world.importer.run(source.id)
+    shutil.copy2(fixtures / "IMG_E1001.JPG", folder / "IMG_E2004.JPG")
+    world.importer.run(source.id)
+    original = world.repo.asset_id_for_source_path(source.id, "IMG_2004.HEIC")
+    assert original is not None
+    assert _variant_of(world, source.id, "IMG_E2004.JPG") == original
+
+
 def test_missing_or_disabled_source_is_refused(world: World, tmp_path: Path) -> None:
     gone = world.repo.add_source("Unplugged disk", str(tmp_path / "not-mounted"))
     with pytest.raises(SourceUnavailableError, match="not found"):

@@ -8,15 +8,17 @@ from collections.abc import Callable, Collection, Mapping
 from datetime import datetime
 from pathlib import Path
 
-from photo_assistant.adapters.sqlite_access import AccessMixin
-from photo_assistant.adapters.sqlite_accounts import AccountsMixin
+from photo_assistant.adapters.sqlite_access import AccessMixin, UnknownUserError
+from photo_assistant.adapters.sqlite_accounts import AccountsMixin, utc_text
 from photo_assistant.adapters.sqlite_albums import AlbumsMixin
 from photo_assistant.adapters.sqlite_base import (
     SqliteBase,
     asset_from_row,
     decode_cursor,
     encode_cursor,
+    source_from_row,
 )
+from photo_assistant.adapters.sqlite_base import iso_text as _iso
 from photo_assistant.adapters.sqlite_database import Database, open_database
 from photo_assistant.adapters.sqlite_database import migrations as _migrations
 from photo_assistant.adapters.sqlite_edits import EditsMixin
@@ -34,13 +36,17 @@ from photo_assistant.domain.model import (
     RunStatus,
     Source,
 )
-from photo_assistant.ports import DuplicateAssetError, Fingerprint, Job, Page, RenderedImage
+from photo_assistant.domain.recheck import Recheck
+from photo_assistant.ports import (
+    IMPORT_RUNS_LISTED,
+    DuplicateAssetError,
+    Fingerprint,
+    Job,
+    Page,
+    RenderedImage,
+)
 
 __all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
-
-
-def _iso(value: datetime) -> str:
-    return value.isoformat()
 
 
 class SqliteRepository(
@@ -75,16 +81,7 @@ class SqliteRepository(
 
     # --- sources ---------------------------------------------------------------------------
 
-    @staticmethod
-    def _source(row: sqlite3.Row) -> Source:
-        return Source(
-            row["id"],
-            row["label"],
-            row["root"],
-            bool(row["enabled"]),
-            row["kind"],
-            row["owner_id"],
-        )
+    _source = staticmethod(source_from_row)
 
     def add_source(
         self,
@@ -103,6 +100,10 @@ class SqliteRepository(
         grants = access or default_source_access(kind, owner_id)
         try:
             with self._transaction():
+                for user_id in {owner_id, *(uid for uid, _ in grants.users)} - {None}:
+                    known = self._conn.execute("SELECT 1 FROM user WHERE id = ?", (user_id,))
+                    if not known.fetchone():
+                        raise UnknownUserError(f"no user with id {user_id}")
                 placeholder = root if isinstance(root, str) else f"pending:{uuid.uuid4().hex}"
                 source_id = self._write(
                     """INSERT INTO source (kind, label, root, owner_id, config_json)
@@ -110,11 +111,12 @@ class SqliteRepository(
                     (kind, label, placeholder, owner_id, json.dumps(config) if config else None),
                 )
                 if not isinstance(root, str):
-                    self._write(
-                        "UPDATE source SET root = ? WHERE id = ?", (root(source_id), source_id)
-                    )
+                    placeholder = root(source_id)
+                    self._write("UPDATE source SET root = ? WHERE id = ?", (placeholder, source_id))
                 self._grant(source_id, grants)
         except sqlite3.IntegrityError as exc:
+            if "source.root" not in str(exc):
+                raise  # not a folder clash: don't report it as one
             raise ValueError(f"folder is already a source: {placeholder}") from exc
         source = self.get_source(source_id)
         assert source is not None
@@ -129,6 +131,44 @@ class SqliteRepository(
 
     def set_source_enabled(self, source_id: int, enabled: bool) -> None:
         self._write("UPDATE source SET enabled = ? WHERE id = ?", (int(enabled), source_id))
+
+    def set_source_recheck(self, source_id: int, recheck: Recheck) -> None:
+        self._write("UPDATE source SET recheck = ? WHERE id = ?", (recheck.value, source_id))
+
+    def last_check_attempts(self, job_kind: str) -> dict[int, datetime]:
+        """Source id → when its latest check started, whether it worked or not: the later of
+        its newest import run and its newest check job a worker picked up (``updated_at`` is
+        set when a job is claimed). The job covers a check that died before any report."""
+        runs = self._all(
+            """SELECT source_id, started_at FROM import_run
+               WHERE id IN (SELECT MAX(id) FROM import_run GROUP BY source_id)"""
+        )
+        attempts = {int(r["source_id"]): datetime.fromisoformat(r["started_at"]) for r in runs}
+        for source_id, claimed_at in self._check_jobs(job_kind, "attempts > 0"):
+            last = attempts.get(source_id)
+            attempts[source_id] = claimed_at if last is None else max(last, claimed_at)
+        return attempts
+
+    def sources_being_checked(self, job_kind: str) -> set[int]:
+        """Sources with a check waiting or running."""
+        jobs = self._check_jobs(job_kind, "status IN ('queued', 'running')")
+        return {source_id for source_id, _ in jobs}
+
+    def _check_jobs(self, job_kind: str, where: str) -> list[tuple[int, datetime]]:
+        """(source id, last touched) of the jobs of this kind that match ``where``."""
+        rows = self._all(
+            f"""SELECT json_extract(payload_json, '$.source_id') AS source_id, updated_at
+                FROM job WHERE kind = ? AND {where}""",
+            (job_kind,),
+        )
+        return [
+            (int(r["source_id"]), datetime.fromisoformat(r["updated_at"]))
+            for r in rows
+            if r["source_id"] is not None
+        ]
+
+    def rename_source(self, source_id: int, label: str) -> None:
+        self._write("UPDATE source SET label = ? WHERE id = ?", (label, source_id))
 
     # --- assets ----------------------------------------------------------------------------
 
@@ -157,17 +197,11 @@ class SqliteRepository(
         job_kind: str,
         fingerprint: Fingerprint | None = None,
     ) -> int:
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                asset_id = self.add_asset(asset, imported_at)
-                self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
-                self.set_thumbnail(asset_id, thumb)
-                self.enqueue(job_kind, {"asset_id": asset_id})
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        with self._transaction():
+            asset_id = self.add_asset(asset, imported_at)
+            self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
+            self.set_thumbnail(asset_id, thumb)
+            self.enqueue(job_kind, {"asset_id": asset_id})
             return asset_id
 
     def _insert_asset(self, asset: NewAsset, imported_at: datetime) -> int:
@@ -294,48 +328,37 @@ class SqliteRepository(
         )
         return int(row["asset_id"]) if row else None
 
-    def origins_of(self, asset_id: int) -> list[tuple[Source, str]]:
-        rows = self._all(
-            """SELECT s.*, a.relative_path FROM asset_source a JOIN source s ON s.id = a.source_id
-               WHERE a.asset_id = ? ORDER BY s.id, a.relative_path""",
-            (asset_id,),
-        )
-        return [(self._source(r), r["relative_path"]) for r in rows]
-
     # --- import runs -----------------------------------------------------------------------
 
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int:
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                run_id = self._write(
-                    """INSERT INTO import_run (source_id, status, started_at, finished_at,
-                           ignored, summary_json, message) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        report.source_id,
-                        report.status.value,
-                        _iso(started_at),
-                        _iso(finished_at),
-                        report.ignored,
-                        json.dumps(report.summary()),
-                        report.message,
-                    ),
-                )
-                self._conn.executemany(
-                    """INSERT INTO import_item (run_id, relative_path, outcome, reason, asset_id)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    [
-                        (run_id, i.relative_path, i.outcome.value, i.reason, i.asset_id)
-                        for i in report.items
-                    ],
-                )
-                self._conn.execute("COMMIT")
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
+        with self._transaction():
+            run_id = self._write(
+                """INSERT INTO import_run (source_id, status, started_at, finished_at,
+                       ignored, summary_json, message) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    report.source_id,
+                    report.status.value,
+                    _iso(started_at),
+                    _iso(finished_at),
+                    report.ignored,
+                    json.dumps(report.summary()),
+                    report.message,
+                ),
+            )
+            self._conn.executemany(
+                """INSERT INTO import_item (run_id, relative_path, outcome, reason, asset_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    (run_id, i.relative_path, i.outcome.value, i.reason, i.asset_id)
+                    for i in report.items
+                ],
+            )
         return run_id
+
+    def set_import_run_message(self, run_id: int, message: str) -> None:
+        self._write("UPDATE import_run SET message = ? WHERE id = ?", (message, run_id))
 
     def get_import_report(self, run_id: int) -> ImportReport | None:
         run = self._one("SELECT * FROM import_run WHERE id = ?", (run_id,))
@@ -353,13 +376,33 @@ class SqliteRepository(
             message=run["message"],
         )
 
-    def list_import_runs(self, source_id: int | None = None) -> list[dict[str, object]]:
+    def import_run_summary(self, run_id: int) -> dict[str, int] | None:
+        """The counts saved with the run: they outlive its per-file rows (prune_import_items)."""
+        row = self._one("SELECT summary_json FROM import_run WHERE id = ?", (run_id,))
+        return json.loads(row["summary_json"]) if row else None
+
+    def prune_import_items(self, keep_runs: int) -> int:
+        """Delete the per-file rows of all but each source's ``keep_runs`` newest runs (one row
+        per file seen on every rescan adds up). The runs and their summaries stay."""
+        return self._count(
+            """DELETE FROM import_item WHERE run_id IN (
+                   SELECT id FROM (
+                       SELECT id, ROW_NUMBER() OVER (PARTITION BY source_id ORDER BY id DESC) AS n
+                       FROM import_run)
+                   WHERE n > ?)""",
+            (keep_runs,),
+        )
+
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED
+    ) -> list[dict[str, object]]:
+        """Newest first, at most ``limit``."""
         sql = "SELECT * FROM import_run"
         params: tuple[object, ...] = ()
         if source_id is not None:
             sql += " WHERE source_id = ?"
             params = (source_id,)
-        rows = self._all(sql + " ORDER BY id DESC", params)
+        rows = self._all(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
         return [
             {
                 "id": r["id"],
@@ -396,23 +439,40 @@ class SqliteRepository(
         self,
         now: datetime,
         *,
+        owner: str | None = None,
         only: Collection[str] | None = None,
         excluding: Collection[str] = (),
     ) -> Job | None:
-        """Atomic across processes: one statement picks and marks the job (of a lane's kinds)."""
-        where, params = "status = 'queued'", [_iso(now)]
+        """Atomic across processes: one statement picks and marks the job (of a lane's kinds).
+
+        The oldest queued job whose time has come. ``waiting`` lists the kinds that have queued
+        jobs with one index seek each, so a lane never walks the jobs of the others."""
+        lane, kinds = "", list[str]()
         if only is not None:
-            where += f" AND kind IN ({', '.join('?' for _ in only)})"
-            params += list(only)
+            lane += f" AND kind IN ({', '.join('?' for _ in only)})"
+            kinds += list(only)
         if excluding:
-            where += f" AND kind NOT IN ({', '.join('?' for _ in excluding)})"
-            params += list(excluding)
+            lane += f" AND kind NOT IN ({', '.join('?' for _ in excluding)})"
+            kinds += list(excluding)
+        at = utc_text(now)
         with self._lock:  # a write (UPDATE … RETURNING): on the writer
             row = self._conn.execute(
-                f"""UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
-                    WHERE id = (SELECT id FROM job WHERE {where} ORDER BY id LIMIT 1)
+                f"""WITH RECURSIVE waiting(kind) AS (
+                        SELECT MIN(kind) FROM job WHERE status = 'queued'
+                        UNION ALL
+                        SELECT (SELECT MIN(kind) FROM job
+                                WHERE status = 'queued' AND kind > waiting.kind)
+                        FROM waiting WHERE waiting.kind IS NOT NULL)
+                    UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?,
+                        run_after = NULL, claimed_by = ?, claimed_at = ?
+                    WHERE id = (
+                        SELECT MIN((SELECT id FROM job
+                                    WHERE status = 'queued' AND kind = waiting.kind
+                                      AND (run_after IS NULL OR run_after <= ?)
+                                    ORDER BY id LIMIT 1))
+                        FROM waiting WHERE kind IS NOT NULL{lane})
                     RETURNING id, kind, payload_json, attempts""",
-                params,
+                [_iso(now), owner, at, at, *kinds],
             ).fetchone()
         if row is None:
             return None
@@ -427,11 +487,19 @@ class SqliteRepository(
     def complete_job(self, job_id: int) -> None:
         self._write("UPDATE job SET status = 'done', error = NULL WHERE id = ?", (job_id,))
 
-    def fail_job(self, job_id: int, error: str, retry: bool) -> None:
+    def fail_job(
+        self, job_id: int, error: str, retry: bool, run_after: datetime | None = None
+    ) -> None:
+        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once)."""
         status = "queued" if retry else "failed"
-        self._write("UPDATE job SET status = ?, error = ? WHERE id = ?", (status, error, job_id))
+        wait = utc_text(run_after) if retry and run_after is not None else None
+        self._write(
+            "UPDATE job SET status = ?, error = ?, run_after = ? WHERE id = ?",
+            (status, error, wait, job_id),
+        )
 
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]:
+        """``run_after`` is set on a queued job that waits for its next attempt."""
         sql = "SELECT * FROM job"
         params: tuple[object, ...] = ()
         if status is not None:
@@ -445,33 +513,58 @@ class SqliteRepository(
                 "status": r["status"],
                 "attempts": r["attempts"],
                 "error": r["error"],
+                "run_after": r["run_after"],
             }
             for r in self._all(sql + " ORDER BY id", params)
         ]
 
     def retry_job(self, job_id: int) -> bool:
+        """By hand, from the admin screen: a fresh set of attempts, starting now."""
         with self._lock:
             cur = self._conn.execute(
-                "UPDATE job SET status = 'queued', error = NULL WHERE id = ? AND status = 'failed'",
+                """UPDATE job SET status = 'queued', error = NULL, attempts = 0,
+                       run_after = NULL, claimed_by = NULL, claimed_at = NULL
+                   WHERE id = ? AND status = 'failed'""",
                 (job_id,),
             )
             return cur.rowcount > 0
 
     def release_job(self, job_id: int) -> None:
         self._write(
-            """UPDATE job SET status = 'queued', attempts = MAX(attempts - 1, 0)
+            """UPDATE job SET status = 'queued', attempts = MAX(attempts - 1, 0),
+                   claimed_by = NULL, claimed_at = NULL
                WHERE id = ? AND status = 'running'""",
             (job_id,),
         )
 
-    def recover_interrupted_jobs(self) -> int:
-        """Jobs still 'running' at startup were cut off by a crash; queue them again."""
-        with self._lock:
-            cur = self._conn.execute("UPDATE job SET status = 'queued' WHERE status = 'running'")
-            return cur.rowcount
+    def renew_claim(self, job_id: int, owner: str, now: datetime) -> None:
+        """The heartbeat of a running job. Only its owner's: a job that was given up on and
+        taken over by another process is not kept fresh by the first one."""
+        self._write(
+            "UPDATE job SET claimed_at = ? WHERE id = ? AND status = 'running' AND claimed_by = ?",
+            (utc_text(now), job_id, owner),
+        )
+
+    def requeue_stale_jobs(self, stale_before: datetime) -> int:
+        """Queue running jobs again whose claim was last renewed before ``stale_before`` (or
+        never: rows from before leases existed): their process died. The interrupted run
+        keeps counting as an attempt. A job with a fresh claim is another live process's."""
+        return self._count(
+            """UPDATE job SET status = 'queued', claimed_by = NULL, claimed_at = NULL
+               WHERE status = 'running' AND (claimed_at IS NULL OR claimed_at < ?)""",
+            (utc_text(stale_before),),
+        )
 
     def job_counts(self) -> dict[str, int]:
-        rows = self._all("SELECT status, COUNT(*) AS n FROM job GROUP BY status")
-        counts = {"queued": 0, "running": 0, "done": 0, "failed": 0}
+        """By status; ``waiting`` are the queued jobs that wait for a retry time, counted
+        apart so "queued" stays "work that is due"."""
+        rows = self._all(  # one statement: both counts from the same moment
+            """SELECT status, COUNT(*) AS n FROM job GROUP BY status
+               UNION ALL
+               SELECT 'waiting', COUNT(*) FROM job
+               WHERE status = 'queued' AND run_after IS NOT NULL"""
+        )
+        counts = {"queued": 0, "waiting": 0, "running": 0, "done": 0, "failed": 0}
         counts.update({r["status"]: int(r["n"]) for r in rows})
+        counts["queued"] -= counts["waiting"]
         return counts

@@ -14,14 +14,35 @@ import {
 
 const PUBLIC_ROUTES = ['/login', '/setup'];
 
+/** Pages shown without a session and without the app frame: sign-in and first setup. */
+export function isPublicRoute(pathname: string): boolean {
+	return PUBLIC_ROUTES.some((p) => pathname.startsWith(p));
+}
+
 function currentPath(): string {
 	return `${location.pathname}${location.search}`;
 }
 
+/**
+ * Where to go after signing in: `next` if it is a path on this site, else the library. The
+ * URL parser decides, because it reads `/\evil.example` as another site, like browsers do.
+ */
+function sameSitePath(next: string | null): string {
+	if (!next?.startsWith('/')) return '/';
+	try {
+		return new URL(next, location.origin).origin === location.origin ? next : '/';
+	} catch {
+		return '/';
+	}
+}
+
 class Session {
 	user = $state<User | null>(null);
-	/** True once we know whether someone is signed in. */
+	/** True once we asked who is signed in (whatever came of it). */
 	ready = $state(false);
+	/** Why we could not find out who is signed in (server down or unreachable), else null. */
+	error = $state<string | null>(null);
+	#loading: Promise<void> | null = null;
 
 	get isAdmin() {
 		return this.user?.role === 'admin';
@@ -33,18 +54,36 @@ class Session {
 	/** Any 401: forget the user and go to the sign-in page, coming back here afterwards. */
 	lost() {
 		this.user = null;
-		if (PUBLIC_ROUTES.some((p) => location.pathname.startsWith(p))) return;
+		library.forget();
+		if (isPublicRoute(location.pathname)) return;
 		void goto(`/login?next=${encodeURIComponent(currentPath())}`, { replaceState: true });
 	}
 
-	/** Who is signed in? Sends a fresh install to setup and everyone else to sign-in. */
-	async load(): Promise<void> {
+	/**
+	 * Who is signed in? Sends a fresh install to setup and everyone else to sign-in. Never
+	 * rejects: when the server cannot say, the reason is kept in `error` for the layout to show.
+	 */
+	load(): Promise<void> {
+		this.#loading ??= this.#ask().finally(() => (this.#loading = null));
+		return this.#loading;
+	}
+
+	/** Ask again, but only after a failure (the network came back, the tab was reopened). */
+	retry(): Promise<void> {
+		return this.error === null ? Promise.resolve() : this.load();
+	}
+
+	async #ask(): Promise<void> {
 		try {
-			this.user = await api.me();
+			this.user = await api.me().catch(async (error: unknown) => {
+				if (!(error instanceof ApiError) || error.status !== 401) throw error;
+				const { needs_admin } = await api.setupState();
+				if (needs_admin) await goto('/setup', { replaceState: true });
+				return null;
+			});
+			this.error = null;
 		} catch (error) {
-			if (!(error instanceof ApiError) || error.status !== 401) throw error;
-			const { needs_admin } = await api.setupState();
-			if (needs_admin) await goto('/setup', { replaceState: true });
+			this.error = error instanceof Error ? error.message : 'Something went wrong.';
 		} finally {
 			this.ready = true;
 		}
@@ -52,14 +91,14 @@ class Session {
 
 	signedIn(user: User, next: string | null) {
 		this.user = user;
-		// Only follow same-site paths, never an absolute URL from the query string.
-		const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
-		void goto(safe, { replaceState: true });
+		library.forget();
+		void goto(sameSitePath(next), { replaceState: true });
 	}
 
 	async signOut() {
 		await api.logout().catch(() => undefined);
 		this.user = null;
+		library.forget();
 		await goto('/login', { replaceState: true });
 	}
 }
@@ -82,7 +121,10 @@ class Library {
 		this.version++;
 	}
 
-	/** Sources you may see (who owns what decides who may make a photo private). */
+	/**
+	 * The sources the signed-in user may see, asked once and kept until `forget()` (another
+	 * user sees other sources). A failed request is not kept: the next call asks again.
+	 */
 	sources(): Promise<Source[]> {
 		this.#sources ??= api.sources().catch(() => {
 			this.#sources = null;
@@ -93,10 +135,14 @@ class Library {
 
 	/** Whether the local ML models are installed (search by meaning, similar photos). */
 	ml(): Promise<MlStatus | null> {
-		this.#ml ??= api.mlStatus().catch(() => null);
+		this.#ml ??= api.mlStatus().catch(() => {
+			this.#ml = null;
+			return null;
+		});
 		return this.#ml;
 	}
 
+	/** The signed-in user changed, or an admin changed the sources: ask again next time. */
 	forget() {
 		this.#sources = null;
 		this.#ml = null;

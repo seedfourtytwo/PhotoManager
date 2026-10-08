@@ -6,11 +6,12 @@ temporary file in the folder the backup would go into.
 
 import json
 import shutil
-import subprocess
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+from photo_assistant.adapters.rclone_sync import rclone_command, read_remotes
+from photo_assistant.adapters.tool_runner import ToolMissingError, ToolTimeoutError, run_tool
 from photo_assistant.domain.backup import PlaceFacts, TargetKind, target_kind
 from photo_assistant.ports.backup import Disk
 
@@ -60,10 +61,10 @@ class LocalBackupPlaces:
         return sorted(found, key=lambda d: d.label.casefold())
 
     def remotes(self) -> list[str]:
-        listed = self._rclone_output(["listremotes"])
-        if listed is None:
+        try:
+            return read_remotes(self._rclone, self._rclone_config)
+        except (ToolMissingError, ToolTimeoutError, OSError):
             return []
-        return sorted(line.rstrip(":") for line in listed.splitlines() if line.strip())
 
     def facts(self, repository: str, data_root: Path) -> PlaceFacts:
         if target_kind(repository) is TargetKind.RCLONE:
@@ -97,18 +98,9 @@ class LocalBackupPlaces:
 
     def _rclone_output(self, args: list[str]) -> str | None:
         """rclone's answer, or None when it is missing, slow or refuses."""
-        command = [self._rclone, *args]
-        if self._rclone_config is not None:
-            command += ["--config", str(self._rclone_config)]
+        command = rclone_command(self._rclone, args, self._rclone_config)
         try:
-            done = subprocess.run(  # an argument list, never a shell
-                command,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=_RCLONE_TIMEOUT,
-                stdin=subprocess.DEVNULL,
-            )
-        except (OSError, subprocess.TimeoutExpired):
+            done = run_tool(command, timeout=_RCLONE_TIMEOUT)
+        except (ToolMissingError, ToolTimeoutError, OSError):
             return None
         return done.stdout if done.returncode == 0 else None

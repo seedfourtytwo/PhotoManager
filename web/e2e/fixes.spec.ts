@@ -6,7 +6,8 @@ import {
 	selectionAction,
 	selectTiles,
 	signIn,
-	test
+	test,
+	toast
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -44,9 +45,9 @@ test('a double click on Move to trash trashes once', async ({ page }) => {
 		.getByRole('toolbar', { name: 'Selected photos' })
 		.getByRole('button', { name: 'Move to trash' })
 		.dblclick();
-	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
+	await expect(toast(page)).toContainText('Moved 1 photo to the trash');
 	expect(deletes).toBe(1);
-	await expect(page.getByRole('status')).not.toContainText(/not found/i);
+	await expect(toast(page)).not.toContainText(/not found/i);
 });
 
 test('the two Hide buttons have different names', async ({ page }) => {

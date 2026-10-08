@@ -1,6 +1,7 @@
 """CLIP image + text encoders from an Immich-style model folder (Hugging Face immich-app/<name>).
 
-Folder layout, as published by Immich (verify on the laptop — docs/wiring/ml.md):
+Folder layout, as published by Immich (checked against the real models, on a machine that
+has them, by tests/ml/test_real_models.py):
 
     <name>/config.json                  {"embed_dim": 512, "text_cfg": {"context_length": 77}, …}
     <name>/visual/model.onnx            input "image" float32 [N,3,S,S] → [N,embed_dim]

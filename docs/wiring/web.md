@@ -1,5 +1,10 @@
 # Web app wiring (M2)
 
+> **Historical integration record.** This page describes how a branch was wired in and is not
+> kept up to date: file, class and migration names in it may be stale. For the settings see
+> [`docs/guides/settings.md`](../guides/settings.md); for how the app is built today see
+> [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
+
 The web app is a static SvelteKit SPA (`web/`, adapter-static, `ssr = false`). It talks only
 to `/api/*` as described in [`docs/contracts/api-v1.md`](../contracts/api-v1.md), through the
 typed client in `web/src/lib/api/` (types in `types.ts`, one method per route in `client.ts`).
@@ -50,7 +55,8 @@ rclone remotes, backups with restic, the mock's scan timing) skip themselves the
 ## The mock API (`web/mock-api/`)
 
 Plain `node:http`, no dependencies, run directly by Node 22 type stripping. It implements every
-route in the contract in memory: sessions and cookie, 401/403/404 rules, login rate limit,
+route in the contract in memory: sessions and cookie, 401/403/404 rules, the wait and the
+lock after wrong PINs (`/__mock/reset` with `locked: <user name>` starts with a locked account),
 per-source access and album sharing, filters/facets/calendar/map, cursor paging, recipes
 (applied to the SVG thumbs), date fixes, albums, trash, stored-ZIP downloads, and scan jobs that
 move queued → running → done over ~3 s and write an import report with skipped/failed/duplicate

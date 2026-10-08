@@ -10,6 +10,7 @@ from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.model import MAX_ID, Source
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports.library import AlbumInfo, AssetView
 
 # Contract: capture times are local wall-clock to the second (`2019-07-04T18:30:00`); a date
@@ -17,6 +18,7 @@ from photo_assistant.ports.library import AlbumInfo, AssetView
 WallClock = Annotated[
     datetime, PlainSerializer(lambda d: d.isoformat(timespec="seconds"), return_type=str)
 ]
+Id = Annotated[int, Field(ge=1, le=MAX_ID)]  # a SQLite rowid (QA A11)
 
 # --- accounts --------------------------------------------------------------------------------
 
@@ -37,6 +39,17 @@ class UserOut(BaseModel):
             role=u.role,
             disabled=u.disabled,
         )
+
+
+class ManagedUserOut(UserOut):
+    """An account as an admin manages it. Whether wrong PINs have locked an account is told to
+    admins only: never on the open list of names, nor to other accounts."""
+
+    locked: bool
+
+    @classmethod
+    def of(cls, u: User) -> "ManagedUserOut":
+        return cls(**UserOut.of(u).model_dump(), locked=u.locked)
 
 
 class AccountName(BaseModel):
@@ -82,7 +95,8 @@ class SourceIn(BaseModel):
 class SourcePatch(BaseModel):
     enabled: bool | None = None
     label: str | None = Field(default=None, min_length=1, max_length=100)
-    owner_id: int | None = None  # admin: hand a source (and its photos) to another account
+    owner_id: Id | None = None  # admin: hand a source (and its photos) to another account
+    recheck: Recheck | None = None  # check it again by itself: off, hourly, daily or weekly
 
 
 class SourceOut(BaseModel):
@@ -94,6 +108,8 @@ class SourceOut(BaseModel):
     owner_id: int | None
     asset_count: int
     problem: str | None = None  # v1.2: "folder not found" when its folder is gone
+    recheck: Recheck = Recheck.OFF
+    next_check_at: datetime | None = None  # null: it never checks itself (off, or disabled)
 
     @classmethod
     def of(
@@ -103,6 +119,7 @@ class SourceOut(BaseModel):
         show_path: bool,
         problem: str | None = None,
         place: str | None = None,
+        next_check_at: datetime | None = None,
     ) -> "SourceOut":
         """``place``: what a remote source reads, shown instead of its staging folder."""
         return cls(
@@ -114,6 +131,8 @@ class SourceOut(BaseModel):
             owner_id=s.owner_id,
             asset_count=asset_count,
             problem=problem,
+            recheck=s.recheck,
+            next_check_at=next_check_at,
         )
 
 
@@ -121,7 +140,7 @@ LevelName = Literal["view", "download", "edit"]
 
 
 class UserAccess(BaseModel):
-    user_id: int
+    user_id: Id
     level: LevelName
 
 
@@ -230,7 +249,6 @@ class StatePatch(BaseModel):
     private: bool | None = None
 
 
-Id = Annotated[int, Field(ge=1, le=MAX_ID)]  # a SQLite rowid (QA A11)
 Ids = Annotated[list[Id], Field(min_length=1, max_length=10_000)]
 
 
@@ -355,7 +373,7 @@ class AlbumOrder(BaseModel):
 
 
 class Member(BaseModel):
-    user_id: int
+    user_id: Id
     role: Literal["viewer", "editor"]
 
 
@@ -391,7 +409,7 @@ class FiltersIn(BaseModel):
 
 class DownloadRequest(BaseModel):
     ids: list[Id] | None = Field(default=None, max_length=100_000)
-    album_id: int | None = None
+    album_id: Id | None = None
     filters: FiltersIn | None = None
     format: Literal["original", "jpeg", "png", "webp"] = "original"
     quality: int = Field(default=90, ge=1, le=100)

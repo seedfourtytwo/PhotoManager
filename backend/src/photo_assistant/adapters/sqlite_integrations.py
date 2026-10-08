@@ -8,9 +8,10 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
+from photo_assistant.adapters.sqlite_base import source_from_row
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.access import INBOX_KIND
 from photo_assistant.domain.model import Source
@@ -61,12 +62,6 @@ class _Store:
             yield
 
 
-def _source(row: sqlite3.Row) -> Source:
-    return Source(
-        row["id"], row["label"], row["root"], bool(row["enabled"]), row["kind"], row["owner_id"]
-    )
-
-
 def _time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
@@ -89,24 +84,13 @@ class SqliteAILog(_Store):
             ),
         )
 
-    def recent(self, limit: int) -> list[dict[str, object]]:
-        """The latest AI calls, for inspection (tests; an admin view later, FEATURES 7)."""
-        rows = self._all("SELECT * FROM ai_log ORDER BY id DESC LIMIT ?", (limit,))
-        return [
-            {
-                "id": r["id"],
-                "capability": r["capability"],
-                "model": r["model"],
-                "attempt": r["attempt"],
-                "ok": bool(r["ok"]),
-                "duration_ms": r["duration_ms"],
-                "error": r["error"],
-                "request": json.loads(r["request_json"]),
-                "response": json.loads(r["response_json"]),
-                "created_at": r["created_at"],
-            }
-            for r in rows
-        ]
+    def prune(self, before: datetime) -> int:
+        """Delete the calls logged before then; returns how many."""
+        return self._write(
+            # created_at is written by SQLite: compare in its own format
+            "DELETE FROM ai_log WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', ?)",
+            (before.astimezone(UTC).isoformat(),),
+        ).rowcount
 
 
 class _SourceCreator(_Store):
@@ -123,11 +107,17 @@ class _SourceCreator(_Store):
 
 
 class SqliteRemoteSources(_SourceCreator):
-    def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
-        """A source of its provider's kind, pulled into ``staging/<its id>`` (default access)."""
+    def add_remote_source(
+        self, label: str, config: RemoteConfig, staging_root: Path, owner_id: int
+    ) -> int:
+        """A source of its provider's kind, pulled into ``staging/<its id>`` (default access).
+
+        It has an owner like a folder source: "private" compares the marker with the owner,
+        so on an ownerless source the mark would hide the photo from nobody."""
         return self._sources.add_source(
             label,
             lambda source_id: str(staging_root / str(source_id)),
+            owner_id,
             kind=config.provider,
             config=config.to_mapping(),
         ).id
@@ -159,7 +149,7 @@ class SqliteInboxes(_SourceCreator):
                 self._write("UPDATE source SET root = ? WHERE id = ?", (root, row["id"]))
                 row = self._one("SELECT * FROM source WHERE id = ?", (row["id"],))
                 assert row is not None
-            return _source(row)
+            return source_from_row(row)
 
     def _create(self, user_id: int, root: str) -> Source:
         """Inside the caller's transaction: the source and its inbox row, or neither."""
@@ -169,7 +159,7 @@ class SqliteInboxes(_SourceCreator):
         self._write("INSERT INTO inbox (user_id, source_id) VALUES (?, ?)", (user_id, source.id))
         row = self._one("SELECT * FROM source WHERE id = ?", (source.id,))
         assert row is not None
-        return _source(row)
+        return source_from_row(row)
 
 
 class SqliteDevices(_Store):

@@ -47,11 +47,12 @@ corrupt files, copy again (step 2 is resumable) — don't start the server on a 
 
 ```bash
 mkdir -p /srv/photo-assistant/secrets /srv/photo-assistant/backup
+mkdir -p -m 700 /srv/photo-assistant/config        # backup keys + rclone config live here
 cp deploy/server.env.example deploy/server.env     # set PA_ALLOWED_HOSTS
 docker compose -f deploy/compose.yml up -d --build
 docker compose -f deploy/compose.yml logs -f
 curl http://127.0.0.1:8420/api/health
-docker compose -f deploy/compose.yml exec photo-assistant python -m photo_assistant.api.cli_ops doctor
+docker compose -f deploy/compose.yml exec photo-assistant python -m photo_assistant doctor
 ```
 
 > **The Docker image has not been built yet** (it was written without a Docker daemon). The
@@ -65,10 +66,39 @@ The port is published on the server's 127.0.0.1 only; other devices use Tailscal
 
 Update: `git pull && docker compose -f deploy/compose.yml up -d --build`.
 
+What lives where with Docker (an update makes a new container, so only mounted folders last):
+
+| On the server | In the container | Holds |
+|---|---|---|
+| `/srv/photo-assistant/data` | `/data` | the library |
+| `/srv/photo-assistant/config` | `/home/app/.config` | the backup encryption keys the app makes (`photo-assistant/backup-keys/`) and rclone's config (`rclone/rclone.conf`). Keep it `chmod 700`, owned by the user the container runs as, and **never delete it**: without the key file a backup can only be opened with the recovery key you saved. |
+| `/srv/photo-assistant/secrets` | `/secrets` (read-only) | password files you wrote yourself |
+| `/srv/photo-assistant/backup` | `/backup` | a backup disk on the server |
+
+**Photo folders on the server:** the container sees none until you mount one. Add a line per
+folder under `volumes:` in `deploy/compose.yml`, always ending in `:ro` (read-only), e.g.
+`- /srv/photos:/sources/photos:ro`, run `up -d` again, then add the folder in the app by its
+path inside the container (`/sources/photos`).
+
+**Proton Drive sources do not work in Docker.** Proton's `proton-drive` tool is not in the
+image, and it keeps its sign-in in the system keyring of the logged-in user, which a container
+does not have. Pull Proton Drive from the laptop, or run the server with Option B.
+
 ### Option B: systemd, like the laptop
 
 Set `PA_DATA_ROOT=/srv/photo-assistant/data` in `.env`, then `just install-service` and
 `sudo loginctl enable-linger $USER`.
+
+### If the service is killed for using too much memory
+
+The memory limits (systemd: `MemoryHigh=1536M`, `MemoryMax=2G` in
+`deploy/photo-assistant.service`; Docker: `mem_limit: 4g` in `deploy/compose.yml`) have not
+been measured with the ML models loaded. If the app dies during `just ml-backfill` and
+`systemctl --user status photo-assistant` shows `oom-kill` (Docker: `docker inspect` shows
+`OOMKilled`), raise the limit: `systemctl --user edit photo-assistant` and set `MemoryHigh=`
+and `MemoryMax=` under `[Service]`, or change `mem_limit` in compose. To use less memory
+instead, lower `PA_PREVIEW_WORKERS`, `PA_VIPS_CONCURRENCY` or `PA_ML_CLIP_BATCH_SIZE`
+([settings.md](settings.md)). The backfill continues where it stopped after a restart.
 
 ## 5. Switch over
 

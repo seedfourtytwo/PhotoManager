@@ -13,6 +13,7 @@ import type {
 	ImportRun,
 	Job,
 	Place,
+	Recheck,
 	Recipe,
 	Role,
 	Source
@@ -119,6 +120,11 @@ export type MockUser = {
 	role: Role;
 	disabled: boolean;
 	pin: string; // plain text: this is an in-memory mock, never a real store
+	/** When each wrong PIN of the last 15 minutes was tried (the wait counts these). */
+	recentWrongPins: number[];
+	/** Wrong PINs since the last good sign-in: 30 lock the account. */
+	failedPins: number;
+	locked: boolean;
 };
 
 export type MockAlbum = {
@@ -134,8 +140,14 @@ export type MockAlbum = {
 
 export type MockReport = ImportRun & { items: ImportItem[] };
 
-/** The mock keeps every folder's path; the API hides it from non-admins. */
-export type MockSource = Source & { path: string };
+/**
+ * The mock keeps every folder's path; the API hides it from non-admins. No `recheck` means
+ * "off"; `next_check_at` is worked out when a source is sent.
+ */
+export type MockSource = Omit<Source, 'recheck' | 'next_check_at'> & {
+	path: string;
+	recheck?: Recheck;
+};
 
 export type MockFace = {
 	id: number;
@@ -167,7 +179,6 @@ export type MockDevice = Device & { user_id: number; token: string };
 export type MockState = {
 	users: MockUser[];
 	sessions: Map<string, number>;
-	failedLogins: Map<string, number[]>;
 	sources: MockSource[];
 	access: Map<number, Access>;
 	assets: MockAsset[];
@@ -233,7 +244,17 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const local = (d: Date) =>
 	`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 
-export const SEED_USERS: Omit<MockUser, 'id'>[] = [
+/** A fresh account's standing: no wrong PINs counted, not locked. */
+export const noWrongPins = () => ({
+	recentWrongPins: [] as number[],
+	failedPins: 0,
+	locked: false
+});
+
+export const SEED_USERS: Pick<
+	MockUser,
+	'username' | 'display_name' | 'role' | 'disabled' | 'pin'
+>[] = [
 	{
 		username: 'admin',
 		display_name: 'C',
@@ -391,7 +412,9 @@ function makePeople(assets: MockAsset[]): { people: MockPerson[]; faces: MockFac
 export function makeState(options: { users: 'none' | 'seed'; count?: number; seed?: number }) {
 	const assets = makeAssets(options.count ?? 300, options.seed ?? 42);
 	const users: MockUser[] =
-		options.users === 'seed' ? SEED_USERS.map((u, i) => ({ ...u, id: i + 1 })) : [];
+		options.users === 'seed'
+			? SEED_USERS.map((u, i) => ({ ...u, ...noWrongPins(), id: i + 1 }))
+			: [];
 	const sources = makeSources();
 	const access = new Map<number, Access>([
 		[1, { everyone: 'download', users: [] }],
@@ -474,7 +497,6 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 	const state: MockState = {
 		users,
 		sessions: new Map(),
-		failedLogins: new Map(),
 		sources,
 		access,
 		assets,
@@ -490,6 +512,7 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 				status: 'failed',
 				attempts: 3,
 				error: 'libvips could not decode the file (truncated JPEG)',
+				run_after: null,
 				run_at: 0
 			},
 			{
@@ -499,6 +522,7 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 				status: 'done',
 				attempts: 1,
 				error: null,
+				run_after: null,
 				run_at: 0
 			}
 		],

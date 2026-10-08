@@ -4,12 +4,15 @@ from pathlib import Path
 
 import pytest
 
+from photo_assistant.adapters.sqlite_access import UnknownUserError
 from photo_assistant.adapters.sqlite_repository import (
     DuplicateAssetError,
     SqliteRepository,
     open_database,
 )
+from photo_assistant.domain.access import Level, Role, SourceAccess
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports import Fingerprint, RenderedImage
 from tests.factories import NOW, new_asset
 
@@ -60,10 +63,85 @@ def test_sources_round_trip(repo: SqliteRepository) -> None:
     assert repo.get_source(999) is None
 
 
+def test_a_source_does_not_check_itself_until_it_is_told_to(repo: SqliteRepository) -> None:
+    source = repo.add_source("a", "/a")
+    assert source.recheck is Recheck.OFF
+    repo.set_source_recheck(source.id, Recheck.DAILY)
+    assert [s.recheck for s in repo.list_sources()] == [Recheck.DAILY]
+    with pytest.raises(sqlite3.IntegrityError):
+        repo._write("UPDATE source SET recheck = 'monthly' WHERE id = ?", (source.id,))
+
+
+def test_the_last_check_of_a_source_is_the_start_of_its_latest_import_run(
+    repo: SqliteRepository,
+) -> None:
+    checked, failed, never = (repo.add_source(n, f"/{n}") for n in "abc")
+    hour = timedelta(hours=1)
+    repo.save_import_report(ImportReport(checked.id, RunStatus.DONE), NOW - 2 * hour, NOW - hour)
+    repo.save_import_report(ImportReport(checked.id, RunStatus.DONE), NOW - hour, NOW)
+    repo.save_import_report(ImportReport(failed.id, RunStatus.FAILED), NOW, NOW)
+    assert repo.last_check_attempts("scan_source") == {checked.id: NOW - hour, failed.id: NOW}
+    assert never.id not in repo.last_check_attempts("scan_source")
+
+
+def test_a_check_that_ended_without_a_report_still_counts_as_an_attempt(
+    repo: SqliteRepository,
+) -> None:
+    """Else a source whose check dies before the import would be queued again at every look."""
+    source = repo.add_source("a", "/a")
+    repo.save_import_report(ImportReport(source.id, RunStatus.DONE), NOW, NOW)
+    job_id = repo.enqueue("scan_source", {"source_id": source.id})
+    repo.enqueue("preview", {"source_id": source.id})
+    assert repo.last_check_attempts("scan_source") == {source.id: NOW}, "waiting is no attempt"
+    later = NOW + timedelta(hours=3)
+    assert repo.claim_next_job(later, only={"scan_source"}) is not None
+    repo.fail_job(job_id, "SourceUnavailableError: gone", retry=False)
+    assert repo.last_check_attempts("scan_source") == {source.id: later}
+
+
+def test_sources_being_checked_have_a_check_waiting_or_running(repo: SqliteRepository) -> None:
+    waiting, running, done, failed, idle = (repo.add_source(n, f"/{n}") for n in "abcde")
+    for source in (running, done, failed, waiting):
+        repo.enqueue("scan_source", {"source_id": source.id})
+    repo.enqueue("preview", {"source_id": idle.id})
+    claimed = [repo.claim_next_job(NOW, only={"scan_source"}) for _ in range(3)]
+    assert claimed[1] is not None and claimed[2] is not None
+    repo.complete_job(claimed[1].id)
+    repo.fail_job(claimed[2].id, "boom", retry=False)
+    assert repo.sources_being_checked("scan_source") == {waiting.id, running.id}
+
+
 def test_the_same_folder_cannot_be_added_twice(repo: SqliteRepository) -> None:
     repo.add_source("one", "/x")
     with pytest.raises(ValueError, match="already"):
         repo.add_source("two", "/x")
+
+
+def test_a_source_for_an_unknown_account_is_not_reported_as_a_duplicate_folder(
+    repo: SqliteRepository,
+) -> None:
+    lea = repo.add_user("lea", "Lea", "h", Role.MEMBER)
+    with pytest.raises(UnknownUserError, match="no user with id 99"):
+        repo.add_source("owner", "/owner", owner_id=99)
+    with pytest.raises(UnknownUserError, match="no user with id 77"):
+        repo.add_source(
+            "grant",
+            "/grant",
+            lea.id,
+            access=SourceAccess(None, ((lea.id, Level.EDIT), (77, Level.VIEW))),
+        )
+    with pytest.raises(UnknownUserError, match="no user with id 99"):
+        repo.add_source("remote", lambda source_id: f"/staging/{source_id}", owner_id=99)
+    assert repo.list_sources() == [], "nothing half-made is left behind"
+
+
+def test_a_folder_clash_names_the_folder_even_when_the_root_depends_on_the_id(
+    repo: SqliteRepository,
+) -> None:
+    repo.add_source("one", "/staging/taken")
+    with pytest.raises(ValueError, match="already a source: /staging/taken"):
+        repo.add_source("two", lambda _source_id: "/staging/taken")
+    assert [s.label for s in repo.list_sources()] == ["one"]
 
 
 # --- assets --------------------------------------------------------------------------------
@@ -129,7 +207,11 @@ def test_asset_sources_track_every_origin(repo: SqliteRepository) -> None:
     assert repo.asset_id_for_source_path(s1.id, "y.jpg") is None
     assert repo.asset_id_for_source_path(s2.id, "copy/x.jpg") == asset_id
     assert repo.asset_id_for_source_path(s2.id, "nope.jpg") is None
-    assert repo.origins_of(asset_id) == [(s1, "x.jpg"), (s2, "copy/x.jpg")]
+    origins = repo._conn.execute(
+        "SELECT source_id, relative_path FROM asset_source WHERE asset_id = ? ORDER BY 1, 2",
+        (asset_id,),
+    ).fetchall()
+    assert [tuple(r) for r in origins] == [(s1.id, "x.jpg"), (s2.id, "copy/x.jpg")]
 
 
 # --- import runs ---------------------------------------------------------------------------
@@ -151,6 +233,18 @@ def test_import_report_round_trip(repo: SqliteRepository) -> None:
     assert repo.get_import_report(999) is None
 
 
+def test_a_saved_runs_message_can_be_replaced_without_touching_its_status(
+    repo: SqliteRepository,
+) -> None:
+    source = repo.add_source("a", "/a")
+    report = ImportReport(source_id=source.id, status=RunStatus.DONE)
+    run_id = repo.save_import_report(report, NOW, NOW)
+    other = repo.save_import_report(report, NOW, NOW)
+    repo.set_import_run_message(run_id, "2 files could not be downloaded")
+    runs = {r["id"]: (r["status"], r["message"]) for r in repo.list_import_runs(source.id)}
+    assert runs == {run_id: ("done", "2 files could not be downloaded"), other: ("done", None)}
+
+
 # --- job queue -----------------------------------------------------------------------------
 
 
@@ -165,7 +259,7 @@ def test_jobs_are_claimed_in_order_once(repo: SqliteRepository) -> None:
     assert repo.claim_next_job(NOW) is None
     repo.complete_job(first)
     assert [j["id"] for j in repo.list_jobs("done")] == [first]
-    assert repo.job_counts() == {"queued": 0, "running": 1, "done": 1, "failed": 0}
+    assert repo.job_counts() == {"queued": 0, "waiting": 0, "running": 1, "done": 1, "failed": 0}
 
 
 def test_failed_job_can_retry_then_gives_up(repo: SqliteRepository) -> None:
@@ -183,13 +277,16 @@ def test_failed_job_can_retry_then_gives_up(repo: SqliteRepository) -> None:
     assert repo.retry_job(12345) is False
 
 
-def test_jobs_left_running_by_a_crash_are_requeued_on_open(tmp_path: Path) -> None:
+def test_jobs_left_running_by_a_crash_are_requeued_once_their_claim_is_stale(
+    tmp_path: Path,
+) -> None:
     db = tmp_path / "library.db"
     repo = SqliteRepository(open_database(db))
     repo.enqueue("derive", {"asset_id": 1})
     assert repo.claim_next_job(NOW) is not None  # now "running"; process "crashes" here
     reopened = SqliteRepository(open_database(db))
-    reopened.recover_interrupted_jobs()
+    assert reopened.requeue_stale_jobs(stale_before=NOW) == 0, "it may still be running"
+    assert reopened.requeue_stale_jobs(stale_before=NOW + timedelta(minutes=5)) == 1
     assert reopened.claim_next_job(NOW) is not None
 
 
@@ -223,6 +320,20 @@ def test_record_import_of_known_content_changes_nothing_and_says_which(
     assert caught.value.asset_id == first
     assert repo.asset_id_for_source_path(source.id, "b.jpg") is None
     assert len(repo.list_jobs("queued")) == 1, "rolled back: no second job"
+
+
+def test_import_writes_join_a_transaction_that_is_already_open(repo: SqliteRepository) -> None:
+    """They go through the one transaction() like every other write, so they nest."""
+    source = repo.add_source("s", "/s")
+    thumb = RenderedImage("derived/thumb/x.webp", 64, 48)
+    report = ImportReport(source_id=source.id, status=RunStatus.DONE)
+    report.add(ItemResult("a.jpg", Outcome.IMPORTED))
+    with pytest.raises(RuntimeError, match="undo"), repo._transaction():
+        repo.record_import(new_asset(1), NOW, source.id, "a.jpg", thumb, "preview")
+        repo.save_import_report(report, NOW, NOW)
+        raise RuntimeError("undo")
+    assert repo.count_assets() == 0 and repo.list_import_runs() == []
+    assert not repo._conn.in_transaction
 
 
 def test_two_processes_never_claim_the_same_job(tmp_path: Path) -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from photo_assistant.domain.edit_recipe import Recipe
-from photo_assistant.domain.library_paths import edited_relpath
+from photo_assistant.domain.library_paths import DERIVATIVE_KINDS, edited_relpath
 from photo_assistant.domain.model import Asset
 from photo_assistant.ports import ImageRenderer, LibraryStore, RenderedImage, RenderSpec
 from photo_assistant.ports.backup import JobQueue
@@ -51,7 +51,10 @@ class Editor:
         if recipe.is_identity:
             self.revert(asset_id)
         else:
+            previous = self._edits.get_recipe(asset_id)
             self._edits.save_recipe(asset_id, recipe, user_id, now)
+            if previous is not None and previous.key != recipe.key:
+                self._forget_renders(asset_id, previous)
             if self._queue is not None:  # render both sizes now, not on the first request
                 self._queue.enqueue(RENDER_EDIT_JOB, {"asset_id": asset_id})
         return recipe
@@ -79,7 +82,20 @@ class Editor:
         )
 
     def revert(self, asset_id: int) -> None:
+        previous = self._edits.get_recipe(asset_id)
         self._edits.delete_recipe(asset_id)
+        if previous is not None:
+            self._forget_renders(asset_id, previous)
+
+    def _forget_renders(self, asset_id: int, recipe: Recipe) -> None:
+        """Delete the cached thumbnail and preview of a recipe the photo no longer has
+        (derived files only; each saved recipe used to leave its pair behind for good)."""
+        asset = self._edits.get_asset(asset_id)
+        if asset is None:
+            return
+        for kind in DERIVATIVE_KINDS:
+            relative = edited_relpath(kind, asset.content_hash, recipe.key)
+            self._store.absolute(str(relative)).unlink(missing_ok=True)
 
     def image_for(self, view: AssetView, kind: str) -> Path | None:
         """The WebP to show for ``kind`` (thumb | preview), rendering an edit on first use."""

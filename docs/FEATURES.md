@@ -16,6 +16,7 @@ RTX 2070 Max-Q 8 GB). Every design choice must also hold at 100k so the home-ser
 | 1.1 | Import a local folder (recursive), **read-only** on the source | Must | M1 ✅ |
 | 1.1a | **Multiple source folders**, each registered once with a label (e.g. "Laptop Pictures", "Old HDD", "Partner's export"); all aggregated into the one de-duplicated library; "rescan all" picks up new files from every source | Must | M1 ✅ |
 | 1.1d | **Pick a folder by browsing** the machine's folders in the web app (admin, read-only listing; the library's own folder is never offered) | Must | ✅ |
+| 1.1e | **Automatic re-check** per source (folder, cloud, Proton): off / every hour / day / week, set on Admin → Folders, which also shows the next check. It queues the same read-only check as "Check again"; a failed check waits for the next interval | Should | ✅ |
 | 1.1b | **Remote folders** as sources: anything rclone can reach read-only — SFTP/SSH (e.g. the home server), SMB/NAS share, WebDAV, plus MEGA/Proton (1.6). Same staging → import path | Should | M4 |
 | 1.1c | Per-source view: how many photos came from each source, overlap between sources, last scan, errors | Should | M2 |
 | 1.2 | Supported formats: JPEG, PNG, HEIC/HEIF, WebP, TIFF, GIF, AVIF ✅; common RAW recognised, decoding to verify in M2 with real RAW files; Live Photo video halves detected and reported ✅ | Must | M1 |
@@ -245,5 +246,5 @@ photos from the laptop go in by web upload (10.2) or by adding a folder as a sou
 | 11.7 | **Laptop-friendly:** image-processing concurrency is a setting (default 2 threads) ✅; ML jobs run niced (M3) | Must | M1 |
 | 11.8 | **iPhone file quirks:** `IMG_E1234` (edited copies) grouped with their original, `.AAE` edit files ignored, Live Photo `.MOV` halves paired and hidden until video support | Must | M1 ✅ |
 | 11.9 | **Videos in sources:** counted and reported as "skipped: video (not supported yet)" instead of silently ignored | Must | M1 ✅ |
-| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting, session expiry, 4-digit PIN login and PIN change | Must | M2 ✅ (API) |
+| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting per account (10 wrong PINs: wait 15 minutes; 30: locked until an admin unlocks it), session expiry, 4-digit PIN login and PIN change | Must | M2 ✅ (API) |
 | 11.11 | Share link for someone without an account (expiring, view-only, one album) — only over Tailscale Funnel or similar; decide when needed | Later | — |

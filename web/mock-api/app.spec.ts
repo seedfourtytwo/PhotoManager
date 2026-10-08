@@ -106,6 +106,128 @@ describe('with seeded users', () => {
 		await expect(admin.unlockUser(999)).rejects.toMatchObject({ status: 404 });
 	});
 
+	const MINUTE = 60_000;
+	const PARTNER = { username: 'partner', pin: '2345' };
+
+	/** Wrong PINs for partner, waiting out the 15-minute block whenever it comes. */
+	async function guessWrong(times: number) {
+		const api = browser();
+		for (let i = 0; i < times; i++) {
+			const refused = await api.login({ ...PARTNER, pin: '0000' }).catch((e: ApiError) => e.status);
+			if (refused !== 429) continue;
+			clock += 15 * MINUTE;
+			await expect(api.login({ ...PARTNER, pin: '0000' })).rejects.toMatchObject({ status: 401 });
+		}
+	}
+
+	const lockedFlags = async (admin: Api) =>
+		Object.fromEntries((await admin.users()).map((u) => [u.username, u.locked]));
+
+	it('counts wrong PINs per account, from any browser, and says how long to wait', async () => {
+		for (let i = 0; i < 10; i++)
+			await expect(browser().login({ ...PARTNER, pin: '0000' })).rejects.toMatchObject({
+				status: 401
+			});
+		clock += 9.5 * MINUTE;
+		await expect(browser().login({ username: 'Partner', pin: '2345' })).rejects.toMatchObject({
+			status: 429,
+			message:
+				'Too many wrong PINs; wait 6 minutes and try again, or ask an admin to unlock this account'
+		});
+		await expect(signedIn()).resolves.toBeTruthy(); // another account is not held up
+		const admin = await signedIn();
+		expect((await lockedFlags(admin)).partner).toBe(true); // the wait shows as locked to admins
+		clock += 5.5 * MINUTE;
+		expect((await lockedFlags(admin)).partner).toBe(false);
+		const partner = await browser().login(PARTNER);
+		expect(partner).not.toHaveProperty('locked'); // told to admins only
+	});
+
+	it('does not count tries at a user name nobody has', async () => {
+		for (let i = 0; i < 12; i++)
+			await expect(browser().login({ username: 'nobody', pin: '0000' })).rejects.toMatchObject({
+				status: 401
+			});
+	});
+
+	it('locks an account after 30 wrong PINs, whatever PIN comes next, until an admin unlocks it', async () => {
+		const admin = await signedIn();
+		await guessWrong(29);
+		expect(await lockedFlags(admin)).toEqual({ admin: false, partner: false, guest: false });
+		await guessWrong(1);
+		expect(await lockedFlags(admin)).toEqual({ admin: false, partner: true, guest: false });
+		clock += 400 * 24 * 60 * MINUTE; // no window ends this
+		await expect(browser().login(PARTNER)).rejects.toMatchObject({
+			status: 423,
+			message:
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'"
+		});
+		expect(await browser().loginAccounts()).toContainEqual({
+			username: 'partner',
+			display_name: 'Partner'
+		}); // names only: the open list says nothing about locks
+		const guest = await signedIn('guest', '3456');
+		const partner = (await admin.users()).find((u) => u.username === 'partner')!;
+		await expect(guest.unlockUser(partner.id)).rejects.toMatchObject({ status: 403 });
+		await admin.unlockUser(partner.id);
+		expect((await lockedFlags(admin)).partner).toBe(false);
+		await expect(browser().login(PARTNER)).resolves.toMatchObject({ username: 'partner' });
+	});
+
+	it('starts the count again after a good sign-in', async () => {
+		await guessWrong(29);
+		clock += 15 * MINUTE;
+		await expect(browser().login(PARTNER)).resolves.toBeTruthy();
+		await guessWrong(29);
+		clock += 15 * MINUTE;
+		await expect(browser().login(PARTNER)).resolves.toMatchObject({ username: 'partner' });
+	});
+
+	it('lifts the lock when an admin sets a new PIN, not for other changes', async () => {
+		const admin = await signedIn();
+		await guessWrong(30);
+		const partner = (await admin.users()).find((u) => u.username === 'partner')!;
+		expect(await admin.updateUser(partner.id, { display_name: 'P' })).toMatchObject({
+			locked: true
+		});
+		expect(await admin.updateUser(partner.id, { pin: '9999' })).toMatchObject({ locked: false });
+		await expect(browser().login({ ...PARTNER, pin: '9999' })).resolves.toBeTruthy();
+	});
+
+	it('counts wrong current PINs in Settings like wrong PINs at sign-in', async () => {
+		const partner = await signedIn('partner', '2345');
+		for (let i = 0; i < 10; i++)
+			await expect(
+				partner.changePin({ current_pin: '0000', new_pin: '5678' })
+			).rejects.toMatchObject({ status: 400 });
+		await expect(partner.changePin({ current_pin: '2345', new_pin: '5678' })).rejects.toMatchObject(
+			{ status: 429 }
+		);
+		await expect(browser().login(PARTNER)).rejects.toMatchObject({ status: 429 });
+		await guessWrong(20);
+		await expect(partner.changePin({ current_pin: '2345', new_pin: '5678' })).rejects.toMatchObject(
+			{ status: 423 }
+		);
+		expect(await partner.me()).toMatchObject({ username: 'partner' }); // the open session goes on
+	});
+
+	it('can start with a locked account (for the E2E suite)', async () => {
+		const reset = await fetch(`${base}/__mock/reset`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ locked: 'guest' })
+		});
+		expect(reset.status).toBe(204);
+		await expect(browser().login({ username: 'guest', pin: '3456' })).rejects.toMatchObject({
+			status: 423
+		});
+		expect(await lockedFlags(await signedIn())).toEqual({
+			admin: false,
+			partner: false,
+			guest: true
+		});
+	});
+
 	it('logs out', async () => {
 		const api = await signedIn();
 		await api.logout();
@@ -252,6 +374,39 @@ describe('with seeded users', () => {
 		await expect(api.addSource({ label: 'X', path: '/missing' })).rejects.toThrow(/not found/);
 	});
 
+	it('lets an admin choose how often a folder checks itself again', async () => {
+		const api = await signedIn();
+		const [phone] = await api.sources();
+		expect([phone.recheck, phone.next_check_at]).toEqual(['off', null]);
+		const [run] = await api.imports(phone.id);
+		const day = 24 * 3600 * 1000;
+
+		const daily = await api.updateSource(phone.id, { recheck: 'daily' });
+		expect(daily.recheck).toBe('daily');
+		expect(Date.parse(daily.next_check_at!)).toBe(Date.parse(run.started_at) + day);
+		expect((await api.sources())[0].next_check_at).toBe(daily.next_check_at);
+
+		const weekly = await api.updateSource(phone.id, { recheck: 'weekly' });
+		expect(Date.parse(weekly.next_check_at!)).toBe(Date.parse(run.started_at) + 7 * day);
+		const disabled = await api.updateSource(phone.id, { enabled: false });
+		expect([disabled.recheck, disabled.next_check_at]).toEqual(['weekly', null]);
+
+		const added = await api.addSource({ label: 'Scans', path: '/home/c/Scans' });
+		expect(added.recheck).toBe('off');
+		const hourly = await api.updateSource(added.id, { recheck: 'hourly' });
+		expect(Date.parse(hourly.next_check_at!)).toBe(clock); // never checked: due now
+
+		// @ts-expect-error only the four settings exist
+		await expect(api.updateSource(phone.id, { recheck: 'monthly' })).rejects.toMatchObject({
+			status: 422
+		});
+		const guest = await signedIn('guest', '3456');
+		await expect(api.updateSource(phone.id, { recheck: 'off' })).resolves.toBeTruthy();
+		await expect(guest.updateSource(phone.id, { recheck: 'daily' })).rejects.toMatchObject({
+			status: 403
+		});
+	});
+
 	it('manages users and keeps at least one admin', async () => {
 		const api = await signedIn();
 		const user = await api.createUser({
@@ -310,3 +465,54 @@ async function sessionCookie(): Promise<string> {
 	});
 	return (response.headers.get('set-cookie') ?? '').split(';')[0];
 }
+
+describe('the mock answers like the server (routes/sources.py, imports.py, system.py)', () => {
+	beforeEach(() => start('seed'));
+
+	it('refuses a relative or missing folder with 422, and a folder added twice with 409', async () => {
+		const api = await signedIn();
+		await expect(api.addSource({ label: 'Rel', path: 'Pictures' })).rejects.toMatchObject({
+			status: 422
+		});
+		await expect(api.addSource({ label: 'Gone', path: '/home/c/missing' })).rejects.toMatchObject({
+			status: 422,
+			message: expect.stringMatching(/folder not found/i)
+		});
+		await api.addSource({ label: 'Scans', path: '/home/c/Scans' });
+		await expect(
+			api.addSource({ label: 'Scans again', path: '/home/c/Scans/' })
+		).rejects.toMatchObject({
+			status: 409,
+			message: expect.stringMatching(/already a source/i)
+		});
+	});
+
+	it('lists only the sources a viewer may see, counting only the photos they can see', async () => {
+		const all = await (await signedIn()).sources();
+		expect(all.map((s) => s.id)).toEqual(expect.arrayContaining([1, 2, 3]));
+		// Source 3 is shared with the partner alone.
+		const partner = await (await signedIn('partner', '2345')).sources();
+		expect(partner.map((s) => s.id)).toEqual(expect.arrayContaining([1, 2, 3]));
+		const guest = await (await signedIn('guest', '3456')).sources();
+		expect(guest.map((s) => s.id)).toEqual([1, 2]);
+		expect(guest.every((s) => s.path === null)).toBe(true);
+		for (const source of guest)
+			expect(source.asset_count).toBeLessThanOrEqual(
+				all.find((s) => s.id === source.id)!.asset_count
+			);
+	});
+
+	it('keeps jobs, import runs, reports and source access for admins', async () => {
+		const admin = await signedIn();
+		const [run] = await admin.imports();
+		for (const who of [await signedIn('partner', '2345'), await signedIn('guest', '3456')]) {
+			await expect(who.jobs()).rejects.toMatchObject({ status: 403 });
+			await expect(who.imports()).rejects.toMatchObject({ status: 403 });
+			await expect(who.importReport(run.id)).rejects.toMatchObject({ status: 403 });
+			await expect(who.sourceAccess(1)).rejects.toMatchObject({ status: 403 });
+		}
+		await expect(admin.jobs()).resolves.toBeInstanceOf(Array);
+		await expect(admin.importReport(run.id)).resolves.toMatchObject({ id: run.id });
+		await expect(admin.sourceAccess(1)).resolves.toMatchObject({ everyone: 'download' });
+	});
+});

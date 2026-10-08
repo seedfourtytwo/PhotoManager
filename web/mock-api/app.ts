@@ -13,8 +13,11 @@ import type {
 	AssetOut,
 	DownloadRequest,
 	Level,
+	ManagedUser,
 	Recipe,
 	Role,
+	Source,
+	SourcePatch,
 	User
 } from '../src/lib/api/types.ts';
 import { isPin } from '../src/lib/api/types.ts';
@@ -23,10 +26,12 @@ import { v11Routes } from './v11.ts';
 import {
 	makeAsset,
 	makeState,
+	noWrongPins,
 	PLACES,
 	rng,
 	type MockAlbum,
 	type MockAsset,
+	type MockSource,
 	type MockState,
 	type MockUser
 } from './data.ts';
@@ -46,6 +51,8 @@ import {
 	type Route
 } from './http.ts';
 
+/** How long a source that checks itself waits between checks. */
+const RECHECK_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
 const LEVELS: Level[] = ['view', 'download', 'edit'];
 const rank = (level: Level | null) => (level ? LEVELS.indexOf(level) : -1);
 const maxLevel = (a: Level | null, b: Level | null) => (rank(a) >= rank(b) ? a : b);
@@ -58,6 +65,15 @@ function publicUser(u: MockUser): User {
 		role: u.role,
 		disabled: u.disabled
 	};
+}
+
+// Wrong PINs, as the server counts them (backend: domain/access.py, app/accounts.py).
+const WRONG_PIN_WINDOW = 15 * 60_000;
+const MAX_RECENT_WRONG_PINS = 10;
+const LOCK_AFTER_WRONG_PINS = 30;
+
+function forgiveWrongPins(user: MockUser) {
+	Object.assign(user, noWrongPins());
 }
 
 function checkPin(pin: unknown) {
@@ -381,6 +397,28 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		});
 	}
 
+	/** A source as the API sends it: counted, its path for admins only (v1.2), its next check. */
+	function sourceOut(s: MockSource, isAdmin: boolean): Source {
+		const recheck = s.recheck ?? 'off';
+		const last = state.reports.find((r) => r.source_id === s.id); // newest first
+		const next =
+			recheck === 'off' || !s.enabled
+				? null
+				: last
+					? Date.parse(last.started_at) + RECHECK_MS[recheck]
+					: now(); // never checked: due at once
+		return {
+			...s,
+			path: isAdmin ? s.path : null,
+			problem: s.path.includes('gone') ? 'folder not found' : null,
+			asset_count: state.assets.filter(
+				(a) => live(a) && a.sources.some((o) => o.source_id === s.id)
+			).length,
+			recheck,
+			next_check_at: next === null ? null : new Date(next).toISOString()
+		};
+	}
+
 	function inboxFor(user: MockUser) {
 		let inbox = state.sources.find((s) => s.kind === 'inbox' && s.owner_id === user.id);
 		if (!inbox) {
@@ -426,6 +464,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			status: 'queued' as const,
 			attempts: 0,
 			error: null,
+			run_after: null,
 			run_at: now()
 		};
 		state.jobs.push(job);
@@ -441,6 +480,40 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'set-cookie': `pa_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`
 		};
 	}
+
+	/**
+	 * One counted try at an account's PIN: is it right? Counted per account, whatever browser
+	 * it comes from, and before the PIN is looked at. Refused while the account is locked (423)
+	 * or has ten tries in the last 15 minutes (429); the caller forgives after a right PIN.
+	 */
+	function tryPin(user: MockUser, pin: string): boolean {
+		if (user.locked)
+			throw new HttpError(
+				423,
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'"
+			);
+		const recent = wrongPinsInWindow(user);
+		if (recent.length >= MAX_RECENT_WRONG_PINS) {
+			const minutes = Math.max(1, Math.ceil((recent[0] + WRONG_PIN_WINDOW - now()) / 60_000));
+			throw new HttpError(
+				429,
+				`Too many wrong PINs; wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account`
+			);
+		}
+		user.recentWrongPins = [...recent, now()];
+		user.failedPins += 1;
+		user.locked = user.failedPins >= LOCK_AFTER_WRONG_PINS;
+		return user.pin === pin;
+	}
+
+	const wrongPinsInWindow = (user: MockUser) =>
+		user.recentWrongPins.filter((t) => now() - t < WRONG_PIN_WINDOW);
+
+	/** What only admins are told: the lock, or the 15-minute wait, that wrong PINs caused. */
+	const managedUser = (u: MockUser): ManagedUser => ({
+		...publicUser(u),
+		locked: u.locked || wrongPinsInWindow(u).length >= MAX_RECENT_WRONG_PINS
+	});
 
 	function sessionUser(req: IncomingMessage): MockUser | null {
 		const cookie = req.headers.cookie ?? '';
@@ -581,7 +654,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/stats$/,
 			(ctx) => {
-				const counts = { queued: 0, running: 0, done: 0, failed: 0 };
+				const counts = { queued: 0, waiting: 0, running: 0, done: 0, failed: 0 };
 				for (const j of state.jobs) counts[j.status]++;
 				return ok({
 					assets: visible(me(ctx)).length,
@@ -595,6 +668,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/jobs$/,
 			(ctx) => {
+				admin(ctx);
 				const status = ctx.url.searchParams.get('status');
 				return ok(
 					state.jobs
@@ -635,7 +709,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					display_name: body.display_name,
 					role: 'admin',
 					disabled: false,
-					pin: body.pin
+					pin: body.pin,
+					...noWrongPins()
 				};
 				state.users.push(user);
 				return { status: 201, json: publicUser(user), headers: startSession(user) };
@@ -659,16 +734,12 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					'username',
 					'pin'
 				]);
-				const key = `${body.username}|${ctx.req.socket.remoteAddress}`;
-				const recent = (state.failedLogins.get(key) ?? []).filter((t) => now() - t < 15 * 60_000);
-				if (recent.length >= 10)
-					throw new HttpError(429, 'Too many attempts. Wait 15 minutes and try again.');
-				const user = state.users.find((u) => u.username === body.username);
-				if (!user || user.pin !== body.pin || user.disabled) {
-					state.failedLogins.set(key, [...recent, now()]);
+				const name = body.username.toLowerCase(); // user names ignore case
+				const user = state.users.find((u) => u.username.toLowerCase() === name);
+				// a name nobody has is refused at once: nothing to count, nothing to lock
+				if (!user || !tryPin(user, body.pin) || user.disabled)
 					throw new HttpError(401, 'Wrong PIN.');
-				}
-				state.failedLogins.delete(key);
+				forgiveWrongPins(user);
 				return { status: 200, json: publicUser(user), headers: startSession(user) };
 			}
 		],
@@ -693,7 +764,9 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					'current_pin',
 					'new_pin'
 				]);
-				if (body.current_pin !== me(ctx).pin) throw new HttpError(400, 'The current PIN is wrong.');
+				if (!tryPin(me(ctx), body.current_pin))
+					throw new HttpError(400, 'The current PIN is wrong.');
+				forgiveWrongPins(me(ctx));
 				checkPin(body.new_pin);
 				me(ctx).pin = body.new_pin;
 				return noContent;
@@ -701,7 +774,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		],
 
 		// users
-		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(publicUser)))],
+		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(managedUser)))],
 		[
 			'GET',
 			/^\/api\/users\/directory$/,
@@ -746,7 +819,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 						content_hash: null, asset_id: null, reason: null }; // prettier-ignore
 				});
 				const job = { id: state.nextId.job++, kind: 'import', payload: { source_id: inbox.id },
-					status: 'done' as const, attempts: 1, error: null, run_at: 0 }; // prettier-ignore
+					status: 'done' as const, attempts: 1, error: null, run_after: null, run_at: 0 }; // prettier-ignore
 				state.jobs.push(job);
 				return ok({ files, import_job_id: job.id });
 			}
@@ -765,9 +838,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				checkPin(body.pin);
 				if (state.users.some((u) => u.username === body.username))
 					throw new HttpError(409, 'That user name is taken.');
-				const user: MockUser = { ...body, id: state.nextId.user++, disabled: false };
+				const user: MockUser = {
+					...body,
+					id: state.nextId.user++,
+					disabled: false,
+					...noWrongPins()
+				};
 				state.users.push(user);
-				return ok(publicUser(user), 201);
+				return ok(managedUser(user), 201);
 			}
 		],
 		[
@@ -792,9 +870,10 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 						)
 					)
 				);
+				if (body.pin !== undefined) forgiveWrongPins(user); // a new PIN lifts the lock
 				if (user.disabled)
 					for (const [t, id] of state.sessions) if (id === user.id) state.sessions.delete(t);
-				return ok(publicUser(user));
+				return ok(managedUser(user));
 			}
 		],
 		[
@@ -804,10 +883,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				admin(ctx);
 				const user = state.users.find((u) => u.id === idParam(ctx));
 				if (!user) throw new HttpError(404, 'User not found.');
-				const name = user.username.toLowerCase();
-				for (const key of [...state.failedLogins.keys()])
-					if (key.slice(0, key.lastIndexOf('|')).toLowerCase() === name)
-						state.failedLogins.delete(key);
+				forgiveWrongPins(user);
 				return noContent;
 			}
 		],
@@ -816,18 +892,24 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		[
 			'GET',
 			/^\/api\/sources$/,
-			(ctx) =>
-				ok(
-					state.sources.map((s) => ({
-						...s,
-						// v1.2: paths only for admins; a folder that has gone says so.
-						path: ctx.user?.role === 'admin' ? s.path : null,
-						problem: s.path.includes('gone') ? 'folder not found' : null,
-						asset_count: state.assets.filter(
-							(a) => live(a) && a.sources.some((o) => o.source_id === s.id)
-						).length
-					}))
-				)
+			(ctx) => {
+				// Like the server: an admin sees every source; anyone else their own and those
+				// shared with them or with everyone, each with the photos they can see.
+				const user = me(ctx);
+				const shared = (id: number) => {
+					const access = state.access.get(id);
+					return !!access && (access.everyone !== null || access.users.some((u) => u.user_id === user.id)); // prettier-ignore
+				};
+				return ok(
+					state.sources
+						.filter((s) => user.role === 'admin' || s.owner_id === user.id || shared(s.id))
+						.map((s) => ({
+							...sourceOut(s, user.role === 'admin'),
+							asset_count: visible(user).filter((a) => a.sources.some((o) => o.source_id === s.id))
+								.length
+						}))
+				);
+			}
 		],
 		[
 			'POST',
@@ -836,10 +918,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const user = admin(ctx);
 				const body = requireFields<{ label: string; path: string }>(ctx.body, ['label', 'path']);
 				if (!body.label.trim()) throw new HttpError(422, 'Give the source a name.');
+				// Statuses and sentences as in routes/sources.py.
 				if (!body.path.startsWith('/'))
-					throw new HttpError(400, 'Use an absolute folder path, like /home/c/Pictures.');
+					throw new HttpError(422, 'give the full path of the folder, starting with /');
 				if (body.path.includes('missing'))
-					throw new HttpError(400, `Folder not found: ${body.path}`);
+					throw new HttpError(422, `folder not found on this machine: ${body.path}`);
+				const same = (path: string) => path.replace(/\/+$/, '') === body.path.replace(/\/+$/, '');
+				if (state.sources.some((s) => same(s.path)))
+					throw new HttpError(409, `folder is already a source: ${body.path}`);
 				const source = {
 					id: state.nextId.source++,
 					label: body.label,
@@ -851,7 +937,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				};
 				state.sources.push(source);
 				state.access.set(source.id, { everyone: 'download', users: [] });
-				return ok(source, 201);
+				return ok(sourceOut(source, true), 201);
 			}
 		],
 		[
@@ -861,10 +947,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				admin(ctx);
 				const source = state.sources.find((s) => s.id === idParam(ctx));
 				if (!source) throw new HttpError(404, 'Source not found.');
-				const body = (ctx.body ?? {}) as { enabled?: boolean; label?: string };
+				const body = (ctx.body ?? {}) as SourcePatch;
+				if (body.recheck !== undefined && !(body.recheck === 'off' || body.recheck in RECHECK_MS))
+					throw new HttpError(422, 'Check automatically: off, hourly, daily or weekly.');
 				if (body.enabled !== undefined) source.enabled = body.enabled;
 				if (body.label) source.label = body.label;
-				return ok(source);
+				if (body.recheck !== undefined) source.recheck = body.recheck;
+				return ok(sourceOut(source, true));
 			}
 		],
 		[
@@ -892,6 +981,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/sources\/(\d+)\/access$/,
 			(ctx) => {
+				admin(ctx);
 				const access = state.access.get(idParam(ctx));
 				if (!access) throw new HttpError(404, 'Source not found.');
 				return ok(access);
@@ -912,6 +1002,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/imports$/,
 			(ctx) => {
+				admin(ctx);
 				const sourceId = ctx.url.searchParams.get('source_id');
 				return ok(
 					state.reports
@@ -924,6 +1015,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/imports\/(\d+)$/,
 			(ctx) => {
+				admin(ctx);
 				const report = state.reports.find((r) => r.id === idParam(ctx));
 				if (!report) throw new HttpError(404, 'Import run not found.');
 				const outcome = ctx.url.searchParams.get('outcome');
@@ -1507,8 +1599,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				count?: number;
 				models?: boolean;
 				review?: boolean;
+				/** A user name to start locked, as after 30 wrong PINs. */
+				locked?: string;
 			};
 			state = makeState({ users: body.users ?? 'seed', count: body.count ?? initialCount });
+			for (const user of state.users)
+				if (user.username === body.locked)
+					Object.assign(user, { failedPins: LOCK_AFTER_WRONG_PINS, locked: true });
 			state.ml.installed = body.models ?? false;
 			if (body.review) holdSome();
 			return noContent;

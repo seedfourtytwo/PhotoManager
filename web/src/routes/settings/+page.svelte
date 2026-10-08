@@ -2,12 +2,14 @@
 	import { isPin, PIN_LENGTH } from '$lib/api';
 	import { api, notice, session, settings, type Density, type Theme } from '$lib/app.svelte';
 	import Devices from '$lib/components/Devices.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PIN_FIELD } from '$lib/pin';
 
 	let current = $state('');
 	let next = $state('');
 	let error = $state('');
 	let version = $state('');
+	let busy = $state(false);
 
 	$effect(() => {
 		api
@@ -18,17 +20,22 @@
 
 	async function changePin(event: SubmitEvent) {
 		event.preventDefault();
+		// A second submit would fail with "current PIN is wrong" after the first changed it.
+		if (busy) return;
 		error = '';
 		if (!isPin(next)) {
 			error = `Use exactly ${PIN_LENGTH} digits.`;
 			return;
 		}
+		busy = true;
 		try {
 			await api.changePin({ current_pin: current, new_pin: next });
 			current = next = '';
 			notice.show('PIN changed.');
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not change the PIN.';
+			error = errorMessage(e, 'Could not change the PIN.');
+		} finally {
+			busy = false;
 		}
 	}
 
@@ -100,7 +107,7 @@
 			>
 			<label>New PIN <input {...PIN_FIELD} bind:value={next} autocomplete="off" required /></label>
 			{#if error}<p role="alert">{error}</p>{/if}
-			<button type="submit" class="primary">Change PIN</button>
+			<button type="submit" class="primary" disabled={busy}>Change PIN</button>
 		</form>
 		<button type="button" class="signout" onclick={() => session.signOut()}>Sign out</button>
 	</section>

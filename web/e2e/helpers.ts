@@ -20,11 +20,12 @@ export const REAL_BACKEND = !!process.env.E2E_RESET_URL;
 /** Fresh, known state (the mock's seed, or the real backend's seeded snapshot). */
 export async function resetMock(
 	users: 'seed' | 'none' = 'seed',
-	options: { models?: boolean; count?: number; review?: boolean } = {}
+	options: { models?: boolean; count?: number; review?: boolean; locked?: string } = {}
 ) {
 	test.skip(!RESET_URL, 'needs a reset endpoint (mock API or backend test mode)');
 	test.skip(REAL_BACKEND && !!options.models, 'ML models are a mock-only switch');
 	test.skip(REAL_BACKEND && !!options.review, 'photos held for review are a mock-only switch');
+	test.skip(REAL_BACKEND && !!options.locked, 'an account locked from the start is mock-only');
 	const response = await fetch(RESET_URL, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
@@ -42,6 +43,9 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await page.getByLabel('PIN').fill(who.pin); // the fourth digit signs in
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
+
+/** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
+export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 

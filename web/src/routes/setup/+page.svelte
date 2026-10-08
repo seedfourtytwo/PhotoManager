@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { isPin, PIN_LENGTH } from '$lib/api';
 	import { api, session } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PIN_FIELD } from '$lib/pin';
 
 	let username = $state('');
@@ -37,7 +38,7 @@
 			});
 			session.signedIn(user, '/');
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not create the account.';
+			error = errorMessage(e, 'Could not create the account.');
 		} finally {
 			busy = false;
 		}

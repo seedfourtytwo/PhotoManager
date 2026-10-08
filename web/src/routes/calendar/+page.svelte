@@ -2,13 +2,14 @@
 	import { page } from '$app/state';
 	import type { CalendarDay } from '$lib/api';
 	import { api, ui, viewport } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	const query = $derived(filtersToQuery(filters));
-	let days = $state<CalendarDay[] | null>(null);
+	let days = $state.raw<CalendarDay[] | null>(null);
 	let error = $state('');
 
 	$effect(() => {
@@ -16,8 +17,12 @@
 		let stale = false;
 		api
 			.calendar(f)
-			.then((d) => !stale && (days = d))
-			.catch((e: unknown) => !stale && (error = e instanceof Error ? e.message : 'Failed.'));
+			.then((d) => {
+				if (stale) return;
+				days = d;
+				error = '';
+			})
+			.catch((e: unknown) => !stale && (error = errorMessage(e, 'Could not load the calendar.')));
 		return () => (stale = true);
 	});
 

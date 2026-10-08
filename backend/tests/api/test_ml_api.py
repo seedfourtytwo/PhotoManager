@@ -5,7 +5,6 @@ says why, status reports "models not installed". With (fake) models the semantic
 within the visible set only.
 """
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -177,13 +176,28 @@ def test_people_rename_merge_split_and_their_photos(
     assert faces_of_snow[0]["person_id"] == split.json()["id"]
 
 
+def test_people_and_face_ids_beyond_sqlite_integers_are_unprocessable(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    store = services_of(admin).ml.store
+    face = Face(BoundingBox(0.1, 0.1, 0.2, 0.2), 0.9, ((0.5, 0.5),) * 5, (1.0, 0.0, 0.0))
+    (face_id,) = store.replace_faces(library["beach"], "f", [face])
+    lea = store.create_person(face_id)
+    huge = 10**30
+    for path, body in (
+        (f"/api/people/{lea}/merge", {"source_ids": [huge]}),
+        ("/api/people/split", {"face_ids": [huge]}),
+        ("/api/people/split", {"face_ids": [face_id], "person_id": huge}),
+    ):
+        assert admin.post(path, json=body).status_code == 422, (path, body)
+
+
 def test_guests_cannot_change_people(admin: TestClient, library: dict[str, int]) -> None:
     gus = add_user(admin, "gus", "guest")
     assert gus.patch("/api/people/1", json={"name": "x"}).status_code == 403
     assert gus.post("/api/people/split", json={"face_ids": [1]}).status_code == 403
 
 
-@pytest.mark.skipif(shutil.which("vips") is None, reason="needs libvips")
 def test_preview_jobs_plan_ml_analysis_after_import_only_with_models(
     admin: TestClient, library: dict[str, int]
 ) -> None:

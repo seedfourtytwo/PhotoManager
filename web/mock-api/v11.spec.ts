@@ -146,6 +146,15 @@ describe('print', () => {
 });
 
 describe('backups, devices and remote sources', () => {
+	it('a new cloud source belongs to the admin who adds it, like a folder source', async () => {
+		const api = await h.signedIn();
+		const me = (await api.me()).id;
+		const mega = await api.addRemoteSource({ label: 'Drive', remote: 'gdrive', path: 'Camera' });
+		const proton = await api.addProtonSource({ label: 'Proton', path: '/photos' });
+		const owners = new Map((await api.sources()).map((s) => [s.id, s.owner_id]));
+		expect([owners.get(mega.id), owners.get(proton.id)]).toEqual([me, me]);
+	});
+
 	it("lists the server's folders for picking one, to admins only", async () => {
 		const api = await h.signedIn();
 		const home = await api.folders();
@@ -258,7 +267,7 @@ describe('backups, devices and remote sources', () => {
 			places_total: 2,
 			problems: []
 		});
-		await api.setBackupEnabled(1, false);
+		await api.updateBackup(1, { enabled: false });
 		const one = await api.backupHealth();
 		expect(one).toMatchObject({ places_ok: 1, places_total: 1 });
 		expect(one.problems.map((p) => p.message)).toEqual([
@@ -283,7 +292,7 @@ describe('backups, devices and remote sources', () => {
 		const runs = await api.backupRuns(target.id);
 		expect(runs[0].status).toBe('succeeded');
 		await api.restoreTest(target.id);
-		expect((await api.setBackupEnabled(target.id, false)).enabled).toBe(false);
+		expect((await api.updateBackup(target.id, { enabled: false })).enabled).toBe(false);
 		const changed = await api.updateBackup(target.id, {
 			schedule: 'weekly sun 03:00',
 			quiet_window: '22:00-06:00',

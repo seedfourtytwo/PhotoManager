@@ -1,4 +1,4 @@
-"""Local ML over HTTP (docs/wiring/ml.md): search, similar photos, faces, tags, people.
+"""Local ML over HTTP (docs/contracts/api-v1.md): search, similar photos, faces, tags, people.
 
 Every route starts from the visibility rule (``repo.visible_asset_ids``) and hands that set to
 the use cases, which only rank or filter inside it; anything outside is a 404. Without model
@@ -21,7 +21,7 @@ from photo_assistant.api.deps import (
     require_view,
 )
 from photo_assistant.api.filters import FilterDep, checked
-from photo_assistant.api.schemas import AssetOut
+from photo_assistant.api.schemas import AssetOut, Id
 from photo_assistant.api.services import Services
 from photo_assistant.app.people import FaceNotFoundError, PersonNotFoundError
 from photo_assistant.app.search import NotIndexedError, SearchUnavailableError, parse_query
@@ -114,12 +114,12 @@ class PersonPatch(BaseModel):
 
 
 class MergeIn(BaseModel):
-    source_ids: list[int] = Field(min_length=1)
+    source_ids: list[Id] = Field(min_length=1)
 
 
 class SplitIn(BaseModel):
-    face_ids: list[int]
-    person_id: int | None = None
+    face_ids: list[Id]
+    person_id: Id | None = None
     name: str | None = None
 
 

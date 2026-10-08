@@ -1,7 +1,6 @@
 """MetadataReader backed by one long-running ExifTool process (-stay_open)."""
 
 import re
-import subprocess
 import threading
 from collections.abc import Sequence
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Any
 
 import exiftool  # type: ignore[import-untyped]
 
+from photo_assistant.adapters.tool_runner import ToolTimeoutError, run_tool
 from photo_assistant.domain.capture_time import MetadataDates
 from photo_assistant.domain.model import PhotoMetadata
 
@@ -174,18 +174,18 @@ _ALL_TAGS = ["-all=", "-tagsfromfile", "@", "-icc_profile", "-orientation"]
 class ExifToolStripper:
     """MetadataStripper: rewrites a *temporary copy* in place (never a library original)."""
 
-    def __init__(self, executable: str = "exiftool") -> None:
+    def __init__(self, executable: str = "exiftool", timeout_seconds: float = 120.0) -> None:
         self._executable = executable
+        self._timeout = timeout_seconds
 
     def strip(self, path: Path, *, location_only: bool) -> None:
         if not path.is_absolute() or _UNSAFE_NAME.search(str(path)):
             raise ValueError(f"refusing to run exiftool on {path!r}")
         tags = _LOCATION_TAGS if location_only else _ALL_TAGS
-        result = subprocess.run(
-            [self._executable, "-q", "-q", "-overwrite_original", *tags, str(path)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        command = [self._executable, "-q", "-q", "-overwrite_original", *tags, str(path)]
+        try:
+            result = run_tool(command, timeout=self._timeout)
+        except ToolTimeoutError as exc:
+            raise RuntimeError("exiftool took too long to strip metadata") from exc
         if result.returncode != 0:
             raise RuntimeError(f"exiftool could not strip metadata: {result.stderr.strip()}")

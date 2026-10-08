@@ -17,7 +17,7 @@ export function toggle(selection: Selection, id: Id): Selection {
 }
 
 /** Add every id between the anchor and `id` (inclusive) in display order. */
-export function selectRange(selection: Selection, order: readonly Id[], id: Id): Selection {
+function selectRange(selection: Selection, order: readonly Id[], id: Id): Selection {
 	const from = selection.anchor === null ? -1 : order.indexOf(selection.anchor);
 	const to = order.indexOf(id);
 	if (from < 0 || to < 0) return toggle(selection, id);
@@ -44,6 +44,27 @@ export function selectMany(selection: Selection, ids: Iterable<Id>, additive: bo
 
 export function selectAll(order: readonly Id[]): Selection {
 	return { ids: new Set(order), anchor: order[0] ?? null };
+}
+
+/** The most photos one action may change: the server refuses a longer list of ids. */
+export const MAX_SELECTION = 10_000;
+
+const COUNT = new Intl.NumberFormat('en-GB');
+
+export const TOO_MANY_SELECTED = `Selected the first ${COUNT.format(MAX_SELECTION)} photos: that is the most one action can change at once.`;
+
+/** The selection cut down to its first `max` photos; the same object when it already fits. */
+export function limitSelection(selection: Selection, max = MAX_SELECTION): Selection {
+	if (selection.ids.size <= max) return selection;
+	return { ids: new Set([...selection.ids].slice(0, max)), anchor: selection.anchor };
+}
+
+/**
+ * The words on the "select all" button: a view that pages in as you scroll can only select
+ * what it has loaded so far, and then says how many that is instead of promising "all".
+ */
+export function selectAllLabel(loaded: number, complete: boolean): string {
+	return complete ? 'Select all' : `Select loaded (${COUNT.format(loaded)})`;
 }
 
 export type Rect = { x1: number; y1: number; x2: number; y2: number };

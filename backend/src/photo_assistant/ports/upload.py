@@ -43,9 +43,18 @@ class UploadSpool(Protocol):
 
     def discard(self, upload: SpooledUpload) -> None: ...
 
+    def free_bytes(self) -> int:
+        """Free space on the disk uploads are stored on."""
+        ...
+
+    def newest_arrival(self, folder: Path) -> datetime | None:
+        """When the newest file anywhere under ``folder`` got there (timezone-aware); None
+        if it holds no file or does not exist."""
+        ...
+
 
 class LibraryIndex(Protocol):
-    """The two things uploads need from the library (the Repository satisfies it)."""
+    """The few things uploads need from the library (the Repository satisfies it)."""
 
     def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
         """Of ``hashes``, the ones this viewer already has: the photo's id if they may see it
@@ -54,6 +63,12 @@ class LibraryIndex(Protocol):
         ...
 
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...
+
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = ...
+    ) -> list[dict[str, object]]:
+        """A source's import runs, newest first, each with its ``status`` and ``started_at``."""
+        ...
 
 
 class InboxStore(Protocol):

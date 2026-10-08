@@ -226,3 +226,78 @@ def test_a_time_from_the_file_mtime_is_whole_seconds_like_every_other_source() -
     result = pick_capture_time(MetadataDates(), filename="x.jpg", file_mtime=mtime, now=NOW)
     assert result.value == datetime(2020, 5, 1, 10, 0, 7)
     assert result.value.microsecond == 0
+
+
+# --- review round 3: 12-hour clocks, compact times, one plausibility rule for names -----------
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Screenshot 2024-03-10 at 9.15.22 AM.png", datetime(2024, 3, 10, 9, 15, 22)),
+        ("Screenshot 2024-03-10 at 9.15.22 PM.png", datetime(2024, 3, 10, 21, 15, 22)),
+        ("Screenshot 2024-03-10 at 9.15.22\u202fPM.png", datetime(2024, 3, 10, 21, 15, 22)),
+        ("Screenshot 2024-03-10 at 12.05.00 AM.png", datetime(2024, 3, 10, 0, 5, 0)),
+        ("Screenshot 2024-03-10 at 12.05.00 pm.png", datetime(2024, 3, 10, 12, 5, 0)),
+        ("Screenshot 2024-03-10 at 9.15.22.png", datetime(2024, 3, 10, 9, 15, 22)),
+        ("Screenshot 2024-03-10 at 21.15.22.png", datetime(2024, 3, 10, 21, 15, 22)),
+        ("Screenshot 2024-03-10 at 13.15.22 PM.png", datetime(2024, 3, 10, 13, 15, 22)),
+        ("2015-02-02 10.53.11 Amsterdam.jpg", datetime(2015, 2, 2, 10, 53, 11)),  # not "AM"
+        ("2015-02-02 10.53.11 pm Amsterdam.jpg", datetime(2015, 2, 2, 22, 53, 11)),
+        ("signal-2021-05-01-123456.jpg", datetime(2021, 5, 1, 12, 34, 56)),
+        ("signal-2021-05-01-123456789.jpg", datetime(2021, 5, 1)),  # digits run on: no time
+    ],
+)
+def test_twelve_hour_and_compact_times_in_file_names(name: str, expected: datetime) -> None:
+    assert date_from_filename(name) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "1080-1920-01-02.jpg",  # a picture size glued to digits: not 2 January 1920
+        "19200102.jpg",
+        "18990704_120000.jpg",
+        "2100-01-01.jpg",
+        "1825-12-31.jpg",  # before the first photograph
+    ],
+)
+def test_digits_that_are_too_often_something_else_are_not_dates(name: str) -> None:
+    """Compact dates (YYYYMMDD) are believed in 1990-2099 only; so is a dashed date glued to
+    a number group before it. A dashed date standing alone may be as old as photography."""
+    assert date_from_filename(name) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("1975-06-01 grandma.jpg", datetime(1975, 6, 1)),
+        ("scan 1931-12-24.png", datetime(1931, 12, 24)),
+        ("1920-01-02.jpg", datetime(1920, 1, 2)),
+        ("1962-08-15 14.30.00 wedding.jpg", datetime(1962, 8, 15, 14, 30, 0)),
+        ("IMG-1920-1080-2021-05-01.jpg", datetime(2021, 5, 1)),  # glued, but a modern year
+        ("1826-01-01.jpg", datetime(1826, 1, 1)),
+    ],
+)
+def test_scans_named_with_an_old_dashed_date_keep_it(name: str, expected: datetime) -> None:
+    """Regression: one 1990-2099 range for every spelling took the date off scanned family
+    photos, which then fell back to the day they were scanned."""
+    assert date_from_filename(name) == expected
+
+
+def test_an_old_scan_gets_its_date_from_the_name_not_the_file() -> None:
+    picked = pick(MetadataDates(), "1975-06-01 grandma.jpg")
+    assert picked == CaptureTime(datetime(1975, 6, 1), None, DateSource.FILENAME)
+    assert pick(MetadataDates(), "1080-1920-01-02.jpg").source is DateSource.FILE_MTIME
+
+
+@pytest.mark.parametrize("name", ["1990-01-01.jpg", "19900101.jpg", "19900101_000000.jpg"])
+def test_the_strict_year_range_starts_in_1990(name: str) -> None:
+    assert date_from_filename(name) == datetime(1990, 1, 1)
+
+
+def test_the_first_plausible_date_in_a_name_wins_not_the_first_valid_one() -> None:
+    assert date_from_filename("1080-1920-01-02 2021-05-01.jpg") == datetime(2021, 5, 1)
+    future_first = pick(MetadataDates(), "2090-01-01 copy of 2021-05-01.jpg")
+    assert future_first == CaptureTime(datetime(2021, 5, 1), None, DateSource.FILENAME)
+    assert pick(MetadataDates(), "2090-01-01.jpg").source is DateSource.FILE_MTIME

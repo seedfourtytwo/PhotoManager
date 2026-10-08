@@ -1,13 +1,23 @@
 """Setup, login, sessions and user admin over HTTP (contract api-v1: Setup & auth, Users)."""
 
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
-from tests.api.conftest import BASE, PIN, add_user, login, make_settings, user_id_of
+from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, LOCK_AFTER_FAILED_PINS
+from tests.api.conftest import (
+    BASE,
+    PIN,
+    add_user,
+    login,
+    make_settings,
+    services_of,
+    user_id_of,
+)
 
 OPEN_ROUTES = {
     ("GET", "/api/health"),
@@ -65,6 +75,14 @@ def test_login_logout_and_wrong_pin(admin: TestClient) -> None:
     assert admin.get("/api/auth/me").status_code == 200, "other sessions are unaffected"
 
 
+def test_logging_out_tells_the_browser_to_drop_its_cached_photos(admin: TestClient) -> None:
+    """A shared browser: the next account must not open the last one's cached thumbnails."""
+    out = admin.post("/api/auth/logout")
+    assert out.status_code == 204
+    assert out.headers["clear-site-data"] == '"cache"'
+    assert "pa_session=" in out.headers["set-cookie"], "and the cookie still goes"
+
+
 def test_the_login_screen_lists_the_active_accounts_without_a_session(admin: TestClient) -> None:
     add_user(admin, "lea")
     gone = add_user(admin, "old")
@@ -85,6 +103,21 @@ def test_login_is_rate_limited(admin: TestClient) -> None:
         assert r.status_code == 401
     blocked = other.post("/api/auth/login", json={"username": "admin", "pin": PIN})
     assert blocked.status_code == 429
+
+
+def test_the_limit_is_per_account_whatever_address_the_guesses_come_from(
+    admin: TestClient,
+) -> None:
+    for n in range(10):
+        elsewhere = TestClient(admin.app, base_url=BASE, client=(f"10.0.0.{n}", 50000))
+        r = elsewhere.post("/api/auth/login", json={"username": "admin", "pin": "0000"})
+        assert r.status_code == 401
+    fresh = TestClient(admin.app, base_url=BASE, client=("10.0.9.9", 50000))
+    blocked = fresh.post("/api/auth/login", json={"username": "admin", "pin": PIN})
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == (
+        "too many wrong PINs; wait 15 minutes and try again, or ask an admin to unlock this account"
+    )
 
 
 def test_an_admin_unlocks_a_rate_limited_account(admin: TestClient) -> None:
@@ -108,6 +141,124 @@ def test_guests_cannot_unlock(admin: TestClient) -> None:
     assert guest.post(f"/api/users/{user_id_of(admin, 'admin')}/unlock").status_code == 403
 
 
+# --- the hard lock: 30 wrong PINs since the last good sign-in ----------------------------------
+
+
+def lock_out(client: TestClient, username: str) -> None:
+    """Thirty wrong PINs an hour apart: ten within 15 minutes would only mean a wait."""
+    services = services_of(client)
+    now = services.clock.now()
+    for n in range(LOCK_AFTER_FAILED_PINS):
+        at = now - timedelta(hours=LOCK_AFTER_FAILED_PINS - n)
+        tried = services.repo.record_login_attempt(
+            username, f"10.0.0.{n}", at, at - FAILED_LOGIN_WINDOW
+        )
+        assert tried.allowed
+
+
+def locked_flags(admin: TestClient) -> dict[str, bool]:
+    return {u["username"]: u["locked"] for u in admin.get("/api/users").json()}
+
+
+def test_a_locked_account_refuses_the_right_pin_until_an_admin_unlocks_it(
+    admin: TestClient,
+) -> None:
+    lea = add_user(admin, "lea")
+    lea_id = user_id_of(admin, "lea")
+    assert locked_flags(admin) == {"admin": False, "lea": False}
+    lock_out(admin, "lea")
+    other = TestClient(admin.app, base_url=BASE)
+    refused = other.post("/api/auth/login", json={"username": "LEA", "pin": PIN})
+    assert refused.status_code == 423
+    assert refused.json()["detail"] == (
+        "this account is locked after too many wrong PINs; ask an admin to unlock it, "
+        "or set a new PIN on the server with 'just set-pin'"
+    )
+    assert "set-cookie" not in refused.headers
+    assert locked_flags(admin) == {"admin": False, "lea": True}
+    assert lea.post(f"/api/users/{lea_id}/unlock").status_code == 403, "not by themselves"
+    assert admin.post(f"/api/users/{lea_id}/unlock").status_code == 204
+    assert locked_flags(admin) == {"admin": False, "lea": False}
+    ok = other.post("/api/auth/login", json={"username": "lea", "pin": PIN})
+    assert ok.status_code == 200 and "locked" not in ok.json()
+
+
+def test_the_fifteen_minute_wait_shows_as_locked_to_admins_and_unlock_lifts_it(
+    admin: TestClient,
+) -> None:
+    add_user(admin, "lea")
+    lea_id = user_id_of(admin, "lea")
+    other = TestClient(admin.app, base_url=BASE)
+    for _ in range(9):
+        other.post("/api/auth/login", json={"username": "lea", "pin": "0000"})
+    assert locked_flags(admin) == {"admin": False, "lea": False}, "one try is left"
+    other.post("/api/auth/login", json={"username": "Lea", "pin": "0000"})
+    assert locked_flags(admin) == {"admin": False, "lea": True}
+    renamed = admin.patch(f"/api/users/{lea_id}", json={"display_name": "Léa"})
+    assert renamed.json()["locked"] is True
+    assert admin.post(f"/api/users/{lea_id}/unlock").status_code == 204
+    assert locked_flags(admin) == {"admin": False, "lea": False}
+
+
+def test_only_admins_learn_which_accounts_are_locked(admin: TestClient) -> None:
+    lea = add_user(admin, "lea")
+    guest = add_user(admin, "gus", "guest")
+    lock_out(admin, "admin")
+    assert locked_flags(admin)["admin"] is True, "the admin's open session still works"
+    anyone = TestClient(admin.app, base_url=BASE)
+    assert anyone.get("/api/auth/accounts").json() == [
+        {"username": "admin", "display_name": "C"},
+        {"username": "lea", "display_name": "Lea"},
+        {"username": "gus", "display_name": "Gus"},
+    ], "the open list still gives names only, the locked account among them"
+    directory = lea.get("/api/users/directory").json()
+    assert all(set(entry) == {"id", "display_name"} for entry in directory)
+    for client in (lea, guest):
+        assert client.get("/api/users").status_code == 403
+        assert "locked" not in client.get("/api/auth/me").json()
+        unlock = client.post(f"/api/users/{user_id_of(admin, 'admin')}/unlock")
+        assert unlock.status_code == 403
+    assert locked_flags(admin)["admin"] is True
+
+
+def test_the_lock_outlives_the_window_the_housekeeping_and_a_restart(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path / "data")
+    with TestClient(create_app(settings), base_url=BASE) as first:
+        first.post("/api/setup", json={"username": "admin", "display_name": "C", "pin": PIN})
+        add_user(first, "lea")
+        lock_out(first, "lea")  # the last wrong PIN was an hour ago: no 15-minute wait is left
+        services = services_of(first)
+        services.ops.periodic.tick()  # the daily pruning of old failed logins
+        left = services.db.writer.execute("SELECT COUNT(*) FROM login_failure").fetchone()[0]
+        assert left < LOCK_AFTER_FAILED_PINS
+        again = first.post("/api/auth/login", json={"username": "lea", "pin": PIN})
+        assert again.status_code == 423
+    with TestClient(create_app(settings), base_url=BASE) as second:
+        after = second.post("/api/auth/login", json={"username": "lea", "pin": PIN})
+        assert after.status_code == 423
+        boss = login(second.app, "admin")  # type: ignore[arg-type]
+        assert locked_flags(boss) == {"admin": False, "lea": True}
+
+
+def test_an_admin_pin_reset_lifts_the_lock(admin: TestClient) -> None:
+    add_user(admin, "lea")
+    lea_id = user_id_of(admin, "lea")
+    lock_out(admin, "lea")
+    renamed = admin.patch(f"/api/users/{lea_id}", json={"display_name": "Léa"})
+    assert renamed.json()["locked"] is True, "only a new PIN or Unlock lifts it"
+    reset = admin.patch(f"/api/users/{lea_id}", json={"pin": NEW_PIN})
+    assert reset.status_code == 200 and reset.json()["locked"] is False
+    login(admin.app, "lea", NEW_PIN)  # type: ignore[arg-type]
+
+
+def test_a_locked_account_cannot_change_its_pin_from_an_open_session(admin: TestClient) -> None:
+    lock_out(admin, "admin")
+    refused = admin.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": NEW_PIN})
+    assert refused.status_code == 423 and "locked" in refused.json()["detail"]
+    assert admin.get("/api/auth/me").status_code == 200, "the open session goes on"
+    assert locked_flags(admin) == {"admin": True}
+
+
 def test_change_pin(admin: TestClient) -> None:
     wrong = admin.post("/api/auth/pin", json={"current_pin": "0000", "new_pin": NEW_PIN})
     assert wrong.status_code == 400
@@ -116,6 +267,16 @@ def test_change_pin(admin: TestClient) -> None:
     ok = admin.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": NEW_PIN})
     assert ok.status_code == 204
     login(admin.app, "admin", NEW_PIN)  # type: ignore[arg-type]
+
+
+def test_guessing_the_current_pin_is_rate_limited_like_login(admin: TestClient) -> None:
+    for _ in range(10):
+        wrong = admin.post("/api/auth/pin", json={"current_pin": "0000", "new_pin": NEW_PIN})
+        assert wrong.status_code == 400
+    for pin in ("0000", PIN):
+        blocked = admin.post("/api/auth/pin", json={"current_pin": pin, "new_pin": NEW_PIN})
+        assert blocked.status_code == 429 and "wait" in blocked.json()["detail"]
+    assert admin.get("/api/auth/me").status_code == 200, "the session itself is untouched"
 
 
 def test_admin_manages_users(admin: TestClient) -> None:

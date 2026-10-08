@@ -17,6 +17,12 @@ export type User = {
 	disabled: boolean;
 };
 
+/**
+ * An account as an admin manages it. `locked`: wrong PINs stop it signing in, either for good
+ * (30 since the last good sign-in) or for the 15-minute wait after ten; Unlock lifts both.
+ */
+export type ManagedUser = User & { locked: boolean };
+
 export type SetupState = { needs_admin: boolean };
 export type SetupBody = { username: string; display_name: string; pin: string };
 export type LoginBody = { username: string; pin: string };
@@ -50,9 +56,14 @@ export type Source = {
 	asset_count: number;
 	/** v1.2: "folder not found" when the folder is gone, else null (absent before v1.2). */
 	problem?: string | null;
+	/** How often the folder checks itself again; "off" = only when someone asks. */
+	recheck: Recheck;
+	/** When it next checks itself; null when it never does (off, or disabled). */
+	next_check_at: string | null;
 };
+export type Recheck = 'off' | 'hourly' | 'daily' | 'weekly';
 export type SourceIn = { label: string; path: string };
-export type SourcePatch = Partial<{ enabled: boolean; label: string }>;
+export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Recheck }>;
 
 export type Access = { everyone: Level | null; users: { user_id: Id; level: Level }[] };
 
@@ -96,12 +107,15 @@ export type Job = {
 	status: JobStatus;
 	attempts: number;
 	error: string | null;
+	/** Set on a queued job that waits for its next attempt after a failure (UTC ISO time). */
+	run_after: string | null;
 };
 
 export type Stats = {
 	assets: number;
 	sources: number;
-	jobs: Record<JobStatus, number>;
+	/** `waiting`: queued jobs that wait for a retry time; not part of `queued`. */
+	jobs: Record<JobStatus, number> & { waiting: number };
 	free_bytes: number;
 };
 

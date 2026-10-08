@@ -57,6 +57,17 @@ def test_add_list_and_disable_sources(client: TestClient, source_guard: Path) ->
     assert patched.json()["enabled"] is False
 
 
+def test_a_source_can_be_renamed(client: TestClient, source_guard: Path) -> None:
+    created = client.post("/api/sources", json={"label": "Pictures", "path": str(source_guard)})
+    source_id = created.json()["id"]
+    renamed = client.patch(f"/api/sources/{source_id}", json={"label": "Holidays"})
+    assert renamed.status_code == 200 and renamed.json()["label"] == "Holidays"
+    assert [s["label"] for s in client.get("/api/sources").json()] == ["Holidays"]
+    untouched = client.patch(f"/api/sources/{source_id}", json={"enabled": False}).json()
+    assert (untouched["label"], untouched["enabled"]) == ("Holidays", False)
+    assert client.patch(f"/api/sources/{source_id}", json={"label": ""}).status_code == 422
+
+
 def test_sources_are_validated(client: TestClient, source_guard: Path, tmp_path: Path) -> None:
     missing = client.post("/api/sources", json={"label": "x", "path": str(tmp_path / "nope")})
     assert missing.status_code == 422 and "folder not found" in missing.json()["detail"]
@@ -107,6 +118,22 @@ def test_timeline_pages_through_everything_newest_first(
     assert set(first) >= {"id", "taken_at", "date_source", "width", "height", "thumb"}
     assert first["thumb"]["url"] == f"/api/assets/{first['id']}/thumb?v=0"
     assert client.get("/api/assets", params={"cursor": "junk"}).status_code == 400
+
+
+def test_a_thumbnail_standing_in_for_a_missing_preview_is_never_cached(
+    client: TestClient, source_guard: Path
+) -> None:
+    add_and_scan(client, source_guard)
+    asset_id = client.get("/api/assets", params={"limit": 1}).json()["items"][0]["id"]
+    real = client.get(f"/api/assets/{asset_id}/preview")
+    assert "immutable" in real.headers["cache-control"]
+    # as it is between the import and the preview job
+    services(client).repo._write("UPDATE asset SET preview_path = NULL WHERE id = ?", (asset_id,))
+    thumb = client.get(f"/api/assets/{asset_id}/thumb")
+    stand_in = client.get(f"/api/assets/{asset_id}/preview")
+    assert stand_in.status_code == 200 and stand_in.content == thumb.content
+    assert stand_in.headers["cache-control"] == "no-store", "or it is the preview for a year"
+    assert "immutable" in thumb.headers["cache-control"], "the thumbnail was asked for: cache it"
 
 
 def test_asset_detail_images_and_original_download(client: TestClient, source_guard: Path) -> None:

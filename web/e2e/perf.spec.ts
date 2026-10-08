@@ -1,6 +1,7 @@
 /**
- * Performance probe for the library grid (docs/wiring/web.md, "Performance"). Not part of the
- * normal run: start a 10k-photo mock and a production build, then
+ * Performance probe for the library grid (budget: docs/ARCHITECTURE.md §5, measured numbers:
+ * docs/PERFORMANCE.md). Not part of the normal run: start a 10k-photo mock and a production
+ * build, then
  *
  *   MOCK_COUNT=10000 MOCK_PORT=9311 node mock-api/server.ts &
  *   pnpm build && PA_API=http://127.0.0.1:9311 pnpm exec vite preview --port 9312 &

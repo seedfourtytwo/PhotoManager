@@ -1,5 +1,11 @@
 # Wiring the ops branch (feat/ops) into main
 
+> **Historical integration record.** This page describes how a branch was wired in and is not
+> kept up to date: file, class and migration names in it may be stale, and `app.state.ops`
+> no longer exists (routes reach everything through `app.state.services`). For the settings see
+> [`docs/guides/settings.md`](../guides/settings.md); for how the app is built today see
+> [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
+
 > **Status (2026-10-02, fix/backend): wired.** Everything here runs in the app: `api/services.py`
 > builds it from the one `Settings` and the one `Database`. This page stays as the record of how
 > the branch was integrated; where it differs from the code, the code and ARCHITECTURE.md win.
@@ -73,7 +79,7 @@ def build_services(settings: Settings) -> Services:
 ## 4. Startup (`api/main.py` lifespan)
 
 ```python
-services.repo.recover_interrupted_jobs()
+services.stale_jobs.run()   # requeues jobs whose process died (stale claim), see ARCHITECTURE
 if settings.worker_enabled:
     services.worker.start()
     services.ops.start()      # marks crashed backup runs failed, starts the periodic thread
@@ -125,7 +131,7 @@ Then the justfile recipes can call `python -m photo_assistant <cmd>` instead of
 - FEATURES §9b: 9b.1–9b.8 built (status); 9.4 Docker Compose written, untested; 9.5
   partially covered by `verify-library`.
 - README: link `docs/guides/`.
-- CI (`ci/github-ci.yml`): `apt install restic rclone` so the restic integration tests run
+- CI (`.github/workflows/ci.yml`): `apt install restic rclone` so the restic integration tests run
   instead of being skipped.
 
 ## Known limits

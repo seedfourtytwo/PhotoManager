@@ -5,9 +5,11 @@ Session tokens are random; only their SHA-256 is stored. A session ends after
 """
 
 import hashlib
+import math
 import secrets
-from dataclasses import dataclass
-from datetime import timedelta
+import threading
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 
 from photo_assistant.domain.access import (
     FAILED_LOGIN_WINDOW,
@@ -16,7 +18,6 @@ from photo_assistant.domain.access import (
     leaves_no_admin,
     pin_problem,
     session_expired,
-    too_many_failures,
     username_problem,
 )
 from photo_assistant.domain.errors import ConflictError, InvalidError
@@ -31,6 +32,7 @@ from photo_assistant.ports.accounts import (
 )
 
 _TOUCH_EVERY = timedelta(minutes=1)  # don't write to the database on every request
+_VERIFIES_AT_ONCE = 2  # an argon2 check holds its whole memory cost (64 MiB) while it runs
 
 
 class AccountError(InvalidError):
@@ -47,8 +49,26 @@ class InvalidCredentialsError(AccountError):
 class TooManyAttemptsError(AccountError):
     status = 429
 
+    def __init__(self, retry_at: datetime, now: datetime) -> None:
+        minutes = max(1, math.ceil((retry_at - now) / timedelta(minutes=1)))
+        super().__init__(
+            f"too many wrong PINs; wait {minutes} minute{'' if minutes == 1 else 's'} and try "
+            "again, or ask an admin to unlock this account"
+        )
+
+
+class AccountLockedError(AccountError):
+    """No sign-in, right PIN or not, until an admin unlocks the account or it gets a new PIN.
+    The message is shown to anyone at the login screen: it names the two ways out and nothing
+    about the account."""
+
+    status = 423
+
     def __init__(self) -> None:
-        super().__init__("too many failed logins; wait 15 minutes and try again")
+        super().__init__(
+            "this account is locked after too many wrong PINs; ask an admin to unlock it, "
+            "or set a new PIN on the server with 'just set-pin'"
+        )
 
 
 class AlreadySetUpError(AccountError):
@@ -109,7 +129,7 @@ class Accounts:
         self._store = store
         self._hasher = hasher
         self._clock = clock
-        self._dummy_hash: str | None = None
+        self._verifying = threading.BoundedSemaphore(_VERIFIES_AT_ONCE)
 
     # --- first run -------------------------------------------------------------------------
 
@@ -140,7 +160,13 @@ class Accounts:
             raise NameTakenError(username) from exc
 
     def list_users(self) -> list[User]:
-        return self._store.list_users()
+        """Every account, as an admin manages them: ``locked`` is also set while an account
+        waits out the 15 minutes after ten wrong PINs, since Unlock lifts that too."""
+        return self._as_managed(self._store.list_users())
+
+    def _as_managed(self, users: list[User]) -> list[User]:
+        waiting = self._store.users_waiting(self._clock.now() - FAILED_LOGIN_WINDOW)
+        return [replace(u, locked=True) if u.id in waiting else u for u in users]
 
     def login_names(self) -> list[tuple[str, str]]:
         """(user name, display name) of every account that can log in: the login screen
@@ -164,29 +190,34 @@ class Accounts:
         self._guard_last_admin(user, patch)
         if patch.pin is not None:
             _check_pin(patch.pin)
-            self._store.set_pin_hash(user_id, self._hasher.hash(patch.pin))
-            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays
-            self._store.delete_sessions_of(user_id)
-            self._store.revoke_devices_of(user_id, self._clock.now())
-        try:
+        try:  # the one step that can still be refused goes first, and writes the PIN with it
             self._store.update_user(
-                user_id, display_name=patch.display_name, role=patch.role, disabled=patch.disabled
+                user_id,
+                display_name=patch.display_name,
+                role=patch.role,
+                disabled=patch.disabled,
+                password_hash=None if patch.pin is None else self._hasher.hash(patch.pin),
             )
         except NoActiveAdminError as exc:  # a concurrent change got past the early check
             raise LastAdminError() from exc
-        if patch.disabled:
+        if patch.pin is not None:
+            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays,
+            # and the wrong tries at the old one no longer count (this lifts a lock, too)
+            self._store.revoke_devices_of(user_id, self._clock.now())
+            self._store.forgive_wrong_pins(user.username)
+        if patch.pin is not None or patch.disabled:
             self._store.delete_sessions_of(user_id)
         updated = self._store.get_user(user_id)
         assert updated is not None
-        return updated
+        return self._as_managed([updated])[0]
 
     def unlock(self, user_id: int) -> None:
-        """Lift the failed-login block on this account, from every address (v1.3): for the
-        person who mistyped their PIN ten times and can't wait 15 minutes."""
+        """Lift the 15-minute wait and the lock on this account, and start its count of wrong
+        PINs again: for the person who mistyped their PIN too often."""
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError()
-        self._store.clear_all_login_failures(user.username)
+        self._store.forgive_wrong_pins(user.username)
 
     def _guard_last_admin(self, user: User, patch: UserPatch) -> None:
         is_active_admin = user.role is Role.ADMIN and not user.disabled
@@ -197,23 +228,30 @@ class Accounts:
     # --- sessions --------------------------------------------------------------------------
 
     def login(self, username: str, pin: str, ip: str) -> tuple[User, str]:
-        now = self._clock.now()
-        since = now - FAILED_LOGIN_WINDOW
-        if too_many_failures(self._store.count_login_failures(username, ip, since)):
-            raise TooManyAttemptsError()
         found = self._store.find_user_by_username(username)
         if found is None:
-            self._hasher.verify(self._dummy(), pin)  # same work: don't reveal who exists
-        if found is None or not self._hasher.verify(found[1], pin) or found[0].disabled:
-            self._store.add_login_failure(username, ip, now)
+            # the login screen lists every account name, so who exists is no secret: an
+            # unknown name costs no hash and leaves no row
             raise InvalidCredentialsError()
-        self._store.clear_login_failures(username, ip)
-        return found[0], self._start_session(found[0])
+        user, pin_hash = found
+        if not self._guess(username, pin_hash, pin, ip) or user.disabled:
+            raise InvalidCredentialsError()
+        self._store.forgive_wrong_pins(username)
+        return user, self._start_session(user)
 
-    def _dummy(self) -> str:
-        if self._dummy_hash is None:
-            self._dummy_hash = self._hasher.hash(secrets.token_hex(16))
-        return self._dummy_hash
+    def _guess(self, username: str, pin_hash: str, pin: str, ip: str) -> bool:
+        """One counted try at a PIN: is it right? The try is counted *before* the PIN is
+        checked, so guesses sent at the same moment can't all get in under the limits; the
+        caller clears the count when the try turns out right. Tries are counted per account,
+        whatever address they come from. Raises TooManyAttemptsError, AccountLockedError."""
+        now = self._clock.now()
+        tried = self._store.record_login_attempt(username, ip, now, now - FAILED_LOGIN_WINDOW)
+        if tried.locked:
+            raise AccountLockedError()
+        if tried.retry_at is not None:
+            raise TooManyAttemptsError(tried.retry_at, now)
+        with self._verifying:
+            return self._hasher.verify(pin_hash, pin)
 
     def _start_session(self, user: User) -> str:
         token = secrets.token_urlsafe(32)
@@ -238,12 +276,14 @@ class Accounts:
     def logout(self, token: str) -> None:
         self._store.delete_session(_token_hash(token))
 
-    def change_pin(self, user: User, current: str, new: str, keep_token: str) -> None:
+    def change_pin(self, user: User, current: str, new: str, keep_token: str, ip: str) -> None:
         """Every other session of this user ends (a thief's included); ``keep_token``, the
-        session making the change, stays signed in."""
+        session making the change, stays signed in. A wrong current PIN counts as a wrong
+        PIN at login does: an open session is no way to guess the PIN without limit."""
         found = self._store.find_user_by_username(user.username)
-        if found is None or not self._hasher.verify(found[1], current):
+        if found is None or not self._guess(user.username, found[1], current, ip):
             raise InvalidCredentialsError()
+        self._store.forgive_wrong_pins(user.username)
         _check_pin(new)
         self._store.set_pin_hash(user.id, self._hasher.hash(new))
         self._store.delete_sessions_of(user.id, keep=_token_hash(keep_token))

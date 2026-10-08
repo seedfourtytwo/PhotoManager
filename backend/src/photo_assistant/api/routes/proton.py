@@ -8,8 +8,7 @@ takes or stores account details. Pulling uses the ordinary remote-source and sou
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from photo_assistant.api.deps import ADMIN_ONLY
-from photo_assistant.api.integrations import IntegrationsDep
+from photo_assistant.api.deps import ADMIN_ONLY, AdminUser, IntegrationsDep
 from photo_assistant.app.sync_source import add_proton_source, create_proton_folder
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.ports.sync import SyncError, SyncNotFoundError
@@ -83,7 +82,7 @@ def create_folder(body: NewProtonFolder, integrations: IntegrationsDep) -> Proto
 
 
 @router.post("/sources", status_code=status.HTTP_201_CREATED)
-def add(body: ProtonSourceIn, integrations: IntegrationsDep) -> ProtonSourceOut:
+def add(body: ProtonSourceIn, integrations: IntegrationsDep, admin: AdminUser) -> ProtonSourceOut:
     try:
         source_id = add_proton_source(
             integrations.remote_sources,
@@ -91,6 +90,7 @@ def add(body: ProtonSourceIn, integrations: IntegrationsDep) -> ProtonSourceOut:
             integrations.staging_root,
             body.label,
             body.path,
+            admin.id,
         )
     except (RemoteConfigError, SyncError) as exc:
         raise _failure(exc) from exc

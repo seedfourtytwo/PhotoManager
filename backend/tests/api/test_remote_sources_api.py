@@ -4,6 +4,7 @@ import shutil
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
@@ -47,15 +48,17 @@ def world(tmp_path: Path) -> Iterator[World]:
     config.write_text("[mega]\ntype = local\n")
     conn = open_database(":memory:")
     repo = SqliteRepository(conn)
+    repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
     app.include_router(remote_sources.router)
-    app.state.integrations = build_integrations(
+    integrations = build_integrations(
         data_root=tmp_path / "data",
         settings=IntegrationSettings(rclone_config=config),
         conn=conn,
         repo=repo,
         importer=StubImporter(),
     )
+    app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     yield World(TestClient(app, base_url="http://127.0.0.1"), repo, tmp_path / "data")
     conn.close()
@@ -107,7 +110,7 @@ def test_pull_queues_a_scan_job_for_remote_sources_only(world: World) -> None:
 
 
 def test_rclone_missing_is_a_clear_503(world: World, tmp_path: Path) -> None:
-    world.client.app.state.integrations.rclone._binary = str(tmp_path / "none")  # type: ignore[attr-defined]
+    world.client.app.state.services.integrations.rclone._binary = str(tmp_path / "none")  # type: ignore[attr-defined]
     response = world.client.get("/api/remote-sources/remotes", headers=ADMIN)
     assert response.status_code == 503
     assert "rclone is not installed" in response.json()["detail"]

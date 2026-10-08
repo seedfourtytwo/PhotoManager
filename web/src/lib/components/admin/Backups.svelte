@@ -58,7 +58,7 @@
 		try {
 			if (what === 'run') await api.runBackup(target.id);
 			else if (what === 'restore') await api.restoreTest(target.id);
-			else await api.setBackupEnabled(target.id, !target.enabled);
+			else await api.updateBackup(target.id, { enabled: !target.enabled });
 			if (what !== 'toggle')
 				notice.show(what === 'run' ? `Backing up to ${target.label}.` : 'Restore test started.');
 			onchange();

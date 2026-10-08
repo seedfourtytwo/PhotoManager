@@ -7,8 +7,7 @@ is a source of kind "rclone"). Admin-only (core's admin check), like adding any 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from photo_assistant.api.deps import ADMIN_ONLY
-from photo_assistant.api.integrations import IntegrationsDep
+from photo_assistant.api.deps import ADMIN_ONLY, AdminUser, IntegrationsDep
 from photo_assistant.app.sync_source import SCAN_JOB_KIND, add_remote_source
 from photo_assistant.domain.remote_source import RemoteConfigError
 from photo_assistant.ports.sync import SyncError
@@ -51,7 +50,7 @@ def list_remotes(integrations: IntegrationsDep) -> RemotesOut:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def add(body: RemoteSourceIn, integrations: IntegrationsDep) -> RemoteSourceOut:
+def add(body: RemoteSourceIn, integrations: IntegrationsDep, admin: AdminUser) -> RemoteSourceOut:
     try:
         source_id = add_remote_source(
             integrations.remote_sources,
@@ -59,6 +58,7 @@ def add(body: RemoteSourceIn, integrations: IntegrationsDep) -> RemoteSourceOut:
             integrations.staging_root,
             body.label,
             {"remote": body.remote, "path": body.path},
+            admin.id,
         )
     except RemoteConfigError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
