@@ -43,6 +43,30 @@ test('the filter panel searches the library by free text', async ({ page }) => {
 	await expect(page).toHaveURL(/q=carnac/);
 });
 
+test('search keeps the space between words when you pause while typing', async ({ page }) => {
+	const panel = await openFilters(page);
+	const search = panel.getByRole('searchbox', { name: 'Search' });
+	await search.pressSequentially('new ');
+	await expect(page).toHaveURL(/q=new$/); // the pause: the first word is already searched
+	await search.pressSequentially('york');
+	await expect(search).toHaveValue('new york');
+	await expect(page).toHaveURL(/q=new(\+|%20)york$/);
+	// Anything else that changes the URL still shows in the field.
+	await panel.getByRole('button', { name: 'Clear' }).click();
+	await expect(page).not.toHaveURL(/q=/);
+	await expect(search).toHaveValue('');
+});
+
+test('a search typed just before leaving the page does not follow you there', async ({ page }) => {
+	const panel = await openFilters(page);
+	await panel.getByRole('searchbox', { name: 'Search' }).pressSequentially('carnac');
+	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
+	await page.getByRole('link', { name: 'Albums', exact: true }).click();
+	await expect(page).toHaveURL(/\/albums$/);
+	await page.waitForTimeout(500);
+	await expect(page).toHaveURL(/\/albums$/);
+});
+
 test('calendar: click a day to open the filtered library', async ({ page }) => {
 	test.slow(); // axe walks every day of every year
 	await page.goto('/calendar');

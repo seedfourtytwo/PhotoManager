@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
@@ -14,9 +15,17 @@
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let facets = $state<Facets | null>(null);
 	let search: HTMLInputElement | undefined = $state();
-	// Follows the URL, and is overwritten while typing (debounced back into the URL).
-	let q = $derived(filters.q ?? '');
+	// What is typed. It follows the URL (links, Clear, back), but not the echo of its own
+	// debounced write: that one is trimmed and would eat the space before the next word.
+	let q = $state('');
 	let typing: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		const fromUrl = filters.q ?? '';
+		const echo = fromUrl === untrack(() => q).trim();
+		if (!echo || document.activeElement !== search) q = fromUrl;
+	});
+	// A search still waiting to be applied must not land on the page you went to instead.
+	onDestroy(() => clearTimeout(typing));
 	const count = new Intl.NumberFormat('en-GB');
 	const MONTHS = [
 		'Jan',
