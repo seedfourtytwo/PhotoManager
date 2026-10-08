@@ -95,8 +95,9 @@ its *own* kind still reads each (no caller does that: the ML backfill reads the 
 A heartbeat thread per running job costs 0.08 ms to start and stop.
 
 The table was measured before `asset_by_held_like` was added to the same migration: with it
-the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Not fixed
-here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
+the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Migration
+`0025` added `album_by_cover` for the same `DELETE`'s check of `album.cover_asset_id` (asserted
+by query plan, not timed). Not fixed here: the check of `clip_embedding` still scans its index
 (not measured: the synthetic library has no embeddings).
 
 ## Commits without a disk flush each (`synchronous = NORMAL`)

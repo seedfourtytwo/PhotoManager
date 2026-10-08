@@ -274,7 +274,7 @@ the next sweep decides.
 **Indexes (0022).** `job_waiting (kind, id) WHERE status = 'queued'` holds only waiting jobs:
 each lane's poll and `enqueue_once` seek to their own kinds instead of walking the 10k previews
 queued by an import. `asset_by_variant_of` serves the purge's variant lookup and the foreign-key
-check on every `DELETE FROM asset`.
+check on every `DELETE FROM asset`; `album_by_cover` (0025) does the same for album covers.
 
 ## 5. Performance budget (10k photos on the laptop)
 
