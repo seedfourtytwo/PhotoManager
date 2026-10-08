@@ -2,9 +2,13 @@
 
 `source_guard` enforces rule #1 (originals are sacred): any test that imports from a source
 folder must leave it byte-identical. Import tests (M1) take this fixture.
+
+`no_settings_from_the_shell` keeps the developer's own `.env` out: `just` exports it into every
+recipe, and the environment beats a test's own values.
 """
 
 import hashlib
+import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -20,6 +24,18 @@ def snapshot_tree(root: Path) -> dict[str, tuple[str, int, int]]:
         digest = "dir" if path.is_dir() else hashlib.sha256(path.read_bytes()).hexdigest()
         result[str(path.relative_to(root))] = (digest, stat.st_mtime_ns, stat.st_mode)
     return result
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_settings_from_the_shell() -> Iterator[None]:
+    """The run starts with no PA_* variable set; each test sets the ones it needs itself.
+
+    Session-wide so that module-scoped fixtures, which build before any per-test one, are covered.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        for name in [name for name in os.environ if name.startswith("PA_")]:
+            patch.delenv(name)
+        yield
 
 
 @pytest.fixture
