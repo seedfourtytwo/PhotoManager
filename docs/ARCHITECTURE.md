@@ -51,7 +51,8 @@ faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, f
 `inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
 `taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
-admin (see Visibility in §7). `ANALYZE` runs after migrating, `PRAGMA
+admin (see Visibility in §7); `0026` keeps what the last global face-clustering pass saw
+(`face_cluster_pass`, `face_cluster_mark`). `ANALYZE` runs after migrating, `PRAGMA
 optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
@@ -91,6 +92,9 @@ backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, s
               quiet_window, retention_json, enabled, created_at)                     -- 0016
 backup_run(id, target_id → backup_target ON DELETE CASCADE, kind, status, started_at, …)
 ml_task, clip_embedding, face, person, tag, asset_tag, asset_ml_flag                 -- 0015
+face_cluster_pass(model PK, rule)   -- settings of the last finished global clustering pass (0026)
+face_cluster_mark(face_id PK → face ON DELETE CASCADE, person_id, cluster_state, created_at,
+                  fingerprint)      -- each face as that pass saw it (0026)
 ```
 
 Still planned (later milestones, first cut):
@@ -225,7 +229,11 @@ claims only its kinds, atomically, so a backup or a big import never starves pre
 uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering,
 and a `scan_source` for each source whose automatic re-check is due: `app/recheck.py`, rule in
 `domain/recheck.py`) or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
-ML jobs are planned only when their model files are installed.
+ML jobs are planned only when their model files are installed. The global face-clustering
+pass (nightly and at every start) looks only at waiting faces near a face that changed since
+the last finished pass; what that pass saw is kept in the library (0026), so a restart goes
+on from it. Every waiting face is stepped again only when no pass has finished yet for the
+face model with the current clustering settings.
 
 **Retries wait (0022).** Domain errors (`domain/errors.py`) fail a job at once, without
 retries: they say "the same job would fail the same way" (a folder that is gone, a tool or a

@@ -114,7 +114,7 @@ guest who see 25,000 / 16,667 / 8,333 photos through three sources. "Before" is 
 | one deferred face: how many faces match, who is nearest | 184 + 226 ms (two scans) | 129–190 ms (one scan) |
 | global pass, nothing added or placed since the last one | ≈ 137 min (20,000 × 410 ms, projected) | **0.24 s** |
 | global pass after 100 new faces (strangers) | ≈ 138 min (projected) | **30 s** (200 steps + one comparison of the 100 with the 20,000) |
-| first global pass after a server start | ≈ 137 min (projected) | ≈ 43–63 min (20,000 × one scan, projected) |
+| first global pass after a server start | ≈ 137 min (projected) | ≈ 43–63 min (20,000 × one scan, projected); see "across a restart" below |
 
 One statement now answers both questions with one distance per other face. The handler keeps
 what the last global pass saw per face (person, state, creation time, start of the embedding;
@@ -123,9 +123,30 @@ detected again or placed since — by clustering, or by a person on the People s
 same id order, so the people are the ones a pass over every deferred face gives
 (`tests/ml/test_ml_jobs.py`, random days against the old pass). Which deferred faces are near
 N changed faces costs 20,000 × N distances in one statement: 0.08 s for 1, 2.9 s for 100, 20 s
-for 500. Still slow: that memory lives in the process (no schema change), so the first pass
-after every start steps every deferred face once. A persisted mark per face (a column, i.e. a
-migration) would remove that.
+for 500.
+
+**The same pass across a restart** (migration 0026). That memory lived in the process, so the
+first pass after every start stepped every deferred face once. It is now kept in the library:
+`face_cluster_mark` holds each face as the last finished pass saw it, `face_cluster_pass` the
+clustering settings of that pass. Measured on a second synthetic library of the same shape
+(50,000 faces, 20,000 deferred; one scan took 99 ms that day, so "before" is 20,000 × 99 ms):
+
+| first global pass after a server start | before | after |
+|---|---|---|
+| nothing added or placed since the last pass | ≈ 33 min (projected) | **0.09 s**, 0 rows written |
+| 100 new faces (strangers) since the last pass | ≈ 33 min (projected) | **23 s** (200 steps 20 s, the 100 against the 20,000 2.1 s) |
+| a library no pass has finished on (an upgrade, a changed reach or group size) | ≈ 33 min | the same, once; then as above |
+
+A pass reads only the faces that differ from their mark (one statement, 0.07 s; 0.14 s when
+nothing is kept yet) and at its end writes one row per face that differed plus one for the
+pass, in one transaction: 101 rows in 0.02 s after 100 new faces, 1,001 rows in 0.008 s, 50,001
+rows in 0.22 s for the first pass of a library (3.1 MB in the file, about 63 bytes a face).
+Nothing changed: nothing written. A pass that fails or is cut off has written no mark, so the
+next one sees everything it placed as a change and goes on from there; it steps every
+deferred face only when `face_cluster_pass` has no row for the face model or one with other
+settings. A mark goes with its face (foreign key), and holds the creation time and the start
+of the embedding because a face id is used again (`tests/ml/test_ml_jobs.py`: the random days
+now include restarts, passes cut off half way and a restart right after one).
 
 **People and similar photos** (ms, median of 7; admin / member / guest):
 
