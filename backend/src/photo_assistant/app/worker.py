@@ -129,6 +129,7 @@ class Lanes:
     ) -> None:
         """``pooled``: job kinds that get a pool of threads of their own, e.g. previews with
         max(1, cores - 2) threads (C28)."""
+        self._repo, self._handlers, self._clock = repo, dict(handlers), clock
         self.long_kinds = frozenset(long_kinds)
         pools = dict(pooled or {})
         own = self.long_kinds | set(pools)
@@ -160,8 +161,12 @@ class Lanes:
     def kinds(self) -> set[str]:
         return set().union(*(w.kinds for w in self._workers))
 
-    def run_until_idle(self) -> int:
-        """Every lane, until none finds a job (follow-ups may cross lanes)."""
+    def run_until_idle(self, only: Collection[str] | None = None) -> int:
+        """Every lane, until none finds a job (follow-ups may cross lanes). ``only``: just
+        these job kinds, for a caller that must leave the rest of the queue to the server."""
+        if only is not None:
+            mine = {kind: h for kind, h in self._handlers.items() if kind in only}
+            return Worker(self._repo, mine, self._clock, only=only).run_until_idle()
         total = 0
         while ran := sum(w.run_until_idle() for w in self._workers):
             total += ran

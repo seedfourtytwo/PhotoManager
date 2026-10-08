@@ -92,6 +92,37 @@ def test_export_and_verify_library_from_the_main_cli(
     assert "1" in capsys.readouterr().out
 
 
+def test_a_cli_import_leaves_the_servers_other_jobs_in_the_queue(
+    data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With the server running, its backups, scans and ML jobs are not the CLI's to run."""
+    from tests.synthetic import write_photo
+
+    services = cli.build_services(get_settings())
+    try:
+        for kind in ("backup_due", "purge_trash", "scan_source", "cluster_faces"):
+            services.repo.enqueue(kind, {"source_id": 999} if kind == "scan_source" else {})
+    finally:
+        services.close()
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics")]) == 0
+    assert "Making 3 " in capsys.readouterr().out, "its own preview, places and groups"
+    services = cli.build_services(get_settings())
+    try:
+        waiting = [(j["kind"], j["attempts"]) for j in services.repo.list_jobs("queued")]
+        done = {j["kind"] for j in services.repo.list_jobs("done")}
+        failed = services.repo.list_jobs("failed")
+    finally:
+        services.close()
+    assert waiting == [
+        ("backup_due", 0),
+        ("purge_trash", 0),
+        ("scan_source", 0),
+        ("cluster_faces", 0),
+    ]
+    assert done == {"preview", "geocode", "group"} and failed == []
+
+
 def test_backup_list_from_the_main_cli(
     data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

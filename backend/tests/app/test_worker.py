@@ -237,6 +237,24 @@ def test_run_until_idle_drains_every_lane(repo: SqliteRepository) -> None:
     assert sorted(done) == ["backup", "p"]
 
 
+def test_run_until_idle_can_be_limited_to_some_job_kinds(repo: SqliteRepository) -> None:
+    from photo_assistant.app.worker import Lanes
+
+    done: list[str] = []
+    for kind in ("backup_run", "preview", "geocode", "preview"):
+        repo.enqueue(kind, {})
+    lanes = Lanes(
+        repo,
+        {k: (lambda p, k=k: done.append(k)) for k in ("backup_run", "preview", "geocode")},
+        FixedClock(),
+        long_kinds={"backup_run"},
+        pooled={"preview": 2},
+    )
+    assert lanes.run_until_idle(only={"preview", "geocode"}) == 3
+    assert done == ["preview", "geocode", "preview"]
+    assert [j["kind"] for j in repo.list_jobs("queued")] == ["backup_run"]
+
+
 def test_previews_run_on_a_pool_of_threads(tmp_path: Path) -> None:
     """C28: previews in parallel (max(1, cores - 2) threads); two meet at a barrier."""
     from photo_assistant.app.worker import Lanes
