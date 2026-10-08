@@ -521,7 +521,6 @@
 	.place {
 		font-family: var(--font-data);
 		font-stretch: 80%;
-		font-style: italic;
 		font-size: var(--fs-16);
 		margin-top: var(--s-3) !important;
 	}

@@ -177,13 +177,13 @@
 	input {
 		flex: 1;
 		font-family: var(--font-title);
-		font-weight: var(--title-weight);
+		font-weight: 400;
 		font-size: var(--fs-20) !important;
 		padding-block: var(--s-1);
 	}
 	input::placeholder {
 		font-size: var(--fs-16);
-		font-style: italic;
+		font-style: var(--voice-style);
 	}
 	.hint,
 	.source {

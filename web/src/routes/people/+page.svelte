@@ -100,7 +100,7 @@
 		white-space: nowrap;
 	}
 	.name.quiet {
-		font-style: italic;
+		font-style: var(--voice-style);
 	}
 	@media (hover: hover) {
 		a:hover .name {

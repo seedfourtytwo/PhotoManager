@@ -19,6 +19,7 @@
 	--font-mono: var(--font-data);
 	--font-title: var(--font-ui);
 	--title-weight: 720;
+	--voice-style: normal; /* descriptions and opening lines: upright in the sans, italic in the Album serif */
 	/* Scale (rem = 16 px): 12 · 14 · 16 · 20 · 28 · 40. */
 	--fs-12: 0.75rem; /* metadata, counts, captions under thumbnails */
 	--fs-14: 0.875rem; /* interface text */
@@ -62,6 +63,7 @@
 :root[data-look='album'] {
 	--font-title: var(--font-serif);
 	--title-weight: 500;
+	--voice-style: italic;
 }
 
 @media (max-width: 1023px) {

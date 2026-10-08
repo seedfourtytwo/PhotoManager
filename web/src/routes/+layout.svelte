@@ -75,8 +75,8 @@
 	.opening {
 		padding: var(--s-6) var(--page-x);
 		font-family: var(--font-title);
-		font-weight: var(--title-weight);
-		font-style: italic;
+		font-weight: 400;
+		font-style: var(--voice-style);
 		font-size: var(--fs-16);
 	}
 	.skip:focus {
