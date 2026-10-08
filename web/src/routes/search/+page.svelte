@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import type { AssetOut, MlStatus, SearchResult } from '$lib/api';
 	import { api, library } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
@@ -42,7 +43,7 @@
 		busy = true;
 		const done = () => !stale && (busy = false);
 		const fail = (e: unknown) => {
-			if (!stale) error = e instanceof Error ? e.message : 'The search failed.';
+			if (!stale) error = errorMessage(e, 'The search failed.');
 		};
 		if (photo !== null) {
 			api

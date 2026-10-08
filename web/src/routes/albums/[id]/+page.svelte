@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { LatestWriter } from '$lib/latest';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
@@ -57,7 +58,7 @@
 			error = '';
 		} catch (e) {
 			if (run !== loads) return;
-			error = e instanceof Error ? e.message : 'Could not open the album.';
+			error = errorMessage(e, 'Could not open the album.');
 		}
 	}
 

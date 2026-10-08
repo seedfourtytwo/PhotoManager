@@ -10,6 +10,7 @@
 	} from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatShort } from '$lib/dates';
+	import { errorMessage } from '$lib/format';
 
 	/** Previews are small multiples: identical, low-resolution pages side by side. */
 	const PREVIEW_PPI = 40;
@@ -40,9 +41,7 @@
 				album = a;
 				options = o;
 			})
-			.catch(
-				(e: unknown) => (error = e instanceof Error ? e.message : 'Could not open the album.')
-			);
+			.catch((e: unknown) => (error = errorMessage(e, 'Could not open the album.')));
 	});
 
 	// The plan (pages and resolution issues) follows every choice; nothing is rendered for it.
@@ -58,7 +57,7 @@
 				if (stale) return;
 				// Not the whole-page error: the form stays, so another choice can fix it.
 				plan = null;
-				printError = e instanceof Error ? e.message : 'Could not plan the pages.';
+				printError = errorMessage(e, 'Could not plan the pages.');
 			});
 		return () => (stale = true);
 	});
@@ -93,9 +92,7 @@
 			printError =
 				e instanceof ApiError && e.status === 422 && blocking.length
 					? `${e.message}. Choose a smaller size, take those photos out, or tick “Print anyway”.`
-					: e instanceof Error
-						? e.message
-						: 'Could not make the PDF.';
+					: errorMessage(e, 'Could not make the PDF.');
 		} finally {
 			busy = false;
 		}

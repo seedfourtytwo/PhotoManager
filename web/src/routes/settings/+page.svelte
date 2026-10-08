@@ -2,6 +2,7 @@
 	import { isPin, PIN_LENGTH } from '$lib/api';
 	import { api, notice, session, settings, type Density, type Theme } from '$lib/app.svelte';
 	import Devices from '$lib/components/Devices.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PIN_FIELD } from '$lib/pin';
 
 	let current = $state('');
@@ -32,7 +33,7 @@
 			current = next = '';
 			notice.show('PIN changed.');
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not change the PIN.';
+			error = errorMessage(e, 'Could not change the PIN.');
 		} finally {
 			busy = false;
 		}

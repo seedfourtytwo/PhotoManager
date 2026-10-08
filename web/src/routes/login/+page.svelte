@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { isPin, type AccountName } from '$lib/api';
 	import { api, session } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PIN_FIELD } from '$lib/pin';
 
 	let accounts = $state<AccountName[]>([]);
@@ -20,7 +21,7 @@
 			accounts = await api.loginAccounts();
 			if (accounts.length === 1) chosen = accounts[0];
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not reach the library.';
+			error = errorMessage(e, 'Could not reach the library.');
 		}
 	});
 
@@ -41,7 +42,7 @@
 			const user = await api.login({ username: chosen.username, pin });
 			session.signedIn(user, page.url.searchParams.get('next'));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not sign in.';
+			error = errorMessage(e, 'Could not sign in.');
 			pin = '';
 		} finally {
 			busy = false;

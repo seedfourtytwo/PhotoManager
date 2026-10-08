@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import type { CalendarDay } from '$lib/api';
 	import { api, ui, viewport } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
@@ -21,7 +22,7 @@
 				days = d;
 				error = '';
 			})
-			.catch((e: unknown) => !stale && (error = e instanceof Error ? e.message : 'Failed.'));
+			.catch((e: unknown) => !stale && (error = errorMessage(e, 'Could not load the calendar.')));
 		return () => (stale = true);
 	});
 

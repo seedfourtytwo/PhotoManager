@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import {
 		LinkedPhoto,
@@ -40,7 +41,7 @@
 			person = await api.person(id);
 			error = '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not open this person.';
+			error = errorMessage(e, 'Could not open this person.');
 		}
 	}
 
