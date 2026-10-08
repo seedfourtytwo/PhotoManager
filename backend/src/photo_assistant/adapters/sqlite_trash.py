@@ -34,6 +34,28 @@ class TrashMixin(SqliteBase):
             tuple(ids),
         )
 
+    def trash_superseded(self, asset_id: int, now: datetime) -> bool:
+        """By the import, not by a person (``trashed_by`` stays empty): move a photo to the
+        trash if no file of any source holds it any more. False when one still does."""
+        return bool(
+            self._count(
+                """UPDATE asset SET trashed_at = ? WHERE id = ? AND trashed_at IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM asset_source s WHERE s.asset_id = asset.id)""",
+                (utc_text(now), asset_id),
+            )
+        )
+
+    def restore_superseded(self, asset_id: int) -> bool:
+        """Take a photo back out of the trash if the import put it there (a source file
+        holds it again). One a person trashed stays: that was their decision."""
+        return bool(
+            self._count(
+                """UPDATE asset SET trashed_at = NULL
+                   WHERE id = ? AND trashed_at IS NOT NULL AND trashed_by IS NULL""",
+                (asset_id,),
+            )
+        )
+
     def purge_candidates(
         self, ids: Sequence[int] | None, trashed_before: datetime | None
     ) -> list[Asset]:
@@ -51,13 +73,18 @@ class TrashMixin(SqliteBase):
 
     def purge_asset(self, asset: Asset, now: datetime) -> bool:
         """One transaction: re-check the photo is still trashed, then remove its rows.
-        False when a restore got there first (nothing is changed)."""
-        with self._transaction():
+        False when a restore got there first (nothing is changed).
+
+        Flushed to the disk before it returns: the caller deletes the photo's files next, and
+        a power cut must not bring back the row of a photo whose original is gone."""
+        with self._db.durable():
             still_trashed = self._conn.execute(
-                "SELECT 1 FROM asset WHERE id = ? AND trashed_at IS NOT NULL", (asset.id,)
+                "SELECT trashed_by FROM asset WHERE id = ? AND trashed_at IS NOT NULL",
+                (asset.id,),
             ).fetchone()
             if still_trashed is None:
                 return False
+            by_a_person = still_trashed["trashed_by"] is not None
             for table in _DEPENDENTS:
                 self._conn.execute(f"DELETE FROM {table} WHERE asset_id = ?", (asset.id,))
             self._conn.execute(
@@ -67,10 +94,13 @@ class TrashMixin(SqliteBase):
                 "UPDATE asset SET variant_of = NULL WHERE variant_of = ?", (asset.id,)
             )
             self._conn.execute("UPDATE asset SET held_like = NULL WHERE held_like = ?", (asset.id,))
-            self._conn.execute(
-                "INSERT OR IGNORE INTO purged_hash (content_hash, purged_at) VALUES (?, ?)",
-                (asset.content_hash, utc_text(now)),
-            )
+            if by_a_person:
+                # a person's delete keeps the content out for good; what the import moved
+                # here (a file's earlier version) may come back if a source shows it again
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO purged_hash (content_hash, purged_at) VALUES (?, ?)",
+                    (asset.content_hash, utc_text(now)),
+                )
             self._conn.execute("DELETE FROM asset WHERE id = ?", (asset.id,))
         return True
 

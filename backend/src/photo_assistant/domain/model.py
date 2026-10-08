@@ -85,6 +85,17 @@ class Outcome(StrEnum):
     FAILED = "failed"  # should have worked but didn't: corrupt, unreadable, empty
 
 
+# The order a report lists its files in: what needs a look first, so that the failures of a
+# rescan never hide behind thousands of files that were seen before.
+REPORT_ORDER = (
+    Outcome.FAILED,
+    Outcome.SKIPPED,
+    Outcome.DUPLICATE,
+    Outcome.ALREADY_KNOWN,
+    Outcome.IMPORTED,
+)
+
+
 @dataclass(frozen=True, slots=True)
 class ItemResult:
     relative_path: str  # relative to the source root

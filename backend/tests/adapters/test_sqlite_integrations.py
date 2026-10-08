@@ -51,7 +51,7 @@ def test_ai_calls_are_logged_as_json_summaries(db: Database, conn: sqlite3.Conne
 def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
     db: Database, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(db)
+    store = SqliteRemoteSources(db, SqliteRepository(db))
     source_id = store.add_remote_source("MEGA", RemoteConfig("mega", "Photos"), tmp_path, 1)
     source = SqliteRepository(db).get_source(source_id)
     assert source is not None
@@ -63,7 +63,7 @@ def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
 
 def test_remote_config_is_none_for_other_sources(db: Database) -> None:
     folder = SqliteRepository(db).add_source("Pictures", "/pictures")
-    store = SqliteRemoteSources(db)
+    store = SqliteRemoteSources(db, SqliteRepository(db))
     assert store.remote_config(folder.id) is None
     assert store.remote_config(404) is None
 
@@ -71,7 +71,7 @@ def test_remote_config_is_none_for_other_sources(db: Database) -> None:
 def test_a_tampered_remote_config_is_refused(
     db: Database, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(db)
+    store = SqliteRemoteSources(db, SqliteRepository(db))
     source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     conn.execute("UPDATE source SET config_json = ? WHERE id = ?", ('{"remote": "-x"}', source_id))
     with pytest.raises(RemoteConfigError):
@@ -82,7 +82,7 @@ def test_a_tampered_remote_config_is_refused(
 
 
 def test_set_root_moves_a_source(db: Database, tmp_path: Path) -> None:
-    store = SqliteRemoteSources(db)
+    store = SqliteRemoteSources(db, SqliteRepository(db))
     source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     store.set_root(source_id, "/new/staging/1")
     source = SqliteRepository(db).get_source(source_id)
@@ -90,7 +90,7 @@ def test_set_root_moves_a_source(db: Database, tmp_path: Path) -> None:
 
 
 def test_each_user_has_one_inbox_source(db: Database) -> None:
-    inboxes = SqliteInboxes(db)
+    inboxes = SqliteInboxes(db, SqliteRepository(db))
     first = inboxes.ensure_inbox_source(7, "/data/inbox/7")
     again = inboxes.ensure_inbox_source(7, "/data/inbox/7")
     other = inboxes.ensure_inbox_source(8, "/data/inbox/8")
@@ -100,7 +100,7 @@ def test_each_user_has_one_inbox_source(db: Database) -> None:
 
 
 def test_a_new_inbox_is_owned_by_and_private_to_its_user(db: Database) -> None:
-    inbox = SqliteInboxes(db).ensure_inbox_source(7, "/data/inbox/7")
+    inbox = SqliteInboxes(db, SqliteRepository(db)).ensure_inbox_source(7, "/data/inbox/7")
     repo = SqliteRepository(db)
     assert inbox.owner_id == 7
     assert inbox.label == "Uploads (User 7)"
@@ -110,12 +110,14 @@ def test_a_new_inbox_is_owned_by_and_private_to_its_user(db: Database) -> None:
 def test_remote_sources_are_open_to_everyone_like_any_new_source(
     db: Database, tmp_path: Path
 ) -> None:
-    source_id = SqliteRemoteSources(db).add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
+    source_id = SqliteRemoteSources(db, SqliteRepository(db)).add_remote_source(
+        "x", RemoteConfig("mega"), tmp_path, 1
+    )
     assert SqliteRepository(db).get_access(source_id) == (Level.DOWNLOAD, [])
 
 
 def test_an_inbox_follows_a_moved_data_root(db: Database) -> None:
-    inboxes = SqliteInboxes(db)
+    inboxes = SqliteInboxes(db, SqliteRepository(db))
     first = inboxes.ensure_inbox_source(7, "/old/inbox/7")
     moved = inboxes.ensure_inbox_source(7, "/new/inbox/7")
     assert (moved.id, moved.root) == (first.id, "/new/inbox/7")
@@ -174,7 +176,7 @@ def test_every_kind_of_source_is_created_by_the_one_repository_method(
 def test_a_proton_source_is_its_own_kind_and_stores_only_the_place(
     db: Database, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(db)
+    store = SqliteRemoteSources(db, SqliteRepository(db))
     source_id = store.add_remote_source("Proton", RemoteConfig.proton("/photos"), tmp_path, 1)
     row = conn.execute("SELECT kind, config_json FROM source WHERE id = ?", (source_id,)).fetchone()
     assert (row[0], json.loads(row[1])) == ("proton", {"provider": "proton", "path": "/photos"})

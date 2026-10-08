@@ -5,13 +5,14 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 
 from photo_assistant.api.integrations import Integrations
+from photo_assistant.api.security import SESSION_COOKIE, SESSION_FRESH_COOKIE, renew_session_cookie
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Role, User, Viewer
 from photo_assistant.domain.errors import ForbiddenError
 from photo_assistant.domain.model import MAX_ID, Source
 from photo_assistant.ports.library import AssetView
 
-SESSION_COOKIE = "pa_session"
+__all__ = ["SESSION_COOKIE"]  # where the routes and tests import it from
 _BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
@@ -39,10 +40,21 @@ def get_integrations(services: ServicesDep) -> Integrations:
 IntegrationsDep = Annotated[Integrations, Depends(get_integrations)]
 
 
+def _session_user(request: Request, services: Services) -> User | None:
+    """The user of the request's session cookie. A browser that no longer sends the marker
+    holds a cookie past half its life: it gets the cookie again, when the use is recorded."""
+    token = request.cookies.get(SESSION_COOKIE)
+    found = services.accounts.session(token) if token else None
+    if found is None:
+        return None
+    if token and found.touched and SESSION_FRESH_COOKIE not in request.cookies:
+        renew_session_cookie(request.scope, token)
+    return found.user
+
+
 def current_user(request: Request, services: ServicesDep) -> User:
     """Every /api route except health, setup and login depends on this (401 without)."""
-    token = request.cookies.get(SESSION_COOKIE)
-    user = services.accounts.authenticate(token) if token else None
+    user = _session_user(request, services)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "log in first")
     return user
@@ -74,8 +86,7 @@ def session_or_device_user(request: Request, services: ServicesDep) -> User:
     authorization = request.headers.get("authorization")
     if authorization is not None:
         return _device_user(services, authorization)
-    token = request.cookies.get(SESSION_COOKIE)
-    user = services.accounts.authenticate(token) if token else None
+    user = _session_user(request, services)
     if user is None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,

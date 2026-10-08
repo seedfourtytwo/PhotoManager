@@ -31,13 +31,15 @@ from photo_assistant.ports.sync import (
     SyncOptions,
     SyncRateLimitedError,
     SyncReport,
+    SyncUnsupportedError,
 )
 
 log = logging.getLogger(__name__)
 
 SCAN_JOB_KIND = "scan_source"  # the job kind api.services registers for every source kind
-# Retrying these at once can't help (and hammering a throttling provider makes it worse):
-# record them for the user and finish the job.
+# Recorded for the user in the source's import history, and the job ends there: signing in
+# or naming another folder is theirs to do, and a throttling provider is asked again at the
+# source's next check, not sooner.
 _FINAL = (SyncAuthError, SyncNotFoundError, SyncRateLimitedError)
 _SHOWN_ERRORS = 3  # of a partial pull, in the import's message; the log has the count
 
@@ -152,7 +154,7 @@ class ProviderSync:
     def pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
         sync = self._by_provider.get(remote.provider)
         if sync is None:
-            raise SyncError(f"this version cannot pull from '{remote.provider}'")
+            raise SyncUnsupportedError(f"this version cannot pull from '{remote.provider}'")
         return sync.pull(remote, staging, options)
 
 

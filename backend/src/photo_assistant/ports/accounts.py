@@ -51,6 +51,11 @@ class AccountStore(Protocol):
         Raises NotFirstUserError if any account exists (concurrent setups: one wins)."""
         ...
 
+    def give_ownerless_sources_to_first_admin(self) -> int:
+        """Every source without an owner goes to the first admin who can log in (lowest id,
+        not disabled). Returns how many; 0, and nothing changes, while there is no such admin."""
+        ...
+
     def get_user(self, user_id: int) -> User | None: ...
     def find_user_by_username(self, username: str) -> tuple[User, str] | None:
         """The user and their password hash."""

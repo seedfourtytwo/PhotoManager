@@ -85,6 +85,11 @@ def open_database(path: str | Path, backup_dir: Path | None = None) -> sqlite3.C
     conn.execute("PRAGMA foreign_keys = ON")
     if is_file:
         conn.execute("PRAGMA journal_mode = WAL")
+        # In WAL mode a commit is safe from corruption without flushing the disk; NORMAL only
+        # flushes at checkpoints (3 ms -> 0.03 ms per commit, each under the write lock). The
+        # price: a power cut can lose the commits of the last seconds. Imports and jobs get
+        # those back by scanning again; the few writes nothing brings back use ``durable``.
+        conn.execute("PRAGMA synchronous = NORMAL")
         conn.execute("PRAGMA busy_timeout = 5000")
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     known = migrations()
@@ -198,6 +203,26 @@ class Database:
                 if self.writer.in_transaction:
                     self.writer.execute("ROLLBACK")
                 raise
+
+    @contextmanager
+    def durable(self) -> Iterator[sqlite3.Connection]:
+        """A transaction that is on the disk when it returns (one flush, ~3 ms): for a write
+        that a power cut must not take back because nothing would redo it, e.g. forgetting a
+        photo right before its files are deleted. Never inside another transaction: SQLite
+        cannot change the flush level there, and the outer commit would not be flushed."""
+        with self.lock:
+            if self.writer.in_transaction:
+                raise RuntimeError("a durable write cannot start inside a transaction")
+            if self._path is None:  # in memory: nothing to flush
+                with self.transaction() as conn:
+                    yield conn
+                return
+            self.writer.execute("PRAGMA synchronous = FULL")
+            try:
+                with self.transaction() as conn:
+                    yield conn
+            finally:
+                self.writer.execute("PRAGMA synchronous = NORMAL")
 
     def close(self) -> None:
         """Close every connection. Idempotent: every store sharing it may call it."""

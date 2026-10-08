@@ -39,6 +39,12 @@ class UploadOut(BaseModel):
     import_job_id: int | None
 
 
+class ImportJobOut(BaseModel):
+    id: int
+    status: str  # queued | running | done | failed
+    run_after: datetime | None  # a failed import waiting for its next attempt
+
+
 class CheckIn(BaseModel):
     hashes: list[str] = Field(max_length=5000)
 
@@ -132,6 +138,14 @@ async def upload(request: Request, user: UploaderUser, services: ServicesDep) ->
         for r in receiver.results
     ]
     return UploadOut(files=files, import_job_id=job_id)
+
+
+@router.get("/upload/jobs/{job_id}")
+def import_job(job_id: int, user: UploaderUser, services: ServicesDep) -> ImportJobOut:
+    """How the import queued by the caller's own upload is doing (``import_job_id`` of
+    ``POST /api/upload``). Any other job, and any job of someone else, is a 404."""
+    state = services.integrations.upload.import_job(user.id, job_id)
+    return ImportJobOut(id=state.id, status=state.status, run_after=state.run_after)
 
 
 @router.post("/upload/check")

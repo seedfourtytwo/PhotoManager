@@ -95,9 +95,27 @@ its *own* kind still reads each (no caller does that: the ML backfill reads the 
 A heartbeat thread per running job costs 0.08 ms to start and stop.
 
 The table was measured before `asset_by_held_like` was added to the same migration: with it
-the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Not fixed
-here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
-(not measured: the synthetic library has no embeddings).
+the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Migration
+`0025` added `album_by_cover` for the same `DELETE`'s check of `album.cover_asset_id` (asserted
+by query plan, not timed) and `clip_embedding_by_asset` for its check of `clip_embedding`:
+without planner statistics for that table the check scanned it, 46 ms per purged photo at 50k
+embeddings, 0.06 ms with the index (measured with the ML work; here asserted by query plan).
+
+## Commits without a disk flush each (`synchronous = NORMAL`)
+
+400 single-statement commits (`INSERT INTO job`) on a library database file, ext4 on NVMe,
+development machine, SQLite 3.45.1, two runs each:
+
+| ms per commit | median | mean |
+|---|---|---|
+| WAL + `synchronous = FULL` (before) | 3.00 / 3.02 | 2.86 / 3.16 |
+| WAL + `synchronous = NORMAL` (after) | **0.02 / 0.03** | 0.05 / 0.06 |
+
+An imported photo is at least 5 commits, each under the one write lock, so about 15 ms of
+waiting for the disk per photo is gone (2.5 min in 10k photos), and the other writers
+(previews recording their paths, the job queue) no longer queue behind those flushes. Not
+re-timed end to end. The trade-off and the three writes that still flush are in
+`ARCHITECTURE.md` §3.
 
 ## Faces, people and look-alikes (ML and review)
 

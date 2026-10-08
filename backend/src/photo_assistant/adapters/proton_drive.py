@@ -29,6 +29,7 @@ from photo_assistant.domain.media_types import IMPORTABLE_EXTENSIONS
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig
 from photo_assistant.ports.sync import (
     SyncAuthError,
+    SyncDiskFullError,
     SyncError,
     SyncNotFoundError,
     SyncOptions,
@@ -55,11 +56,16 @@ _DISK_FULL = (errno.ENOSPC, errno.EDQUOT)
 
 
 class _PullStoppedError(SyncError):
-    """Nothing more can be pulled now (tool gone, out of time): asking again cannot help."""
+    """Nothing more can be pulled now (out of time; its subclasses: tool gone, disk full):
+    asking for the next photo cannot help. Out of time may pass: a later pull continues."""
 
 
 class _ToolMissingError(_PullStoppedError, SyncToolMissingError):
     """The pull stops, and no later attempt can do better until the tool is installed."""
+
+
+class _DiskFullError(_PullStoppedError, SyncDiskFullError):
+    """The pull stops, and no later attempt can do better until space is freed."""
 
 
 def find_binary(name: str) -> str:
@@ -124,7 +130,7 @@ def _safe(name: str) -> str:
 
 def _disk_error(exc: OSError, where: Path) -> SyncError:
     if exc.errno in _DISK_FULL:
-        return _PullStoppedError(
+        return _DiskFullError(
             f"the disk holding {where} is full: free some space, then pull again "
             "(photos already pulled are kept)"
         )

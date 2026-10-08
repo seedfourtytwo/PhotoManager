@@ -53,7 +53,7 @@ def make_world(data: Path, exiftool: ExifToolReader, **settings: int) -> World:
         renderer=VipsRenderer(),
         store=store,
         clock=FakeClock(),
-        settings=ImportSettings(**settings),
+        settings=ImportSettings(**settings),  # type: ignore[arg-type]  # the int knobs only
     )
     return World(repo, store, importer, data)
 

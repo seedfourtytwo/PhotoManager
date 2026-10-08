@@ -15,7 +15,7 @@ from pathlib import Path
 
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import INBOX_KIND, Viewer
-from photo_assistant.domain.errors import InvalidError
+from photo_assistant.domain.errors import InvalidError, NotFoundError
 from photo_assistant.domain.model import RunStatus, Source
 from photo_assistant.domain.uploads import (
     is_content_hash,
@@ -39,6 +39,24 @@ NOT_A_PHOTO = "not a photo (only JPEG, PNG, HEIC, WebP, TIFF, GIF, AVIF and RAW 
 class InvalidHashListError(InvalidError, ValueError):
     """The hashes of a "what's new?" check are too many or not content hashes. (Still a
     ValueError, as it was before it joined the hierarchy.)"""
+
+
+class UploadJobNotFoundError(NotFoundError):
+    """No such job, or not the import of an upload of the one asking: the same answer, so
+    nobody learns which jobs exist."""
+
+    def __init__(self) -> None:
+        super().__init__("no import of an upload of yours with that id")
+
+
+@dataclass(frozen=True, slots=True)
+class ImportJobState:
+    """How the import of an upload is doing: no payload, no error text (those are the
+    admin's, in the job list)."""
+
+    id: int
+    status: str  # queued | running | done | failed
+    run_after: datetime | None  # set while a failed import waits for its next attempt
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +159,21 @@ class UploadInbox:
             return None
         source = self._inbox.ensure_inbox_source(user_id, str(self._user_folder(user_id)))
         return self._library.enqueue(self._settings.import_job_kind, {"source_id": source.id})
+
+    def import_job(self, user_id: int, job_id: int) -> ImportJobState:
+        """The import that an upload of this user queued (``finish_batch``'s job id): an
+        import of their own inbox. Raises UploadJobNotFoundError for every other job."""
+        job = self._library.get_job(job_id)
+        if job is None or job["kind"] != self._settings.import_job_kind:
+            raise UploadJobNotFoundError()
+        payload = job["payload"]
+        source_id = payload.get("source_id") if isinstance(payload, dict) else None
+        source = self._library.get_source(source_id) if isinstance(source_id, int) else None
+        if source is None or source.kind != INBOX_KIND or source.owner_id != user_id:
+            raise UploadJobNotFoundError()
+        run_after = job["run_after"]
+        waits = datetime.fromisoformat(str(run_after)) if run_after else None
+        return ImportJobState(job_id, str(job["status"]), waits)
 
     def rescan(
         self,
