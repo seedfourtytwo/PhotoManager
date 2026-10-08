@@ -1,13 +1,14 @@
 from fastapi import APIRouter, HTTPException, status
 
 from photo_assistant.api.deps import ADMIN_ONLY, ServicesDep
+from photo_assistant.api.schemas import Id
 from photo_assistant.domain.model import Outcome
 
 router = APIRouter(prefix="/api/imports", tags=["imports"], dependencies=ADMIN_ONLY)
 
 
 @router.get("")
-def list_imports(services: ServicesDep, source_id: int | None = None) -> list[dict[str, object]]:
+def list_imports(services: ServicesDep, source_id: Id | None = None) -> list[dict[str, object]]:
     return services.repo.list_import_runs(source_id)
 
 
