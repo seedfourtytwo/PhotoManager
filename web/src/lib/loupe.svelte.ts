@@ -6,6 +6,7 @@
  * `page.state.pushed` says this history entry was made by `openPhoto`, so Back closes the
  * loupe; it lives in the entry (not in a variable) so that leaving by a link forgets it.
  */
+import { untrack } from 'svelte';
 import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
 import type { AssetOut, Id } from './api/types';
@@ -120,7 +121,8 @@ export class LinkedPhoto {
 				this.#options.onmissing();
 			}
 		);
-		this.#options.find?.(id);
+		// Untracked: the page's list is read while looking, and must not re-run the caller.
+		untrack(() => this.#options.find?.(id));
 	}
 
 	/** A change made in the loupe while the photo is shown on its own. */
