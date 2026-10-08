@@ -97,8 +97,9 @@ A heartbeat thread per running job costs 0.08 ms to start and stop.
 The table was measured before `asset_by_held_like` was added to the same migration: with it
 the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Migration
 `0025` added `album_by_cover` for the same `DELETE`'s check of `album.cover_asset_id` (asserted
-by query plan, not timed). Not fixed here: the check of `clip_embedding` still scans its index
-(not measured: the synthetic library has no embeddings).
+by query plan, not timed) and `clip_embedding_by_asset` for its check of `clip_embedding`:
+without planner statistics for that table the check scanned it, 46 ms per purged photo at 50k
+embeddings, 0.06 ms with the index (measured with the ML work; here asserted by query plan).
 
 ## Commits without a disk flush each (`synchronous = NORMAL`)
 
