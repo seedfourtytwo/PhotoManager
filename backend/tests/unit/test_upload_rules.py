@@ -81,6 +81,17 @@ def test_long_names_are_shortened_keeping_the_extension() -> None:
     assert len(name.encode()) <= 200
 
 
+@pytest.mark.parametrize(
+    "raw",
+    ["IMG\ud800.jpg", "\udcff" * 300 + ".jpg", "a\ud83d" * 150],
+    ids=["short", "long", "long without extension"],
+)
+def test_a_name_with_half_a_character_is_made_storable(raw: str) -> None:
+    """A lone surrogate cannot be written as UTF-8: it must not crash, nor reach the disk."""
+    name = safe_upload_name(raw, "jpg")
+    assert name.endswith(".jpg") and len(name.encode()) <= 200
+
+
 def test_numbered_names_count_up_before_the_extension() -> None:
     names = numbered_names("IMG_1.HEIC")
     assert [next(names) for _ in range(3)] == ["IMG_1.HEIC", "IMG_1 (2).HEIC", "IMG_1 (3).HEIC"]
