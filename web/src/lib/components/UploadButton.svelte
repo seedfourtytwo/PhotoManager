@@ -4,6 +4,7 @@
 	 * inbox with progress, then reload once the import has run. Guests can't upload.
 	 */
 	import { api, notice, session } from '$lib/app.svelte';
+	import type { UploadResult } from '$lib/api';
 	import { summarizeUpload, uploadFiles } from '$lib/upload';
 
 	type Props = {
@@ -20,25 +21,65 @@
 	const ACCEPT = 'image/*,.heic,.heif,.dng,.cr2,.cr3,.nef,.arw,.raf,.orf,.rw2';
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+	/** Per request: the server takes at most 500 files in one, and small requests fail small. */
+	const CHUNK = 50;
+	/** Refused files named in the notice; the rest are counted. */
+	const NAMED = 3;
+
+	/** Waits for the import; if the server can't be asked, the photos are stored all the same. */
 	async function importDone() {
 		const until = Date.now() + patience * 1000;
-		while (Date.now() < until) {
-			const { jobs } = await api.stats();
-			if (jobs.queued + jobs.running === 0) return;
-			await sleep(pollMs);
+		try {
+			while (Date.now() < until) {
+				const { jobs } = await api.stats();
+				if (jobs.queued + jobs.running === 0) return;
+				await sleep(pollMs);
+			}
+		} catch {
+			// reload now: what is imported so far shows, the rest on the next visit
 		}
+	}
+
+	function summarize(result: UploadResult): string {
+		const refused = result.files.filter((f) => f.outcome === 'rejected');
+		if (refused.length <= NAMED) return summarizeUpload(result);
+		const taken = result.files.filter((f) => f.outcome !== 'rejected');
+		const named = refused.slice(0, NAMED).map((f) => `${f.name}: ${f.reason ?? 'refused'}`);
+		const tail = `${refused.length} refused (${named.join(', ')}, and ${refused.length - NAMED} more)`;
+		return taken.length ? `${summarizeUpload({ ...result, files: taken })} · ${tail}` : tail;
 	}
 
 	async function send(files: File[]) {
 		if (!files.length) return;
 		progress = 0;
 		notice.show(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`, { ms: 600_000 });
+		const total = files.reduce((n, f) => n + f.size, 0) || 1;
+		const result: UploadResult = { files: [], import_job_id: null };
+		let bytes = 0;
+		let failure: unknown = null;
 		try {
-			const result = await uploadFiles(files, {
-				url: api.uploadUrl,
-				onprogress: (f) => (progress = f)
-			});
-			const summary = summarizeUpload(result);
+			for (let at = 0; at < files.length && !failure; at += CHUNK) {
+				const chunk = files.slice(at, at + CHUNK);
+				const size = chunk.reduce((n, f) => n + f.size, 0);
+				try {
+					const part = await uploadFiles(chunk, {
+						url: api.uploadUrl,
+						onprogress: (f) => (progress = (bytes + f * size) / total)
+					});
+					result.files.push(...part.files);
+					result.import_job_id = part.import_job_id ?? result.import_job_id;
+					bytes += size;
+				} catch (error) {
+					failure = error;
+				}
+			}
+			// Nothing got through: that is simply a failed upload.
+			if (failure && !result.files.length) throw failure;
+			let summary = summarize(result);
+			if (failure) {
+				const why = failure instanceof Error ? failure.message : 'the upload failed.';
+				summary += `. The other ${files.length - result.files.length} were not sent: ${why}`;
+			}
 			if (result.import_job_id !== null) {
 				notice.show(`${summary}. Adding them to the library…`, { ms: 600_000 });
 				await importDone();
