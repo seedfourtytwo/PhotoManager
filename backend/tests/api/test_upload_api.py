@@ -216,6 +216,21 @@ def test_broken_multipart_is_a_bad_request_and_leaves_nothing(world: World) -> N
     assert list((world.data / "tmp").glob("*")) == []
 
 
+def test_a_part_with_endless_headers_is_cut_off(world: World) -> None:
+    """Part headers are kept in memory until the part starts. python-multipart caps them (8
+    headers of about 4 KiB a part); this pins that, as nothing of ours limits them."""
+    start = b'--x\r\nContent-Disposition: form-data; name="f"; filename="a.jpg"\r\n'
+    for junk in (b"X-Junk: " + b"a" * 200_000 + b"\r\n", b"X-J: a\r\n" * 20_000):
+        response = world.client.post(
+            "/api/upload",
+            content=start + junk + b"\r\n" + JPEG + b"\r\n--x--\r\n",
+            headers={**_as(1), "Content-Type": "multipart/form-data; boundary=x"},
+        )
+        assert response.status_code == 400 and "header" in response.json()["detail"]
+    assert not (world.data / "inbox").exists()
+    assert list((world.data / "tmp").glob("*")) == []
+
+
 def test_too_many_files_in_one_request_are_rejected(world: World) -> None:
     world.integrations.upload_max_files = 1
     body = _upload(world, [("a.jpg", JPEG), ("b.jpg", PNG)], _as(1))
