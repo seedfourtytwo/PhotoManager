@@ -164,10 +164,14 @@ after a failed one; a failed proof or an unconfirmed key raises the banner.
 Absent places: `_backup` first calls `BackupEngine.probe` (`restic cat config`, no lock; exit 10
 means "no repository") for a target that has had a successful backup, and never runs `init` for
 it. If the repository is not there the run is recorded as `skipped` (`BackupRunStatus.SKIPPED`)
-and the loop moves on to the next target; wrong password, lock and the rest stay `failed`. A
+and the loop moves on to the next target. For a local folder, wrong password, lock and every other
+fault stay `failed`; for an rclone place, `probe` treats any failure except wrong password,
+unreadable password file, lock or missing tool as "cannot be reached" and the run is skipped. A
 skipped run is not an attempt: while the latest run is skipped, `run_due` probes the place at most
 every `SKIP_RETRY` (15 min), writes nothing while it stays away, and backs up at once if overdue,
-otherwise when the quiet window allows. The Proton copy follows the same rule. Known limit: a
+otherwise when the quiet window allows. A skipped Proton copy is also re-checked at most every
+15 min (`_catch_up_copy`), with no overdue check and no quiet window: it runs as soon as Proton
+Drive and the backup folder can be reached. Known limit: a
 target with no successful backup yet can still get its repository created on the first run, so
 the very first backup must be started with the disk connected.
 

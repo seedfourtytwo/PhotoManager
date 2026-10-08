@@ -84,5 +84,5 @@ A backup or copy not attempted because its place is not connected. It is not a f
 _Avoid_: Failed run, missed run
 
 **Protected**:
-At least two backup places are up to date. When not, admins see a banner on every page.
+At least two backup places are up to date. Admins see a banner on every page when that is not true or any backup has a problem.
 _Avoid_: Safe, backed up

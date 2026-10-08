@@ -62,8 +62,9 @@ just backup run 1          # first run creates the repository and copies everyth
 
 If the disk isn't plugged in when a backup is due, the backup is **skipped**, not failed: the
 history says "not connected", the other backups still run, and nothing is written to the
-laptop's own disk. Plug the disk in and that is all: within 15 minutes the app notices, and
-backs up at once if it is overdue, otherwise at the next time its quiet hours allow. Start the
+laptop's own disk. Plug the disk in and that is all: the app finds it again by itself and
+backs up at once if the backup is overdue, otherwise at the next time its quiet hours allow.
+This can take up to about 15 minutes after it is due. Start the
 very first backup with the disk plugged in.
 
 ## 3. Target 2: the server (over SSH, via rclone)
@@ -111,8 +112,9 @@ one). The web app shows the same as a warning banner.
 
 **Two places.** The photos count as safe when at least two places are up to date: a backup
 target, or the Proton Drive copy of one (shown as a copy, because it cannot save you if the
-backup itself is damaged). When fewer than two are, every page shows a warning banner to
-admins. You cannot close it; it goes when the problem is fixed. There is no email or phone
+backup itself is damaged). When fewer than two are, or any backup has a problem (a failed
+backup or restore test, an out-of-date copy, a recovery key not saved), every page shows a
+warning banner to admins. You cannot close it; it goes when the problem is fixed. There is no email or phone
 alert yet, so if the app is not running, nobody is warned. A disk that is simply unplugged
 raises nothing until its backup is overdue.
 
@@ -172,6 +174,7 @@ and continue as in section 6 (move the database into place, verify the library).
 | Message | Fix |
 |---|---|
 | `wrong password for the backup` | the password file changed; restore it from your password manager |
-| `… is not connected` (skipped) | plug the disk in / check the server is reachable; it backs up by itself |
+| `… is not connected` (skipped) | plug the disk in; it backs up by itself |
+| `… cannot be reached right now` (skipped) | check the network or the server; it backs up by itself once it answers |
 | `locked by another run` | if nothing else is running: `restic -r <repo> unlock` |
 | `some library files could not be read` | run `just verify-library`; check disk health |
