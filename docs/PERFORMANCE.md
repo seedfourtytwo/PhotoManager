@@ -99,6 +99,64 @@ the look-alike row no longer scans `asset` (asserted by query plan, not re-timed
 here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
 (not measured: the synthetic library has no embeddings).
 
+## Faces, people and look-alikes (ML and review)
+
+Synthetic rows only, in a temp-file database on the development machine (16 cores, other work
+running: single timings move by ±30 %): 25,000 photos, 50,000 faces of 512 numbers each
+(60 people, 20,000 strangers that stay deferred), 25,000 CLIP vectors; an admin, a member and a
+guest who see 25,000 / 16,667 / 8,333 photos through three sources. "Before" is `a1c0a0e`
+(clustering: `5463926`).
+
+**Nightly face clustering** (the global `cluster_faces {}` pass, also run at every start):
+
+| | before | after |
+|---|---|---|
+| one deferred face: how many faces match, who is nearest | 184 + 226 ms (two scans) | 129–190 ms (one scan) |
+| global pass, nothing added or placed since the last one | ≈ 137 min (20,000 × 410 ms, projected) | **0.24 s** |
+| global pass after 100 new faces (strangers) | ≈ 138 min (projected) | **30 s** (200 steps + one comparison of the 100 with the 20,000) |
+| first global pass after a server start | ≈ 137 min (projected) | ≈ 43–63 min (20,000 × one scan, projected) |
+
+One statement now answers both questions with one distance per other face. The handler keeps
+what the last global pass saw per face (person, state, creation time, start of the embedding;
+about 0.15 s to read) and steps only the deferred faces within reach of a face that was added,
+detected again or placed since — by clustering, or by a person on the People screen — in the
+same id order, so the people are the ones a pass over every deferred face gives
+(`tests/ml/test_ml_jobs.py`, random days against the old pass). Which deferred faces are near
+N changed faces costs 20,000 × N distances in one statement: 0.08 s for 1, 2.9 s for 100, 20 s
+for 500. Still slow: that memory lives in the process (no schema change), so the first pass
+after every start steps every deferred face once. A persisted mark per face (a column, i.e. a
+migration) would remove that.
+
+**People and similar photos** (ms, median of 7; admin / member / guest):
+
+| | before | after |
+|---|---|---|
+| `GET /people` (60 people) | 170 / 195 / 142 | 148 / 137 / 84 |
+| `GET /people/{id}` (one of ~500 faces) | 59 / 67 / 50 | **2.6 / 3.9 / 3.2** |
+| `GET /people/{id}/assets` (first 200) | 89 / 85 / 60 | **4.4 / 6.5 / 5.6** |
+| rename (`PATCH /people/{id}`) | 93 / 82 / 61 | **7.4 / 7.1 / 6.5** |
+| similar photos (`/assets/{id}/similar`) | 115 / 104 / 85 | 81 / 87 / 62 |
+
+Measured at the use-case level (`People`, `SimilarPhotos`) without HTTP. Before, each request
+listed every photo the viewer may see and copied the ids into a temp table; now the ML store
+gets the viewer and puts the library's rule into its own statement: looked up for one person's
+faces only, once per photo for whole-library reads (`/people`, similar photos). Those two still
+check the rule for every photo with a face or a vector, which is what is left of their time
+besides the 25,000 distances.
+
+**Look-alikes held for review** (`domain.review.lookalikes`, pure Python, random hashes, a
+tenth of the new photos within 4 bits of a library photo): 20,000 new photos against a
+30,000-photo library took **58 s** (6 × 10⁸ comparisons; 1,000 timed, × 20) and now **0.38 s**:
+library hashes are indexed by 5 bands of bits and a new photo meets only the hashes sharing a
+band. Real hashes are less evenly spread than random ones, so expect more candidates per photo.
+
+**Purging a photo with 50,000 embeddings stored**: the cascade into `clip_embedding` looks the
+photo up by `asset_id`, but the table's only index starts with `model`. With planner statistics
+for that table SQLite skips over the one model: 0.07 ms per delete. Without them (a library
+whose `ANALYZE` ran before the first embedding existed) it reads the whole table, vectors
+included: **46 ms** per delete. `CREATE INDEX clip_embedding_by_asset ON clip_embedding
+(asset_id)` makes it 0.06 ms in both cases; not added here (it needs a migration).
+
 ## Import and previews (C28)
 
 209 synthetic 12 MP JPEGs (4000 × 3000; synthetic files are ~200 KB, real ones ~4 MB, so real
