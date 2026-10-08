@@ -129,7 +129,9 @@ class VipsRenderer:
     @staticmethod
     def _save(image: pyvips.Image, destination: Path, spec: RenderSpec) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        partial = destination.with_name(f".{uuid.uuid4().hex}.partial{destination.suffix}")
+        # ends in .partial (exports, backups and the start-up sweep know that name) and sits
+        # beside the destination, so the rename is atomic
+        partial = destination.with_name(f".{uuid.uuid4().hex}{destination.suffix}.partial")
         try:
             _SAVERS[spec.format](image, str(partial), spec)
             partial.replace(destination)

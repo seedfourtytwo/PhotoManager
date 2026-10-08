@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import stat
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -21,6 +22,9 @@ log = logging.getLogger(__name__)
 
 _CHUNK = 1024 * 1024
 _REMOVABLE = {"originals", "derived"}
+# A half-written derivative younger than this may belong to an import running beside the
+# server (the CLI): the start-up sweep leaves it alone.
+_STALE_SECONDS = 3600.0
 
 
 class Blake3Hasher:
@@ -87,6 +91,13 @@ class FolderSourceReader:
                 )
 
 
+def _modified_before(path: Path, timestamp: float) -> bool:
+    try:
+        return path.lstat().st_mtime < timestamp
+    except OSError:
+        return False
+
+
 class HashMismatchError(RuntimeError):
     """The copy in the library does not match the source: never keep it."""
 
@@ -137,12 +148,17 @@ class DiskLibraryStore:
             cached.unlink(missing_ok=True)
 
     def sweep_tmp(self) -> int:
-        """Remove half-written copies left by a crash (only ever in data/tmp)."""
-        if not self._tmp.is_dir():
-            return 0
-        leftovers = list(self._tmp.glob("*.partial"))
-        for partial in leftovers:
-            partial.unlink(missing_ok=True)
+        """Remove what a crash left half-written: copies and uploads (``*.partial``) and
+        download files (``download-*``) in data/tmp, old ``*.partial`` renders in derived/.
+        For the server start only: run from a CLI command it would cut the server's work."""
+        leftovers = [*self._tmp.glob("*.partial"), *self._tmp.glob("download-*")]
+        before = time.time() - _STALE_SECONDS
+        leftovers += [
+            p for p in (self.root / "derived").rglob("*.partial") if _modified_before(p, before)
+        ]
+        leftovers = [p for p in leftovers if p.is_file()]
+        for leftover in leftovers:
+            leftover.unlink(missing_ok=True)
         return len(leftovers)
 
     def overlaps(self, folder: Path) -> bool:
