@@ -15,6 +15,7 @@ from pathlib import Path
 
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import INBOX_KIND, Viewer
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.model import RunStatus, Source
 from photo_assistant.domain.uploads import (
     is_content_hash,
@@ -33,6 +34,11 @@ from photo_assistant.ports.upload import (
 
 INBOX_RESCAN_SECONDS = 3600.0  # the safety net; a normal upload queues its own import
 NOT_A_PHOTO = "not a photo (only JPEG, PNG, HEIC, WebP, TIFF, GIF, AVIF and RAW are accepted)"
+
+
+class InvalidHashListError(InvalidError, ValueError):
+    """The hashes of a "what's new?" check are too many or not content hashes. (Still a
+    ValueError, as it was before it joined the hierarchy.)"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,10 +182,13 @@ class UploadInbox:
         """Of these content hashes, the ones this viewer doesn't have (in order, no repeats).
         Purged photos count as present: the phone must not send them again and again."""
         if len(hashes) > self._settings.max_check_hashes:
-            raise ValueError(f"send at most {self._settings.max_check_hashes} hashes at a time")
+            limit = self._settings.max_check_hashes
+            raise InvalidHashListError(f"send at most {limit} hashes at a time")
         for value in hashes:
             if not is_content_hash(value):
-                raise ValueError(f"not a content hash (64 lowercase hex characters): {value!r}")
+                raise InvalidHashListError(
+                    f"not a content hash (64 lowercase hex characters): {value!r}"
+                )
         unique = list(dict.fromkeys(hashes))
         present = self._library.hashes_present(viewer, unique)
         return [h for h in unique if h not in present]
