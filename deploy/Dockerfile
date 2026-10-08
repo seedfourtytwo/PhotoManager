@@ -2,9 +2,12 @@
 #
 # Photo Assistant for the home server (docs/guides/move-to-server.md).
 #
-# !! UNTESTED: written without a Docker daemon. Build and smoke-test it on the server first:
-# !!   docker compose -f deploy/compose.yml build && docker compose -f deploy/compose.yml up
-# !! then open http://127.0.0.1:8420/api/health on the server.
+# The image was built and smoke-tested once, by hand (2026-10-08): it builds, answers
+# /api/health, imports the test fixtures (HEIC included) as the non-root user and passes
+# `doctor`. No automatic check builds it, and the compose stack around it (volumes,
+# server.env, Tailscale) is UNTESTED until run on the server:
+#   docker compose -f deploy/compose.yml build && docker compose -f deploy/compose.yml up
+# then open http://127.0.0.1:8420/api/health on the server.
 #
 # Build from the repository root (compose does this): the context is `..` from deploy/.
 # Three stages: the web app (node), the Python environment (needs a compiler for pyvips),
@@ -50,13 +53,14 @@ RUN uv sync --frozen --no-dev --no-editable
 
 # --- 3. runtime ------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS runtime
-# libvips42: images · exiftool: metadata · libheif-plugin-libde265: iPhone HEIC ·
+# libvips42: images · exiftool: metadata · libheif1: iPhone HEIC (in Debian 12 the HEVC decoder
+# is part of it; the separate libheif-plugin-libde265 package only exists in newer releases) ·
 # restic + rclone: backups and remote targets · tini: proper signal handling as PID 1.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libvips42 \
       libimage-exiftool-perl \
-      libheif-plugin-libde265 \
+      libheif1 \
       restic \
       rclone \
       ca-certificates \
