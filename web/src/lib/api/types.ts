@@ -18,19 +18,22 @@ export type User = {
 };
 
 export type SetupState = { needs_admin: boolean };
-export type SetupBody = { username: string; display_name: string; password: string };
-export type LoginBody = { username: string; password: string };
-export type PasswordBody = { current_password: string; new_password: string };
+export type SetupBody = { username: string; display_name: string; pin: string };
+export type LoginBody = { username: string; pin: string };
+/** What the login screen may show before anyone is signed in. */
+export type AccountName = { username: string; display_name: string };
+export type PinBody = { current_pin: string; new_pin: string };
 export type NewUser = SetupBody & { role: Role };
 export type UserPatch = Partial<{
 	display_name: string;
 	role: Role;
 	disabled: boolean;
-	password: string;
+	pin: string;
 }>;
 
-/** Contract: passwords are at least 10 characters. */
-export const MIN_PASSWORD = 10;
+/** Contract: a PIN is exactly 4 digits. */
+export const PIN_LENGTH = 4;
+export const isPin = (value: string) => /^[0-9]{4}$/.test(value);
 
 // --- sources, imports, jobs (M1 routes, plus access) ---------------------------------------
 
@@ -334,9 +337,40 @@ export type BackupTarget = {
 	repo_bytes: number | null;
 	next_run_at: string | null;
 	overdue: boolean;
+	/** The last restore test that matched every hash: the proof the backup can be read. */
+	last_proven_at: string | null;
+	restore_failing: boolean;
+	/** Someone confirmed a copy of the recovery key exists outside this machine. */
+	key_saved: boolean;
 	/** Drives the warning banner. */
 	needs_attention: boolean;
 };
+/** The sub-folders of one folder on the server (admin), to pick a folder without typing. */
+export type FolderListing = {
+	path: string;
+	parent: string | null;
+	folders: { name: string; path: string }[];
+	truncated: boolean;
+	/** Places to start from: the home folder, plugged-in disks. */
+	roots: { label: string; path: string }[];
+	/** Why this folder can't be added as a source, or null. */
+	source_problem: string | null;
+};
+export type BackupDisk = { path: string; label: string; free_bytes: number };
+export type BackupPlaces = { library_bytes: number; disks: BackupDisk[]; remotes: string[] };
+/** `place`: a folder path, or `rclone:<remote>:<folder>`. */
+export type BackupPlan = {
+	repository: string;
+	library_bytes: number;
+	free_bytes: number | null;
+	ok: boolean;
+	problem: string | null;
+	warnings: string[];
+};
+export type BackupSetupIn = { label: string; place: string; schedule?: string };
+/** Opens the backup without this machine: to be kept somewhere else. */
+export type BackupRecovery = { label: string; repository: string; key: string };
+export type BackupSetup = { target: BackupTarget; recovery: BackupRecovery };
 export type BackupIn = {
 	label: string;
 	repository: string;

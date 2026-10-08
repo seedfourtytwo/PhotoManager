@@ -17,6 +17,7 @@ import type {
 	Role,
 	User
 } from '../src/lib/api/types.ts';
+import { isPin } from '../src/lib/api/types.ts';
 import { filtersFromParams } from '../src/lib/filters.ts';
 import { v11Routes } from './v11.ts';
 import {
@@ -59,9 +60,9 @@ function publicUser(u: MockUser): User {
 	};
 }
 
-function checkPassword(password: unknown) {
-	if (typeof password !== 'string' || password.length < 10)
-		throw new HttpError(422, 'Passwords need at least 10 characters.');
+function checkPin(pin: unknown) {
+	if (typeof pin !== 'string' || !isPin(pin))
+		throw new HttpError(422, 'PINs are exactly 4 digits.');
 }
 
 export type MockOptions = { now?: () => number };
@@ -607,39 +608,49 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			/^\/api\/setup$/,
 			(ctx) => {
 				if (state.users.length > 0) throw new HttpError(409, 'The library already has an admin.');
-				const body = requireFields<{ username: string; display_name: string; password: string }>(
+				const body = requireFields<{ username: string; display_name: string; pin: string }>(
 					ctx.body,
-					['username', 'display_name', 'password']
+					['username', 'display_name', 'pin']
 				);
-				checkPassword(body.password);
+				checkPin(body.pin);
 				const user: MockUser = {
 					id: state.nextId.user++,
 					username: body.username,
 					display_name: body.display_name,
 					role: 'admin',
 					disabled: false,
-					password: body.password
+					pin: body.pin
 				};
 				state.users.push(user);
 				return { status: 201, json: publicUser(user), headers: startSession(user) };
 			}
 		],
 		[
+			'GET',
+			/^\/api\/auth\/accounts$/,
+			() =>
+				ok(
+					state.users
+						.filter((u) => !u.disabled)
+						.map((u) => ({ username: u.username, display_name: u.display_name }))
+				)
+		],
+		[
 			'POST',
 			/^\/api\/auth\/login$/,
 			(ctx) => {
-				const body = requireFields<{ username: string; password: string }>(ctx.body, [
+				const body = requireFields<{ username: string; pin: string }>(ctx.body, [
 					'username',
-					'password'
+					'pin'
 				]);
 				const key = `${body.username}|${ctx.req.socket.remoteAddress}`;
 				const recent = (state.failedLogins.get(key) ?? []).filter((t) => now() - t < 15 * 60_000);
 				if (recent.length >= 10)
 					throw new HttpError(429, 'Too many attempts. Wait 15 minutes and try again.');
 				const user = state.users.find((u) => u.username === body.username);
-				if (!user || user.password !== body.password || user.disabled) {
+				if (!user || user.pin !== body.pin || user.disabled) {
 					state.failedLogins.set(key, [...recent, now()]);
-					throw new HttpError(401, 'Wrong user name or password.');
+					throw new HttpError(401, 'Wrong PIN.');
 				}
 				state.failedLogins.delete(key);
 				return { status: 200, json: publicUser(user), headers: startSession(user) };
@@ -660,16 +671,15 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		['GET', /^\/api\/auth\/me$/, (ctx) => ok(publicUser(me(ctx)))],
 		[
 			'POST',
-			/^\/api\/auth\/password$/,
+			/^\/api\/auth\/pin$/,
 			(ctx) => {
-				const body = requireFields<{ current_password: string; new_password: string }>(ctx.body, [
-					'current_password',
-					'new_password'
+				const body = requireFields<{ current_pin: string; new_pin: string }>(ctx.body, [
+					'current_pin',
+					'new_pin'
 				]);
-				if (body.current_password !== me(ctx).password)
-					throw new HttpError(400, 'Your current password is not right.');
-				checkPassword(body.new_password);
-				me(ctx).password = body.new_password;
+				if (body.current_pin !== me(ctx).pin) throw new HttpError(400, 'The current PIN is wrong.');
+				checkPin(body.new_pin);
+				me(ctx).pin = body.new_pin;
 				return noContent;
 			}
 		],
@@ -733,10 +743,10 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const body = requireFields<{
 					username: string;
 					display_name: string;
-					password: string;
+					pin: string;
 					role: Role;
-				}>(ctx.body, ['username', 'display_name', 'password', 'role']);
-				checkPassword(body.password);
+				}>(ctx.body, ['username', 'display_name', 'pin', 'role']);
+				checkPin(body.pin);
 				if (state.users.some((u) => u.username === body.username))
 					throw new HttpError(409, 'That user name is taken.');
 				const user: MockUser = { ...body, id: state.nextId.user++, disabled: false };
@@ -757,12 +767,12 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					user.role === 'admin' && ((body.role && body.role !== 'admin') || body.disabled === true);
 				if (losesAdmin && admins.length <= 1)
 					throw new HttpError(409, 'The library needs at least one admin.');
-				if (body.password !== undefined) checkPassword(body.password);
+				if (body.pin !== undefined) checkPin(body.pin);
 				Object.assign(
 					user,
 					Object.fromEntries(
 						Object.entries(body).filter(([k]) =>
-							['display_name', 'role', 'disabled', 'password'].includes(k)
+							['display_name', 'role', 'disabled', 'pin'].includes(k)
 						)
 					)
 				);
@@ -1394,7 +1404,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		})
 	);
 
-	const PUBLIC = new Set(['/api/health', '/api/setup', '/api/auth/login']);
+	const PUBLIC = new Set(['/api/health', '/api/setup', '/api/auth/accounts', '/api/auth/login']);
 
 	async function readBody(req: IncomingMessage): Promise<unknown> {
 		const chunks: Buffer[] = [];

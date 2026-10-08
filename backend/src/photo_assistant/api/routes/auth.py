@@ -1,9 +1,9 @@
-"""First-run setup, login/logout, the current user, password change."""
+"""First-run setup, the login screen's account names, login/logout, the current user, PIN change."""
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from photo_assistant.api.deps import SESSION_COOKIE, CurrentUser, ServicesDep
-from photo_assistant.api.schemas import Credentials, NewPassword, SetupIn, UserOut
+from photo_assistant.api.schemas import AccountName, Credentials, NewPin, SetupIn, UserOut
 from photo_assistant.app.accounts import (
     InvalidCredentialsError,
 )
@@ -31,9 +31,18 @@ def setup_state(services: ServicesDep) -> dict[str, bool]:
 
 @router.post("/setup", status_code=status.HTTP_201_CREATED)
 def setup(services: ServicesDep, body: SetupIn, request: Request, response: Response) -> UserOut:
-    user, token = services.accounts.setup(body.username, body.display_name, body.password)
+    user, token = services.accounts.setup(body.username, body.display_name, body.pin)
     _set_session(request, response, token)
     return UserOut.of(user)
+
+
+@router.get("/auth/accounts")
+def accounts(services: ServicesDep) -> list[AccountName]:
+    """Open, like login: the login screen offers the active accounts to pick from."""
+    return [
+        AccountName(username=username, display_name=display_name)
+        for username, display_name in services.accounts.login_names()
+    ]
 
 
 @router.post("/auth/login")
@@ -41,7 +50,7 @@ def login(
     services: ServicesDep, body: Credentials, request: Request, response: Response
 ) -> UserOut:
     ip = request.client.host if request.client else "unknown"
-    user, token = services.accounts.login(body.username, body.password, ip)  # 401 / 429
+    user, token = services.accounts.login(body.username, body.pin, ip)  # 401 / 429
     _set_session(request, response, token)
     return UserOut.of(user)
 
@@ -59,13 +68,11 @@ def me(user: CurrentUser) -> UserOut:
     return UserOut.of(user)
 
 
-@router.post("/auth/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(
-    services: ServicesDep, user: CurrentUser, body: NewPassword, request: Request
-) -> None:
+@router.post("/auth/pin", status_code=status.HTTP_204_NO_CONTENT)
+def change_pin(services: ServicesDep, user: CurrentUser, body: NewPin, request: Request) -> None:
     """Ends every other session of this user; this one stays signed in."""
     token = request.cookies.get(SESSION_COOKIE, "")
     try:
-        services.accounts.change_password(user, body.current_password, body.new_password, token)
+        services.accounts.change_pin(user, body.current_pin, body.new_pin, token)
     except InvalidCredentialsError as exc:  # signed in already: a wrong field, not a 401
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "the current password is wrong") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "the current PIN is wrong") from exc

@@ -2,50 +2,92 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import { isPin, type AccountName } from '$lib/api';
 	import { api, session } from '$lib/app.svelte';
+	import { PIN_FIELD } from '$lib/pin';
 
-	let username = $state('');
-	let password = $state('');
+	let accounts = $state<AccountName[]>([]);
+	let chosen = $state<AccountName | null>(null);
+	let pin = $state('');
 	let error = $state('');
 	let busy = $state(false);
+	let field = $state<HTMLInputElement>();
 
 	onMount(async () => {
 		const state = await api.setupState().catch(() => null);
-		if (state?.needs_admin) await goto('/setup', { replaceState: true });
+		if (state?.needs_admin) return goto('/setup', { replaceState: true });
+		try {
+			accounts = await api.loginAccounts();
+			if (accounts.length === 1) chosen = accounts[0];
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not reach the library.';
+		}
 	});
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
+	$effect(() => {
+		if (chosen) field?.focus();
+	});
+
+	function choose(account: AccountName | null) {
+		chosen = account;
+		pin = error = '';
+	}
+
+	async function signIn() {
+		if (!chosen || busy) return;
 		error = '';
 		busy = true;
 		try {
-			const user = await api.login({ username: username.trim(), password });
+			const user = await api.login({ username: chosen.username, pin });
 			session.signedIn(user, page.url.searchParams.get('next'));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not sign in.';
+			pin = '';
 		} finally {
 			busy = false;
 		}
+	}
+
+	function submit(event: SubmitEvent) {
+		event.preventDefault();
+		void signIn();
 	}
 </script>
 
 <svelte:head><title>Sign in · Photos</title></svelte:head>
 
 <h1>Photos</h1>
-<p class="quiet lede">Sign in to the family library.</p>
-<form onsubmit={submit}>
-	<label>User name <input bind:value={username} autocomplete="username" required /></label>
-	<label>
-		Password <input
-			bind:value={password}
-			type="password"
-			autocomplete="current-password"
-			required
-		/>
-	</label>
+{#if chosen}
+	<p class="quiet lede">Hello {chosen.display_name}. Type your PIN.</p>
+	<form onsubmit={submit}>
+		<label>
+			PIN
+			<input
+				{...PIN_FIELD}
+				bind:value={pin}
+				bind:this={field}
+				oninput={() => isPin(pin) && signIn()}
+				autocomplete="off"
+				required
+			/>
+		</label>
+		{#if error}<p role="alert">{error}</p>{/if}
+		<div class="actions">
+			<button class="primary" type="submit" disabled={busy || !isPin(pin)}>Sign in</button>
+			{#if accounts.length > 1}
+				<button type="button" onclick={() => choose(null)}>Someone else</button>
+			{/if}
+		</div>
+	</form>
+{:else}
+	<p class="quiet lede">Who is looking?</p>
 	{#if error}<p role="alert">{error}</p>{/if}
-	<button class="primary" type="submit" disabled={busy}>Sign in</button>
-</form>
+	<ul>
+		{#each accounts as account (account.username)}
+			<li><button type="button" onclick={() => choose(account)}>{account.display_name}</button></li>
+		{/each}
+	</ul>
+{/if}
 
 <style>
 	/* The same italic wordmark as the rail: the front door of the album. */
@@ -75,11 +117,27 @@
 		font-size: var(--fs-16);
 		font-weight: 400;
 		color: var(--ink);
+		max-width: 8rem;
+		letter-spacing: 0.3em;
 	}
 	button {
-		justify-self: start;
 		min-height: 2.5rem;
+	}
+	.actions {
+		display: flex;
+		gap: var(--s-3);
 		margin-top: var(--s-3);
+	}
+	ul {
+		list-style: none;
+		padding: 0;
+		margin: var(--s-6) 0 0;
+		display: grid;
+		gap: var(--s-2);
+		justify-items: start;
+	}
+	li button {
+		font-size: var(--fs-16);
 	}
 	p[role='alert'] {
 		color: var(--ink);

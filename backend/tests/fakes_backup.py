@@ -11,6 +11,7 @@ from photo_assistant.domain.backup import (
     BackupRunStatus,
     BackupTarget,
     NewBackupTarget,
+    PlaceFacts,
     Retention,
     RunKind,
     RunOutcome,
@@ -19,6 +20,8 @@ from photo_assistant.domain.backup import (
 from photo_assistant.ports.backup import (
     AssetFile,
     BackupError,
+    Disk,
+    PasswordFileError,
     RepositoryRef,
     SnapshotInfo,
     SnapshotSummary,
@@ -30,6 +33,7 @@ class InMemoryBackupStore:
         self.targets: dict[int, BackupTarget] = {}
         self.runs: dict[int, BackupRun] = {}
         self.assets = list(assets)
+        self.asset_bytes = 0
         self._ids = itertools.count(1)
 
     def add_target(self, target: NewBackupTarget, created_at: datetime) -> BackupTarget:
@@ -45,9 +49,17 @@ class InMemoryBackupStore:
             retention=target.retention,
             enabled=True,
             created_at=created_at,
+            key_saved_at=created_at if target.key_saved else None,
         )
         self.targets[new.id] = new
         return new
+
+    def mark_key_saved(self, target_id: int, at: datetime) -> None:
+        if target_id in self.targets:
+            self.targets[target_id] = replace(self.targets[target_id], key_saved_at=at)
+
+    def library_bytes(self) -> int:
+        return self.asset_bytes
 
     def get_target(self, target_id: int) -> BackupTarget | None:
         return self.targets.get(target_id)
@@ -172,6 +184,48 @@ class FakeEngine:
     def repository_size(self, repo: RepositoryRef) -> int:
         self._call("size")
         return 99_000
+
+
+@dataclass
+class FakePlaces:
+    """The machine as the test describes it; ``asked`` records what was looked up."""
+
+    found_disks: list[Disk] = field(default_factory=list)
+    found_remotes: list[str] = field(default_factory=list)
+    by_repository: dict[str, PlaceFacts] = field(default_factory=dict)
+    default: PlaceFacts = field(default_factory=lambda: PlaceFacts(free_bytes=500 * 1000**3))
+    asked: list[str] = field(default_factory=list)
+
+    def disks(self) -> list[Disk]:
+        return list(self.found_disks)
+
+    def remotes(self) -> list[str]:
+        return list(self.found_remotes)
+
+    def facts(self, repository: str, data_root: Path) -> PlaceFacts:
+        self.asked.append(repository)
+        return self.by_repository.get(repository, self.default)
+
+
+class FakeVault:
+    def __init__(self, folder: Path) -> None:
+        self.folder = folder
+        self._count = itertools.count(1)
+
+    def create(self) -> tuple[Path, str]:
+        n = next(self._count)
+        self.folder.mkdir(parents=True, exist_ok=True)
+        path = self.folder / f"key-{n}"
+        path.write_text(f"secret-{n}\n")
+        return path, f"secret-{n}"
+
+    def read(self, key_file: Path) -> str:
+        if not key_file.is_file():
+            raise PasswordFileError(f"the key file is gone: {key_file}")
+        return key_file.read_text().strip()
+
+    def discard(self, key_file: Path) -> None:
+        key_file.unlink(missing_ok=True)
 
 
 class FakeSnapshotter:

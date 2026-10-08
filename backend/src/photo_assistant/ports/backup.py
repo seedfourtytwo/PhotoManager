@@ -10,6 +10,7 @@ from photo_assistant.domain.backup import (
     BackupRun,
     BackupTarget,
     NewBackupTarget,
+    PlaceFacts,
     Retention,
     RunKind,
     RunOutcome,
@@ -92,6 +93,43 @@ class BackupEngine(Protocol):
     def repository_size(self, repo: RepositoryRef) -> int: ...
 
 
+@dataclass(frozen=True, slots=True)
+class Disk:
+    """An external disk that is plugged in and mounted."""
+
+    path: str
+    label: str
+    free_bytes: int
+
+
+class BackupPlaces(Protocol):
+    """Where a backup could go on this machine, and what a given place is like."""
+
+    def disks(self) -> list[Disk]: ...
+
+    def remotes(self) -> list[str]:
+        """Names of the cloud and network remotes set up in rclone; none if rclone is absent."""
+        ...
+
+    def facts(self, repository: str, data_root: Path) -> PlaceFacts:
+        """Never raises: what can't be found out is reported as unknown or as a write error."""
+        ...
+
+
+class KeyVault(Protocol):
+    """Keeps the keys the app makes for its backups, outside the library."""
+
+    def create(self) -> tuple[Path, str]:
+        """A new random key in a new file only this user can read: (file, key)."""
+        ...
+
+    def read(self, key_file: Path) -> str:
+        """Raises PasswordFileError if the file is gone or unreadable."""
+        ...
+
+    def discard(self, key_file: Path) -> None: ...
+
+
 class DatabaseSnapshotter(Protocol):
     def snapshot(self, destination: Path) -> None:
         """Write a consistent copy of the live database (online backup API), atomically."""
@@ -117,6 +155,11 @@ class BackupStore(Protocol):
     def get_target(self, target_id: int) -> BackupTarget | None: ...
     def list_targets(self) -> list[BackupTarget]: ...
     def set_target_enabled(self, target_id: int, enabled: bool) -> None: ...
+    def mark_key_saved(self, target_id: int, at: datetime) -> None: ...
+    def library_bytes(self) -> int:
+        """Bytes of every original the library holds: what a first backup has to store."""
+        ...
+
     def set_target_settings(self, target_id: int, settings: TargetSettings) -> None: ...
     def start_run(self, target_id: int, kind: RunKind, started_at: datetime) -> int: ...
     def finish_run(self, run_id: int, finished_at: datetime, outcome: RunOutcome) -> None: ...

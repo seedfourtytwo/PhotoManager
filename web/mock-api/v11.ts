@@ -7,6 +7,7 @@ import type {
 	AssetFilters,
 	AssetOut,
 	BackupPatch,
+	BackupPlan,
 	Level,
 	PrintPlan,
 	PrintRequest
@@ -172,22 +173,104 @@ export function v11Routes(h: Helpers): Route[] {
 					run.repo_bytes = 48_231_000_000;
 				} else run.details = 'restored 20 random photos and the database; all hashes match';
 			}
+		// the recovery guarantee: a first successful backup is proven by a restore test
+		const backedUp = target.runs.some((r) => r.kind === 'backup' && r.status === 'succeeded');
+		if (backedUp && !target.runs.some((r) => r.kind === 'restore_test')) {
+			queueRun(target, 'restore_test');
+			target.runs[0].ends_at = h.now();
+			settle(target);
+		}
+	}
+
+	/** The mock machine: one roomy disk, one too small, one cloud remote. */
+	const LIBRARY_BYTES = 38_400_000_000;
+	const DISKS = [
+		{ path: '/media/c/Tiny stick', label: 'Tiny stick', free_bytes: 2_000_000_000 },
+		{ path: '/media/c/USB disk', label: 'USB disk', free_bytes: 500_000_000_000 }
+	];
+	const REMOTES = ['proton'];
+	const BACKUP_FOLDER = 'photo-assistant-backup';
+	const gb = (bytes: number) => `${(bytes / 1e9).toFixed(1)} GB`;
+
+	/** The mock machine's folders. Any other full path opens as an empty folder, unless its
+	 *  name says it is missing. */
+	const HOME = '/home/c';
+	const TREE: Record<string, string[]> = {
+		[HOME]: ['Documents', 'Pictures', 'Scans'],
+		[`${HOME}/Pictures`]: ['2019', '2020'],
+		'/media/c/USB disk': ['DCIM']
+	};
+
+	function listFolders(asked: string | undefined) {
+		const path = (asked ?? HOME).replace(/(?<=.)\/+$/, '');
+		if (!path.startsWith('/'))
+			throw new HttpError(422, 'give the full path of the folder, starting with /');
+		if (path.includes('missing'))
+			throw new HttpError(422, `folder not found on this machine: ${path}`);
+		const added = h.state().sources.find((s) => s.kind === 'folder' && s.path === path);
+		return {
+			path,
+			parent: path === '/' ? null : path.slice(0, path.lastIndexOf('/')) || '/',
+			folders: (TREE[path] ?? []).map((name) => ({ name, path: `${path}/${name}` })),
+			truncated: false,
+			roots: [{ label: 'Home', path: HOME }, ...DISKS.map((d) => ({ label: d.label, path: d.path }))], // prettier-ignore
+			source_problem: added
+				? `already added as “${added.label}”`
+				: path === HOME
+					? 'this folder contains the photo library itself'
+					: null
+		};
+	}
+
+	function planFor(place: string): BackupPlan {
+		const refuse = (problem: string, repository = place): BackupPlan => ({
+			repository, library_bytes: LIBRARY_BYTES, free_bytes: null, ok: false, problem, warnings: []
+		}); // prettier-ignore
+		place = place.trim();
+		if (place.startsWith('rclone:')) {
+			const [remote, ...rest] = place.slice(7).split(':');
+			if (!REMOTES.includes(remote) || rest.length === 0)
+				return refuse('a cloud location looks like rclone:<name>:<folder>');
+			const folder = rest.join(':').replace(/\/+$/, '');
+			const repository = `rclone:${remote}:${folder ? `${folder}/` : ''}${BACKUP_FOLDER}`;
+			return { repository, library_bytes: LIBRARY_BYTES, free_bytes: null, ok: true, problem: null, warnings: ["free space there can't be checked"] }; // prettier-ignore
+		}
+		if (!place.startsWith('/')) return refuse('a local backup location must be an absolute path');
+		const repository = `${place.replace(/\/+$/, '')}/${BACKUP_FOLDER}`;
+		if (h.state().backups.some((b) => b.repository === repository))
+			return refuse('there is already a backup in this folder, made with another key: choose another', repository); // prettier-ignore
+		const disk = DISKS.find((d) => place === d.path || place.startsWith(`${d.path}/`));
+		const home = place.startsWith('/home/');
+		if (!disk && !home) return refuse(`${place} does not exist: is the disk plugged in?`, repository); // prettier-ignore
+		const free = disk ? disk.free_bytes : 120_000_000_000;
+		if (free < LIBRARY_BYTES)
+			return { ...refuse(`not enough room: the library is ${gb(LIBRARY_BYTES)} and only ${gb(free)} is free there (${gb(LIBRARY_BYTES - free)} missing)`, repository), free_bytes: free }; // prettier-ignore
+		const warnings = home ? ['this is the same disk as the library: it guards against mistakes, not against the disk failing'] : []; // prettier-ignore
+		return { repository, library_bytes: LIBRARY_BYTES, free_bytes: free, ok: true, problem: null, warnings }; // prettier-ignore
 	}
 
 	function targetOut(target: MockBackup) {
 		settle(target);
 		const { runs, ...rest } = target;
-		const lastRun = runs[0] ? (({ ends_at: _e, ...r }) => r)(runs[0]) : null;
+		const lastBackup = runs.find((r) => r.kind === 'backup'); // as the real status: backups only
+		const lastRun = lastBackup ? (({ ends_at: _e, ...r }) => r)(lastBackup) : null;
 		const lastSuccess = runs.find((r) => r.status === 'succeeded' && r.kind === 'backup');
 		const overdue = target.enabled && !lastSuccess;
+		const lastTest = runs.find((r) => r.kind === 'restore_test');
+		const proven = runs.find((r) => r.kind === 'restore_test' && r.status === 'succeeded');
+		const { key: _k, key_saved, ...shown } = rest;
+		const failing = lastRun?.status === 'failed' || lastTest?.status === 'failed';
 		return {
-			...rest,
+			...shown,
+			key_saved,
+			last_proven_at: proven?.finished_at ?? null,
+			restore_failing: lastTest?.status === 'failed',
 			last_success_at: lastSuccess?.finished_at ?? null,
 			last_run: lastRun,
 			repo_bytes: runs.find((r) => r.repo_bytes)?.repo_bytes ?? null,
 			next_run_at: target.enabled && target.schedule !== 'manual' ? '2026-10-03T02:30:00' : null,
 			overdue,
-			needs_attention: overdue || lastRun?.status === 'failed'
+			needs_attention: target.enabled && (overdue || failing || !key_saved)
 		};
 	}
 
@@ -485,10 +568,81 @@ export function v11Routes(h: Helpers): Route[] {
 					quiet_window: body.quiet_window ?? null,
 					retention: body.retention ?? { daily: 7, weekly: 4, monthly: 12 },
 					enabled: true,
+					key: '',
+					key_saved: true,
 					runs: []
 				};
 				h.state().backups.push(target);
 				return ok(targetOut(target), 201);
+			}
+		],
+		[
+			'GET',
+			/^\/api\/folders$/,
+			(ctx) => (admin(ctx), ok(listFolders(ctx.url.searchParams.get('path') ?? undefined)))
+		],
+		[
+			'GET',
+			/^\/api\/backups\/places$/,
+			(ctx) => (admin(ctx), ok({ library_bytes: LIBRARY_BYTES, disks: DISKS, remotes: REMOTES }))
+		],
+		[
+			'POST',
+			/^\/api\/backups\/plan$/,
+			(ctx) => (
+				admin(ctx),
+				ok(planFor(requireFields<{ place: string }>(ctx.body, ['place']).place))
+			)
+		],
+		[
+			'POST',
+			/^\/api\/backups\/setup$/,
+			(ctx) => {
+				admin(ctx);
+				const body = requireFields<{ label: string; place: string; schedule?: string }>(ctx.body, ['label', 'place']); // prettier-ignore
+				const label = body.label.trim();
+				const schedule = body.schedule ?? 'daily 02:30';
+				const plan = planFor(body.place);
+				if (plan.problem) throw new HttpError(422, plan.problem);
+				if (!label) throw new HttpError(422, 'a backup target needs a name');
+				if (!SCHEDULE.test(schedule)) throw new HttpError(422, `unknown schedule '${schedule}'`);
+				if (h.state().backups.some((b) => b.label.toLowerCase() === label.toLowerCase()))
+					throw new HttpError(409, `a backup target named '${label}' already exists`);
+				const target: MockBackup = {
+					id: Math.max(0, ...h.state().backups.map((b) => b.id)) + 1,
+					label,
+					kind: plan.repository.startsWith('rclone:') ? 'rclone' : 'local',
+					repository: plan.repository,
+					schedule,
+					quiet_window: null,
+					retention: { daily: 7, weekly: 4, monthly: 12 },
+					enabled: true,
+					key: randomBytes(32).toString('base64url'),
+					key_saved: false,
+					runs: []
+				};
+				h.state().backups.push(target);
+				queueRun(target, 'backup');
+				const recovery = { label, repository: target.repository, key: target.key };
+				return ok({ target: targetOut(target), recovery }, 201);
+			}
+		],
+		[
+			'GET',
+			/^\/api\/backups\/(\d+)\/recovery$/,
+			(ctx) => {
+				const target = findBackup(ctx);
+				if (!target.key) throw new HttpError(409, `the key file is gone: /home/c/.restic-pass`);
+				return ok({ label: target.label, repository: target.repository, key: target.key });
+			}
+		],
+		[
+			'POST',
+			/^\/api\/backups\/(\d+)\/key-saved$/,
+			(ctx) => {
+				const target = findBackup(ctx);
+				target.key_saved = true;
+				return ok(targetOut(target));
 			}
 		],
 		[

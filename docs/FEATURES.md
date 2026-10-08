@@ -15,6 +15,7 @@ RTX 2070 Max-Q 8 GB). Every design choice must also hold at 100k so the home-ser
 |---|---|---|---|
 | 1.1 | Import a local folder (recursive), **read-only** on the source | Must | M1 ✅ |
 | 1.1a | **Multiple source folders**, each registered once with a label (e.g. "Laptop Pictures", "Old HDD", "Partner's export"); all aggregated into the one de-duplicated library; "rescan all" picks up new files from every source | Must | M1 ✅ |
+| 1.1d | **Pick a folder by browsing** the machine's folders in the web app (admin, read-only listing; the library's own folder is never offered) | Must | ✅ |
 | 1.1b | **Remote folders** as sources: anything rclone can reach read-only — SFTP/SSH (e.g. the home server), SMB/NAS share, WebDAV, plus MEGA/Proton (1.6). Same staging → import path | Should | M4 |
 | 1.1c | Per-source view: how many photos came from each source, overlap between sources, last scan, errors | Should | M2 |
 | 1.2 | Supported formats: JPEG, PNG, HEIC/HEIF, WebP, TIFF, GIF, AVIF ✅; common RAW recognised, decoding to verify in M2 with real RAW files; Live Photo video halves detected and reported ✅ | Must | M1 |
@@ -195,6 +196,8 @@ fixed now so nothing in M1–M5 makes it harder (data folder layout, DB snapshot
 | 9b.7 | Status page: last success per target, size, next run; warning banner when a backup is overdue or failed | Must | M6 |
 | 9b.8 | One-click **restore test**: restores a random sample to a temp folder and verifies hashes (also part of every QA session) | Should | M6 |
 | 9b.9 | Full restore guide (new machine → working library) — tested once per milestone | Should | M6 |
+| 9b.10 | **Guided setup in the web app**: pick a disk, folder or cloud remote; space check; the app makes the key and insists on a saved copy; first backup starts at once | Must | ✅ |
+| 9b.11 | **Proven restores**: an automatic restore test after the first backup and every week; a failed proof raises the banner | Must | ✅ |
 
 ## 10. Web and phone app
 
@@ -237,5 +240,5 @@ photos from the laptop go in by web upload (10.2) or by adding a folder as a sou
 | 11.7 | **Laptop-friendly:** image-processing concurrency is a setting (default 2 threads) ✅; ML jobs run niced (M3) | Must | M1 |
 | 11.8 | **iPhone file quirks:** `IMG_E1234` (edited copies) grouped with their original, `.AAE` edit files ignored, Live Photo `.MOV` halves paired and hidden until video support | Must | M1 ✅ |
 | 11.9 | **Videos in sources:** counted and reported as "skipped: video (not supported yet)" instead of silently ignored | Must | M1 ✅ |
-| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting, session expiry, password change | Must | M2 ✅ (API) |
+| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting, session expiry, 4-digit PIN login and PIN change | Must | M2 ✅ (API) |
 | 11.11 | Share link for someone without an account (expiring, view-only, one album) — only over Tailscale Funnel or similar; decide when needed | Later | — |

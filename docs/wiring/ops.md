@@ -28,6 +28,7 @@ migration (e.g. `0004_backup.sql`). It only creates `backup_target` and `backup_
 | `backup_poll_seconds` | `60` | how often to look for due backups |
 | `backup_restore_sample` | `20` | photos per restore test |
 | `backup_scratch_dir` | system temp | where restore tests unpack (must be outside the library) |
+| `backup_key_dir` | `~/.config/photo-assistant/backup-keys` | keys the guided setup makes, one 0600 file per target (must be outside the library; on the server, a volume of its own) |
 | `restic_binary` | `restic` | |
 | `restic_cache_dir` | restic default | |
 

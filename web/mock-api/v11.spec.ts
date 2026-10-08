@@ -25,7 +25,7 @@ const zipRequest = (scope: object): DownloadRequest =>
 describe('integration rules', () => {
 	it('albums grant view only: an album viewer cannot download a photo it only sees there', async () => {
 		const admin = await h.signedIn();
-		const guest = await h.signedIn('guest', 'guest password');
+		const guest = await h.signedIn('guest', '3456');
 		// Partner's source 3 is invisible to the guest; share an album holding one of its photos.
 		const partnerOnly = h.mock.state.assets.find((a) => a.sources[0].source_id === 3)!;
 		const album = await admin.createAlbum({ title: 'Shared', asset_ids: [partnerOnly.id] });
@@ -41,7 +41,7 @@ describe('integration rules', () => {
 		const thumb = await api.raw(`/api/assets/${a.id}/thumb`);
 		expect(thumb.status).toBe(200);
 		expect((await api.raw(`/api/assets/${a.id}/preview`)).status).toBe(200);
-		const guest = await h.signedIn('guest', 'guest password');
+		const guest = await h.signedIn('guest', '3456');
 		const partnerOnly = h.mock.state.assets.find((x) => x.sources[0].source_id === 3)!;
 		await api.trashAssets([partnerOnly.id]);
 		expect((await guest.raw(`/api/assets/${partnerOnly.id}/thumb`)).status).toBe(404);
@@ -122,7 +122,7 @@ describe('search and people', () => {
 		const page = await api.personAssets(a.id, null, 5);
 		expect(page.items).toHaveLength(5);
 		expect(page.next_cursor).not.toBeNull();
-		const guest = await h.signedIn('guest', 'guest password');
+		const guest = await h.signedIn('guest', '3456');
 		await expect(guest.renamePerson(a.id, 'x')).rejects.toMatchObject({ status: 403 });
 	});
 });
@@ -146,6 +146,76 @@ describe('print', () => {
 });
 
 describe('backups, devices and remote sources', () => {
+	it("lists the server's folders for picking one, to admins only", async () => {
+		const api = await h.signedIn();
+		const home = await api.folders();
+		expect(home).toMatchObject({ path: '/home/c', parent: '/home' });
+		expect(home.folders.map((f) => f.name)).toEqual(['Documents', 'Pictures', 'Scans']);
+		expect(home.roots.map((r) => r.label)).toEqual(['Home', 'Tiny stick', 'USB disk']);
+		expect(home.source_problem).toContain('photo library itself');
+		const pictures = await api.folders('/home/c/Pictures/');
+		expect(pictures.path).toBe('/home/c/Pictures');
+		expect(pictures.source_problem).toBeNull();
+		await api.addSource({ label: 'Pics', path: pictures.path });
+		expect((await api.folders(pictures.path)).source_problem).toBe('already added as “Pics”');
+		expect((await api.folders('/')).parent).toBeNull();
+		await expect(api.folders('/home/c/missing')).rejects.toMatchObject({ status: 422 });
+		await expect(api.folders('Pictures')).rejects.toMatchObject({ status: 422 });
+		const member = await h.signedIn('partner', '2345');
+		await expect(member.folders()).rejects.toMatchObject({ status: 403 });
+	});
+
+	it('guided setup: checks the place, hands over the key, backs up and proves the restore', async () => {
+		const api = await h.signedIn();
+		const places = await api.backupPlaces();
+		expect(places.disks.map((d) => d.label)).toEqual(['Tiny stick', 'USB disk']);
+		expect(places.remotes).toEqual(['proton']);
+
+		const small = await api.planBackup('/media/c/Tiny stick');
+		expect(small.ok).toBe(false);
+		expect(small.problem).toContain('36.4 GB missing');
+		expect((await api.planBackup('/media/c/Gone')).problem).toContain('plugged in');
+		expect((await api.planBackup('backups')).problem).toContain('absolute path');
+		expect((await api.planBackup('/home/c/backups')).warnings[0]).toContain('same disk');
+		expect((await api.planBackup('rclone:proton:')).repository).toBe(
+			'rclone:proton:photo-assistant-backup'
+		);
+		await expect(
+			api.setUpBackup({ label: 'Stick', place: '/media/c/Tiny stick' })
+		).rejects.toMatchObject({ status: 422 });
+
+		const { target, recovery } = await api.setUpBackup({
+			label: 'USB',
+			place: '/media/c/USB disk'
+		});
+		expect(target).toMatchObject({
+			key_saved: false,
+			needs_attention: true,
+			schedule: 'daily 02:30'
+		});
+		expect(recovery.repository).toBe('/media/c/USB disk/photo-assistant-backup');
+		expect(recovery.key.length).toBeGreaterThanOrEqual(40);
+		expect(target.last_run?.status).toBe('running');
+		await expect(
+			api.setUpBackup({ label: 'usb', place: '/home/c/elsewhere' })
+		).rejects.toMatchObject({ status: 409 });
+		expect((await api.planBackup('/media/c/USB disk')).problem).toContain('already a backup');
+
+		h.clock.now += 5000;
+		const runs = await api.backupRuns(target.id);
+		expect(runs.map((r) => [r.kind, r.status])).toEqual([
+			['restore_test', 'succeeded'],
+			['backup', 'succeeded']
+		]);
+		expect(await api.backupRecovery(target.id)).toEqual(recovery);
+		const saved = await api.confirmBackupKey(target.id);
+		expect(saved).toMatchObject({ key_saved: true, needs_attention: false });
+		expect(saved.last_proven_at).toBeTruthy();
+		const member = await h.signedIn('partner', '2345');
+		await expect(member.backupPlaces()).rejects.toMatchObject({ status: 403 });
+		await expect(member.backupRecovery(target.id)).rejects.toMatchObject({ status: 403 });
+	});
+
 	it('adds a backup target, runs it, and lists the runs', async () => {
 		const api = await h.signedIn();
 		const [existing] = await api.backups();
@@ -179,7 +249,7 @@ describe('backups, devices and remote sources', () => {
 		await expect(api.updateBackup(target.id, { schedule: 'often' })).rejects.toMatchObject({
 			status: 422
 		});
-		const member = await h.signedIn('partner', 'battery staple');
+		const member = await h.signedIn('partner', '2345');
 		await expect(member.backups()).rejects.toMatchObject({ status: 403 });
 	});
 

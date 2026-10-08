@@ -13,7 +13,7 @@ from photo_assistant.api.services import Services
 from photo_assistant.api.settings import Settings
 
 BASE = "http://127.0.0.1"
-PASSWORD = "a long enough password"
+PIN = "1234"
 
 
 def make_settings(data_root: Path, **overrides: Any) -> Settings:
@@ -24,6 +24,8 @@ def make_settings(data_root: Path, **overrides: Any) -> Settings:
         "argon2_time_cost": 1,
         "argon2_memory_kib": 64,
     }
+    # never the developer's own ~/.config: backup keys made by a test stay in its folder
+    values["ops"] = {"backup_key_dir": data_root.parent / "backup-keys"}
     values.update(overrides)
     return Settings(**values)
 
@@ -34,10 +36,10 @@ def services_of(client: TestClient) -> Services:
     return s
 
 
-def login(app: FastAPI, username: str, password: str = PASSWORD) -> TestClient:
+def login(app: FastAPI, username: str, pin: str = PIN) -> TestClient:
     """Another browser: a fresh client on the same running app, logged in as ``username``."""
     client = TestClient(app, base_url=BASE)
-    response = client.post("/api/auth/login", json={"username": username, "password": password})
+    response = client.post("/api/auth/login", json={"username": username, "pin": pin})
     assert response.status_code == 200, response.text
     return client
 
@@ -49,7 +51,7 @@ def add_user(admin: TestClient, username: str, role: str = "member") -> TestClie
         json={
             "username": username,
             "display_name": username.title(),
-            "password": PASSWORD,
+            "pin": PIN,
             "role": role,
         },
     )
@@ -67,9 +69,7 @@ def anon(tmp_path: Path) -> Iterator[TestClient]:
 @pytest.fixture
 def admin(anon: TestClient) -> TestClient:
     """The first-run admin, logged in (the same client as ``anon``, now with a session)."""
-    response = anon.post(
-        "/api/setup", json={"username": "admin", "display_name": "C", "password": PASSWORD}
-    )
+    response = anon.post("/api/setup", json={"username": "admin", "display_name": "C", "pin": PIN})
     assert response.status_code == 201, response.text
     return anon
 

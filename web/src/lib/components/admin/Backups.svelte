@@ -1,22 +1,16 @@
 <script lang="ts">
-	import type { BackupRun, BackupTarget } from '$lib/api';
+	import type { BackupRecovery, BackupRun, BackupTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatBytes, formatWhen } from '$lib/format';
-	import Dialog from '../Dialog.svelte';
+	import BackupSetup from './BackupSetup.svelte';
+	import RecoveryKey from './RecoveryKey.svelte';
 
 	type Props = { targets: BackupTarget[]; onchange: () => void };
 	let { targets, onchange }: Props = $props();
 
 	let adding = $state(false);
-	let form = $state({
-		label: '',
-		repository: '',
-		password_file: '',
-		schedule: 'daily 02:30',
-		quiet_window: ''
-	});
-	let addError = $state('');
-	let busy = $state<number | 'add' | null>(null);
+	let busy = $state<number | null>(null);
+	let showing = $state<{ target: BackupTarget; recovery: BackupRecovery } | null>(null);
 	let open = $state<number | null>(null);
 	let runs = $state<BackupRun[]>([]);
 
@@ -67,31 +61,17 @@
 		}
 	}
 
-	async function add() {
-		if (busy !== null) return;
-		busy = 'add';
-		addError = '';
+	function proofLine(t: BackupTarget): string {
+		if (t.restore_failing) return 'restore test failed: see Recent runs';
+		if (t.last_proven_at) return `restore proven ${formatWhen(t.last_proven_at)}`;
+		return t.last_success_at ? 'restore not proven yet' : '';
+	}
+
+	async function showKey(target: BackupTarget) {
 		try {
-			await api.addBackup({
-				label: form.label.trim(),
-				repository: form.repository.trim(),
-				password_file: form.password_file.trim(),
-				schedule: form.schedule.trim() || 'manual',
-				quiet_window: form.quiet_window.trim() || null
-			});
-			adding = false;
-			form = {
-				label: '',
-				repository: '',
-				password_file: '',
-				schedule: 'daily 02:30',
-				quiet_window: ''
-			};
-			onchange();
+			showing = { target, recovery: await api.backupRecovery(target.id) };
 		} catch (e) {
-			addError = e instanceof Error ? e.message : 'Could not add the backup.';
-		} finally {
-			busy = null;
+			notice.error(e);
 		}
 	}
 </script>
@@ -103,7 +83,7 @@
 	</header>
 	{#if targets.length === 0}
 		<p class="quiet">
-			No backups yet. Add a disk or the home server as a backup target (see the backups guide).
+			No backups yet: the library exists only on this computer. Add one; it takes a minute.
 		</p>
 	{/if}
 	<ul>
@@ -121,8 +101,13 @@
 						{formatBytes(t.repo_bytes)} stored{/if}
 				</p>
 				<p class="small status" class:attention={t.needs_attention}>
-					{t.overdue ? 'overdue · ' : ''}{lastLine(t)}
+					{t.overdue ? 'overdue · ' : ''}{lastLine(t)}{#if proofLine(t)}&nbsp;· {proofLine(t)}{/if}
 				</p>
+				{#if !t.key_saved}
+					<p class="small status" class:attention={t.enabled}>
+						The recovery key is not saved yet: without it this backup cannot be read.
+					</p>
+				{/if}
 				<div class="actions">
 					<button type="button" disabled={busy !== null || !t.enabled} onclick={() => act(t, 'run')}
 						>Back up now</button
@@ -135,6 +120,7 @@
 					<button type="button" aria-expanded={open === t.id} onclick={() => showRuns(t)}
 						>Recent runs</button
 					>
+					<button type="button" onclick={() => showKey(t)}>Recovery key</button>
 					<button type="button" disabled={busy !== null} onclick={() => act(t, 'toggle')}
 						>{t.enabled ? 'Disable' : 'Enable'}</button
 					>
@@ -164,47 +150,15 @@
 </section>
 
 {#if adding}
-	<Dialog title="Add a backup" onclose={() => (adding = false)}>
-		<p class="quiet small">
-			A restic repository on a disk, a share or the home server. The password file stays on the
-			server; it is never shown here.
-		</p>
-		<label class="field">Name <input bind:value={form.label} placeholder="USB disk" /></label>
-		<label class="field"
-			>Repository <input
-				bind:value={form.repository}
-				placeholder="/media/usb/restic or rclone:home:/srv/backup"
-			/></label
-		>
-		<label class="field"
-			>Password file <input
-				bind:value={form.password_file}
-				placeholder="/home/c/.restic-pass"
-			/></label
-		>
-		<label class="field"
-			>Schedule <input bind:value={form.schedule} aria-describedby="schedule-help" /></label
-		>
-		<p class="quiet small" id="schedule-help">manual, hourly, daily 02:30 or weekly sun 03:00</p>
-		<label class="field"
-			>Only between (optional) <input
-				bind:value={form.quiet_window}
-				placeholder="22:00-06:00"
-			/></label
-		>
-		{#if addError}<p role="alert">{addError}</p>{/if}
-		{#snippet actions()}
-			<button
-				class="primary"
-				type="button"
-				disabled={busy !== null ||
-					!form.label.trim() ||
-					!form.repository.trim() ||
-					!form.password_file.trim()}
-				onclick={add}>Add</button
-			>
-		{/snippet}
-	</Dialog>
+	<BackupSetup onclose={() => (adding = false)} {onchange} />
+{:else if showing}
+	<RecoveryKey
+		targetId={showing.target.id}
+		recovery={showing.recovery}
+		saved={showing.target.key_saved}
+		onclose={() => (showing = null)}
+		{onchange}
+	/>
 {/if}
 
 <style>
@@ -273,9 +227,6 @@
 	td {
 		padding: var(--s-1) var(--s-4) var(--s-1) 0;
 		vertical-align: top;
-	}
-	#schedule-help {
-		margin: calc(-1 * var(--s-3)) 0 var(--s-4);
 	}
 	p {
 		margin: 0 0 var(--s-3);

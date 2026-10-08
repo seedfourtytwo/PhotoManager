@@ -154,6 +154,13 @@ backend reaches SMB/SFTP/cloud targets. The scheduler (APScheduler in the worker
 target's schedule, then `restic forget --prune` with the retention policy. Results go to a
 `backup_run` table that feeds the status page and the overdue banner.
 
+Guided setup (issue 3): `BackupPlaces` (mounted disks, rclone remotes, facts about one place)
+feeds the pure rule `plan_backup` (fits? writable? same disk? another backup there?); `KeyVault`
+makes the encryption key in a 0600 file outside the library and the owner must confirm keeping
+a copy (`backup_target.key_saved_at`, migration `0018`). The recovery guarantee is the rule
+`restore_proof_due`: a restore test after the first successful backup, then weekly, a day
+after a failed one; a failed proof or an unconfirmed key raises the banner.
+
 ### Phone inbox
 `data/inbox/<user>/` is served over WebDAV (per-user credentials, LAN/Tailscale only).
 It is registered as a normal `source`; a file watcher (plus a periodic rescan as safety net)
@@ -235,7 +242,10 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   a newline; found in the M1 review). Only absolute paths are passed, so no name reads as an option.
 - One import at a time per library (OS file lock), each photo recorded in one transaction,
   jobs claimed atomically, so CLI + server can't corrupt each other.
-- Passwords: argon2id. Sessions: HTTP-only, SameSite=strict cookies.
+- Login: pick your account, type its 4-digit PIN (stored as an argon2id hash in
+  `user.password_hash`; the column keeps its old name). Ten wrong tries lock that account from
+  that address for 15 minutes. A PIN is only as strong as that lock, so the app stays on the
+  home network or Tailscale, never public. Sessions: HTTP-only, SameSite=strict cookies.
 - Source credentials live in rclone's own encrypted config, never in `library.db`.
 - AI calls only go to the configured base URL; each request is logged in `ai_log`.
 - **Visibility is one function in the repository layer:** `visibility(viewer)` in
@@ -256,7 +266,7 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   over HTTPS); only its SHA-256 is stored. Every `/api` route except health, setup and login
   needs a session; source, scan, import, job, access-list and user routes are admin-only.
   Upload routes take the session **or** a device token through one fail-closed dependency
-  (`api/deps.py`). Changing a password ends the user's other sessions; an admin reset ends all
+  (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
   of them and revokes the user's device tokens. First-run setup and the last-admin rule are
   atomic (one `BEGIN IMMEDIATE` transaction each).
 - Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`;

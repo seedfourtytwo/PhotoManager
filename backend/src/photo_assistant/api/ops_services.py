@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from photo_assistant.adapters.backup_places import LocalBackupPlaces
 from photo_assistant.adapters.filesystem import Blake3Hasher, SystemClock
+from photo_assistant.adapters.key_vault import FileKeyVault
 from photo_assistant.adapters.library_files import LocalFileTree, SqliteLibraryIndex
 from photo_assistant.adapters.restic_backup import ResticBackup
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
@@ -20,9 +22,22 @@ from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupServi
 from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer
 from photo_assistant.app.periodic import Periodic, PeriodicTask
+from photo_assistant.domain.library_paths import nested_or_same
 from photo_assistant.ports.backup import JobQueue
 
 DATABASE = "library.db"
+
+
+def default_key_dir() -> Path:
+    return Path.home() / ".config" / "photo-assistant" / "backup-keys"
+
+
+@dataclass(frozen=True, slots=True)
+class RcloneTool:
+    """How this machine runs rclone (the same binary and config the cloud sources use)."""
+
+    binary: str = "rclone"
+    config: Path | None = None
 
 
 @dataclass
@@ -47,9 +62,16 @@ def build_backup_service(
     queue: JobQueue | None = None,
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
     db: Database | None = None,
+    rclone: RcloneTool | None = None,
 ) -> tuple[BackupService, SqliteBackupStore]:
     """``db``: the app's one Database; None (the CLI) opens the library database here."""
     database = data_root / DATABASE
+    key_dir = (ops.backup_key_dir or default_key_dir()).expanduser()
+    if nested_or_same(key_dir.resolve(), data_root.expanduser().resolve()):
+        raise ValueError(
+            "PA_BACKUP_KEY_DIR must be outside the library: a backup can't hold its key"
+        )
+    rclone = rclone or RcloneTool()
     store = SqliteBackupStore(db or Database.open(database, backup_dir=data_root / "db-backups"))
     service = BackupService(
         store=store,
@@ -64,6 +86,8 @@ def build_backup_service(
             source_roots=source_roots,
         ),
         queue=queue,
+        places=LocalBackupPlaces(rclone.binary, rclone.config),
+        vault=FileKeyVault(key_dir),
     )
     return service, store
 
@@ -75,11 +99,12 @@ def build_ops_services(
     housekeeping: Sequence[PeriodicTask] = (),
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
     db: Database | None = None,
+    rclone: RcloneTool | None = None,
 ) -> OpsServices:
     """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering).
     ``source_roots``: the library's source folders (backups may not overlap them)."""
     ops = ops or OpsSettings()
-    backup, store = build_backup_service(data_root, ops, queue, source_roots, db)
+    backup, store = build_backup_service(data_root, ops, queue, source_roots, db, rclone)
     # with a job queue (the server) the check only enqueues: backups run on the long-job lane
     check: Callable[[], object] = (
         (lambda: queue.enqueue_once(BACKUP_DUE_JOB)) if queue is not None else backup.run_due

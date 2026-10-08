@@ -10,7 +10,7 @@ export type Harness = {
 	clock: { now: number };
 	/** A client with its own cookie jar, like a browser tab; `fetch` shares that jar. */
 	browser: () => Api & { raw: typeof fetch };
-	signedIn: (username?: string, password?: string) => Promise<Api & { raw: typeof fetch }>;
+	signedIn: (username?: string, pin?: string) => Promise<Api & { raw: typeof fetch }>;
 	mock: ReturnType<typeof createMockApi>;
 	close: () => Promise<void>;
 };
@@ -36,9 +36,9 @@ export async function startMock(users: 'none' | 'seed' = 'seed'): Promise<Harnes
 		return Object.assign(createApi({ base, fetch: raw }), { raw });
 	}
 
-	async function signedIn(username = 'admin', password = 'correct horse') {
+	async function signedIn(username = 'admin', pin = '1234') {
 		const api = browser();
-		await api.login({ username, password });
+		await api.login({ username, pin });
 		return api;
 	}
 

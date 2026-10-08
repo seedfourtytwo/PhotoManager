@@ -5,7 +5,8 @@ import { MOCK_URL } from '../playwright.config.ts';
 
 export const ADMIN = {
 	username: process.env.E2E_USER ?? 'admin',
-	password: process.env.E2E_PASSWORD ?? 'correct horse'
+	name: process.env.E2E_NAME ?? 'C',
+	pin: process.env.E2E_PIN ?? '1234'
 };
 
 /**
@@ -31,14 +32,13 @@ export async function resetMock(
 	expect(response.status).toBe(204);
 }
 
-export const GUEST = { username: 'guest', password: 'guest password' };
-export const MEMBER = { username: 'partner', password: 'battery staple' };
+export const GUEST = { username: 'guest', name: 'Guest', pin: '3456' };
+export const MEMBER = { username: 'partner', name: 'Partner', pin: '2345' };
 
 export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await page.goto(`/login?next=${encodeURIComponent(path)}`);
-	await page.getByLabel('User name').fill(who.username);
-	await page.getByLabel('Password').fill(who.password);
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: who.name, exact: true }).click();
+	await page.getByLabel('PIN').fill(who.pin); // the fourth digit signs in
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 

@@ -6,6 +6,7 @@ from photo_assistant.domain.library_paths import (
     InvalidLibraryPathError,
     derived_relpath,
     ensure_relative,
+    folder_path_problem,
     original_relpath,
 )
 
@@ -88,3 +89,28 @@ def test_nested_or_same_is_the_one_overlap_rule() -> None:
     assert nested_or_same(P("/a/b"), P("/a")) and nested_or_same(P("/a"), P("/a/b"))
     assert not nested_or_same(P("/a/b"), P("/a/c"))
     assert not nested_or_same(P("/ab"), P("/a")), "a prefix of the name is not a parent"
+
+
+# --- a folder path typed or picked in the web app (issue 7) -----------------------------------
+
+
+@pytest.mark.parametrize("path", ["/", "/home/c/Pictures", "/media/c/My Disk/été 2019"])
+def test_a_full_path_is_fine(path: str) -> None:
+    assert folder_path_problem(path) is None
+
+
+@pytest.mark.parametrize(
+    ("path", "word"),
+    [
+        ("", "full path"),
+        ("Pictures", "full path"),
+        ("~/Pictures", "full path"),
+        ("/home/c/bad\nname", "control character"),
+        ("/home/c/nul\x00", "control character"),
+        ("/home/c/del\x7f", "control character"),
+        ("/" + "x" * 4096, "too long"),
+    ],
+)
+def test_other_paths_are_refused_with_the_reason(path: str, word: str) -> None:
+    problem = folder_path_problem(path)
+    assert problem is not None and word in problem

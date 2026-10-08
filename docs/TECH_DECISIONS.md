@@ -54,7 +54,7 @@ in this codebase, and plain SQL keeps the schema readable.
 
 ## Accounts, places, groups, downloads (M2 dependencies)
 
-- **argon2-cffi** — argon2id password hashes (RFC 9106 low-memory profile: t=3, 64 MiB).
+- **argon2-cffi** — argon2id PIN hashes (RFC 9106 low-memory profile: t=3, 64 MiB).
 - **reverse_geocoder** — used only for its bundled GeoNames cities file (population > 1000);
   we build our own k-d tree over unit-sphere points with **scipy** (its dependency) and drop
   places more than 50 km away. Fully offline. **pycountry** turns ISO codes into country

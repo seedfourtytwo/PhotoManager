@@ -16,7 +16,12 @@ import type {
 	AssetPage,
 	BackupIn,
 	BackupPatch,
+	BackupPlaces,
+	BackupPlan,
+	BackupRecovery,
 	BackupRun,
+	BackupSetup,
+	BackupSetupIn,
 	BackupTarget,
 	BulkState,
 	CalendarDay,
@@ -32,15 +37,17 @@ import type {
 	Health,
 	Id,
 	ImportReport,
+	FolderListing,
 	ImportRun,
 	Job,
 	JobStatus,
+	AccountName,
 	LoginBody,
 	MapPoint,
 	MlStatus,
 	NewDevice,
 	NewUser,
-	PasswordBody,
+	PinBody,
 	Person,
 	PrintedPdf,
 	PrintOptions,
@@ -185,7 +192,9 @@ export function createApi(options: ApiOptions = {}) {
 		login: (body: LoginBody) => request<User>('POST', '/api/auth/login', body),
 		logout: () => request<void>('POST', '/api/auth/logout'),
 		me: () => get<User>('/api/auth/me'),
-		changePassword: (body: PasswordBody) => request<void>('POST', '/api/auth/password', body),
+		/** Open: the active accounts, for the login screen to offer. */
+		loginAccounts: () => get<AccountName[]>('/api/auth/accounts'),
+		changePin: (body: PinBody) => request<void>('POST', '/api/auth/pin', body),
 
 		// users (admin)
 		users: () => get<User[]>('/api/users'),
@@ -200,6 +209,8 @@ export function createApi(options: ApiOptions = {}) {
 		// sources, imports, jobs
 		sources: () => get<Source[]>('/api/sources'),
 		addSource: (body: SourceIn) => request<Source>('POST', '/api/sources', body),
+		/** Admin: the sub-folders of `path` on the server (the home folder when omitted). */
+		folders: (path?: string) => get<FolderListing>(query('/api/folders', { path })),
 		updateSource: (id: Id, body: SourcePatch) =>
 			request<Source>('PATCH', `/api/sources/${id}`, body),
 		scanSource: (id: Id) => request<Queued>('POST', `/api/sources/${id}/scan`),
@@ -336,6 +347,12 @@ export function createApi(options: ApiOptions = {}) {
 		// backups (admin, v1.1)
 		backups: () => get<BackupTarget[]>('/api/backups'),
 		addBackup: (body: BackupIn) => request<BackupTarget>('POST', '/api/backups', body),
+		/** Guided setup: where a backup could go, whether a place will do, then create it. */
+		backupPlaces: () => get<BackupPlaces>('/api/backups/places'),
+		planBackup: (place: string) => request<BackupPlan>('POST', '/api/backups/plan', { place }),
+		setUpBackup: (body: BackupSetupIn) => request<BackupSetup>('POST', '/api/backups/setup', body),
+		backupRecovery: (id: Id) => get<BackupRecovery>(`/api/backups/${id}/recovery`),
+		confirmBackupKey: (id: Id) => request<BackupTarget>('POST', `/api/backups/${id}/key-saved`),
 		setBackupEnabled: (id: Id, enabled: boolean) =>
 			request<BackupTarget>('PATCH', `/api/backups/${id}`, { enabled }),
 		/** v1.3: change schedule, quiet window, retention (and/or enabled). */

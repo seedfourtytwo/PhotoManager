@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import IntEnum, StrEnum
 
-MIN_PASSWORD_LENGTH = 10
+PIN_LENGTH = 4
 MAX_FAILED_LOGINS = 10
 FAILED_LOGIN_WINDOW = timedelta(minutes=15)
 SESSION_IDLE_LIMIT = timedelta(days=30)
 
 _USERNAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_PIN = re.compile(rf"[0-9]{{{PIN_LENGTH}}}")  # ASCII digits only: what a phone keypad types
 
 
 class Role(StrEnum):
@@ -102,9 +103,9 @@ def can_edit_album(album_role: AlbumRole | None, user_role: Role) -> bool:
     return album_role in (AlbumRole.OWNER, AlbumRole.EDITOR)
 
 
-def password_problem(password: str) -> str | None:
-    if len(password.strip()) < MIN_PASSWORD_LENGTH:
-        return f"passwords need at least {MIN_PASSWORD_LENGTH} characters"
+def pin_problem(pin: str) -> str | None:
+    if not _PIN.fullmatch(pin):
+        return f"PINs are exactly {PIN_LENGTH} digits"
     return None
 
 

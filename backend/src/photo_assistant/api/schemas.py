@@ -39,9 +39,16 @@ class UserOut(BaseModel):
         )
 
 
+class AccountName(BaseModel):
+    """What the login screen shows before anyone is signed in: names, nothing else."""
+
+    username: str
+    display_name: str
+
+
 class Credentials(BaseModel):
     username: str = Field(max_length=64)
-    password: str = Field(max_length=1024)
+    pin: str = Field(max_length=64)
 
 
 class SetupIn(Credentials):
@@ -56,12 +63,12 @@ class UserPatchIn(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=100)
     role: Role | None = None
     disabled: bool | None = None
-    password: str | None = Field(default=None, max_length=1024)
+    pin: str | None = Field(default=None, max_length=64)
 
 
-class NewPassword(BaseModel):
-    current_password: str = Field(max_length=1024)
-    new_password: str = Field(max_length=1024)
+class NewPin(BaseModel):
+    current_pin: str = Field(max_length=64)
+    new_pin: str = Field(max_length=64)
 
 
 # --- sources ---------------------------------------------------------------------------------

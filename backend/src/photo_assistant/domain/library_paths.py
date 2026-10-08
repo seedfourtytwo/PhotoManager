@@ -75,3 +75,20 @@ def nested_or_same(a: PurePath, b: PurePath) -> bool:
     The one overlap rule (library vs sources, backups vs sources, export destinations). Pure:
     callers pass absolute paths already resolved (symlinks followed) by an adapter."""
     return a == b or a in b.parents or b in a.parents
+
+
+MAX_PATH_LENGTH = 4096
+
+
+def folder_path_problem(path: str) -> str | None:
+    """Why a folder path from a person can't be used, or None. Pure: nothing is looked up.
+
+    Control characters are refused outright: ExifTool's argument protocol can't escape a
+    line break, and such a name is never one a person chose."""
+    if not path.startswith("/"):
+        return "give the full path of the folder, starting with /"
+    if len(path) > MAX_PATH_LENGTH:
+        return "that path is too long"
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in path):
+        return "the path contains a line break or other control character"
+    return None

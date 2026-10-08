@@ -39,7 +39,9 @@ def _fake() -> BackupStore:
     def asset(n: int) -> AssetFile:
         return AssetFile(n, f"{n:064x}", f"originals/2020/01/{n:064x}.jpg")
 
-    return InMemoryBackupStore([(asset(1), OLD), (asset(2), OLD), (asset(3), NEW)])
+    fake = InMemoryBackupStore([(asset(1), OLD), (asset(2), OLD), (asset(3), NEW)])
+    fake.asset_bytes = 1001 + 1002 + 1003
+    return fake
 
 
 @pytest.fixture(params=[_fake, _sqlite], ids=["fake", "sqlite"])
@@ -68,6 +70,23 @@ def test_targets_round_trip(store: BackupStore) -> None:
     store.set_target_enabled(created.id, False)
     assert [t.enabled for t in store.list_targets()] == [False]
     assert store.get_target(999) is None
+
+
+def test_a_key_the_app_made_stays_unsaved_until_someone_confirms_a_copy(
+    store: BackupStore,
+) -> None:
+    own = store.add_target(_target("Own password file"), T0)
+    assert own.key_saved_at == T0, "a password file the owner wrote is theirs to keep"
+    made = store.add_target(_target("Guided", key_saved=False), T0)
+    assert made.key_saved_at is None
+    store.mark_key_saved(made.id, T0 + timedelta(minutes=5))
+    found = store.get_target(made.id)
+    assert found is not None and found.key_saved_at == T0 + timedelta(minutes=5)
+    store.mark_key_saved(999, T0)  # an unknown target is nothing to mark
+
+
+def test_library_bytes_is_the_size_of_every_original(store: BackupStore) -> None:
+    assert store.library_bytes() == 1001 + 1002 + 1003
 
 
 def test_target_settings_can_be_changed(store: BackupStore) -> None:

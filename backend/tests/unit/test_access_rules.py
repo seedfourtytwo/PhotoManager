@@ -13,7 +13,7 @@ from photo_assistant.domain.access import (
     Viewer,
     can_edit_album,
     leaves_no_admin,
-    password_problem,
+    pin_problem,
     session_expired,
     too_many_failures,
     username_problem,
@@ -55,10 +55,28 @@ def test_who_may_change_an_album(
     assert can_edit_album(album_role, user_role) is allowed
 
 
-def test_passwords_need_ten_characters() -> None:
-    assert password_problem("123456789") is not None
-    assert password_problem("1234567890") is None
-    assert password_problem(" " * 12) is not None, "blank passwords are refused"
+@pytest.mark.parametrize("pin", ["0000", "1234", "9999"])
+def test_a_pin_is_exactly_four_digits(pin: str) -> None:
+    assert pin_problem(pin) is None
+
+
+@pytest.mark.parametrize(
+    "pin",
+    [
+        "",
+        "123",
+        "12345",
+        "12a4",
+        " 123",
+        "1234 ",
+        "12.4",
+        "-123",
+        "\u0661\u0662\u0663\u0664",
+        "\uff11\uff12\uff13\uff14",
+    ],
+)
+def test_anything_else_is_not_a_pin(pin: str) -> None:
+    assert pin_problem(pin) == "PINs are exactly 4 digits"
 
 
 @pytest.mark.parametrize("name", ["", "a b", "x" * 65, "üser", "semi;colon"])

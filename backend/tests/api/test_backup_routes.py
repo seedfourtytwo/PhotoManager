@@ -27,8 +27,11 @@ class Env:
         self.root.mkdir()
         self.repo = SqliteRepository(open_database(self.root / "library.db"))
         self.ops: OpsServices = build_ops_services(
-            self.root, OpsSettings(restic_cache_dir=tmp_path / "cache"), queue=self.repo
+            self.root,
+            OpsSettings(restic_cache_dir=tmp_path / "cache", backup_key_dir=tmp_path / "keys"),
+            queue=self.repo,
         )
+        self.keys = tmp_path / "keys"
         self.password = tmp_path / "secret" / "pw"
         self.password.parent.mkdir()
         self.password.write_text("pw\n")
@@ -80,10 +83,12 @@ def test_add_run_and_watch_a_backup(env: Env) -> None:
     runs = env.client.get(f"/api/backups/{target['id']}/runs").json()
     assert [(r["kind"], r["status"]) for r in runs] == [
         ("restore_test", "succeeded"),
+        ("restore_test", "succeeded"),  # the first backup proves itself (issue 3)
         ("backup", "succeeded"),
     ]
     (listed,) = env.client.get("/api/backups").json()
     assert listed["last_success_at"] and listed["repo_bytes"]
+    assert listed["last_proven_at"] and not listed["restore_failing"] and listed["key_saved"]
     assert listed["last_run"]["snapshot_id"]
     assert env.client.get(f"/api/backups/{target['id']}/runs?limit=1").json()[0]["kind"] == (
         "restore_test"
@@ -179,3 +184,90 @@ def test_patch_refuses_bad_settings_and_changes_nothing(
     (listed,) = env.client.get("/api/backups").json()
     assert listed["schedule"] == target["schedule"] and listed["retention"] == target["retention"]
     assert listed["label"] == "Disk"
+
+
+# --- guided setup (issue 3) --------------------------------------------------------------------
+
+
+def test_places_report_the_library_size_and_where_a_backup_could_go(env: Env) -> None:
+    places = env.client.get("/api/backups/places").json()
+    assert places["library_bytes"] == 0
+    assert isinstance(places["disks"], list) and isinstance(places["remotes"], list)
+
+
+def test_plan_says_whether_a_place_will_do_without_creating_anything(env: Env) -> None:
+    good = env.client.post("/api/backups/plan", json={"place": str(env.disk)})
+    assert good.status_code == 200, good.text
+    body = good.json()
+    assert body["ok"] and body["problem"] is None
+    assert body["repository"] == str(env.disk / "photo-assistant-backup")
+    assert body["free_bytes"] > 0 and body["library_bytes"] == 0
+    assert list(env.disk.iterdir()) == [] and not env.keys.exists()
+    for place in (str(env.root), "relative", str(env.disk / "missing")):
+        bad = env.client.post("/api/backups/plan", json={"place": place}).json()
+        assert not bad["ok"] and bad["problem"], place
+
+
+def test_guided_setup_backs_up_proves_the_restore_and_hands_over_the_key(env: Env) -> None:
+    created = env.client.post("/api/backups/setup", json={"label": "USB", "place": str(env.disk)})
+    assert created.status_code == 201, created.text
+    body = created.json()
+    target, recovery = body["target"], body["recovery"]
+    assert target["schedule"] == "daily 02:30" and target["retention"]["daily"] == 7
+    assert not target["key_saved"] and target["needs_attention"]
+    assert recovery["repository"] == str(env.disk / "photo-assistant-backup")
+    assert len(recovery["key"]) >= 40
+    (key_file,) = env.keys.iterdir()
+    assert key_file.read_text().strip() == recovery["key"]
+
+    env.work()  # the first backup was queued by the setup itself
+    runs = env.client.get(f"/api/backups/{target['id']}/runs").json()
+    assert [(r["kind"], r["status"]) for r in runs] == [
+        ("restore_test", "succeeded"),
+        ("backup", "succeeded"),
+    ], runs
+
+    again = env.client.get(f"/api/backups/{target['id']}/recovery")
+    assert again.status_code == 200 and again.json() == recovery
+    saved = env.client.post(f"/api/backups/{target['id']}/key-saved")
+    assert saved.status_code == 200
+    assert saved.json()["key_saved"] and not saved.json()["needs_attention"]
+    assert saved.json()["last_proven_at"]
+
+
+def test_guided_setup_refuses_bad_places_taken_names_and_bad_schedules(env: Env) -> None:
+    ok = {"label": "USB", "place": str(env.disk)}
+    inside = env.client.post("/api/backups/setup", json=ok | {"place": str(env.root)})
+    assert inside.status_code == 422 and "cannot live inside" in inside.json()["detail"]
+    often = env.client.post("/api/backups/setup", json=ok | {"schedule": "often"})
+    assert often.status_code == 422 and "schedule" in often.json()["detail"]
+    blank = env.client.post("/api/backups/setup", json=ok | {"label": "  "})
+    assert blank.status_code == 422
+    assert not env.keys.exists() and env.client.get("/api/backups").json() == []
+    assert env.client.post("/api/backups/setup", json=ok).status_code == 201
+    other = env.disk / "other"
+    other.mkdir()
+    taken = env.client.post("/api/backups/setup", json=ok | {"place": str(other)})
+    assert taken.status_code == 409
+    assert len(list(env.keys.iterdir())) == 1
+
+
+def test_a_second_setup_in_the_same_place_is_refused_once_the_first_backup_exists(
+    env: Env,
+) -> None:
+    assert (
+        env.client.post("/api/backups/setup", json={"label": "USB", "place": str(env.disk)})
+    ).status_code == 201
+    env.work()
+    again = env.client.post("/api/backups/setup", json={"label": "USB 2", "place": str(env.disk)})
+    assert again.status_code == 422 and "already a backup" in again.json()["detail"]
+
+
+def test_recovery_and_key_saved_for_unknown_targets_or_a_lost_key_file(env: Env) -> None:
+    assert env.client.get("/api/backups/99/recovery").status_code == 404
+    assert env.client.post("/api/backups/99/key-saved").status_code == 404
+    created = env.client.post("/api/backups/setup", json={"label": "USB", "place": str(env.disk)})
+    (key_file,) = env.keys.iterdir()
+    key_file.unlink()
+    lost = env.client.get(f"/api/backups/{created.json()['target']['id']}/recovery")
+    assert lost.status_code == 409 and "key file is gone" in lost.json()["detail"]

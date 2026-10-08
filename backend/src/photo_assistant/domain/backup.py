@@ -1,7 +1,7 @@
 """Backup targets, runs and retention (FEATURES 9b). Pure data and rules, no I/O."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from photo_assistant.domain.schedule import Schedule, parse_schedule, parse_window
@@ -12,6 +12,12 @@ from photo_assistant.domain.schedule import Schedule, parse_schedule, parse_wind
 DB_SNAPSHOT_DIR = "db-snapshot"
 DB_SNAPSHOT_FILE = "library.db"
 BACKUP_FOLDERS = ("originals", "recipes", "config", "inbox", DB_SNAPSHOT_DIR)
+
+GB = 1000**3
+MB = 1000**2
+HEADROOM = 1.2  # a new backup place should hold the library and 20 % more
+PROOF_EVERY = timedelta(days=7)  # how often a restore test proves each backup
+PROOF_RETRY = timedelta(days=1)  # after a failed restore test
 
 
 class TargetKind(StrEnum):
@@ -60,6 +66,8 @@ class NewBackupTarget:
     schedule: str = "daily 02:30"
     quiet_window: str | None = None
     retention: Retention = Retention()
+    # False for a key the app made: the owner must still confirm they kept a copy of it
+    key_saved: bool = True
 
     def __post_init__(self) -> None:
         if not self.label.strip():
@@ -98,6 +106,7 @@ class BackupTarget:
     retention: Retention
     enabled: bool
     created_at: datetime
+    key_saved_at: datetime | None = None  # None: nobody confirmed a copy of the key exists
 
     @property
     def kind(self) -> TargetKind:
@@ -153,15 +162,23 @@ class TargetStatus:
     repo_bytes: int | None
     next_run_at: datetime | None
     overdue: bool
+    last_proven_at: datetime | None = None  # the last restore test that matched every hash
+    restore_failing: bool = False  # the last restore test did not
 
     @property
     def failing(self) -> bool:
         return self.last_run is not None and self.last_run.status is BackupRunStatus.FAILED
 
     @property
+    def key_unsaved(self) -> bool:
+        return self.target.key_saved_at is None
+
+    @property
     def needs_attention(self) -> bool:
-        """Drives the warning banner: overdue or the last attempt failed."""
-        return self.target.enabled and (self.overdue or self.failing)
+        """Drives the warning banner: overdue, the last backup or restore test failed, or
+        nobody confirmed a copy of the recovery key."""
+        trouble = self.overdue or self.failing or self.restore_failing or self.key_unsaved
+        return self.target.enabled and trouble
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,3 +206,84 @@ class RestoreTestReport:
             return f"{text}; every hash matches"
         listed = "; ".join(f"{c.library_path}: {c.reason}" for c in bad[:5])
         return f"{text}; {len(bad)} failed: {listed}"
+
+
+# --- planning a new backup (issue 3) ---------------------------------------------------------
+
+
+def size_text(size: int) -> str:
+    return f"{size / GB:.1f} GB" if size >= GB else f"{round(size / MB)} MB"
+
+
+@dataclass(frozen=True, slots=True)
+class PlaceFacts:
+    """What the machine reports about a place a backup could go."""
+
+    free_bytes: int | None  # None: it can't tell (some cloud remotes)
+    same_disk: bool = False  # the disk that holds the library
+    holds_backup: bool = False  # a backup made with another key is already there
+    write_error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BackupPlan:
+    library_bytes: int
+    free_bytes: int | None
+    problem: str | None  # set: no backup can be set up there
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return self.problem is None
+
+
+def _problem(library_bytes: int, facts: PlaceFacts) -> str | None:
+    if facts.write_error:
+        return f"can't write there: {facts.write_error}"
+    if facts.holds_backup:
+        return "there is already a backup in this folder, made with another key: choose another"
+    if facts.free_bytes is not None and facts.free_bytes < library_bytes:
+        return (
+            f"not enough room: the library is {size_text(library_bytes)} and only "
+            f"{size_text(facts.free_bytes)} is free there "
+            f"({size_text(library_bytes - facts.free_bytes)} missing)"
+        )
+    return None
+
+
+def _warnings(library_bytes: int, facts: PlaceFacts) -> tuple[str, ...]:
+    found = []
+    if facts.same_disk:
+        found.append(
+            "this is the same disk as the library: it guards against mistakes, "
+            "not against the disk failing"
+        )
+    if facts.free_bytes is None:
+        found.append("free space there can't be checked")
+    elif facts.free_bytes < library_bytes * HEADROOM:
+        found.append(
+            f"it fits, but with little room to grow: {size_text(facts.free_bytes)} free "
+            f"for a {size_text(library_bytes)} library"
+        )
+    return tuple(found)
+
+
+def plan_backup(library_bytes: int, facts: PlaceFacts) -> BackupPlan:
+    problem = _problem(library_bytes, facts)
+    warnings = () if problem else _warnings(library_bytes, facts)
+    return BackupPlan(library_bytes, facts.free_bytes, problem, warnings)
+
+
+def restore_proof_due(
+    last_backup_success: datetime | None, last_test: BackupRun | None, now: datetime
+) -> bool:
+    """Is it time for a restore test? Never before a backup exists; at once after the first
+    one; then weekly, or a day after a test that failed."""
+    if last_backup_success is None:
+        return False
+    if last_test is None:
+        return True
+    if last_test.status is BackupRunStatus.RUNNING:
+        return False
+    wait = PROOF_RETRY if last_test.status is BackupRunStatus.FAILED else PROOF_EVERY
+    return now - last_test.started_at >= wait

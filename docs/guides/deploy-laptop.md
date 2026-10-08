@@ -32,6 +32,10 @@ just import ~/Pictures          # read-only on ~/Pictures; copies into the libra
 just import /media/$USER/OldDisk/Photos --label "Old disk"
 ```
 
+Or in the web app, without typing a path: **Admin → Folders → Add folder**, click your way
+to the folder (it starts in your home folder; plugged-in disks are listed on top), then
+**Add and import**. The folder is only ever read.
+
 Each import ends with a summary: seen = imported + duplicates + skipped + failed, and
 every skip or failure says why. Running it again only picks up new files.
 
@@ -65,6 +69,9 @@ Then, in **Admin → People**, add an account for your partner (member) and anyo
 In **Admin → Folders**, set who may see each folder (everyone / chosen people) and at which
 level (view, download, edit). Headless alternative: `uv run python -m photo_assistant create-user NAME --role admin`
 from `backend/`.
+
+Signing in: pick your name, type your 4-digit PIN. Forgot it? An admin sets a new one in
+**Admin → People → Reset PIN**; if the admin forgot theirs, run `just set-pin NAME` on the laptop.
 
 ## 4c. Optional: AI search and faces
 

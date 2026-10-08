@@ -116,7 +116,7 @@ export type MockUser = {
 	display_name: string;
 	role: Role;
 	disabled: boolean;
-	password: string; // plain text: this is an in-memory mock, never a real store
+	pin: string; // plain text: this is an in-memory mock, never a real store
 };
 
 export type MockAlbum = {
@@ -152,6 +152,8 @@ export type MockBackup = {
 	quiet_window: string | null;
 	retention: Record<string, number>;
 	enabled: boolean;
+	key: string;
+	key_saved: boolean;
 	/** Runs newest first; `ends_at` is when a running run finishes (mock clock). */
 	runs: (BackupRun & { ends_at: number })[];
 };
@@ -228,21 +230,21 @@ export const SEED_USERS: Omit<MockUser, 'id'>[] = [
 		display_name: 'C',
 		role: 'admin',
 		disabled: false,
-		password: 'correct horse'
+		pin: '1234'
 	},
 	{
 		username: 'partner',
 		display_name: 'Partner',
 		role: 'member',
 		disabled: false,
-		password: 'battery staple'
+		pin: '2345'
 	},
 	{
 		username: 'guest',
 		display_name: 'Guest',
 		role: 'guest',
 		disabled: false,
-		password: 'guest password'
+		pin: '3456'
 	}
 ];
 
@@ -511,6 +513,8 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 				quiet_window: '22:00-06:00',
 				retention: { daily: 7, weekly: 4, monthly: 12 },
 				enabled: true,
+				key: 'mock-key-home-server',
+				key_saved: true,
 				runs: [
 					{
 						id: 1,
