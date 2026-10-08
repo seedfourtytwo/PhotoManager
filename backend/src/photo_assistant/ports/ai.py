@@ -31,6 +31,10 @@ class AIProvider(Protocol):
         """A validated proposal using only ``context``'s photos and layouts."""
         ...
 
+    def close(self) -> None:
+        """Release what the provider holds (a connection); nothing is asked of it after."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class AICall:

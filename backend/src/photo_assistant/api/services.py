@@ -12,7 +12,6 @@ from photo_assistant.adapters.filesystem import (
     SystemClock,
 )
 from photo_assistant.adapters.geocoder import OfflineGeocoder
-from photo_assistant.adapters.ollama_ai import OllamaProvider
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
@@ -85,8 +84,7 @@ class Services:
         self.worker.stop()
         self.ops.close()
         self.ml.close()
-        if isinstance(self.integrations.ai, OllamaProvider):
-            self.integrations.ai.close()
+        self.integrations.ai.close()
         self.exiftool.close()
         self.db.close()
 
