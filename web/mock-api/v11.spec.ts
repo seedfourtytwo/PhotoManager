@@ -25,7 +25,7 @@ const zipRequest = (scope: object): DownloadRequest =>
 describe('integration rules', () => {
 	it('albums grant view only: an album viewer cannot download a photo it only sees there', async () => {
 		const admin = await h.signedIn();
-		const guest = await h.signedIn('guest', 'guest password');
+		const guest = await h.signedIn('guest', '3456');
 		// Partner's source 3 is invisible to the guest; share an album holding one of its photos.
 		const partnerOnly = h.mock.state.assets.find((a) => a.sources[0].source_id === 3)!;
 		const album = await admin.createAlbum({ title: 'Shared', asset_ids: [partnerOnly.id] });
@@ -41,7 +41,7 @@ describe('integration rules', () => {
 		const thumb = await api.raw(`/api/assets/${a.id}/thumb`);
 		expect(thumb.status).toBe(200);
 		expect((await api.raw(`/api/assets/${a.id}/preview`)).status).toBe(200);
-		const guest = await h.signedIn('guest', 'guest password');
+		const guest = await h.signedIn('guest', '3456');
 		const partnerOnly = h.mock.state.assets.find((x) => x.sources[0].source_id === 3)!;
 		await api.trashAssets([partnerOnly.id]);
 		expect((await guest.raw(`/api/assets/${partnerOnly.id}/thumb`)).status).toBe(404);
@@ -122,7 +122,7 @@ describe('search and people', () => {
 		const page = await api.personAssets(a.id, null, 5);
 		expect(page.items).toHaveLength(5);
 		expect(page.next_cursor).not.toBeNull();
-		const guest = await h.signedIn('guest', 'guest password');
+		const guest = await h.signedIn('guest', '3456');
 		await expect(guest.renamePerson(a.id, 'x')).rejects.toMatchObject({ status: 403 });
 	});
 });
@@ -179,7 +179,7 @@ describe('backups, devices and remote sources', () => {
 		await expect(api.updateBackup(target.id, { schedule: 'often' })).rejects.toMatchObject({
 			status: 422
 		});
-		const member = await h.signedIn('partner', 'battery staple');
+		const member = await h.signedIn('partner', '2345');
 		await expect(member.backups()).rejects.toMatchObject({ status: 403 });
 	});
 

@@ -18,19 +18,22 @@ export type User = {
 };
 
 export type SetupState = { needs_admin: boolean };
-export type SetupBody = { username: string; display_name: string; password: string };
-export type LoginBody = { username: string; password: string };
-export type PasswordBody = { current_password: string; new_password: string };
+export type SetupBody = { username: string; display_name: string; pin: string };
+export type LoginBody = { username: string; pin: string };
+/** What the login screen may show before anyone is signed in. */
+export type AccountName = { username: string; display_name: string };
+export type PinBody = { current_pin: string; new_pin: string };
 export type NewUser = SetupBody & { role: Role };
 export type UserPatch = Partial<{
 	display_name: string;
 	role: Role;
 	disabled: boolean;
-	password: string;
+	pin: string;
 }>;
 
-/** Contract: passwords are at least 10 characters. */
-export const MIN_PASSWORD = 10;
+/** Contract: a PIN is exactly 4 digits. */
+export const PIN_LENGTH = 4;
+export const isPin = (value: string) => /^[0-9]{4}$/.test(value);
 
 // --- sources, imports, jobs (M1 routes, plus access) ---------------------------------------
 

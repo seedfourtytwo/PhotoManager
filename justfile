@@ -31,6 +31,10 @@ import folder *args:
     shift
     cd backend && uv run python -m photo_assistant import "$folder" "$@"
 
+# Give an account a new 4-digit PIN (asks for it). For a forgotten PIN: just set-pin ck
+set-pin username:
+    cd backend && uv run python -m photo_assistant set-pin {{username}}
+
 # List the folders the library imports from.
 sources:
     cd backend && uv run python -m photo_assistant sources

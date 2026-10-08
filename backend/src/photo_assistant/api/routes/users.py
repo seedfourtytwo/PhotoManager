@@ -29,7 +29,7 @@ def list_users(services: ServicesDep) -> list[UserOut]:
 @router.post("", status_code=status.HTTP_201_CREATED, dependencies=ADMIN_ONLY)
 def create_user(services: ServicesDep, body: NewUser) -> UserOut:
     """409 for a taken name, 422 for a bad one (account errors carry their status)."""
-    user = services.accounts.create_user(body.username, body.display_name, body.password, body.role)
+    user = services.accounts.create_user(body.username, body.display_name, body.pin, body.role)
     return UserOut.of(user)
 
 
@@ -39,7 +39,7 @@ def update_user(services: ServicesDep, user_id: int, body: UserPatchIn) -> UserO
         display_name=body.display_name,
         role=body.role,
         disabled=body.disabled,
-        password=body.password,
+        pin=body.pin,
     )
     return UserOut.of(services.accounts.update_user(user_id, patch))
 

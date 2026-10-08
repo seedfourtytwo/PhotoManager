@@ -7,12 +7,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
-from tests.api.conftest import BASE, PASSWORD, add_user, login, make_settings, user_id_of
+from tests.api.conftest import BASE, PIN, add_user, login, make_settings, user_id_of
 
 OPEN_ROUTES = {
     ("GET", "/api/health"),
     ("GET", "/api/setup"),
     ("POST", "/api/setup"),
+    ("GET", "/api/auth/accounts"),
     ("POST", "/api/auth/login"),
 }
 
@@ -20,9 +21,7 @@ OPEN_ROUTES = {
 def test_first_run_setup_creates_the_admin_and_logs_in(anon: TestClient) -> None:
     assert anon.get("/api/setup").json() == {"needs_admin": True}
     assert anon.get("/api/auth/me").status_code == 401
-    created = anon.post(
-        "/api/setup", json={"username": "c", "display_name": "C", "password": PASSWORD}
-    )
+    created = anon.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
     assert created.status_code == 201
     assert created.json() == {
         "id": 1,
@@ -36,31 +35,29 @@ def test_first_run_setup_creates_the_admin_and_logs_in(anon: TestClient) -> None
     assert "Secure" not in cookie, "plain http on the laptop"
     assert anon.get("/api/auth/me").json()["username"] == "c"
     assert anon.get("/api/setup").json() == {"needs_admin": False}
-    again = anon.post(
-        "/api/setup", json={"username": "x", "display_name": "X", "password": PASSWORD}
-    )
+    again = anon.post("/api/setup", json={"username": "x", "display_name": "X", "pin": PIN})
     assert again.status_code == 409
 
 
-def test_setup_refuses_short_passwords(anon: TestClient) -> None:
-    short = anon.post("/api/setup", json={"username": "c", "display_name": "C", "password": "x"})
+def test_setup_refuses_pins_that_are_not_four_digits(anon: TestClient) -> None:
+    short = anon.post("/api/setup", json={"username": "c", "display_name": "C", "pin": "123"})
     assert short.status_code == 422
-    assert "10 characters" in short.json()["detail"]
+    assert "4 digits" in short.json()["detail"]
 
 
 def test_session_cookie_is_secure_over_https(tmp_path: Path) -> None:
     app = create_app(make_settings(tmp_path / "data"))
     with TestClient(app, base_url="https://127.0.0.1") as c:
-        r = c.post("/api/setup", json={"username": "c", "display_name": "C", "password": PASSWORD})
+        r = c.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
         assert "Secure" in r.headers["set-cookie"]
         assert c.get("/api/auth/me").status_code == 200
 
 
-def test_login_logout_and_wrong_password(admin: TestClient) -> None:
+def test_login_logout_and_wrong_pin(admin: TestClient) -> None:
     other = TestClient(admin.app, base_url=BASE)
-    bad = other.post("/api/auth/login", json={"username": "admin", "password": "wrong one!!"})
+    bad = other.post("/api/auth/login", json={"username": "admin", "pin": "0000"})
     assert bad.status_code == 401 and bad.json()["detail"]
-    ok = other.post("/api/auth/login", json={"username": "ADMIN", "password": PASSWORD})
+    ok = other.post("/api/auth/login", json={"username": "ADMIN", "pin": PIN})
     assert ok.status_code == 200 and ok.json()["role"] == "admin"
     assert other.get("/api/auth/me").status_code == 200
     assert other.post("/api/auth/logout").status_code == 204
@@ -68,12 +65,25 @@ def test_login_logout_and_wrong_password(admin: TestClient) -> None:
     assert admin.get("/api/auth/me").status_code == 200, "other sessions are unaffected"
 
 
+def test_the_login_screen_lists_the_active_accounts_without_a_session(admin: TestClient) -> None:
+    add_user(admin, "lea")
+    gone = add_user(admin, "old")
+    admin.patch(f"/api/users/{gone.get('/api/auth/me').json()['id']}", json={"disabled": True})
+    other = TestClient(admin.app, base_url=BASE)
+    listed = other.get("/api/auth/accounts")
+    assert listed.status_code == 200
+    assert listed.json() == [
+        {"username": "admin", "display_name": "C"},
+        {"username": "lea", "display_name": "Lea"},
+    ], "names only: no ids, no roles, no disabled accounts"
+
+
 def test_login_is_rate_limited(admin: TestClient) -> None:
     other = TestClient(admin.app, base_url=BASE)
     for _ in range(10):
-        r = other.post("/api/auth/login", json={"username": "admin", "password": "nope nope!"})
+        r = other.post("/api/auth/login", json={"username": "admin", "pin": "0000"})
         assert r.status_code == 401
-    blocked = other.post("/api/auth/login", json={"username": "admin", "password": PASSWORD})
+    blocked = other.post("/api/auth/login", json={"username": "admin", "pin": PIN})
     assert blocked.status_code == 429
 
 
@@ -82,15 +92,12 @@ def test_an_admin_unlocks_a_rate_limited_account(admin: TestClient) -> None:
     lea_id = user_id_of(admin, "lea")
     other = TestClient(admin.app, base_url=BASE)
     for _ in range(10):
-        other.post("/api/auth/login", json={"username": "lea", "password": "nope nope!"})
-    assert (
-        other.post("/api/auth/login", json={"username": "lea", "password": PASSWORD}).status_code
-        == 429
-    )
+        other.post("/api/auth/login", json={"username": "lea", "pin": "0000"})
+    assert other.post("/api/auth/login", json={"username": "lea", "pin": PIN}).status_code == 429
     assert lea.post(f"/api/users/{lea_id}/unlock").status_code == 403, "members can't unlock"
     unlocked = admin.post(f"/api/users/{lea_id}/unlock")
     assert unlocked.status_code == 204 and unlocked.content == b""
-    ok = other.post("/api/auth/login", json={"username": "lea", "password": PASSWORD})
+    ok = other.post("/api/auth/login", json={"username": "lea", "pin": PIN})
     assert ok.status_code == 200
     assert admin.post("/api/users/999/unlock").status_code == 404
     assert admin.post(f"/api/users/{lea_id}/unlock").status_code == 204, "nothing to clear is fine"
@@ -101,20 +108,14 @@ def test_guests_cannot_unlock(admin: TestClient) -> None:
     assert guest.post(f"/api/users/{user_id_of(admin, 'admin')}/unlock").status_code == 403
 
 
-def test_change_password(admin: TestClient) -> None:
-    wrong = admin.post(
-        "/api/auth/password", json={"current_password": "not it!!!!", "new_password": "x" * 12}
-    )
+def test_change_pin(admin: TestClient) -> None:
+    wrong = admin.post("/api/auth/pin", json={"current_pin": "0000", "new_pin": NEW_PIN})
     assert wrong.status_code == 400
-    short = admin.post(
-        "/api/auth/password", json={"current_password": PASSWORD, "new_password": "short"}
-    )
+    short = admin.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": "12345"})
     assert short.status_code == 422
-    ok = admin.post(
-        "/api/auth/password", json={"current_password": PASSWORD, "new_password": "x" * 12}
-    )
+    ok = admin.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": NEW_PIN})
     assert ok.status_code == 204
-    login(admin.app, "admin", "x" * 12)  # type: ignore[arg-type]
+    login(admin.app, "admin", NEW_PIN)  # type: ignore[arg-type]
 
 
 def test_admin_manages_users(admin: TestClient) -> None:
@@ -125,13 +126,13 @@ def test_admin_manages_users(admin: TestClient) -> None:
     assert lea.get("/api/users").status_code == 403, "members don't manage accounts"
     dup = admin.post(
         "/api/users",
-        json={"username": "Lea", "display_name": "x", "password": PASSWORD, "role": "guest"},
+        json={"username": "Lea", "display_name": "x", "pin": PIN, "role": "guest"},
     )
     assert dup.status_code == 409
     patched = admin.patch(f"/api/users/{lea_id}", json={"display_name": "Léa", "role": "guest"})
     assert patched.json()["display_name"] == "Léa" and patched.json()["role"] == "guest"
     assert admin.patch("/api/users/999", json={"disabled": True}).status_code == 404
-    assert admin.patch(f"/api/users/{lea_id}", json={"password": "short"}).status_code == 422
+    assert admin.patch(f"/api/users/{lea_id}", json={"pin": "123"}).status_code == 422
     admin.patch(f"/api/users/{lea_id}", json={"disabled": True})
     assert lea.get("/api/auth/me").status_code == 401, "disabling ends sessions"
 
@@ -172,26 +173,24 @@ def test_m1_admin_routes_are_admin_only(admin: TestClient, role: str, tmp_path: 
     assert user.post("/api/users", json={}).status_code == 403
 
 
-# --- QA A4: a new password ends the other sessions; an admin reset also revokes devices -------
+# --- QA A4: a new PIN ends the other sessions; an admin reset also revokes devices -------
 
-NEW_PASSWORD = "another long password"
+NEW_PIN = "5678"
 
 
-def test_changing_your_password_ends_your_other_sessions_but_keeps_this_one(
+def test_changing_your_pin_ends_your_other_sessions_but_keeps_this_one(
     admin: TestClient,
 ) -> None:
     here = add_user(admin, "lea")
     elsewhere = login(admin.app, "lea")  # type: ignore[arg-type]
-    changed = here.post(
-        "/api/auth/password", json={"current_password": PASSWORD, "new_password": NEW_PASSWORD}
-    )
+    changed = here.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": NEW_PIN})
     assert changed.status_code == 204
     assert here.get("/api/auth/me").status_code == 200, "the session that changed it stays"
     assert elsewhere.get("/api/auth/me").status_code == 401, "a stolen session is cut off"
     assert admin.get("/api/auth/me").status_code == 200, "other people's sessions are untouched"
 
 
-def test_an_admin_password_reset_ends_every_session_and_revokes_device_tokens(
+def test_an_admin_pin_reset_ends_every_session_and_revokes_device_tokens(
     admin: TestClient,
 ) -> None:
     lea = add_user(admin, "lea")
@@ -200,11 +199,11 @@ def test_an_admin_password_reset_ends_every_session_and_revokes_device_tokens(
     assert lea.post("/api/upload/check", json={"hashes": []}, headers=bearer).status_code == 200
     lea_id = lea.get("/api/auth/me").json()["id"]
 
-    assert admin.patch(f"/api/users/{lea_id}", json={"password": NEW_PASSWORD}).is_success
+    assert admin.patch(f"/api/users/{lea_id}", json={"pin": NEW_PIN}).is_success
 
     assert lea.get("/api/auth/me").status_code == 401
     fresh = TestClient(admin.app, base_url=BASE)  # type: ignore[arg-type]
     assert fresh.post("/api/upload/check", json={"hashes": []}, headers=bearer).status_code == 401
-    lea_again = login(admin.app, "lea", NEW_PASSWORD)  # type: ignore[arg-type]
+    lea_again = login(admin.app, "lea", NEW_PIN)  # type: ignore[arg-type]
     assert [d["revoked"] for d in lea_again.get("/api/devices").json()] == [True]
     assert admin.get("/api/auth/me").status_code == 200

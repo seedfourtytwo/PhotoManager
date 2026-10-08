@@ -29,9 +29,9 @@ from photo_assistant.domain.access import AlbumRole, Level, Role
 
 SOURCES = [("phone", "Phone"), ("old-hdd", "Old hard disk"), ("partner", "Partner")]
 USERS = [  # as web/mock-api/data.ts SEED_USERS
-    ("admin", "C", Role.ADMIN, "correct horse"),
-    ("partner", "Partner", Role.MEMBER, "battery staple"),
-    ("guest", "Guest", Role.GUEST, "guest password"),
+    ("admin", "C", Role.ADMIN, "1234"),
+    ("partner", "Partner", Role.MEMBER, "2345"),
+    ("guest", "Guest", Role.GUEST, "3456"),
 ]
 DORDOGNE = (44.89, 1.22)
 BRITTANY = (47.75, -3.37)
@@ -63,8 +63,8 @@ def import_sources(services: Services, sources: Path) -> dict[str, int]:
 def seed_people(services: Services, sources: dict[str, int], db: Path) -> None:
     repo, accounts, now = services.repo, services.accounts, services.clock.now()
     user_ids = {}
-    for username, name, role, password in USERS:
-        user_ids[username] = accounts.create_user(username, name, password, role).id
+    for username, name, role, pin in USERS:
+        user_ids[username] = accounts.create_user(username, name, pin, role).id
     partner = user_ids["partner"]
     repo.set_access(sources["old-hdd"], Level.VIEW, [(partner, Level.DOWNLOAD)])
     repo.set_source_owner(sources["partner"], partner)

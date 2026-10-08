@@ -18,7 +18,7 @@ from photo_assistant.app.accounts import (
 from photo_assistant.domain.access import Role
 from tests.factories import NOW
 
-GOOD = "correct horse battery"
+GOOD = "1234"
 
 
 class FakeHasher:
@@ -70,14 +70,14 @@ def test_setup_gives_ownerless_sources_to_the_first_admin(
     assert claimed is not None and claimed.owner_id == user.id
 
 
-def test_passwords_are_hashed_and_checked(accounts: Accounts, repo: SqliteRepository) -> None:
+def test_pins_are_hashed_and_checked(accounts: Accounts, repo: SqliteRepository) -> None:
     accounts.setup("c", "C", GOOD)
     stored = repo.find_user_by_username("C")
     assert stored is not None and stored[1] == f"hashed:{GOOD}", "usernames ignore case"
     user, token = accounts.login("c", GOOD, "10.0.0.1")
     assert accounts.authenticate(token) == user
     with pytest.raises(InvalidCredentialsError):
-        accounts.login("c", "wrong password!", "10.0.0.1")
+        accounts.login("c", "0000", "10.0.0.1")
     with pytest.raises(InvalidCredentialsError):
         accounts.login("nobody", GOOD, "10.0.0.1")
 
@@ -88,7 +88,7 @@ def test_ten_failures_in_fifteen_minutes_block_that_user_from_that_address(
     accounts.setup("c", "C", GOOD)
     for _ in range(10):
         with pytest.raises(InvalidCredentialsError):
-            accounts.login("c", "wrong password!", "10.0.0.9")
+            accounts.login("c", "0000", "10.0.0.9")
     with pytest.raises(TooManyAttemptsError):
         accounts.login("c", GOOD, "10.0.0.9")
     accounts.login("c", GOOD, "10.0.0.2")  # another address is not blocked
@@ -102,7 +102,7 @@ def test_an_admin_unlock_clears_the_failures_from_every_address(accounts: Accoun
     for ip, name in (("10.0.0.9", "lea"), ("10.0.0.8", "LEA"), ("10.0.0.9", "c")):
         for _ in range(10):
             with pytest.raises(InvalidCredentialsError):
-                accounts.login(name, "wrong password!", ip)
+                accounts.login(name, "0000", ip)
     accounts.unlock(lea.id)
     accounts.login("lea", GOOD, "10.0.0.9")
     accounts.login("Lea", GOOD, "10.0.0.8")
@@ -133,16 +133,16 @@ def test_logout_ends_the_session(accounts: Accounts) -> None:
     assert accounts.authenticate(token) is None
 
 
-def test_change_password_checks_the_current_one(accounts: Accounts) -> None:
+def test_change_pin_checks_the_current_one(accounts: Accounts) -> None:
     user, token = accounts.setup("c", "C", GOOD)
     _, other = accounts.login("c", GOOD, "2.2.2.2")
     with pytest.raises(InvalidCredentialsError):
-        accounts.change_password(user, "not it at all", "another good one", token)
-    with pytest.raises(AccountError, match="10 characters"):
-        accounts.change_password(user, GOOD, "short", token)
+        accounts.change_pin(user, "0000", "5678", token)
+    with pytest.raises(AccountError, match="4 digits"):
+        accounts.change_pin(user, GOOD, "12345", token)
     assert accounts.authenticate(other) is not None, "failed attempts change nothing"
-    accounts.change_password(user, GOOD, "another good one", token)
-    accounts.login("c", "another good one", "1.1.1.1")
+    accounts.change_pin(user, GOOD, "5678", token)
+    accounts.login("c", "5678", "1.1.1.1")
     assert accounts.authenticate(token) is not None
     assert accounts.authenticate(other) is None
 
@@ -155,15 +155,24 @@ def test_admin_creates_and_updates_users(accounts: Accounts) -> None:
         accounts.create_user("LEA", "Other", GOOD, Role.GUEST)
     with pytest.raises(AccountError, match="user names"):
         accounts.create_user("bad name", "x", GOOD, Role.GUEST)
-    with pytest.raises(AccountError, match="10 characters"):
-        accounts.create_user("tom", "Tom", "short", Role.GUEST)
+    with pytest.raises(AccountError, match="4 digits"):
+        accounts.create_user("tom", "Tom", "12345", Role.GUEST)
     updated = accounts.update_user(lea.id, UserPatch(display_name="Lea M", role=Role.GUEST))
     assert updated.display_name == "Lea M" and updated.role is Role.GUEST
-    accounts.update_user(lea.id, UserPatch(password="brand new secret"))
-    accounts.login("lea", "brand new secret", "1.1.1.1")
+    accounts.update_user(lea.id, UserPatch(pin="9012"))
+    accounts.login("lea", "9012", "1.1.1.1")
     with pytest.raises(NotFoundError):
         accounts.update_user(999, UserPatch(disabled=True))
     assert admin.id != lea.id
+
+
+def test_login_names_are_the_active_accounts(accounts: Accounts) -> None:
+    assert accounts.login_names() == []
+    accounts.setup("c", "C", GOOD)
+    lea = accounts.create_user("lea", "Léa", GOOD, Role.MEMBER)
+    assert accounts.login_names() == [("c", "C"), ("lea", "Léa")]
+    accounts.update_user(lea.id, UserPatch(disabled=True))
+    assert accounts.login_names() == [("c", "C")]
 
 
 def test_disabling_a_user_ends_their_sessions_and_blocks_login(accounts: Accounts) -> None:

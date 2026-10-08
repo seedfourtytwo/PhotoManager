@@ -42,7 +42,7 @@ def test_hashed_build_files_are_cached_forever_and_the_shell_is_not(tmp_path: Pa
 
 
 def test_json_is_gzipped_when_large_and_images_and_zips_never(tmp_path: Path) -> None:
-    from tests.api.conftest import PASSWORD, import_folder
+    from tests.api.conftest import PIN, import_folder
     from tests.synthetic import write_photo
 
     settings = Settings(
@@ -53,7 +53,7 @@ def test_json_is_gzipped_when_large_and_images_and_zips_never(tmp_path: Path) ->
         argon2_memory_kib=64,
     )
     with TestClient(create_app(settings), base_url="http://127.0.0.1") as client:
-        client.post("/api/setup", json={"username": "c", "display_name": "C", "password": PASSWORD})
+        client.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
         for n in range(12):
             write_photo(tmp_path / "p" / f"{n}.jpg", seed=n, gps=(48.0 + n / 100, 2.0))
         import_folder(client, tmp_path / "p", "p")

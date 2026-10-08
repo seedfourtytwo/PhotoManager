@@ -58,7 +58,7 @@ test('admin adds a person and disables them', async ({ page }) => {
 	const dialog = page.getByRole('dialog', { name: 'Add person' });
 	await dialog.getByLabel('User name').fill('grandma');
 	await dialog.getByLabel('Name', { exact: true }).fill('Grandma');
-	await dialog.getByLabel('Password').fill('a long passphrase');
+	await dialog.getByLabel('PIN').fill('4321');
 	await dialog.getByLabel('Role').selectOption('guest');
 	await dialog.getByRole('button', { name: 'Add' }).click();
 	const row = page.getByRole('row').filter({ hasText: 'grandma' });
@@ -108,15 +108,14 @@ test('a refused role change puts the old role back; disabled people say so', asy
 	await expect(guest.getByText('Disabled')).toBeVisible();
 });
 
-test('“Add person” explains the 10-character rule as you type', async ({ page }) => {
+test('“Add person” needs a 4-digit PIN', async ({ page }) => {
 	await page.getByRole('button', { name: 'Add person' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add person' });
-	await expect(dialog.getByText('At least 10 characters.')).toBeVisible();
+	await expect(dialog.getByText('Exactly 4 digits.')).toBeVisible();
 	await dialog.getByLabel('User name').fill('kid');
-	await dialog.getByLabel('Password').fill('short');
-	await expect(dialog.getByText('5 more characters needed.')).toBeVisible();
+	await dialog.getByLabel('PIN').fill('123');
 	await expect(dialog.getByRole('button', { name: 'Add' })).toBeDisabled();
-	await dialog.getByLabel('Password').fill('long enough!');
+	await dialog.getByLabel('PIN').fill('1234');
 	await expect(dialog.getByRole('button', { name: 'Add' })).toBeEnabled();
 });
 

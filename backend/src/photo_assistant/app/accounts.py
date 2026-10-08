@@ -1,4 +1,4 @@
-"""Accounts: first-run setup, login with rate limit, sessions, password change, user admin.
+"""Accounts: first-run setup, login with rate limit, sessions, PIN change, user admin.
 
 Session tokens are random; only their SHA-256 is stored. A session ends after
 ``SESSION_IDLE_LIMIT`` without use, on logout, or when its user is disabled.
@@ -14,7 +14,7 @@ from photo_assistant.domain.access import (
     Role,
     User,
     leaves_no_admin,
-    password_problem,
+    pin_problem,
     session_expired,
     too_many_failures,
     username_problem,
@@ -41,7 +41,7 @@ class InvalidCredentialsError(AccountError):
     status = 401
 
     def __init__(self) -> None:
-        super().__init__("wrong user name or password")
+        super().__init__("wrong PIN")
 
 
 class TooManyAttemptsError(AccountError):
@@ -84,24 +84,24 @@ class UserPatch:
     display_name: str | None = None
     role: Role | None = None
     disabled: bool | None = None
-    password: str | None = None
+    pin: str | None = None
 
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _check_password(password: str) -> None:
-    problem = password_problem(password)
+def _check_pin(pin: str) -> None:
+    problem = pin_problem(pin)
     if problem:
         raise AccountError(problem)
 
 
-def _check_new_account(username: str, password: str) -> None:
+def _check_new_account(username: str, pin: str) -> None:
     problem = username_problem(username)
     if problem:
         raise AccountError(problem)
-    _check_password(password)
+    _check_pin(pin)
 
 
 class Accounts:
@@ -116,13 +116,13 @@ class Accounts:
     def needs_admin(self) -> bool:
         return self._store.count_users() == 0
 
-    def setup(self, username: str, display_name: str, password: str) -> tuple[User, str]:
+    def setup(self, username: str, display_name: str, pin: str) -> tuple[User, str]:
         if not self.needs_admin():
             raise AlreadySetUpError()
-        _check_new_account(username, password)
+        _check_new_account(username, pin)
         try:
             user = self._store.add_first_admin(
-                username, display_name.strip() or username, self._hasher.hash(password)
+                username, display_name.strip() or username, self._hasher.hash(pin)
             )
         except NotFirstUserError as exc:  # another setup won the race
             raise AlreadySetUpError() from exc
@@ -130,17 +130,29 @@ class Accounts:
 
     # --- users -----------------------------------------------------------------------------
 
-    def create_user(self, username: str, display_name: str, password: str, role: Role) -> User:
-        _check_new_account(username, password)
+    def create_user(self, username: str, display_name: str, pin: str, role: Role) -> User:
+        _check_new_account(username, pin)
         try:
             return self._store.add_user(
-                username, display_name.strip() or username, self._hasher.hash(password), role
+                username, display_name.strip() or username, self._hasher.hash(pin), role
             )
         except UsernameTakenError as exc:
             raise NameTakenError(username) from exc
 
     def list_users(self) -> list[User]:
         return self._store.list_users()
+
+    def login_names(self) -> list[tuple[str, str]]:
+        """(user name, display name) of every account that can log in: the login screen
+        shows them to anyone who reaches it, so nothing else about an account is given."""
+        return [(u.username, u.display_name) for u in self._store.list_users() if not u.disabled]
+
+    def set_pin(self, username: str, pin: str) -> User:
+        """A new PIN without the old one, for the command line (a forgotten PIN)."""
+        found = self._store.find_user_by_username(username)
+        if found is None:
+            raise NotFoundError()
+        return self.update_user(found[0].id, UserPatch(pin=pin))
 
     def get_user(self, user_id: int) -> User | None:
         return self._store.get_user(user_id)
@@ -150,10 +162,10 @@ class Accounts:
         if user is None:
             raise NotFoundError()
         self._guard_last_admin(user, patch)
-        if patch.password is not None:
-            _check_password(patch.password)
-            self._store.set_password_hash(user_id, self._hasher.hash(patch.password))
-            # an admin reset is for a lost or leaked password: nothing the old one opened stays
+        if patch.pin is not None:
+            _check_pin(patch.pin)
+            self._store.set_pin_hash(user_id, self._hasher.hash(patch.pin))
+            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays
             self._store.delete_sessions_of(user_id)
             self._store.revoke_devices_of(user_id, self._clock.now())
         try:
@@ -170,7 +182,7 @@ class Accounts:
 
     def unlock(self, user_id: int) -> None:
         """Lift the failed-login block on this account, from every address (v1.3): for the
-        person who mistyped their password ten times and can't wait 15 minutes."""
+        person who mistyped their PIN ten times and can't wait 15 minutes."""
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError()
@@ -184,15 +196,15 @@ class Accounts:
 
     # --- sessions --------------------------------------------------------------------------
 
-    def login(self, username: str, password: str, ip: str) -> tuple[User, str]:
+    def login(self, username: str, pin: str, ip: str) -> tuple[User, str]:
         now = self._clock.now()
         since = now - FAILED_LOGIN_WINDOW
         if too_many_failures(self._store.count_login_failures(username, ip, since)):
             raise TooManyAttemptsError()
         found = self._store.find_user_by_username(username)
         if found is None:
-            self._hasher.verify(self._dummy(), password)  # same work: don't reveal who exists
-        if found is None or not self._hasher.verify(found[1], password) or found[0].disabled:
+            self._hasher.verify(self._dummy(), pin)  # same work: don't reveal who exists
+        if found is None or not self._hasher.verify(found[1], pin) or found[0].disabled:
             self._store.add_login_failure(username, ip, now)
             raise InvalidCredentialsError()
         self._store.clear_login_failures(username, ip)
@@ -226,12 +238,12 @@ class Accounts:
     def logout(self, token: str) -> None:
         self._store.delete_session(_token_hash(token))
 
-    def change_password(self, user: User, current: str, new: str, keep_token: str) -> None:
+    def change_pin(self, user: User, current: str, new: str, keep_token: str) -> None:
         """Every other session of this user ends (a thief's included); ``keep_token``, the
         session making the change, stays signed in."""
         found = self._store.find_user_by_username(user.username)
         if found is None or not self._hasher.verify(found[1], current):
             raise InvalidCredentialsError()
-        _check_password(new)
-        self._store.set_password_hash(user.id, self._hasher.hash(new))
+        _check_pin(new)
+        self._store.set_pin_hash(user.id, self._hasher.hash(new))
         self._store.delete_sessions_of(user.id, keep=_token_hash(keep_token))

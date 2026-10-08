@@ -14,7 +14,7 @@ from photo_assistant.api.main import create_app
 from photo_assistant.api.settings import IntegrationSettings
 from tests.api.conftest import (
     BASE,
-    PASSWORD,
+    PIN,
     add_user,
     import_folder,
     make_settings,
@@ -76,9 +76,7 @@ def test_an_m1_library_boots_and_its_sources_go_to_the_first_admin(tmp_path: Pat
 
     _make_v3_library(data / "library.db")
     with TestClient(create_app(make_settings(data)), base_url=BASE) as client:
-        created = client.post(
-            "/api/setup", json={"username": "c", "display_name": "C", "password": PASSWORD}
-        )
+        created = client.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
         assert created.status_code == 201
         assert [s["owner_id"] for s in client.get("/api/sources").json()] == [created.json()["id"]]
         assert client.get("/api/assets").json()["items"][0]["id"] in (1, 2)
@@ -165,7 +163,7 @@ def test_remote_sources_are_admin_only_and_open_to_everyone_once_added(tmp_path:
         tmp_path / "data", integrations=IntegrationSettings(rclone_config=config)
     )
     with TestClient(create_app(settings), base_url=BASE) as admin:
-        admin.post("/api/setup", json={"username": "c", "display_name": "C", "password": PASSWORD})
+        admin.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
         lea = add_user(admin, "lea")
         assert lea.get("/api/remote-sources/remotes").status_code == 403
         assert admin.get("/api/remote-sources/remotes").json() == {"remotes": ["mega"]}

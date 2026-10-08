@@ -116,7 +116,7 @@ export type MockUser = {
 	display_name: string;
 	role: Role;
 	disabled: boolean;
-	password: string; // plain text: this is an in-memory mock, never a real store
+	pin: string; // plain text: this is an in-memory mock, never a real store
 };
 
 export type MockAlbum = {
@@ -228,21 +228,21 @@ export const SEED_USERS: Omit<MockUser, 'id'>[] = [
 		display_name: 'C',
 		role: 'admin',
 		disabled: false,
-		password: 'correct horse'
+		pin: '1234'
 	},
 	{
 		username: 'partner',
 		display_name: 'Partner',
 		role: 'member',
 		disabled: false,
-		password: 'battery staple'
+		pin: '2345'
 	},
 	{
 		username: 'guest',
 		display_name: 'Guest',
 		role: 'guest',
 		disabled: false,
-		password: 'guest password'
+		pin: '3456'
 	}
 ];
 

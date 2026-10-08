@@ -35,12 +35,13 @@ import type {
 	ImportRun,
 	Job,
 	JobStatus,
+	AccountName,
 	LoginBody,
 	MapPoint,
 	MlStatus,
 	NewDevice,
 	NewUser,
-	PasswordBody,
+	PinBody,
 	Person,
 	PrintedPdf,
 	PrintOptions,
@@ -185,7 +186,9 @@ export function createApi(options: ApiOptions = {}) {
 		login: (body: LoginBody) => request<User>('POST', '/api/auth/login', body),
 		logout: () => request<void>('POST', '/api/auth/logout'),
 		me: () => get<User>('/api/auth/me'),
-		changePassword: (body: PasswordBody) => request<void>('POST', '/api/auth/password', body),
+		/** Open: the active accounts, for the login screen to offer. */
+		loginAccounts: () => get<AccountName[]>('/api/auth/accounts'),
+		changePin: (body: PinBody) => request<void>('POST', '/api/auth/pin', body),
 
 		// users (admin)
 		users: () => get<User[]>('/api/users'),

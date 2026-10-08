@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { MIN_PASSWORD } from '$lib/api';
+	import { isPin, PIN_LENGTH } from '$lib/api';
 	import { api, notice, session, settings, type Density, type Theme } from '$lib/app.svelte';
 	import Devices from '$lib/components/Devices.svelte';
+	import { PIN_FIELD } from '$lib/pin';
 
 	let current = $state('');
 	let next = $state('');
@@ -15,19 +16,19 @@
 			.catch(() => undefined);
 	});
 
-	async function changePassword(event: SubmitEvent) {
+	async function changePin(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
-		if (next.length < MIN_PASSWORD) {
-			error = `Use at least ${MIN_PASSWORD} characters.`;
+		if (!isPin(next)) {
+			error = `Use exactly ${PIN_LENGTH} digits.`;
 			return;
 		}
 		try {
-			await api.changePassword({ current_password: current, new_password: next });
+			await api.changePin({ current_pin: current, new_pin: next });
 			current = next = '';
-			notice.show('Password changed.');
+			notice.show('PIN changed.');
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not change the password.';
+			error = e instanceof Error ? e.message : 'Could not change the PIN.';
 		}
 	}
 
@@ -88,25 +89,18 @@
 			{session.user?.display_name}
 			<span class="quiet">· {session.user?.username} · {session.user?.role}</span>
 		</p>
-		<form onsubmit={changePassword}>
+		<form onsubmit={changePin}>
 			<label
-				>Current password <input
-					type="password"
+				>Current PIN <input
+					{...PIN_FIELD}
 					bind:value={current}
-					autocomplete="current-password"
+					autocomplete="off"
 					required
 				/></label
 			>
-			<label
-				>New password <input
-					type="password"
-					bind:value={next}
-					autocomplete="new-password"
-					required
-				/></label
-			>
+			<label>New PIN <input {...PIN_FIELD} bind:value={next} autocomplete="off" required /></label>
 			{#if error}<p role="alert">{error}</p>{/if}
-			<button type="submit" class="primary">Change password</button>
+			<button type="submit" class="primary">Change PIN</button>
 		</form>
 		<button type="button" class="signout" onclick={() => session.signOut()}>Sign out</button>
 	</section>

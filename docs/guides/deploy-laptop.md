@@ -66,6 +66,9 @@ In **Admin → Folders**, set who may see each folder (everyone / chosen people)
 level (view, download, edit). Headless alternative: `uv run python -m photo_assistant create-user NAME --role admin`
 from `backend/`.
 
+Signing in: pick your name, type your 4-digit PIN. Forgot it? An admin sets a new one in
+**Admin → People → Reset PIN**; if the admin forgot theirs, run `just set-pin NAME` on the laptop.
+
 ## 4c. Optional: AI search and faces
 
 ```bash
