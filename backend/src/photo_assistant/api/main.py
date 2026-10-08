@@ -39,7 +39,7 @@ from photo_assistant.api.routes import (
 )
 from photo_assistant.api.security import CrossSiteGuard
 from photo_assistant.api.services import Services, build_services
-from photo_assistant.api.settings import Settings, get_settings
+from photo_assistant.api.settings import Settings, get_settings, warn_about_unknown_settings
 from photo_assistant.domain.errors import DomainError
 
 IMMUTABLE_BUILD = "public, max-age=31536000, immutable"
@@ -99,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings.data_root.expanduser(), settings.log_level)
+        warn_about_unknown_settings()
         services = build_services(settings)
         _install_services(app, services)
         services.repo.recover_interrupted_jobs()  # only the server owns the job queue
