@@ -37,6 +37,18 @@ SIGN_IN = "proton-drive auth login"
 # guesses at how an expired one reads, so that it still lands on the sign-in hint.
 _AUTH_HINTS = ("failed to load session", "auth login", "not logged in", "session expired")
 _LIST_TIMEOUT = 600.0
+_SLOW_ANSWER = "Proton Drive took too long to answer; try again later"
+_OUT_OF_TIME = (
+    "the pull took too long and was stopped; run it again to continue "
+    "(photos already pulled are kept)"
+)
+# Whole batches failing in a row before failed batches stop being taken apart: when Proton is
+# down, asking for every photo on its own only multiplies the failures.
+_SPLIT_LIMIT = 3
+
+
+class _PullStoppedError(SyncError):
+    """Nothing more can be pulled now (tool gone, out of time): asking again cannot help."""
 
 
 def find_binary(name: str) -> str:
@@ -54,6 +66,17 @@ class _Item:
     name: str
     remote: str  # the path the download command takes
     folder: PurePosixPath  # where it goes, relative to staging
+
+
+@dataclass(frozen=True, slots=True)
+class _Run:
+    """One pull: how to download, where to, until when, and its running count."""
+
+    verb: list[str]
+    staging: Path
+    prefix: str  # of the working folders beside staging
+    deadline: float
+    tally: "_Tally"
 
 
 @dataclass(slots=True)
@@ -143,11 +166,19 @@ class ProtonDrive:
         prefix = f".{staging.name}.fetching-"
         for stale in staging.parent.glob(f"{prefix}*"):  # left by a pull that was killed
             shutil.rmtree(stale, ignore_errors=True)
+        run = _Run(verb, staging, prefix, deadline, tally)
+        listing_problems, failed_in_a_row = len(tally.errors), 0
         for batch in _batches(wanted, self._batch):
-            done = self._fetch(verb, batch, staging, prefix, deadline, tally)
+            done = self._fetch(run, batch, split=failed_in_a_row < _SPLIT_LIMIT)
+            failed_in_a_row = 0 if done else failed_in_a_row + 1
             if done:
                 fetched.update(done)
                 _write_fetched(manifest, fetched)
+        if wanted and not tally.copied:
+            raise SyncError(
+                f"none of the {len(wanted)} new photos could be downloaded from Proton Drive "
+                f"({tally.errors[listing_problems]})"
+            )
         return tally.report()
 
     # --- what is there ----------------------------------------------------------------------
@@ -196,50 +227,32 @@ class ProtonDrive:
 
     # --- fetching ---------------------------------------------------------------------------
 
-    def _fetch(
-        self,
-        verb: list[str],
-        batch: Sequence[_Item],
-        staging: Path,
-        prefix: str,
-        deadline: float,
-        tally: _Tally,
-    ) -> list[str]:
+    def _fetch(self, run: _Run, batch: Sequence[_Item], split: bool) -> list[str]:
         """Download one batch and move it into staging; the uids that arrived."""
-        problem = self._download(verb, batch, staging, prefix, deadline, tally)
+        problem = self._download(run, batch)
         if problem is None:
             return [item.uid for item in batch]
-        if len(batch) == 1:
-            tally.errors.append(f"{batch[0].folder / batch[0].name}: {problem}")
+        if len(batch) == 1 or not split:
+            run.tally.errors.extend(f"{item.folder / item.name}: {problem}" for item in batch)
             return []
         done: list[str] = []  # which one failed? ask one at a time
         for item in batch:
-            done += self._fetch(verb, [item], staging, prefix, deadline, tally)
+            done += self._fetch(run, [item], split=False)
         return done
 
-    def _download(
-        self,
-        verb: list[str],
-        batch: Sequence[_Item],
-        staging: Path,
-        prefix: str,
-        deadline: float,
-        tally: _Tally,
-    ) -> str | None:
+    def _download(self, run: _Run, batch: Sequence[_Item]) -> str | None:
         """None when every file of the batch is now in staging, else what went wrong (and
         nothing of the batch was kept)."""
-        work = Path(tempfile.mkdtemp(prefix=prefix, dir=staging.parent))
+        staging, tally = run.staging, run.tally
+        work = Path(tempfile.mkdtemp(prefix=run.prefix, dir=staging.parent))
         try:
-            remaining = deadline - time.monotonic()
+            remaining = run.deadline - time.monotonic()
             if remaining <= 0:
-                raise SyncError(
-                    "the pull took too long and was stopped; run it again to continue "
-                    "(photos already pulled are kept)"
-                )
-            args = [*verb, *(item.remote for item in batch), str(work), "--json"]
+                raise _PullStoppedError(_OUT_OF_TIME)
+            args = [*run.verb, *(item.remote for item in batch), str(work), "--json"]
             try:
-                summary = json.loads(self._call(args, remaining))
-            except SyncAuthError:
+                summary = json.loads(self._call(args, remaining, out_of_time=_OUT_OF_TIME))
+            except (SyncAuthError, _PullStoppedError):
                 raise
             except (SyncError, json.JSONDecodeError) as exc:
                 return str(exc)
@@ -257,7 +270,9 @@ class ProtonDrive:
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
-    def _call(self, args: list[str], timeout: float, path: str = "") -> str:
+    def _call(
+        self, args: list[str], timeout: float, path: str = "", out_of_time: str = _SLOW_ANSWER
+    ) -> str:
         try:
             result = subprocess.run(  # an argument list, never a shell
                 [self._binary, *args],
@@ -268,11 +283,11 @@ class ProtonDrive:
                 env=os.environ | {"PROTON_DRIVE_LOG_LEVEL": "ERROR"},
             )
         except FileNotFoundError as exc:
-            raise SyncError(
+            raise _PullStoppedError(
                 "Proton Drive's tool (proton-drive) is not installed on this machine"
             ) from exc
         except subprocess.TimeoutExpired as exc:
-            raise SyncError("Proton Drive took too long to answer; try again later") from exc
+            raise _PullStoppedError(out_of_time) from exc
         if result.returncode == 0:
             return result.stdout
         text = result.stderr.strip() or f"proton-drive exited with code {result.returncode}"
