@@ -462,7 +462,8 @@ class SqliteRepository(
     def retry_job(self, job_id: int) -> bool:
         with self._lock:
             cur = self._conn.execute(
-                "UPDATE job SET status = 'queued', error = NULL WHERE id = ? AND status = 'failed'",
+                """UPDATE job SET status = 'queued', error = NULL, attempts = 0
+                   WHERE id = ? AND status = 'failed'""",
                 (job_id,),
             )
             return cur.rowcount > 0

@@ -13,7 +13,6 @@ from pathlib import Path
 
 from photo_assistant.app.print_job import (
     InvalidPagesError,
-    PrintBlockedError,
     PrintOptions,
     PrintPhoto,
     PrintPlan,
@@ -171,10 +170,8 @@ class AlbumPrinter:
         if planned.plan.blocked and not req.allow_low_resolution:
             raise AlbumPrintBlockedError(planned.issues)
         photos, options = self._options(album, req, full=True)
-        try:
-            result = print_album(photos, options, self._renderer_for(album.updated_at))
-        except PrintBlockedError as exc:
-            raise AlbumPrintBlockedError(_issues(album, exc.issues)) from exc
+        # the same photo sizes and options as the plan just checked: it cannot be blocked here
+        result = print_album(photos, options, self._renderer_for(album.updated_at))
         return result, _issues(album, result.issues)
 
     def preview(self, album: AlbumToPrint, req: PrintRequest, page: int, ppi: float) -> bytes:

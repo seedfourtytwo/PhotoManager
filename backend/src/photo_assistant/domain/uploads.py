@@ -62,7 +62,9 @@ def safe_upload_name(raw: str, sniffed_ext: str) -> str:
 
     If the name's extension is not a photo one, the sniffed extension is appended so the
     importer (which decides by extension) recognises the file."""
-    base = re.split(r"[\\/]", raw)[-1]
+    # half a character (a lone surrogate) cannot be stored as UTF-8: it becomes "?", then "_"
+    whole = raw.encode(errors="replace").decode()
+    base = re.split(r"[\\/]", whole)[-1]
     name = _UNSAFE.sub("_", _CONTROL.sub("", unicodedata.normalize("NFC", base)))
     name = name.strip().lstrip(".").strip()
     if not name:

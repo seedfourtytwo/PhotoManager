@@ -4,14 +4,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from photo_assistant.domain.library_paths import DATABASE_FILE, LIBRARY_FOLDERS
 from photo_assistant.domain.schedule import Schedule, parse_schedule, parse_window
 
 # What a backup contains, relative to the data root (FEATURES 9b.4). ``derived/`` (thumbnails,
 # previews) is rebuildable and skipped; ``db-snapshot/`` is a consistent copy of library.db
 # taken with SQLite's online backup API just before each run: the live .db is never copied.
 DB_SNAPSHOT_DIR = "db-snapshot"
-DB_SNAPSHOT_FILE = "library.db"
-BACKUP_FOLDERS = ("originals", "recipes", "config", "inbox", DB_SNAPSHOT_DIR)
+DB_SNAPSHOT_FILE = DATABASE_FILE
+BACKUP_FOLDERS = (*LIBRARY_FOLDERS, DB_SNAPSHOT_DIR)
 
 GB = 1000**3
 MB = 1000**2

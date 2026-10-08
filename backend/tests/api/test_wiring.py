@@ -77,6 +77,7 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
         "optimize database",
         "prune finished jobs",
         "prune old records",
+        "inbox rescan",
     ]
 
 
@@ -126,6 +127,31 @@ def test_housekeeping_prunes_the_tables_that_only_ever_grew(
     assert oldest["summary"]["skipped"] == 1, "the counts outlive the file list"
     newest = admin.get(f"/api/imports/{runs[-1]}").json()
     assert len(newest["items"]) == 1 and newest["summary"] == oldest["summary"]
+
+
+def test_housekeeping_rescans_upload_inboxes_without_piling_up(admin: TestClient) -> None:
+    """ARCHITECTURE "Phone inbox": a periodic rescan is the safety net for a lost scan job."""
+    from photo_assistant.app.upload import UploadOutcome, UploadResult
+
+    services = services_of(admin)
+    repo = services.repo
+    user = repo.list_users()[0]
+    stored = [UploadResult("a.jpg", UploadOutcome.STORED)]
+    first = services.integrations.upload.finish_batch(user.id, stored)
+    claimed = repo.claim_next_job(services.clock.now(), only={"scan_source"})
+    assert claimed is not None and claimed.id == first
+    repo.complete_job(claimed.id)  # that scan ran; a later file lost its own
+    repo.add_source("Pictures", "/somewhere/else")
+
+    def waiting() -> list[object]:
+        return [j["payload"] for j in repo.list_jobs("queued") if j["kind"] == "scan_source"]
+
+    assert waiting() == []
+    services.ops.periodic.tick()
+    assert waiting() == [claimed.payload], "the inbox only, not other sources"
+    services.ops.periodic._next_at["inbox rescan"] = 0.0  # due again
+    services.ops.periodic.tick()
+    assert len(waiting()) == 1, "never two scans of one inbox waiting"
 
 
 def test_an_m1_library_boots_and_its_sources_go_to_the_first_admin(tmp_path: Path) -> None:

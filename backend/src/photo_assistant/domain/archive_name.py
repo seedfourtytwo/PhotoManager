@@ -11,7 +11,8 @@ from photo_assistant.domain.library_filter import AssetFilter
 
 MAX_NAME_LENGTH = 100  # characters, ".zip" included
 _EXT = ".zip"
-_UNSAFE = re.compile(r"[\x00-\x1f\x7f/\\:*?\"<>|]")
+# not allowed in a file name on some system (control characters, path separators, Windows)
+UNSAFE_NAME_CHARS = re.compile(r"[\x00-\x1f\x7f/\\:*?\"<>|]")
 _NOT_WORD = re.compile(r"[\W_]+")
 
 
@@ -21,7 +22,7 @@ def _clip(stem: str, trim: str) -> str:
 
 def album_zip_name(title: str) -> str:
     """``<title>.zip``, made safe; ``album.zip`` when nothing usable is left."""
-    text = _UNSAFE.sub("_", unicodedata.normalize("NFC", title))
+    text = UNSAFE_NAME_CHARS.sub("_", unicodedata.normalize("NFC", title))
     text = " ".join(text.split()).strip(". ")
     if not text.strip("_"):
         text = "album"
@@ -93,4 +94,4 @@ def ascii_fallback(name: str) -> str:
             c for c in unicodedata.normalize("NFKD", char) if not unicodedata.combining(c)
         )
         out.append(plain if plain.isascii() and plain else "_")
-    return _UNSAFE.sub("_", "".join(out))
+    return UNSAFE_NAME_CHARS.sub("_", "".join(out))

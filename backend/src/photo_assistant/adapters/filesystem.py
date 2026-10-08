@@ -142,10 +142,13 @@ class DiskLibraryStore:
             raise ValueError(f"only library originals and derivatives can be removed: {path}")
         self.absolute(relative_path).unlink(missing_ok=True)
 
-    def remove_edited(self, content_hash: str) -> None:
-        folder = self.root / "derived" / "edited" / content_hash[:2]
-        for cached in folder.glob(f"{content_hash}-*.webp"):
-            cached.unlink(missing_ok=True)
+    def remove_renditions(self, content_hash: str) -> None:
+        """Delete every cached render of a photo's edits: edited previews and the
+        full-resolution print renditions (derived files only, never an original)."""
+        for kind, suffix in (("edited", "webp"), ("print", "jpg")):
+            folder = self.root / "derived" / kind / content_hash[:2]
+            for cached in folder.glob(f"{content_hash}-*.{suffix}"):
+                cached.unlink(missing_ok=True)
 
     def sweep_tmp(self) -> int:
         """Remove what a crash left half-written: copies and uploads (``*.partial``) and

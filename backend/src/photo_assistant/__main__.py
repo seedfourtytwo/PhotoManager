@@ -26,10 +26,15 @@ from photo_assistant.api.main import create_app
 from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.accounts import AccountError
-from photo_assistant.app.import_source import SourceUnavailableError
+from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB
+from photo_assistant.app.import_source import PREVIEW_JOB, SourceUnavailableError
 from photo_assistant.domain.access import PIN_LENGTH, Role
 from photo_assistant.domain.model import ImportReport, Outcome
 from photo_assistant.ports import ImportBusyError
+
+# What an import itself queues. Everything else in the queue (backups, scans of other
+# sources, ML) belongs to the server and stays there.
+_IMPORT_JOBS = frozenset({PREVIEW_JOB, GEOCODE_JOB, GROUP_JOB})
 
 
 def _serve() -> int:
@@ -105,10 +110,11 @@ def _import(folder: Path, label: str | None, show: int) -> int:
             return 1
         _print_report(run_id, report, show)
         services.enqueue_enrichment()
-        pending = services.repo.job_counts()["queued"]
+        queued = services.repo.list_jobs("queued")
+        pending = sum(job["kind"] in _IMPORT_JOBS for job in queued)
         if pending:
             print(f"\nMaking {pending} full-size previews …")
-            services.worker.run_until_idle()
+            services.worker.run_until_idle(only=_IMPORT_JOBS)
         print(f"\nDone. Report #{run_id}. Library now holds {services.repo.count_assets()} photos.")
         return 0
     finally:

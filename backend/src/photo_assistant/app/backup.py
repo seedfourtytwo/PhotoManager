@@ -126,7 +126,11 @@ class BackupService:
         queue: JobQueue | None = None,
         places: BackupPlaces | None = None,
         vault: KeyVault | None = None,
+        *,
+        database_integrity: Callable[[Path], str],
     ) -> None:
+        """``database_integrity``: the probe ``just doctor`` uses (SystemProbe): "ok", or what
+        is wrong with the SQLite file at that path."""
         if config.scratch_dir is not None and _inside(config.scratch_dir, config.data_root):
             raise ValueError("the restore-test folder must be outside the library")
         self._store = store
@@ -138,6 +142,7 @@ class BackupService:
         self._queue = queue
         self._places = places
         self._vault = vault
+        self._database_integrity = database_integrity
         self._lock = threading.Lock()  # one run at a time per process; restic locks the repo
 
     # --- targets ---------------------------------------------------------------------------
@@ -388,14 +393,28 @@ class BackupService:
         self._engine.ensure_repository(repo)
         self._snapshotter.snapshot(root / DB_SNAPSHOT_DIR / DB_SNAPSHOT_FILE)
         summary = self._engine.backup(repo, root, BACKUP_FOLDERS)
-        self._engine.forget(repo, target.retention)
+        # The snapshot exists from here on: trouble while tidying up (a locked repository, a
+        # network blip) is reported in the details, never as a failed backup.
+        problems = []
+        try:
+            self._engine.forget(repo, target.retention)
+        except (BackupError, OSError) as exc:
+            problems.append(f"pruning failed: {_message(exc)}")
+        repo_bytes = None
+        try:
+            repo_bytes = self._engine.repository_size(repo)
+        except (BackupError, OSError) as exc:
+            problems.append(f"measuring the backup failed: {_message(exc)}")
+        if problems:
+            log.warning("backup written, tidying up failed", extra={"target": target.label})
         return RunOutcome(
             BackupRunStatus.SUCCEEDED,
             snapshot_id=summary.snapshot_id,
             bytes_added=summary.bytes_added,
             files_new=summary.files_new,
             files_changed=summary.files_changed,
-            repo_bytes=self._engine.repository_size(repo),
+            repo_bytes=repo_bytes,
+            details="; ".join(["snapshot ok", *problems]) if problems else None,
         )
 
     # --- restore test (FEATURES 9b.8) ------------------------------------------------------
@@ -417,9 +436,13 @@ class BackupService:
 
     def _check_database(self, scratch: Path) -> RestoreCheck:
         restored = scratch / DB_SNAPSHOT_PATH
-        if restored.is_file() and restored.stat().st_size > 0:
-            return RestoreCheck(DB_SNAPSHOT_PATH, True)
-        return RestoreCheck(DB_SNAPSHOT_PATH, False, "database snapshot missing from the backup")
+        if not restored.is_file() or restored.stat().st_size == 0:
+            reason = "database snapshot missing from the backup"
+            return RestoreCheck(DB_SNAPSHOT_PATH, False, reason)
+        verdict = self._database_integrity(restored)
+        if verdict != "ok":
+            return RestoreCheck(DB_SNAPSHOT_PATH, False, f"database snapshot is damaged: {verdict}")
+        return RestoreCheck(DB_SNAPSHOT_PATH, True)
 
     def _check(self, scratch: Path, asset: AssetFile) -> RestoreCheck:
         restored = scratch / asset.library_path
@@ -439,17 +462,17 @@ class BackupService:
         last = self._store.last_run(target.id, RunKind.BACKUP)
         success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
         schedule = target.parsed_schedule
-        upcoming = None
-        if target.enabled:
-            upcoming = next_run(
-                schedule, self._last_attempt(target), parse_window(target.quiet_window)
-            )
+        window = parse_window(target.quiet_window)
+        upcoming = (
+            next_run(schedule, self._last_attempt(target), window) if target.enabled else None
+        )
         success_at = (success.finished_at or success.started_at) if success else None
         overdue = is_overdue(
             schedule,
             self._local(success_at) if success_at else None,
             self._local(target.created_at),
             now,
+            window,
         )
         test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven = self._store.last_run(target.id, RunKind.RESTORE_TEST, succeeded_only=True)
