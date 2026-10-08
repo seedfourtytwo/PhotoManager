@@ -272,3 +272,30 @@ test('album: a slow answer for the album you left does not replace the one you a
 	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
 	await expect(page.locator('.tile')).toHaveCount(0);
 });
+
+test('album: two quick moves reach the server in order, the last one last', async ({ page }) => {
+	// The first save is slow: unless the second waits for it, it lands first and is overwritten.
+	const arrived: number[][] = [];
+	let n = 0;
+	await page.route('**/api/albums/1/order', async (route) => {
+		if (++n === 1) await new Promise((r) => setTimeout(r, 600));
+		arrived.push(route.request().postDataJSON().asset_ids);
+		await route.continue();
+	});
+	await signIn(page, '/albums/1');
+	const tiles = page.locator('.tile');
+	const ids = async () =>
+		tiles.evaluateAll((all) => all.map((t) => Number(t.getAttribute('data-id'))));
+	const before = await ids();
+	await page.getByRole('button', { name: 'Arrange' }).click();
+	await tiles.first().focus();
+	await page.keyboard.press('Alt+ArrowRight');
+	await expect.poll(ids).toEqual([before[1], before[0], ...before.slice(2)]);
+	await page.keyboard.press('Alt+ArrowRight'); // while the first save is still on its way
+	const moved = [before[1], before[2], before[0], ...before.slice(3)];
+	await expect.poll(ids).toEqual(moved);
+	await expect.poll(() => arrived.length).toBe(2);
+	expect(arrived[1]).toEqual(moved);
+	await page.reload();
+	await expect.poll(ids).toEqual(moved);
+});

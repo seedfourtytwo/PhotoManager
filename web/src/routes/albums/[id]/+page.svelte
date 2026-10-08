@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
+	import { LatestWriter } from '$lib/latest';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
@@ -68,24 +69,25 @@
 		void load();
 	});
 
-	async function move(assetId: Id, to: number) {
+	// Each move saves the whole order, so saves go one at a time and only the newest waits.
+	// If one fails, the screen goes back to the order the server has.
+	const savedOrder = new LatestWriter<{ album: Id; ids: Id[] }>(
+		({ album, ids }) => api.reorderAlbum(album, ids),
+		(e) => {
+			notice.error(e);
+			void load();
+		}
+	);
+
+	function move(assetId: Id, to: number) {
 		const next = items.filter((a) => a.id !== assetId);
 		next.splice(
 			to,
 			0,
 			items.find((a) => a.id === assetId)!
 		);
-		const before = items;
 		items = next;
-		try {
-			await api.reorderAlbum(
-				id,
-				next.map((a) => a.id)
-			);
-		} catch (e) {
-			items = before;
-			notice.error(e);
-		}
+		void savedOrder.set({ album: id, ids: next.map((a) => a.id) });
 		// Keep keyboard focus on the moved photo.
 		queueMicrotask(() =>
 			document.querySelector<HTMLElement>(`.tile[data-id="${assetId}"]`)?.focus()
