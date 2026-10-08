@@ -1,13 +1,14 @@
 """One library database per process (B16, B26): every store shares ONE writer connection and
 ONE lock; reads use a read-only connection per thread (WAL), so they never wait for a write."""
 
+import sqlite3
 import threading
 from pathlib import Path
 
 import pytest
 
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
-from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_database import Database, NewerDatabaseError, migrations
 from photo_assistant.adapters.sqlite_integrations import SqliteAILog
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.ports.ai import AICall
@@ -95,3 +96,22 @@ def test_an_in_memory_database_uses_its_one_connection_for_everything() -> None:
     assert [j["kind"] for j in repo.list_jobs()] == ["x"]
     db.close()
     db.close()  # idempotent
+
+
+def test_a_database_from_a_newer_version_of_the_app_is_refused(tmp_path: Path) -> None:
+    """Opening it anyway would skip, forever, any later migration that reuses its number."""
+    path = tmp_path / "library.db"
+    Database.open(path).close()
+    newest = max(number for number, _ in migrations())
+    conn = sqlite3.connect(path)
+    conn.execute(f"PRAGMA user_version = {newest + 2}")
+    conn.close()
+    with pytest.raises(NewerDatabaseError) as refused:
+        Database.open(path, backup_dir=tmp_path / "backups")
+    message = str(refused.value)
+    assert f"version {newest + 2}" in message and f"version {newest}" in message
+    assert "update" in message.lower(), "it says what to do"
+    assert not (tmp_path / "backups").exists(), "nothing was touched"
+    conn = sqlite3.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == newest + 2
+    conn.close()

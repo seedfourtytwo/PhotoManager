@@ -34,6 +34,13 @@ def migrations() -> list[tuple[int, str]]:
     return sorted(found)
 
 
+class NewerDatabaseError(RuntimeError):
+    """The database was migrated by a newer version of the app than the one opening it.
+
+    Opening it anyway would run old code against a schema it does not know, and a later
+    migration that happens to reuse the database's number would be skipped forever."""
+
+
 def _snapshot(conn: sqlite3.Connection, backup_dir: Path, version: int) -> None:
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
@@ -54,7 +61,16 @@ def open_database(path: str | Path, backup_dir: Path | None = None) -> sqlite3.C
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA busy_timeout = 5000")
     current = conn.execute("PRAGMA user_version").fetchone()[0]
-    pending = [(n, sql) for n, sql in migrations() if n > current]
+    known = migrations()
+    newest = max((n for n, _ in known), default=0)
+    if current > newest:
+        conn.close()
+        raise NewerDatabaseError(
+            f"The library database at {path} is at version {current}, but this copy of Photo "
+            f"Assistant only knows up to version {newest}: a newer copy of the app has used "
+            "this library. Update Photo Assistant and start it again; nothing was changed."
+        )
+    pending = [(n, sql) for n, sql in known if n > current]
     if pending and existed and backup_dir is not None:
         _snapshot(conn, backup_dir, current)
     for number, sql in pending:
