@@ -5,7 +5,7 @@ handlers to merge into the Worker and the use cases the routes need. Nothing her
 model — that happens on first use, so the app starts fine without any model files.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,6 +29,7 @@ from photo_assistant.app.ml_jobs import (
 )
 from photo_assistant.app.people import People
 from photo_assistant.app.search import SemanticSearch, SimilarPhotos
+from photo_assistant.domain.tags import TagScore
 from photo_assistant.ports import Repository
 from photo_assistant.ports.ml import FaceAnalyzer, ModelStatus
 
@@ -72,6 +73,7 @@ def build_ml_services(
     repo: Repository,
     library: ImagePaths,
     db: Database | None = None,
+    on_tags: Callable[[int, Sequence[TagScore]], object] | None = None,
 ) -> MlServices:
     """``repo``/``library``: the app's Repository and LibraryStore; ``db``: the app's one
     Database (None: open the library database for this store alone, as tools do)."""
@@ -85,7 +87,7 @@ def build_ml_services(
         EMBED_CLIP: embed,
         DETECT_FACES: DetectFaces(repo, library, store, faces),
         CLUSTER_FACES: ClusterFaces(store, faces.name, ml.cluster_params()),
-        AUTO_TAG: AutoTag(embed, store, clip, ml.tag_params()),
+        AUTO_TAG: AutoTag(embed, store, clip, ml.tag_params(), on_tags=on_tags),
     }
     tasks = {EMBED_CLIP: clip.name, DETECT_FACES: faces.name, AUTO_TAG: clip.name}
     model_of = {EMBED_CLIP: clip, AUTO_TAG: clip, DETECT_FACES: faces}

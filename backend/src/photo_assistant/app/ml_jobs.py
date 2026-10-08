@@ -16,6 +16,7 @@ from photo_assistant.domain.tags import (
     VOCABULARY,
     TagModel,
     TagParams,
+    TagScore,
     TagSpec,
     build_tag_model,
     is_screen_or_document,
@@ -171,9 +172,12 @@ class AutoTag:
         text: TextEmbedder,
         params: TagParams,
         vocabulary: Sequence[TagSpec] = VOCABULARY,
+        on_tags: Callable[[int, Sequence[TagScore]], object] | None = None,
     ) -> None:
+        """``on_tags``: told each photo's tags once, best first (the review check)."""
         self._embed, self._store, self._text = embed, store, text
         self._params, self._vocabulary = params, vocabulary
+        self._on_tags = on_tags
         self._tag_model: TagModel | None = None
 
     def __call__(self, payload: dict[str, object]) -> None:
@@ -208,6 +212,8 @@ class AutoTag:
         tags = zero_shot_tags(vector, tag_model, self._params)
         flag = is_screen_or_document(tags, self._vocabulary)
         self._store.replace_model_tags(asset_id, model, tags, flag)
+        if self._on_tags is not None:
+            self._on_tags(asset_id, tags)
         self._store.set_task_status(asset_id, AUTO_TAG, model, TaskStatus.DONE)
 
 

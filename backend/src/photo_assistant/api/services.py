@@ -33,6 +33,7 @@ from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, Gr
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
+from photo_assistant.app.review import Review
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.worker import Lanes
@@ -51,6 +52,7 @@ class Services:
     clock: SystemClock
     downloads: Downloads
     trash: Trash
+    review: Review
     integrations: Integrations
     ml: MlServices
     ops: OpsServices
@@ -100,6 +102,7 @@ def build_services(settings: Settings) -> Services:
         ),
     )
     trash = Trash(repo, store, clock)
+    review = Review(repo, clock)
     integrations = build_integrations(
         data_root=root,
         settings=settings.integrations,
@@ -108,7 +111,7 @@ def build_services(settings: Settings) -> Services:
         importer=importer,
         clock=clock,
     )
-    ml = build_ml_services(root, settings.ml, repo, store, db)
+    ml = build_ml_services(root, settings.ml, repo, store, db, on_tags=review.hold_clutter)
 
     def scan(payload: dict[str, object]) -> object:
         # rclone sources are pulled into staging/ first; every kind is then imported
@@ -161,7 +164,9 @@ def build_services(settings: Settings) -> Services:
             ),
             SCAN_JOB_KIND: scan,  # one handler: pulls rclone sources, then imports any kind
             GEOCODE_JOB: GeocodeAssets(repo, OfflineGeocoder()),
-            GROUP_JOB: GroupSimilar(repo, ImageHashPhash(), lambda rel: store.absolute(rel)),
+            GROUP_JOB: GroupSimilar(
+                repo, ImageHashPhash(), lambda rel: store.absolute(rel), review=review
+            ),
             PURGE_JOB: trash.purge_expired,
             RENDER_EDIT_JOB: editor.render_edits,
             **ml.handlers,
@@ -191,6 +196,7 @@ def build_services(settings: Settings) -> Services:
         clock,
         downloads,
         trash,
+        review,
         integrations,
         ml,
         ops,

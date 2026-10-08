@@ -46,7 +46,8 @@ class EnrichMixin(SqliteBase):
 
     def shots(self) -> list[Shot]:
         rows = self._all(
-            "SELECT id, taken_at, camera_model, phash FROM asset WHERE trashed_at IS NULL"
+            """SELECT id, taken_at, camera_model, phash FROM asset
+               WHERE trashed_at IS NULL AND held_reason IS NULL"""
         )
         return [
             Shot(int(r["id"]), datetime.fromisoformat(r["taken_at"]), r["camera_model"], r["phash"])
@@ -54,7 +55,9 @@ class EnrichMixin(SqliteBase):
         ]
 
     def shot_times(self) -> list[tuple[int, datetime]]:
-        rows = self._all("SELECT id, taken_at FROM asset WHERE trashed_at IS NULL")
+        rows = self._all(
+            "SELECT id, taken_at FROM asset WHERE trashed_at IS NULL AND held_reason IS NULL"
+        )
         return [(int(r["id"]), datetime.fromisoformat(r["taken_at"])) for r in rows]
 
     def shots_in(self, runs: Sequence[tuple[datetime, datetime]]) -> list[Shot]:
@@ -62,7 +65,8 @@ class EnrichMixin(SqliteBase):
         for start, end in runs:  # each range walks the timeline index
             rows = self._all(
                 """SELECT id, taken_at, camera_model, phash FROM asset
-                   WHERE trashed_at IS NULL AND taken_at BETWEEN ? AND ?""",
+                   WHERE trashed_at IS NULL AND held_reason IS NULL
+                     AND taken_at BETWEEN ? AND ?""",
                 (start.isoformat(), end.isoformat()),
             )
             found += [
@@ -84,4 +88,9 @@ class EnrichMixin(SqliteBase):
                     "UPDATE asset SET group_id = ? WHERE id = ? AND group_id IS NOT ?",
                     (group_id, asset_id, group_id),
                 ).rowcount
+            # a photo held for review is in no group (it rejoins one when it is kept)
+            self._conn.execute(
+                """UPDATE asset SET group_id = NULL
+                   WHERE held_reason IS NOT NULL AND group_id IS NOT NULL"""
+            )
         return changed
