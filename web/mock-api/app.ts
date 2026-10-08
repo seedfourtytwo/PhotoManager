@@ -579,6 +579,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/jobs$/,
 			(ctx) => {
+				admin(ctx);
 				const status = ctx.url.searchParams.get('status');
 				return ok(
 					state.jobs
@@ -800,18 +801,27 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		[
 			'GET',
 			/^\/api\/sources$/,
-			(ctx) =>
-				ok(
-					state.sources.map((s) => ({
-						...s,
-						// v1.2: paths only for admins; a folder that has gone says so.
-						path: ctx.user?.role === 'admin' ? s.path : null,
-						problem: s.path.includes('gone') ? 'folder not found' : null,
-						asset_count: state.assets.filter(
-							(a) => a.trashed_at === null && a.sources.some((o) => o.source_id === s.id)
-						).length
-					}))
-				)
+			(ctx) => {
+				// Like the server: an admin sees every source; anyone else their own and those
+				// shared with them or with everyone, each with the photos they can see.
+				const user = me(ctx);
+				const shared = (id: number) => {
+					const access = state.access.get(id);
+					return !!access && (access.everyone !== null || access.users.some((u) => u.user_id === user.id)); // prettier-ignore
+				};
+				return ok(
+					state.sources
+						.filter((s) => user.role === 'admin' || s.owner_id === user.id || shared(s.id))
+						.map((s) => ({
+							...s,
+							// v1.2: paths only for admins; a folder that has gone says so.
+							path: user.role === 'admin' ? s.path : null,
+							problem: s.path.includes('gone') ? 'folder not found' : null,
+							asset_count: visible(user).filter((a) => a.sources.some((o) => o.source_id === s.id))
+								.length
+						}))
+				);
+			}
 		],
 		[
 			'POST',
@@ -820,10 +830,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const user = admin(ctx);
 				const body = requireFields<{ label: string; path: string }>(ctx.body, ['label', 'path']);
 				if (!body.label.trim()) throw new HttpError(422, 'Give the source a name.');
+				// Statuses and sentences as in routes/sources.py.
 				if (!body.path.startsWith('/'))
-					throw new HttpError(400, 'Use an absolute folder path, like /home/c/Pictures.');
+					throw new HttpError(422, 'give the full path of the folder, starting with /');
 				if (body.path.includes('missing'))
-					throw new HttpError(400, `Folder not found: ${body.path}`);
+					throw new HttpError(422, `folder not found on this machine: ${body.path}`);
+				const same = (path: string) => path.replace(/\/+$/, '') === body.path.replace(/\/+$/, '');
+				if (state.sources.some((s) => same(s.path)))
+					throw new HttpError(409, `folder is already a source: ${body.path}`);
 				const source = {
 					id: state.nextId.source++,
 					label: body.label,
@@ -876,6 +890,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/sources\/(\d+)\/access$/,
 			(ctx) => {
+				admin(ctx);
 				const access = state.access.get(idParam(ctx));
 				if (!access) throw new HttpError(404, 'Source not found.');
 				return ok(access);
@@ -896,6 +911,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/imports$/,
 			(ctx) => {
+				admin(ctx);
 				const sourceId = ctx.url.searchParams.get('source_id');
 				return ok(
 					state.reports
@@ -908,6 +924,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/imports\/(\d+)$/,
 			(ctx) => {
+				admin(ctx);
 				const report = state.reports.find((r) => r.id === idParam(ctx));
 				if (!report) throw new HttpError(404, 'Import run not found.');
 				const outcome = ctx.url.searchParams.get('outcome');
