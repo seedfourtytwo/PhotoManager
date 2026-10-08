@@ -265,6 +265,12 @@ PrintRequest = {trim: "a4-landscape", theme: "quiet", cover: true, crop_marks: f
 Unknown trim, theme or layout, or a page whose photo count doesn't fit its layout: `422`.
 Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop marks).
 
+## Folders of the server (admin)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/folders` | `path?` (default: the home folder) | Admin. `{path, parent?, folders: [{name, path}], truncated, roots: [{label, path}], source_problem?}`: the sub-folders of one folder on the server, to pick one. Hidden folders and the library's own folder are never listed; `422` with the reason for a path that is not absolute, has control characters, is missing or unreadable, or is inside the library. `source_problem` says why this folder can't be added as a source |
+
 ## Backups (admin)
 
 | Method | Path | Body | Response |

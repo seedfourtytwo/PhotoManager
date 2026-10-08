@@ -345,6 +345,17 @@ export type BackupTarget = {
 	/** Drives the warning banner. */
 	needs_attention: boolean;
 };
+/** The sub-folders of one folder on the server (admin), to pick a folder without typing. */
+export type FolderListing = {
+	path: string;
+	parent: string | null;
+	folders: { name: string; path: string }[];
+	truncated: boolean;
+	/** Places to start from: the home folder, plugged-in disks. */
+	roots: { label: string; path: string }[];
+	/** Why this folder can't be added as a source, or null. */
+	source_problem: string | null;
+};
 export type BackupDisk = { path: string; label: string; free_bytes: number };
 export type BackupPlaces = { library_bytes: number; disks: BackupDisk[]; remotes: string[] };
 /** `place`: a folder path, or `rclone:<remote>:<folder>`. */

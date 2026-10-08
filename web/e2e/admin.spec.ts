@@ -15,11 +15,22 @@ test('admin adds a folder, sees the import progress and every skip/failure reaso
 	await expectAccessible(page);
 	await page.getByRole('button', { name: 'Add folder' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+	const folder = dialog.getByLabel('Folder', { exact: true });
+	// It opens on the home folder, which holds the library: that one can't be added.
+	await expect(dialog.getByRole('alert')).toContainText('contains the photo library');
+	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeDisabled();
+	await folder.fill('/home/c/missing');
+	await folder.press('Enter');
+	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);
+	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeDisabled();
+	// No typing needed: back to the start, then open the folder by clicking it.
+	await dialog.getByRole('button', { name: 'Home' }).click();
+	await dialog.getByRole('button', { name: /^scans$/i }).click();
+	await expect(folder).toHaveValue(SCANS);
+	await expect(dialog.getByLabel('Name')).toHaveValue(SCANS.split('/').pop()!);
+	await expect(dialog.getByRole('alert')).toHaveCount(0);
+	await expectAccessible(page);
 	await dialog.getByLabel('Name').fill('Scans');
-	await dialog.getByLabel('Folder path on the server').fill('/home/c/missing');
-	await dialog.getByRole('button', { name: 'Add and import' }).click();
-	await expect(dialog.getByRole('alert')).toContainText('Folder not found');
-	await dialog.getByLabel('Folder path on the server').fill(SCANS);
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 
 	await expect(page.getByText(/working: \d running, \d queued/)).toBeVisible();
@@ -72,8 +83,10 @@ test('a scan of a folder that has gone says “folder not found” on the folder
 	test.skip(REAL_BACKEND, 'the mock simulates a disk that was unplugged');
 	await page.getByRole('button', { name: 'Add folder' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+	await dialog.getByLabel('Folder', { exact: true }).fill('/media/usb-gone');
+	await dialog.getByLabel('Folder', { exact: true }).press('Enter');
+	await expect(dialog.getByLabel('Name')).toHaveValue('usb-gone');
 	await dialog.getByLabel('Name').fill('USB disk');
-	await dialog.getByLabel('Folder path on the server').fill('/media/usb-gone');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 	const row = page.getByRole('listitem').filter({ hasText: 'USB disk' });
 	await expect(row.getByText(/last import failed: folder not found/i)).toBeVisible({
@@ -88,7 +101,7 @@ test('a scan of a folder that has gone says “folder not found” on the folder
 test('import progress is live while a scan runs', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'timing of the mock’s scan');
 	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await row.getByRole('button', { name: 'Scan' }).click();
+	await row.getByRole('button', { name: 'Check again' }).click();
 	await expect(row.getByText(/importing · \d+ files? so far/)).toBeVisible({ timeout: 5000 });
 	await expect(row.getByText(/last import\s+6\s+new/)).toBeVisible({ timeout: 10_000 });
 });
@@ -140,11 +153,12 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 
 	await dialog.getByLabel('Another folder').check();
 	await expect(dialog.getByRole('alert')).toHaveCount(0); // the verdict was about the other place
-	await expect(dialog.getByRole('button', { name: 'Check this place' })).toBeDisabled();
-	await dialog.getByRole('textbox', { name: 'Folder' }).fill('/media/c/Unplugged');
+	await expect(dialog.getByRole('button', { name: 'Pictures' })).toBeVisible(); // the home folder
+	await dialog.getByRole('textbox', { name: 'Folder' }).fill('/media/c/missing-disk');
+	await dialog.getByRole('textbox', { name: 'Folder' }).press('Enter');
+	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);
 	await dialog.getByLabel('Name').fill('Old disk');
-	await dialog.getByRole('button', { name: 'Check this place' }).click();
-	await expect(dialog.getByRole('alert')).toContainText('is the disk plugged in?');
+	await expect(dialog.getByRole('button', { name: 'Check this place' })).toBeDisabled();
 
 	await dialog.getByLabel(/USB disk/).check();
 	await expect(dialog.getByLabel('Name')).toHaveValue('USB disk');

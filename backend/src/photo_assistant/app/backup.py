@@ -174,6 +174,10 @@ class BackupService:
         found = self._need_places()
         return found.disks(), found.remotes()
 
+    def disks(self) -> list[Disk]:
+        """Plugged-in external disks (also the starting points when browsing for a folder)."""
+        return self._need_places().disks()
+
     def library_bytes(self) -> int:
         return self._store.library_bytes()
 
