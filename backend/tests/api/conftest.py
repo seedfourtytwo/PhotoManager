@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from photo_assistant.api.main import create_app
 from photo_assistant.api.services import Services
@@ -88,6 +89,12 @@ def asset_id_of(client: TestClient, source_id: int, relative_path: str) -> int:
     found = services_of(client).repo.asset_id_for_source_path(source_id, relative_path)
     assert found is not None, relative_path
     return found
+
+
+def refusal(response: Response) -> tuple[int, object]:
+    """Status and body of a refused request: both are the contract (the web app shows the
+    sentence), so tests compare them whole."""
+    return response.status_code, response.json()
 
 
 def user_id_of(admin: TestClient, username: str) -> int:

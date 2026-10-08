@@ -188,3 +188,37 @@ def test_a_folder_is_not_made_with_a_bad_name_or_in_a_bad_place(
     )
     assert refused.status_code == code, refused.text
     assert not any(call[:2] == ["filesystem", "create-folder"] for call in world.cloud.calls())
+
+
+BAD_PLACE = "choose the Photos section (/photos) or a folder in My files (/my-files/...)"
+
+
+def test_proton_refusals_say_why(world: World) -> None:
+    def folders(path: str) -> tuple[int, object]:
+        listed = world.client.get("/api/proton/folders", params={"path": path}, headers=ADMIN)
+        return listed.status_code, listed.json()
+
+    def new_folder(parent: str, name: str) -> tuple[int, object]:
+        body = {"parent": parent, "name": name}
+        made = world.client.post("/api/proton/folders", json=body, headers=ADMIN)
+        return made.status_code, made.json()
+
+    def source(path: str) -> tuple[int, object]:
+        body = {"label": "x", "path": path}
+        added = world.client.post("/api/proton/sources", json=body, headers=ADMIN)
+        return added.status_code, added.json()
+
+    missing = (404, {"detail": "folder '/my-files/Nope' not found on Proton Drive"})
+    assert folders("/photos") == (
+        422,
+        {"detail": "the Photos section has no folders to choose from"},
+    )
+    assert folders("/trash") == (422, {"detail": BAD_PLACE})
+    assert folders("/my-files/Nope") == missing
+    assert new_folder("/photos", "x") == (422, {"detail": "folders can only be made in My files"})
+    assert new_folder("/trash", "x") == (422, {"detail": BAD_PLACE})
+    assert new_folder("/my-files", " ") == (422, {"detail": "give the new folder a name"})
+    assert new_folder("/my-files", "Trips") == (422, {"detail": "'Trips' already exists there"})
+    assert new_folder("/my-files/Nope", "x") == missing
+    assert source("/trash") == (422, {"detail": BAD_PLACE})
+    assert source("/my-files/Nope") == missing

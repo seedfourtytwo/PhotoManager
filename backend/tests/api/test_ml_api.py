@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from photo_assistant.app.search import SemanticSearch, SimilarPhotos
 from photo_assistant.domain.faces import BoundingBox, Face
-from tests.api.conftest import add_user, asset_id_of, import_folder, services_of
+from tests.api.conftest import add_user, asset_id_of, import_folder, refusal, services_of
 from tests.ml.fakes import FakeClip
 from tests.ml.test_face_adapters import buffalo
 from tests.ml.test_onnx_clip import make_clip_folder
@@ -196,6 +196,38 @@ def test_guests_cannot_change_people(admin: TestClient, library: dict[str, int])
     gus = add_user(admin, "gus", "guest")
     assert gus.patch("/api/people/1", json={"name": "x"}).status_code == 403
     assert gus.post("/api/people/split", json={"face_ids": [1]}).status_code == 403
+
+
+def test_search_and_similar_refusals_say_why(admin: TestClient, library: dict[str, int]) -> None:
+    impossible = admin.get("/api/search", params={"q": "date:2023-02-30"})
+    assert refusal(impossible) == (400, {"detail": "date:2023-02-30 is not a real date"})
+    _install_fake_clip(admin, {library["beach"]: (1.0, 0.0, 0.0)})
+    waiting = admin.get(f"/api/assets/{library['garden']}/similar")
+    assert refusal(waiting) == (409, {"detail": "this photo has not been analysed yet"})
+
+
+def test_people_refusals_say_why(admin: TestClient, library: dict[str, int]) -> None:
+    store = services_of(admin).ml.store
+    face = Face(BoundingBox(0.1, 0.1, 0.2, 0.2), 0.9, ((0.5, 0.5),) * 5, (1.0, 0.0, 0.0))
+    (face_id,) = store.replace_faces(library["beach"], "f", [face])
+    lea = store.create_person(face_id)
+    nobody = (404, {"detail": "no person 99"})
+    assert refusal(admin.get("/api/people/99")) == nobody
+    assert refusal(admin.patch("/api/people/99", json={"name": "x"})) == nobody
+    assert refusal(admin.get("/api/people/99/assets")) == nobody
+    assert refusal(admin.post("/api/people/99/merge", json={"source_ids": [lea]})) == nobody
+    assert refusal(admin.post(f"/api/people/{lea}/merge", json={"source_ids": [99]})) == nobody
+    itself = admin.post(f"/api/people/{lea}/merge", json={"source_ids": [lea]})
+    assert refusal(itself) == (422, {"detail": "cannot merge a person into itself"})
+
+    split = "/api/people/split"
+    none = admin.post(split, json={"face_ids": []})
+    assert refusal(none) == (422, {"detail": "choose at least one face to move"})
+    stranger = admin.post(split, json={"face_ids": [999]})
+    assert refusal(stranger) == (404, {"detail": "no face 999"})
+    assert refusal(admin.post(split, json={"face_ids": [face_id], "person_id": 99})) == nobody
+    long_name = admin.post(split, json={"face_ids": [face_id], "name": "x" * 101})
+    assert refusal(long_name) == (422, {"detail": "name too long (max 100 characters)"})
 
 
 def test_preview_jobs_plan_ml_analysis_after_import_only_with_models(

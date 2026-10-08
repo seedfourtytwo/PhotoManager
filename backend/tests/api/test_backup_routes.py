@@ -15,7 +15,9 @@ from photo_assistant.api.ops_services import OpsServices, build_ops_services
 from photo_assistant.api.routes import backup
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.access import Role, User
+from photo_assistant.domain.backup import NewBackupTarget
 from photo_assistant.ports.backup import RepositoryMirror
+from tests.api.conftest import refusal
 from tests.proton_cloud import Cloud
 
 pytestmark = [
@@ -382,3 +384,155 @@ def test_without_proton_on_the_server_the_copy_cannot_be_switched_on(env: Env) -
         f"/api/backups/{target['id']}/proton-copy", json={"path": "/my-files/Backups"}
     )
     assert refused.status_code == 422 and "not available" in refused.json()["detail"]
+
+
+# --- what a refused request says (status and sentence are the contract) ------------------------
+
+BAD_SCHEDULE = (
+    "unknown schedule 'sometimes': use 'manual', 'hourly', 'daily HH:MM' or 'weekly sun HH:MM'"
+)
+
+
+def test_adding_a_target_by_hand_says_why_it_is_refused(env: Env) -> None:
+    _add(env)
+
+    def add(**changes: object) -> tuple[int, object]:
+        body = {"label": "B", "repository": "/x", "password_file": str(env.password)} | changes
+        return refusal(env.client.post("/api/backups", json=body))
+
+    assert add(label="Disk") == (409, {"detail": "a backup target named 'Disk' already exists"})
+    assert add(schedule="sometimes") == (422, {"detail": BAD_SCHEDULE})
+    assert add(quiet_window="night") == (
+        422,
+        {"detail": "quiet window 'night' must look like 22:00-06:00"},
+    )
+    assert add(label="  ") == (422, {"detail": "a backup target needs a name"})
+    assert add(repository=" ") == (422, {"detail": "a backup target needs a repository location"})
+    assert add(repository="relative") == (
+        422,
+        {"detail": "a local backup location must be an absolute path"},
+    )
+    assert add(repository=str(env.root / "b")) == (
+        422,
+        {"detail": "a backup cannot live inside the library, or contain it"},
+    )
+    assert add(retention={"daily": 0, "weekly": 0, "monthly": 0}) == (
+        422,
+        {"detail": "retention must keep at least one snapshot and no negative counts"},
+    )
+    assert add(password_file="/root/.ssh/id_ed25519") == (
+        422,
+        {
+            "detail": "the password file must be a key file in this app's key folder; for a "
+            "file elsewhere on the server use the command line (just backup add)"
+        },
+    )
+
+
+def test_a_guided_setup_says_why_it_is_refused(env: Env) -> None:
+    def set_up(**changes: object) -> tuple[int, object]:
+        body = {"label": "USB", "place": str(env.disk)} | changes
+        return refusal(env.client.post("/api/backups/setup", json=body))
+
+    assert set_up(place=str(env.root)) == (
+        422,
+        {"detail": "a backup cannot live inside the library, or contain it"},
+    )
+    assert set_up(place="relative") == (
+        422,
+        {"detail": "a local backup location must be an absolute path"},
+    )
+    assert set_up(place="rclone:nowhere") == (
+        422,
+        {"detail": "a cloud location looks like rclone:<name>:<folder>"},
+    )
+    assert set_up(schedule="sometimes") == (422, {"detail": BAD_SCHEDULE})
+    assert set_up(label="  ") == (422, {"detail": "a backup target needs a name"})
+    assert env.client.post(
+        "/api/backups/setup", json={"label": "USB", "place": str(env.disk)}
+    ).is_success
+    other = env.disk / "other"
+    other.mkdir()
+    assert set_up(place=str(other)) == (
+        409,
+        {"detail": "a backup target named 'USB' already exists"},
+    )
+
+
+def test_changing_a_target_says_why_it_is_refused(env: Env) -> None:
+    target = _add(env)
+
+    def patch(**changes: object) -> tuple[int, object]:
+        return refusal(env.client.patch(f"/api/backups/{target['id']}", json=changes))
+
+    assert patch(schedule="sometimes") == (422, {"detail": BAD_SCHEDULE})
+    assert patch(schedule=None) == (
+        422,
+        {"detail": "the schedule can't be empty: use 'manual' to pause it"},
+    )
+    assert patch(quiet_window="22:00-22:00") == (
+        422,
+        {"detail": "quiet window '22:00-22:00' is empty: start and end are the same"},
+    )
+    assert patch(retention={"daily": 0, "weekly": 0, "monthly": 0}) == (
+        422,
+        {"detail": "retention must keep at least one snapshot and no negative counts"},
+    )
+
+
+def test_unknown_targets_and_unreadable_keys_say_so(env: Env) -> None:
+    unknown = (404, {"detail": "backup target not found"})
+    assert refusal(env.client.get("/api/backups/99/recovery")) == unknown
+    assert refusal(env.client.patch("/api/backups/99", json={"enabled": False})) == unknown
+    assert refusal(env.client.post("/api/backups/99/run")) == unknown
+    assert refusal(env.client.get("/api/backups/99/runs")) == unknown
+    created = env.client.post("/api/backups/setup", json={"label": "USB", "place": str(env.disk)})
+    (key_file,) = env.keys.iterdir()
+    key_file.unlink()
+    lost = env.client.get(f"/api/backups/{created.json()['target']['id']}/recovery")
+    assert refusal(lost) == (
+        409,
+        {
+            "detail": f"the key file is gone: {key_file} "
+            "(the saved recovery key still opens the backup)"
+        },
+    )
+    elsewhere = env.keys.parent / "elsewhere.pw"
+    elsewhere.write_text("pw\n")
+    by_hand = env.ops.backup.add_target(
+        NewBackupTarget("CLI", str(env.disk / "cli"), str(elsewhere))
+    )
+    hidden = env.client.get(f"/api/backups/{by_hand.id}/recovery")
+    assert refusal(hidden) == (
+        409,
+        {
+            "detail": "this backup's password file was chosen on the command line, so it is "
+            f"not shown here: read {elsewhere} on the server"
+        },
+    )
+
+
+def test_the_proton_copy_says_why_it_is_refused(proton: tuple[Env, Cloud]) -> None:
+    env, _ = proton
+    target = _add(env)
+    refused = env.client.put(f"/api/backups/{target['id']}/proton-copy", json={"path": "/photos"})
+    assert refusal(refused) == (422, {"detail": "choose a folder in My files on Proton Drive"})
+    cloud_target = _add(env, label="Cloud", repository="rclone:mega:photos")
+    remote = env.client.put(
+        f"/api/backups/{cloud_target['id']}/proton-copy", json={"path": "/my-files/Backups"}
+    )
+    assert refusal(remote) == (
+        422,
+        {"detail": "only a backup in a folder or disk of this machine can be copied"},
+    )
+
+
+def test_without_proton_the_copy_says_it_is_not_available(env: Env) -> None:
+    target = _add(env)
+    refused = env.client.put(
+        f"/api/backups/{target['id']}/proton-copy", json={"path": "/my-files/Backups"}
+    )
+    assert refusal(refused) == (
+        422,
+        {"detail": "a copy on Proton Drive is not available on this machine"},
+    )
