@@ -34,7 +34,9 @@ class LibraryFiles(Protocol):
         """Delete a library original or derivative (never anything else)."""
         ...
 
-    def remove_edited(self, content_hash: str) -> None: ...
+    def remove_renditions(self, content_hash: str) -> None:
+        """Delete the photo's cached edited previews and print renditions."""
+        ...
 
 
 class Trash:
@@ -72,6 +74,6 @@ class Trash:
             for relative in (asset.library_path, asset.thumb_path, asset.preview_path):
                 if relative:
                     self._files.remove(relative)
-            self._files.remove_edited(asset.content_hash)
+            self._files.remove_renditions(asset.content_hash)
             purged += 1
         return purged

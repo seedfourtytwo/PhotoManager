@@ -45,6 +45,9 @@ def library_photo(repo: SqliteRepository, store: DiskLibraryStore, n: int) -> in
     edited = store.absolute(f"derived/edited/{asset.content_hash[:2]}/{asset.content_hash}-k.webp")
     edited.parent.mkdir(parents=True, exist_ok=True)
     edited.write_bytes(b"e")
+    printed = store.absolute(f"derived/print/{asset.content_hash[:2]}/{asset.content_hash}-k.jpg")
+    printed.parent.mkdir(parents=True, exist_ok=True)
+    printed.write_bytes(b"p")
     repo.set_thumbnail(asset_id, RenderedImage(f"derived/thumb/{n}.webp", 1, 1))
     repo.set_preview(asset_id, RenderedImage(f"derived/preview/{n}.webp", 1, 1))
     return asset_id
@@ -79,6 +82,7 @@ def test_purge_removes_library_copy_and_derivatives_and_remembers_the_hash(world
     assert not store.absolute("derived/thumb/1.webp").exists()
     assert not store.absolute("derived/preview/1.webp").exists()
     assert not list(store.absolute("derived/edited").rglob("*.webp"))
+    assert not list(store.absolute("derived/print").rglob("*.jpg")), "print renditions go too"
     assert repo.get_asset(a) is None
     assert repo.is_purged_hash(asset.content_hash)
     assert repo.trashed_views(ADMIN) == []
