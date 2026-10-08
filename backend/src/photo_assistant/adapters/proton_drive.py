@@ -371,5 +371,8 @@ def _read_fetched(manifest: Path) -> set[str]:
 
 def _write_fetched(manifest: Path, fetched: set[str]) -> None:
     draft = manifest.with_name(manifest.name + ".new")
-    draft.write_text(json.dumps({"fetched": sorted(fetched)}))
+    with draft.open("w") as handle:
+        handle.write(json.dumps({"fetched": sorted(fetched)}))
+        handle.flush()
+        os.fsync(handle.fileno())  # on the disk before it replaces the list it extends
     draft.replace(manifest)
