@@ -9,11 +9,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.remote_source import RemoteConfig
 
 
 class SyncError(RuntimeError):
-    """The pull failed; the message says what happened and what to do."""
+    """The pull failed; the message says what happened and what to do.
+
+    Not a DomainError: most of what makes a pull fail may pass (the network, a slow provider),
+    and the worker retries a job that fails for one. The routes that talk to a remote give
+    these their status themselves."""
 
 
 class SyncAuthError(SyncError):
@@ -26,6 +31,11 @@ class SyncNotFoundError(SyncError):
 
 class SyncRateLimitedError(SyncError):
     """The provider is throttling us (MEGA does this under heavy use)."""
+
+
+class SyncToolMissingError(SyncError, UnavailableError):
+    """The tool that pulls (rclone, proton-drive) is not installed. Waiting does not install
+    it, so this one is a DomainError as well: the worker fails the job at once."""
 
 
 @dataclass(frozen=True, slots=True)

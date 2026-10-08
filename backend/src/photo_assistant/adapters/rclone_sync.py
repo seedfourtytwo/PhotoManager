@@ -29,6 +29,7 @@ from photo_assistant.ports.sync import (
     SyncOptions,
     SyncRateLimitedError,
     SyncReport,
+    SyncToolMissingError,
 )
 
 _ANSWER_TIMEOUT = 30.0  # for questions about rclone's own config
@@ -188,7 +189,7 @@ class RcloneSync:
         try:
             return read_remotes(self._binary, self._config)
         except ToolMissingError as exc:
-            raise SyncError(_NOT_INSTALLED) from exc
+            raise SyncToolMissingError(_NOT_INSTALLED) from exc
         except ToolTimeoutError as exc:
             raise SyncError("rclone took too long to list its remotes; try again") from exc
 
@@ -196,7 +197,7 @@ class RcloneSync:
         try:
             return run_tool(args, timeout=timeout)
         except ToolMissingError as exc:
-            raise SyncError(_NOT_INSTALLED) from exc
+            raise SyncToolMissingError(_NOT_INSTALLED) from exc
         except ToolTimeoutError as exc:
             raise SyncError(
                 f"the pull took longer than {timeout / 3600:.1f} h and was stopped; run it "

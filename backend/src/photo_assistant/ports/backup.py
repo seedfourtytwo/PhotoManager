@@ -16,7 +16,7 @@ from photo_assistant.domain.backup import (
     RunOutcome,
     TargetSettings,
 )
-from photo_assistant.domain.errors import ConflictError
+from photo_assistant.domain.errors import ConflictError, UnavailableError
 
 
 class BackupTargetExistsError(ConflictError, ValueError):
@@ -49,8 +49,8 @@ class RepositoryLockedError(BackupError):
     pass
 
 
-class BackupToolMissingError(BackupError):
-    pass
+class BackupToolMissingError(BackupError, UnavailableError):
+    """restic is not installed: waiting does not install it."""
 
 
 class IncompleteBackupError(BackupError):

@@ -39,6 +39,7 @@ from photo_assistant.domain.backup import (
     restore_proof_due,
     size_text,
 )
+from photo_assistant.domain.errors import NotFoundError
 from photo_assistant.domain.library_paths import nested_or_same
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.domain.schedule import is_due, is_overdue, next_run, parse_window
@@ -75,7 +76,7 @@ RCLONE_PREFIX = "rclone:"
 Handler = Callable[[dict[str, object]], object]
 
 
-class UnknownTargetError(LookupError):
+class UnknownTargetError(NotFoundError):
     pass
 
 
