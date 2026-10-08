@@ -4,9 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
-from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.enrich import GeocodeAssets, GroupSimilar
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
@@ -29,11 +27,6 @@ class FakeGeocoder:
 class FakeHasher:
     def phash(self, image: Path) -> str:
         return "0000000000000000" if "similar" in image.name else "ffffffffffffffff"
-
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(Database.open(":memory:"))
 
 
 def test_geocoding_fills_places_in_batches(repo: SqliteRepository) -> None:

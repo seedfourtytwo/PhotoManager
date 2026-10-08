@@ -35,11 +35,6 @@ def db() -> Iterator[Database]:
     database.close()
 
 
-@pytest.fixture
-def conn(db: Database) -> sqlite3.Connection:
-    return db.writer
-
-
 def test_ai_calls_are_logged_as_json_summaries(db: Database, conn: sqlite3.Connection) -> None:
     log = SqliteAILog(db)
     log.record(

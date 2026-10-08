@@ -1,6 +1,6 @@
 """Accounts use case: setup, login, sessions, rate limit, user admin (FEATURES 8.1, 11.10)."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -18,7 +18,7 @@ from photo_assistant.app.accounts import (
 )
 from photo_assistant.domain import errors
 from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, Role
-from tests.factories import NOW
+from tests.fakes import FakeClock
 
 GOOD = "1234"
 IP = "10.0.0.1"
@@ -32,26 +32,8 @@ class FakeHasher:
         return password_hash == f"hashed:{password}"
 
 
-class MovableClock:
-    def __init__(self) -> None:
-        self.at = NOW
-
-    def now(self) -> datetime:
-        return self.at
-
-
 @pytest.fixture
-def clock() -> MovableClock:
-    return MovableClock()
-
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(Database.open(":memory:"))
-
-
-@pytest.fixture
-def accounts(repo: SqliteRepository, clock: MovableClock) -> Accounts:
+def accounts(repo: SqliteRepository, clock: FakeClock) -> Accounts:
     return Accounts(repo, FakeHasher(), clock)
 
 
@@ -86,7 +68,7 @@ def test_pins_are_hashed_and_checked(accounts: Accounts, repo: SqliteRepository)
 
 
 def test_ten_wrong_pins_in_fifteen_minutes_block_the_account_from_every_address(
-    accounts: Accounts, clock: MovableClock
+    accounts: Accounts, clock: FakeClock
 ) -> None:
     accounts.setup("c", "C", GOOD)
     for n in range(10):
@@ -122,7 +104,7 @@ def test_an_admin_unlock_lifts_the_wait_for_that_account_only(accounts: Accounts
 
 
 def test_sessions_expire_after_thirty_idle_days_and_use_keeps_them_alive(
-    accounts: Accounts, clock: MovableClock
+    accounts: Accounts, clock: FakeClock
 ) -> None:
     _, token = accounts.setup("c", "C", GOOD)
     clock.at += timedelta(days=20)
@@ -258,7 +240,7 @@ def _race(*calls: object) -> list[BaseException | None]:
 
 def test_concurrent_first_run_setups_create_exactly_one_admin(tmp_path) -> None:  # type: ignore[no-untyped-def]
     repo = SqliteRepository(Database.open(tmp_path / "library.db"))
-    accounts = Accounts(RacingStore(repo, 3), FakeHasher(), MovableClock())  # type: ignore[arg-type]
+    accounts = Accounts(RacingStore(repo, 3), FakeHasher(), FakeClock())  # type: ignore[arg-type]
     outcomes = _race(*(lambda n=n: accounts.setup(f"admin{n}", "A", GOOD) for n in range(3)))
     assert repo.count_users() == 1
     assert sum(o is None for o in outcomes) == 1
@@ -267,10 +249,10 @@ def test_concurrent_first_run_setups_create_exactly_one_admin(tmp_path) -> None:
 
 def test_two_admins_demoting_each_other_at_once_leave_one_admin(tmp_path) -> None:  # type: ignore[no-untyped-def]
     repo = SqliteRepository(Database.open(tmp_path / "library.db"))
-    plain = Accounts(repo, FakeHasher(), MovableClock())
+    plain = Accounts(repo, FakeHasher(), FakeClock())
     a, _ = plain.setup("a", "A", GOOD)
     b = plain.create_user("b", "B", GOOD, Role.ADMIN)
-    racing = Accounts(RacingStore(repo, 2), FakeHasher(), MovableClock())  # type: ignore[arg-type]
+    racing = Accounts(RacingStore(repo, 2), FakeHasher(), FakeClock())  # type: ignore[arg-type]
     outcomes = _race(
         lambda: racing.update_user(a.id, UserPatch(role=Role.MEMBER)),
         lambda: racing.update_user(b.id, UserPatch(disabled=True)),
@@ -283,7 +265,7 @@ def test_two_admins_demoting_each_other_at_once_leave_one_admin(tmp_path) -> Non
 
 
 def test_wrong_current_pins_count_as_failed_logins_and_block_like_them(
-    accounts: Accounts, clock: MovableClock
+    accounts: Accounts, clock: FakeClock
 ) -> None:
     user, token = accounts.setup("c", "C", GOOD)
     for _ in range(10):
@@ -337,7 +319,7 @@ class SlowCountingHasher(FakeHasher):
 def test_parallel_wrong_pins_cannot_get_more_guesses_than_the_limit(tmp_path) -> None:  # type: ignore[no-untyped-def]
     repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     hasher = SlowCountingHasher()
-    accounts = Accounts(repo, hasher, MovableClock())
+    accounts = Accounts(repo, hasher, FakeClock())
     accounts.setup("c", "C", GOOD)
     outcomes = _race(*(lambda n=n: accounts.login("c", f"{n:04d}", IP) for n in range(40)))
     assert hasher.verified == 10, "the limit is ten guesses, however they arrive"
@@ -347,7 +329,7 @@ def test_parallel_wrong_pins_cannot_get_more_guesses_than_the_limit(tmp_path) ->
 
 
 def test_an_unknown_user_name_is_refused_without_hashing_or_leaving_a_row(
-    repo: SqliteRepository, clock: MovableClock
+    repo: SqliteRepository, clock: FakeClock
 ) -> None:
     hasher = SlowCountingHasher()
     accounts = Accounts(repo, hasher, clock)
@@ -364,7 +346,7 @@ def test_an_unknown_user_name_is_refused_without_hashing_or_leaving_a_row(
 WINDOW = FAILED_LOGIN_WINDOW + timedelta(seconds=1)
 
 
-def _guess_wrong(accounts: Accounts, clock: MovableClock, username: str, times: int) -> None:
+def _guess_wrong(accounts: Accounts, clock: FakeClock, username: str, times: int) -> None:
     """Wrong PINs, each from another address, waiting out the 15-minute block when it comes."""
     for n in range(times):
         try:
@@ -382,7 +364,7 @@ def _locked(accounts: Accounts, username: str) -> bool:
 
 
 def test_thirty_wrong_pins_lock_the_account_until_someone_unlocks_it(
-    accounts: Accounts, clock: MovableClock
+    accounts: Accounts, clock: FakeClock
 ) -> None:
     accounts.setup("c", "C", GOOD)
     lea = accounts.create_user("lea", "Léa", GOOD, Role.MEMBER)
@@ -402,7 +384,7 @@ def test_thirty_wrong_pins_lock_the_account_until_someone_unlocks_it(
 
 
 def test_a_locked_account_refuses_wrong_pins_without_checking_them(
-    repo: SqliteRepository, clock: MovableClock
+    repo: SqliteRepository, clock: FakeClock
 ) -> None:
     hasher = SlowCountingHasher()
     accounts = Accounts(repo, hasher, clock)
@@ -415,7 +397,7 @@ def test_a_locked_account_refuses_wrong_pins_without_checking_them(
     assert hasher.verified == 30, "a locked account gives no more guesses"
 
 
-def test_the_lock_outlives_a_restart_and_the_daily_pruning(tmp_path, clock: MovableClock) -> None:  # type: ignore[no-untyped-def]
+def test_the_lock_outlives_a_restart_and_the_daily_pruning(tmp_path, clock: FakeClock) -> None:  # type: ignore[no-untyped-def]
     repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     accounts = Accounts(repo, FakeHasher(), clock)
     accounts.setup("c", "C", GOOD)
@@ -430,7 +412,7 @@ def test_the_lock_outlives_a_restart_and_the_daily_pruning(tmp_path, clock: Mova
         restarted.login("c", GOOD, IP)
 
 
-def test_a_good_sign_in_starts_the_count_again(accounts: Accounts, clock: MovableClock) -> None:
+def test_a_good_sign_in_starts_the_count_again(accounts: Accounts, clock: FakeClock) -> None:
     accounts.setup("c", "C", GOOD)
     _guess_wrong(accounts, clock, "c", 29)
     clock.at += WINDOW
@@ -441,7 +423,7 @@ def test_a_good_sign_in_starts_the_count_again(accounts: Accounts, clock: Movabl
 
 
 def test_a_new_pin_from_an_admin_or_the_command_line_lifts_the_lock(
-    accounts: Accounts, clock: MovableClock
+    accounts: Accounts, clock: FakeClock
 ) -> None:
     admin, _ = accounts.setup("c", "C", GOOD)
     lea = accounts.create_user("lea", "Léa", GOOD, Role.MEMBER)
@@ -456,9 +438,7 @@ def test_a_new_pin_from_an_admin_or_the_command_line_lifts_the_lock(
     assert admin.id != lea.id
 
 
-def test_changes_other_than_the_pin_leave_the_lock_on(
-    accounts: Accounts, clock: MovableClock
-) -> None:
+def test_changes_other_than_the_pin_leave_the_lock_on(accounts: Accounts, clock: FakeClock) -> None:
     accounts.setup("c", "C", GOOD)
     lea = accounts.create_user("lea", "Léa", GOOD, Role.MEMBER)
     _guess_wrong(accounts, clock, "lea", 30)
@@ -466,7 +446,7 @@ def test_changes_other_than_the_pin_leave_the_lock_on(
 
 
 def test_wrong_current_pins_count_towards_the_lock_too(
-    accounts: Accounts, clock: MovableClock
+    accounts: Accounts, clock: FakeClock
 ) -> None:
     user, token = accounts.setup("c", "C", GOOD)
     _guess_wrong(accounts, clock, "c", 25)
@@ -483,7 +463,7 @@ def test_wrong_current_pins_count_towards_the_lock_too(
 
 def test_parallel_wrong_pins_cannot_get_past_the_lock(tmp_path) -> None:  # type: ignore[no-untyped-def]
     repo = SqliteRepository(Database.open(tmp_path / "library.db"))
-    hasher, clock = SlowCountingHasher(), MovableClock()
+    hasher, clock = SlowCountingHasher(), FakeClock()
     accounts = Accounts(repo, hasher, clock)
     accounts.setup("c", "C", GOOD)
     _guess_wrong(accounts, clock, "c", 27)
@@ -497,7 +477,7 @@ def test_parallel_wrong_pins_cannot_get_past_the_lock(tmp_path) -> None:  # type
     assert _locked(accounts, "c")
 
 
-def test_a_disabled_account_gets_no_free_guesses(accounts: Accounts, clock: MovableClock) -> None:
+def test_a_disabled_account_gets_no_free_guesses(accounts: Accounts, clock: FakeClock) -> None:
     accounts.setup("c", "C", GOOD)
     lea = accounts.create_user("lea", "Léa", GOOD, Role.MEMBER)
     accounts.update_user(lea.id, UserPatch(disabled=True))
@@ -526,7 +506,7 @@ class MiscountingStore:
 
 
 def test_a_refused_patch_changes_neither_the_pin_nor_the_sessions(
-    repo: SqliteRepository, clock: MovableClock
+    repo: SqliteRepository, clock: FakeClock
 ) -> None:
     accounts = Accounts(MiscountingStore(repo), FakeHasher(), clock)  # type: ignore[arg-type]
     admin, token = accounts.setup("c", "C", GOOD)

@@ -4,29 +4,12 @@ per-file rows of old import runs."""
 import sqlite3
 from datetime import timedelta
 
-import pytest
-
 from photo_assistant.adapters.sqlite_integrations import SqliteAILog
 from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.domain.access import Role
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
 from photo_assistant.ports.ai import AICall
 from tests.factories import NOW
-
-
-@pytest.fixture
-def db() -> Database:
-    return Database.open(":memory:")
-
-
-@pytest.fixture
-def conn(db: Database) -> sqlite3.Connection:
-    return db.writer
-
-
-@pytest.fixture
-def repo(db: Database) -> SqliteRepository:
-    return SqliteRepository(db)
 
 
 def _count(conn: sqlite3.Connection, table: str) -> int:

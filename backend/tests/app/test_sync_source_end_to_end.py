@@ -2,7 +2,6 @@
 
 import shutil
 from collections.abc import Iterator
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -19,17 +18,12 @@ from photo_assistant.app.sync_source import SyncSource, add_remote_source
 from photo_assistant.domain.model import Outcome
 from photo_assistant.ports.sync import SyncOptions
 from tests.conftest import snapshot_tree
-from tests.factories import NOW
+from tests.fakes import FakeClock
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone not installed"),
 ]
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @pytest.fixture
@@ -55,7 +49,7 @@ def test_pull_then_import_leaves_the_remote_untouched(
         metadata=exiftool,
         renderer=VipsRenderer(),
         store=store,
-        clock=FixedClock(),
+        clock=FakeClock(),
         settings=ImportSettings(min_free_bytes=0),
     )
     remotes, sync = SqliteRemoteSources(db), RcloneSync(config_path=config)
@@ -65,7 +59,7 @@ def test_pull_then_import_leaves_the_remote_untouched(
         sync=sync,
         importer=importer,
         reports=repo,
-        clock=FixedClock(),
+        clock=FakeClock(),
         staging_root=data / "staging",
         options=SyncOptions(tpslimit=0),
     )

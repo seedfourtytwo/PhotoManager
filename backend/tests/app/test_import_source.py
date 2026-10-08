@@ -22,15 +22,10 @@ from photo_assistant.app.import_source import ImportSettings, ImportSource, Sour
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.model import Outcome, RunStatus
 from photo_assistant.ports import ImportBusyError
-from tests.factories import NOW
+from tests.fakes import FakeClock
 from tests.fixtures.expected import DUPLICATE, FAILED, IGNORED, IMPORTED, SKIPPED, TOTAL_FILES
 
 pytestmark = pytest.mark.integration
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @dataclass
@@ -58,7 +53,7 @@ def make_world(data: Path, exiftool: ExifToolReader, **settings: int) -> World:
         metadata=exiftool,
         renderer=VipsRenderer(),
         store=store,
-        clock=FixedClock(),
+        clock=FakeClock(),
         settings=ImportSettings(**settings),
     )
     return World(repo, store, importer, data)

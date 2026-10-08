@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.domain.access import Role
 from tests.factories import NOW, new_asset
 
@@ -19,11 +19,6 @@ class CountingList(list[int]):
     def __iter__(self) -> Iterator[int]:
         self.walks += 1
         return super().__iter__()
-
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(Database.open(":memory:"))
 
 
 @pytest.fixture

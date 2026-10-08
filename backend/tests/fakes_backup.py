@@ -259,14 +259,6 @@ class FakeQueue:
         return len(self.jobs)
 
 
-class SteppingClock:
-    def __init__(self, start: datetime) -> None:
-        self.current = start
-
-    def now(self) -> datetime:
-        return self.current
-
-
 class FakeMirror:
     """Remembers what it was asked to copy where; fails on demand."""
 

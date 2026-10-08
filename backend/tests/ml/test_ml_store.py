@@ -17,26 +17,6 @@ from tests.factories import NOW, new_asset
 M = "test-model"
 
 
-@pytest.fixture
-def db() -> Database:
-    return Database.open(":memory:")
-
-
-@pytest.fixture
-def conn(db: Database) -> sqlite3.Connection:
-    return db.writer
-
-
-@pytest.fixture
-def repo(db: Database) -> SqliteRepository:
-    return SqliteRepository(db)
-
-
-@pytest.fixture
-def store(db: Database) -> SqliteMlStore:
-    return SqliteMlStore(db)
-
-
 def assets(repo: SqliteRepository, n: int) -> list[int]:
     return [repo.add_asset(new_asset(i), NOW) for i in range(1, n + 1)]
 

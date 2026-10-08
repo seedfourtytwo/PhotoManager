@@ -6,7 +6,6 @@ admin). Device tokens go through the same single auth dependency (api/deps.py).
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -20,16 +19,12 @@ from photo_assistant.api.main import create_app
 from photo_assistant.api.settings import IntegrationSettings
 from tests.api.conftest import BASE, PIN, make_settings, refusal, services_of
 from tests.factories import NOW, new_asset
+from tests.fakes import FakeClock
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "photos"
 JPEG = (FIXTURES / "IMG_1002.JPG").read_bytes()
 PNG = (FIXTURES / "grey-1x1.png").read_bytes()
 MONTH = "2026-09"
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @dataclass
@@ -56,7 +51,7 @@ def world(tmp_path: Path) -> Iterator[World]:
             assert other.post("/api/auth/login", json={"username": f"u{n}", "pin": PIN})
             sessions[n] = other.cookies[SESSION_COOKIE]
         services = services_of(admin)
-        services.integrations.upload._clock = FixedClock()  # type: ignore[attr-defined]
+        services.integrations.upload._clock = FakeClock()  # type: ignore[attr-defined]
         yield World(
             TestClient(app, base_url=BASE),
             services.repo,

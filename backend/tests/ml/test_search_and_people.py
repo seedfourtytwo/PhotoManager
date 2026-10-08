@@ -1,12 +1,11 @@
 """Semantic search, similar photos and people use cases — always within the visible set."""
 
 import math
-import sqlite3
 
 import pytest
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
-from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.people import FaceNotFoundError, People, PersonNotFoundError
 from photo_assistant.app.search import (
     NotIndexedError,
@@ -18,26 +17,6 @@ from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.vectors import Vector
 from tests.factories import NOW, new_asset
 from tests.ml.fakes import FakeClip
-
-
-@pytest.fixture
-def db() -> Database:
-    return Database.open(":memory:")
-
-
-@pytest.fixture
-def conn(db: Database) -> sqlite3.Connection:
-    return db.writer
-
-
-@pytest.fixture
-def repo(db: Database) -> SqliteRepository:
-    return SqliteRepository(db)
-
-
-@pytest.fixture
-def store(db: Database) -> SqliteMlStore:
-    return SqliteMlStore(db)
 
 
 def angle(deg: float) -> Vector:

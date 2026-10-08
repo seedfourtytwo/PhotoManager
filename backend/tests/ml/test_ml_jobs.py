@@ -2,13 +2,12 @@
 
 import math
 import random
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
-from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.ml_jobs import (
     AUTO_TAG,
     CLUSTER_FACES,
@@ -28,26 +27,6 @@ from photo_assistant.domain.vectors import Vector
 from photo_assistant.ports import RenderedImage
 from tests.factories import NOW, new_asset
 from tests.ml.fakes import FakeClip, FakeFaces, FakeLibrary
-
-
-@pytest.fixture
-def db() -> Database:
-    return Database.open(":memory:")
-
-
-@pytest.fixture
-def conn(db: Database) -> sqlite3.Connection:
-    return db.writer
-
-
-@pytest.fixture
-def repo(db: Database) -> SqliteRepository:
-    return SqliteRepository(db)
-
-
-@pytest.fixture
-def store(db: Database) -> SqliteMlStore:
-    return SqliteMlStore(db)
 
 
 @pytest.fixture

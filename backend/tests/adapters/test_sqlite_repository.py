@@ -17,12 +17,6 @@ from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports import Fingerprint, RenderedImage
 from tests.factories import NOW, new_asset
 
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(Database.open(":memory:"))
-
-
 # --- migrations ----------------------------------------------------------------------------
 
 

@@ -14,11 +14,6 @@ from tests.factories import NOW, new_asset
 MINUTE = timedelta(minutes=1)
 
 
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(Database.open(":memory:"))
-
-
 def _row(repo: SqliteRepository, job_id: int) -> sqlite3.Row:
     row = repo._conn.execute("SELECT * FROM job WHERE id = ?", (job_id,)).fetchone()
     assert row is not None

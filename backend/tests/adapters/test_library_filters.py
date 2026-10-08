@@ -7,25 +7,10 @@ from datetime import datetime, timedelta
 import pytest
 
 from photo_assistant.adapters.sqlite_library import ORDER, filter_sql, from_sql, visibility
-from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
 from tests.factories import NOW, new_asset
-
-
-@pytest.fixture
-def db() -> Database:
-    return Database.open(":memory:")
-
-
-@pytest.fixture
-def conn(db: Database) -> sqlite3.Connection:
-    return db.writer
-
-
-@pytest.fixture
-def repo(db: Database) -> SqliteRepository:
-    return SqliteRepository(db)
 
 
 @pytest.fixture
