@@ -89,4 +89,49 @@ describe('ShareDialog', () => {
 		expect(sent.some((s) => s.url === '/api/users')).toBe(false);
 		session.user = null;
 	});
+
+	it('cannot save before the current members are in, nor when they failed to load', async () => {
+		const { default: ShareDialog } = await import('./ShareDialog.svelte');
+		let release = () => {};
+		const held = new Promise<void>((resolve) => (release = resolve));
+		const sent: string[] = [];
+		const json = (body: unknown, status = 200) =>
+			new Response(JSON.stringify(body), {
+				status,
+				headers: { 'content-type': 'application/json' }
+			});
+		let fail = false;
+		vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = String(input);
+			sent.push(`${init?.method ?? 'GET'} ${url}`);
+			if (url === '/api/users/directory')
+				return json([
+					{ id: 2, display_name: 'Lea' },
+					{ id: 3, display_name: 'Tom' }
+				]);
+			if (fail) return json({ detail: 'The server is busy.' }, 503);
+			await held;
+			return json([{ user_id: 3, role: 'editor' }]);
+		});
+		const first = render(ShareDialog, { albumId: 9, ownerId: 1, onclose: () => {} });
+		const save = page.getByRole('button', { name: 'Save' });
+		await expect.element(page.getByRole('status')).toHaveTextContent('Loading…');
+		await expect.element(save).toBeDisabled();
+		await expect.element(page.getByText('Only you, for now.')).not.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('combobox', { name: 'Person to add' }))
+			.not.toBeInTheDocument();
+		release();
+		await expect
+			.element(page.getByRole('combobox', { name: 'Role for Tom' }))
+			.toHaveValue('editor');
+		await expect.element(save).toBeEnabled();
+		first.unmount();
+
+		fail = true;
+		render(ShareDialog, { albumId: 9, ownerId: 1, onclose: () => {} });
+		await expect.element(page.getByRole('alert')).toHaveTextContent(/Could not load/);
+		await expect.element(save).toBeDisabled();
+		expect(sent.some((s) => s.startsWith('PUT'))).toBe(false);
+	});
 });

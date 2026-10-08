@@ -75,6 +75,47 @@ test('share an album with another person', async ({ page }) => {
 	]);
 });
 
+test('share on a slow link: nothing can be saved until the current members are in', async ({
+	page
+}) => {
+	let release = () => {};
+	const held = new Promise<void>((resolve) => (release = resolve));
+	await page.route('**/api/albums/*/members', async (route) => {
+		if (route.request().method() === 'GET') await held;
+		await route.fallback();
+	});
+	await page.goto('/albums');
+	await page.getByRole('link', { name: /Summers at the house/ }).click();
+	await page.getByRole('button', { name: 'Share' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Share album' });
+	await expect(dialog.getByRole('status')).toHaveText('Loading…');
+	await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+	await expect(dialog.getByLabel('Person to add')).toHaveCount(0);
+	release();
+	await dialog.getByLabel('Person to add').selectOption({ label: 'Guest' });
+	await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/members'));
+	await dialog.getByRole('button', { name: 'Save' }).click();
+	// Partner, who was already a member, is still in what gets saved.
+	expect((await put).postDataJSON()).toEqual([
+		{ user_id: 2, role: 'editor' },
+		{ user_id: 3, role: 'viewer' }
+	]);
+});
+
+test('share when the members cannot be loaded: it says so and Save stays off', async ({ page }) => {
+	await page.route('**/api/albums/*/members', (route) =>
+		route.fulfill({ status: 503, json: { detail: 'The library is busy; try again.' } })
+	);
+	await page.goto('/albums');
+	await page.getByRole('link', { name: /Summers at the house/ }).click();
+	await page.getByRole('button', { name: 'Share' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Share album' });
+	await expect(dialog.getByRole('alert')).toContainText('Could not load who this album is shared');
+	await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+	await expect(dialog.getByLabel('Person to add')).toHaveCount(0);
+});
+
 test('remove from album, then Undo puts the photos back where they were', async ({ page }) => {
 	await page.goto('/albums/1');
 	const tiles = page.locator('.tile');
