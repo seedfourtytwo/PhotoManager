@@ -16,6 +16,7 @@ from photo_assistant.api.deps import admin_user
 from photo_assistant.api.integrations import Integrations, build_integrations
 from photo_assistant.api.routes import proton, remote_sources
 from photo_assistant.api.settings import IntegrationSettings
+from tests.api.conftest import answer_domain_errors
 from tests.api.test_remote_sources_api import ADMIN, StubImporter, _admin_from_header
 from tests.proton_cloud import Cloud
 
@@ -43,6 +44,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
     repo = SqliteRepository(conn)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
+    answer_domain_errors(app)
     app.include_router(proton.router)
     app.include_router(remote_sources.router)
     integrations = build_integrations(

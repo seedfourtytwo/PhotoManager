@@ -17,6 +17,7 @@ from photo_assistant.api.routes import remote_sources
 from photo_assistant.api.settings import IntegrationSettings
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.model import ImportReport, RunStatus
+from tests.api.conftest import answer_domain_errors
 
 pytestmark = pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone not installed")
 ADMIN = {"X-Test-User": "1"}
@@ -50,6 +51,7 @@ def world(tmp_path: Path) -> Iterator[World]:
     repo = SqliteRepository(conn)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
+    answer_domain_errors(app)
     app.include_router(remote_sources.router)
     integrations = build_integrations(
         data_root=tmp_path / "data",

@@ -17,7 +17,7 @@ from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.backup import NewBackupTarget
 from photo_assistant.ports.backup import RepositoryMirror
-from tests.api.conftest import refusal
+from tests.api.conftest import answer_domain_errors, refusal
 from tests.proton_cloud import Cloud
 
 pytestmark = [
@@ -41,6 +41,7 @@ class Env:
         self.disk = tmp_path / "disk"
         self.disk.mkdir()
         app = FastAPI()
+        answer_domain_errors(app)
         # core's admin check (session + role) is covered in test_wiring.py
         app.dependency_overrides[admin_user] = lambda: User(1, "c", "C", Role.ADMIN)
         app.state.services = SimpleNamespace(ops=self.ops)

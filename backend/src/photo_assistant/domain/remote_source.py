@@ -12,6 +12,8 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from photo_assistant.domain.errors import InvalidError
+
 # rclone: letters, digits, _ - . + @ and space; not starting with - or space.
 _REMOTE_NAME = re.compile(r"^[\w.+@][\w.+@ -]{0,63}$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -23,7 +25,7 @@ PROTON_PHOTOS = "/photos"
 PROTON_FILES = "/my-files"
 
 
-class RemoteConfigError(ValueError):
+class RemoteConfigError(InvalidError):
     """The remote source settings are not usable; the message says what to fix."""
 
 

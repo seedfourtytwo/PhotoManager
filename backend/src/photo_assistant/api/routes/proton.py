@@ -37,9 +37,9 @@ class ProtonSourceOut(BaseModel):
     path: str
 
 
-def _failure(exc: Exception) -> HTTPException:
-    if isinstance(exc, RemoteConfigError):
-        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+def _failure(exc: SyncError) -> HTTPException:
+    """Proton could not do it. Sync errors stay outside the DomainError hierarchy (a pull that
+    fails for one of them is retried by the worker), so the route gives them their status."""
     if isinstance(exc, SyncNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
     return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))
@@ -62,7 +62,7 @@ def folders(path: str, integrations: IntegrationsDep) -> ProtonFolders:
             raise RemoteConfigError("the Photos section has no folders to choose from")
         RemoteConfig.proton(path)
         return ProtonFolders(path=path, folders=integrations.proton.folders(path))
-    except (RemoteConfigError, SyncError) as exc:
+    except SyncError as exc:
         raise _failure(exc) from exc
 
 
@@ -76,7 +76,7 @@ def create_folder(body: NewProtonFolder, integrations: IntegrationsDep) -> Proto
     """Make a new, empty folder in My files (a place for a backup copy) and show it."""
     try:
         path = create_proton_folder(integrations.proton, body.parent, body.name)
-    except (RemoteConfigError, SyncError) as exc:
+    except SyncError as exc:
         raise _failure(exc) from exc
     return ProtonFolders(path=path, folders=[])
 
@@ -92,6 +92,6 @@ def add(body: ProtonSourceIn, integrations: IntegrationsDep, admin: AdminUser) -
             body.path,
             admin.id,
         )
-    except (RemoteConfigError, SyncError) as exc:
+    except SyncError as exc:
         raise _failure(exc) from exc
     return ProtonSourceOut(id=source_id, label=body.label, path=body.path)

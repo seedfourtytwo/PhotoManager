@@ -9,9 +9,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from photo_assistant.api.main import create_app
+from photo_assistant.api.main import _domain_error, create_app
 from photo_assistant.api.services import Services
 from photo_assistant.api.settings import Settings
+from photo_assistant.domain.errors import DomainError
 
 BASE = "http://127.0.0.1"
 PIN = "1234"
@@ -29,6 +30,12 @@ def make_settings(data_root: Path, **overrides: Any) -> Settings:
     values["ops"] = {"backup_key_dir": data_root.parent / "backup-keys"}
     values.update(overrides)
     return Settings(**values)
+
+
+def answer_domain_errors(app: FastAPI) -> None:
+    """For a test that builds its own small app around one router: the routes leave domain
+    errors to the app's one handler, so that app needs it as the real one does."""
+    app.add_exception_handler(DomainError, _domain_error)
 
 
 def services_of(client: TestClient) -> Services:
