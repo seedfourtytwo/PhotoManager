@@ -38,8 +38,9 @@ from photo_assistant.app.review import Review
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
-from photo_assistant.app.worker import Lanes
+from photo_assistant.app.worker import Lanes, StaleJobSweep, new_owner_id
 from photo_assistant.domain.access import SESSION_IDLE_LIMIT
+from photo_assistant.domain.job_queue import STALE_SWEEP_INTERVAL
 
 # What the daily "prune old records" task keeps (these tables otherwise only grow):
 LOGIN_FAILURES_KEPT = timedelta(days=1)  # the lockout itself looks back 15 minutes
@@ -66,6 +67,7 @@ class Services:
     ops: OpsServices
     db: Database  # the one library database: every store shares its writer and lock
     printer: AlbumPrinter
+    stale_jobs: StaleJobSweep  # queues jobs again whose process died (server only)
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -87,7 +89,9 @@ class Services:
         self.db.close()
 
 
-def build_services(settings: Settings) -> Services:
+def build_services(settings: Settings, role: str = "cli") -> Services:
+    """``role``: what this process is, for the owner id of the jobs it claims (the server
+    passes "server"; every command line run is "cli")."""
     root = settings.data_root.expanduser()
     root.mkdir(parents=True, exist_ok=True)
     db = Database.open(root / "library.db", backup_dir=root / "db-backups")
@@ -109,6 +113,7 @@ def build_services(settings: Settings) -> Services:
     )
     trash = Trash(repo, store, clock)
     review = Review(repo, clock)
+    stale_jobs = StaleJobSweep(repo, clock)
     integrations = build_integrations(
         data_root=root,
         settings=settings.integrations,
@@ -157,6 +162,7 @@ def build_services(settings: Settings) -> Services:
             INBOX_RESCAN_SECONDS,
             lambda: integrations.upload.rescan(repo.list_sources(), repo.enqueue_once),
         ),
+        PeriodicTask("requeue stale jobs", STALE_SWEEP_INTERVAL.total_seconds(), stale_jobs.run),
     ]
     ops = build_ops_services(
         root,
@@ -199,6 +205,7 @@ def build_services(settings: Settings) -> Services:
         long_kinds={SCAN_JOB_KIND, *LONG_JOBS},
         pooled={PREVIEW_JOB: settings.preview_threads()},
         poll_seconds=settings.worker_poll_seconds,
+        owner=new_owner_id(role),
     )
     hasher = Argon2Hasher(settings.argon2_time_cost, settings.argon2_memory_kib)
     accounts = Accounts(repo, hasher, clock)
@@ -223,4 +230,5 @@ def build_services(settings: Settings) -> Services:
         ops,
         db,
         printer,
+        stale_jobs,
     )

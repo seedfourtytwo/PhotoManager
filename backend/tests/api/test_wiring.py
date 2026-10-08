@@ -78,6 +78,7 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
         "prune finished jobs",
         "prune old records",
         "inbox rescan",
+        "requeue stale jobs",
     ]
 
 

@@ -78,7 +78,7 @@ def build_services(settings: Settings) -> Services:
 ## 4. Startup (`api/main.py` lifespan)
 
 ```python
-services.repo.recover_interrupted_jobs()
+services.stale_jobs.run()   # requeues jobs whose process died (stale claim), see ARCHITECTURE
 if settings.worker_enabled:
     services.worker.start()
     services.ops.start()      # marks crashed backup runs failed, starts the periodic thread

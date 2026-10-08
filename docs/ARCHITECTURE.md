@@ -79,7 +79,8 @@ edit_recipe(asset_id PK, recipe_json, updated_by, updated_at)         -- one per
 date_change(id, asset_id, old_taken_at, old_tz_offset_min, old_date_source, new_taken_at,
             changed_by, changed_at)
 purged_hash(content_hash PK, purged_at)                               -- never re-imported
-import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …)
+import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …,
+    run_after, claimed_by, claimed_at)          -- 0021: retry time, owner and lease
 inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0014, FK 0017
 device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
        created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
@@ -121,7 +122,8 @@ the domain rule `default_source_access` gives its kind.
    → check free disk → copy (not move) into `originals/`, verify the hash, make it read-only →
    create the `asset`.
 4. Enqueue `preview` (M1); later `embed`, `faces`, `geocode`, `phash` jobs.
-5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun.
+5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun
+   ("Jobs and lanes" below: retries wait, running jobs have an owner).
 
 ### Multiple sources
 Each `source` row is scanned independently (local path, or an rclone remote pulled read-only
@@ -217,8 +219,39 @@ the **quick lane** (one thread: geocode, group, purge, ML, edited renders), the 
 claims only its kinds, atomically, so a backup or a big import never starves previews and
 uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering)
 or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
-Domain errors (`domain/errors.py`) fail a job without retries; anything else is retried 3×.
 ML jobs are planned only when their model files are installed.
+
+**Retries wait (0021).** Domain errors (`domain/errors.py`) fail a job at once, without
+retries. Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
+minute after the first failure, 5 after the second (`domain/job_queue.RETRY_DELAYS`; a third
+entry, 25 minutes, applies if `max_attempts` is ever raised). A claim skips jobs whose time has
+not come, so a network blip, a locked backup repository or an unplugged disk has ~6 minutes to
+pass before the job fails for good, instead of ~3 seconds. "Retry" on the admin screen clears
+the wait and the attempts: the job runs at the next poll. `run_until_idle` (CLI import, tests)
+returns once nothing is *due*; a waiting retry stays queued for the server's worker.
+`GET /api/jobs` rows carry `run_after`; `GET /api/stats` counts those jobs as `waiting`, apart
+from `queued`, so screens that wait for "nothing queued or running" do not sit through it.
+
+**Every process owns what it runs (0021).** The server and CLI commands share the table. Each
+process claims under an owner id made at its start (`server-<pid>-<random>`, `cli-…`) and the
+claim records `claimed_by` and `claimed_at`. While a handler runs, a small thread renews
+`claimed_at` every 30 s (`HEARTBEAT_INTERVAL`) — independent of the job, so a backup of hours
+stays fresh as long as its process lives. A running job whose claim is older than 5 minutes
+(`CLAIM_STALE_AFTER`, ten missed heartbeats) belonged to a process that died:
+`app.worker.StaleJobSweep` queues it again at server start and every minute from the periodic
+thread. A fresh claim is never touched, whoever owns it, so a server start no longer restarts
+the previews a running `import` command is working on; and a killed CLI command's job is
+picked up after at most ~6 minutes without a server restart. The interrupted run stays counted
+in `attempts`: a job that kills every process running it is failed, not run, once its attempts
+are used up (the crash-loop guard). Two consequences to know: after a crash the server waits
+those ~5 minutes before rerunning what it was doing, and after the machine slept (every claim
+looks old, also live ones) the first sweep changes nothing — heartbeats come within 30 s and
+the next sweep decides.
+
+**Indexes (0021).** `job_waiting (kind, id) WHERE status = 'queued'` holds only waiting jobs:
+each lane's poll and `enqueue_once` seek to their own kinds instead of walking the 10k previews
+queued by an import. `asset_by_variant_of` serves the purge's variant lookup and the foreign-key
+check on every `DELETE FROM asset`.
 
 ## 5. Performance budget (10k photos on the laptop)
 

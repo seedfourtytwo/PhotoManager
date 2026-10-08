@@ -198,7 +198,7 @@ def test_jobs_are_claimed_in_order_once(repo: SqliteRepository) -> None:
     assert repo.claim_next_job(NOW) is None
     repo.complete_job(first)
     assert [j["id"] for j in repo.list_jobs("done")] == [first]
-    assert repo.job_counts() == {"queued": 0, "running": 1, "done": 1, "failed": 0}
+    assert repo.job_counts() == {"queued": 0, "waiting": 0, "running": 1, "done": 1, "failed": 0}
 
 
 def test_failed_job_can_retry_then_gives_up(repo: SqliteRepository) -> None:
@@ -216,13 +216,16 @@ def test_failed_job_can_retry_then_gives_up(repo: SqliteRepository) -> None:
     assert repo.retry_job(12345) is False
 
 
-def test_jobs_left_running_by_a_crash_are_requeued_on_open(tmp_path: Path) -> None:
+def test_jobs_left_running_by_a_crash_are_requeued_once_their_claim_is_stale(
+    tmp_path: Path,
+) -> None:
     db = tmp_path / "library.db"
     repo = SqliteRepository(open_database(db))
     repo.enqueue("derive", {"asset_id": 1})
     assert repo.claim_next_job(NOW) is not None  # now "running"; process "crashes" here
     reopened = SqliteRepository(open_database(db))
-    reopened.recover_interrupted_jobs()
+    assert reopened.requeue_stale_jobs(stale_before=NOW) == 0, "it may still be running"
+    assert reopened.requeue_stale_jobs(stale_before=NOW + timedelta(minutes=5)) == 1
     assert reopened.claim_next_job(NOW) is not None
 
 

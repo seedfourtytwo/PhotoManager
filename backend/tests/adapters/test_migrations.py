@@ -9,6 +9,7 @@ from pathlib import Path
 
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, _migrations, open_database
 from photo_assistant.domain.access import Level
+from tests.factories import NOW
 
 EXPECTED_TABLES = {
     # M1
@@ -71,7 +72,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 20
+    assert _latest() == 21
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -201,3 +202,47 @@ def test_backup_targets_from_before_0018_count_as_having_their_key_saved(tmp_pat
     conn = open_database(db, backup_dir=tmp_path / "backups")
     rows = conn.execute("SELECT created_at, key_saved_at FROM backup_target").fetchall()
     assert [tuple(r) for r in rows] == [("2026-09-01", "2026-09-01")]
+
+
+def _make_v20_library_with_jobs(db: Path) -> None:
+    """A library just before 0021, stopped in the middle of its work: jobs waiting, one cut
+    off while running, one failed for good, one finished."""
+    conn = sqlite3.connect(db)
+    for number, sql in _migrations():
+        if number <= 20:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO job (id, kind, payload_json, status, attempts, error) VALUES
+            (1, 'preview', '{"asset_id": 1}', 'done', 1, NULL),
+            (2, 'backup_run', '{}', 'running', 1, NULL),
+            (3, 'preview', '{"asset_id": 2}', 'queued', 0, NULL),
+            (4, 'scan_source', '{"source_id": 1}', 'failed', 3, 'ConnectionError: offline');
+        """
+    )
+    conn.close()
+
+
+def test_a_v20_library_keeps_its_jobs_claimable_after_0021(tmp_path: Path) -> None:
+    """0021: not-before time, owner and lease on jobs; old rows need none of them."""
+    db = tmp_path / "library.db"
+    _make_v20_library_with_jobs(db)
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert {"job_queue", "job_waiting", "asset_by_variant_of", "ai_log_recent"} <= indexes
+    repo = SqliteRepository(conn)
+    assert [(j["id"], j["status"], j["attempts"]) for j in repo.list_jobs()] == [
+        (1, "done", 1),
+        (2, "running", 1),
+        (3, "queued", 0),
+        (4, "failed", 3),
+    ]
+    assert all(j["run_after"] is None for j in repo.list_jobs())
+    # the job cut off under the old version has no lease: the server start queues it again
+    assert repo.requeue_stale_jobs(stale_before=NOW) == 1
+    assert repo.retry_job(4) is True
+    claimed = [repo.claim_next_job(NOW, owner="server-1") for _ in range(4)]
+    assert [(j.id, j.attempts) for j in claimed if j is not None] == [(2, 2), (3, 1), (4, 1)]
+    assert claimed[-1] is None

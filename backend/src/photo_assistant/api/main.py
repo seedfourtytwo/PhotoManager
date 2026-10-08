@@ -99,9 +99,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings.data_root.expanduser(), settings.log_level)
         warn_about_unknown_settings()
-        services = build_services(settings)
+        services = build_services(settings, role="server")
         _install_services(app, services)
-        services.repo.recover_interrupted_jobs()  # only the server owns the job queue
+        # jobs cut off by a crash; never one that a running CLI command still renews
+        services.stale_jobs.run()
         services.store.sweep_tmp()  # never from a CLI command: it would cut a running upload
         if settings.worker_enabled:
             services.start_background()
