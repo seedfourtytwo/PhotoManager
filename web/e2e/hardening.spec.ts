@@ -121,3 +121,49 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	await page.waitForTimeout(3200);
 	expect(asked.length).toBe(settled);
 });
+
+/** Follow a link the way a click in the app does (no reload). */
+async function follow(page: Page, href: string) {
+	await page.evaluate((to) => {
+		const link = Object.assign(document.createElement('a'), { href: to });
+		document.body.append(link);
+		link.click();
+		link.remove();
+	}, href);
+}
+
+test('search: clearing the search while one is running does not leave “Searching…”', async ({
+	page
+}) => {
+	await page.route('**/api/search?*', async (route) => {
+		await new Promise((r) => setTimeout(r, 800));
+		await route.continue().catch(() => undefined);
+	});
+	await signIn(page, '/search');
+	const box = page.getByRole('searchbox', { name: 'Search' });
+	await box.fill('sarlat');
+	await box.press('Enter');
+	await expect(page.getByText('Searching…')).toBeVisible();
+	await box.fill('');
+	await box.press('Enter');
+	await expect(page).toHaveURL(/\/search$/);
+	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	await page.waitForTimeout(1000); // the abandoned search answers; nothing may change
+	await expect(page.getByText('Searching…')).toHaveCount(0);
+	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+});
+
+test('search: “like this photo” never names the previous photo as its source', async ({ page }) => {
+	await resetMock('seed', { models: true });
+	await signIn(page);
+	const ids = await page
+		.locator('.tile')
+		.evaluateAll((tiles) => tiles.slice(0, 2).map((t) => t.getAttribute('data-id')));
+	await follow(page, `/search?like=${ids[0]}`);
+	await expect(page.locator(`a[href="/?photo=${ids[0]}"]`)).toBeVisible();
+	// The second photo's details never arrive: the line must not keep naming the first.
+	await page.route(`**/api/assets/${ids[1]}`, () => undefined);
+	await follow(page, `/search?like=${ids[1]}`);
+	await expect(page).toHaveURL(new RegExp(`like=${ids[1]}$`));
+	await expect(page.locator(`a[href="/?photo=${ids[0]}"]`)).toHaveCount(0);
+});

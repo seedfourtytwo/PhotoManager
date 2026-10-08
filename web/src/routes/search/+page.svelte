@@ -36,6 +36,8 @@
 		error = '';
 		result = null;
 		similar = null;
+		source = null;
+		busy = false;
 		if (!words && photo === null) return;
 		busy = true;
 		const done = () => !stale && (busy = false);
