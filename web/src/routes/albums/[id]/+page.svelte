@@ -273,8 +273,7 @@
 	}
 	h1 {
 		font-size: var(--fs-40);
-		font-weight: 350;
-		letter-spacing: -0.015em;
+		font-weight: var(--title-weight);
 		margin: var(--s-4) 0 var(--s-2);
 		max-width: 20ch;
 	}

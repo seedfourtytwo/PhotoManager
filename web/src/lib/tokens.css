@@ -23,10 +23,10 @@
 	/* Scale (rem = 16 px): 12 · 14 · 16 · 20 · 28 · 40. */
 	--fs-12: 0.75rem; /* metadata, counts, captions under thumbnails */
 	--fs-14: 0.875rem; /* interface text */
-	--fs-16: 1rem; /* reading text, phone controls, serif dates */
-	--fs-20: 1.25rem; /* section titles and month headings (serif) */
-	--fs-28: 1.75rem; /* page titles (serif) */
-	--fs-40: 2.5rem; /* album titles, welcome (serif, display optical size) */
+	--fs-16: 1rem; /* reading text, phone controls, dates */
+	--fs-20: 1.25rem; /* section titles and month headings */
+	--fs-28: 1.75rem; /* page titles */
+	--fs-40: 2.5rem; /* album titles, welcome */
 	--lh-tight: 1.15;
 	--lh-ui: 1.45;
 	--lh-text: 1.6;
@@ -497,7 +497,7 @@ legend {
 	color: var(--ink-2);
 }
 
-/* An empty or "nothing yet" state: one serif line, then what to do. */
+/* An empty or "nothing yet" state: one line, then what to do. */
 .empty-state {
 	max-width: var(--measure);
 	padding: var(--s-7) 0;
@@ -506,7 +506,7 @@ legend {
 }
 .empty-state > :first-child {
 	font-family: var(--font-title);
-	font-weight: var(--title-weight);
+	font-weight: 400;
 	font-size: var(--fs-20);
 	color: var(--ink);
 	margin: 0 0 var(--s-2);
