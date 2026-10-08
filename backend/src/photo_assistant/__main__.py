@@ -23,7 +23,7 @@ from photo_assistant.adapters.filesystem import DiskLibraryStore
 from photo_assistant.api import cli_ops
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.main import create_app
-from photo_assistant.api.services import build_services
+from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.accounts import AccountError
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB
@@ -87,6 +87,19 @@ def _print_report(run_id: int, report: ImportReport, show: int) -> None:
         print(f"\n{report.message}")
 
 
+def _give_ownerless_sources_to_the_first_admin(services: Services) -> None:
+    """Nobody is logged in on the command line, and a source without an owner makes "private"
+    hide nothing (the rule compares the marker with the owner). Same choice as migration
+    0022: the first admin who can log in; with no admin yet, the sources wait for one."""
+    admins = (u for u in services.repo.list_users() if u.role is Role.ADMIN and not u.disabled)
+    admin = next(admins, None)
+    if admin is None:
+        return
+    for source in services.repo.list_sources():
+        if source.owner_id is None:
+            services.repo.set_source_owner(source.id, admin.id)
+
+
 def _import(folder: Path, label: str | None, show: int) -> int:
     settings = get_settings()
     data_root = settings.data_root.expanduser()
@@ -102,6 +115,7 @@ def _import(folder: Path, label: str | None, show: int) -> int:
         source = known.get(str(folder)) or services.repo.add_source(
             label or folder.name, str(folder)
         )
+        _give_ownerless_sources_to_the_first_admin(services)
         print(f"Importing '{source.label}' from {folder} into {data_root} (source is read-only) …")
         try:
             run_id, report = services.importer.run(source.id)
@@ -148,6 +162,7 @@ def _create_user(username: str, role: Role, display_name: str | None) -> int:
     services = build_services(get_settings())
     try:
         services.accounts.create_user(username, display_name or username, pin, role)
+        _give_ownerless_sources_to_the_first_admin(services)
     except AccountError as exc:
         print(exc, file=sys.stderr)
         return 2

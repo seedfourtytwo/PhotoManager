@@ -9,6 +9,7 @@ import os
 import shutil
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
@@ -89,3 +90,16 @@ class DiskUploadSpool:
     def free_bytes(self) -> int:
         self._tmp.mkdir(parents=True, exist_ok=True)
         return shutil.disk_usage(self._tmp).free
+
+    def newest_arrival(self, folder: Path) -> datetime | None:
+        """By change time: ``commit`` links a file in, which sets it, whatever date the file
+        itself carries."""
+        newest: float | None = None
+        for parent, _, names in os.walk(folder):
+            for name in names:
+                try:
+                    changed = Path(parent, name).lstat().st_ctime
+                except OSError:
+                    continue  # gone while we looked
+                newest = changed if newest is None else max(newest, changed)
+        return None if newest is None else datetime.fromtimestamp(newest, UTC)

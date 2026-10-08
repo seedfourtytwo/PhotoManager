@@ -1,6 +1,6 @@
 """Composition for local ML: builds adapters and use cases from settings.
 
-Meant to be called from ``api/services.py`` (see docs/wiring/ml.md): it returns the job
+Called from ``api/services.py``, the composition root: it returns the job
 handlers to merge into the Worker and the use cases the routes need. Nothing here loads a
 model — that happens on first use, so the app starts fine without any model files.
 """

@@ -1,4 +1,4 @@
-"""Local ML over HTTP (docs/wiring/ml.md): search, similar photos, faces, tags, people.
+"""Local ML over HTTP (docs/contracts/api-v1.md): search, similar photos, faces, tags, people.
 
 Every route starts from the visibility rule (``repo.visible_asset_ids``) and hands that set to
 the use cases, which only rank or filter inside it; anything outside is a 404. Without model

@@ -1,7 +1,7 @@
-"""Composition for backups, library transfer and the doctor (docs/wiring/ops.md).
+"""Composition for backups, library transfer and the doctor (guides: docs/guides/backups.md).
 
-``api/services.py`` stays the composition root; it calls ``build_ops_services`` once the
-integrator wires it in. The CLI (``api/cli_ops.py``) uses the same builders on its own.
+``api/services.py`` is the composition root and calls ``build_ops_services``. The CLI
+(``api/cli_ops.py``) uses the same builders on its own.
 """
 
 from collections.abc import Callable, Sequence

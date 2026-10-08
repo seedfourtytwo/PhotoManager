@@ -7,7 +7,7 @@
 	/**
 	 * Start a download in a hidden frame, so the browser writes the stream straight to disk
 	 * instead of holding it in memory. A ZIP is a real form POST whose one field, `request`,
-	 * holds the DownloadRequest JSON (docs/wiring/web.md); a single photo is a GET.
+	 * holds the DownloadRequest JSON (docs/contracts/api-v1.md); a single photo is a GET.
 	 * When the server refuses, the frame loads its JSON answer instead of saving a file:
 	 * `onerror` then gets the server's sentence.
 	 */

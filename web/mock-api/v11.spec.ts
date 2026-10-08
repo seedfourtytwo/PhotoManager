@@ -146,6 +146,15 @@ describe('print', () => {
 });
 
 describe('backups, devices and remote sources', () => {
+	it('a new cloud source belongs to the admin who adds it, like a folder source', async () => {
+		const api = await h.signedIn();
+		const me = (await api.me()).id;
+		const mega = await api.addRemoteSource({ label: 'Drive', remote: 'gdrive', path: 'Camera' });
+		const proton = await api.addProtonSource({ label: 'Proton', path: '/photos' });
+		const owners = new Map((await api.sources()).map((s) => [s.id, s.owner_id]));
+		expect([owners.get(mega.id), owners.get(proton.id)]).toEqual([me, me]);
+	});
+
 	it("lists the server's folders for picking one, to admins only", async () => {
 		const api = await h.signedIn();
 		const home = await api.folders();

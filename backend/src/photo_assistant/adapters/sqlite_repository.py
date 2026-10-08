@@ -329,6 +329,9 @@ class SqliteRepository(
             )
         return run_id
 
+    def set_import_run_message(self, run_id: int, message: str) -> None:
+        self._write("UPDATE import_run SET message = ? WHERE id = ?", (message, run_id))
+
     def get_import_report(self, run_id: int) -> ImportReport | None:
         run = self._one("SELECT * FROM import_run WHERE id = ?", (run_id,))
         if run is None:

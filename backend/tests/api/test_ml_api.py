@@ -5,7 +5,6 @@ says why, status reports "models not installed". With (fake) models the semantic
 within the visible set only.
 """
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -199,7 +198,6 @@ def test_guests_cannot_change_people(admin: TestClient, library: dict[str, int])
     assert gus.post("/api/people/split", json={"face_ids": [1]}).status_code == 403
 
 
-@pytest.mark.skipif(shutil.which("vips") is None, reason="needs libvips")
 def test_preview_jobs_plan_ml_analysis_after_import_only_with_models(
     admin: TestClient, library: dict[str, int]
 ) -> None:
