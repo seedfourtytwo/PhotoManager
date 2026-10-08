@@ -52,7 +52,7 @@ def test_concurrent_transactions_from_several_stores_never_interleave(db: Databa
         t.join()
     assert errors == []
     assert len(repo.list_jobs()) == 4 * 25
-    assert len(log.recent(1000)) == 4 * 25
+    assert db.writer.execute("SELECT COUNT(*) FROM ai_log").fetchone()[0] == 4 * 25
 
 
 def test_reads_do_not_wait_for_a_write_in_progress(db: Database) -> None:

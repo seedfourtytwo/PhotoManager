@@ -158,7 +158,11 @@ def test_asset_sources_track_every_origin(repo: SqliteRepository) -> None:
     assert repo.asset_id_for_source_path(s1.id, "y.jpg") is None
     assert repo.asset_id_for_source_path(s2.id, "copy/x.jpg") == asset_id
     assert repo.asset_id_for_source_path(s2.id, "nope.jpg") is None
-    assert repo.origins_of(asset_id) == [(s1, "x.jpg"), (s2, "copy/x.jpg")]
+    origins = repo._conn.execute(
+        "SELECT source_id, relative_path FROM asset_source WHERE asset_id = ? ORDER BY 1, 2",
+        (asset_id,),
+    ).fetchall()
+    assert [tuple(r) for r in origins] == [(s1.id, "x.jpg"), (s2.id, "copy/x.jpg")]
 
 
 # --- import runs ---------------------------------------------------------------------------

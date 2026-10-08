@@ -295,14 +295,6 @@ class SqliteRepository(
         )
         return int(row["asset_id"]) if row else None
 
-    def origins_of(self, asset_id: int) -> list[tuple[Source, str]]:
-        rows = self._all(
-            """SELECT s.*, a.relative_path FROM asset_source a JOIN source s ON s.id = a.source_id
-               WHERE a.asset_id = ? ORDER BY s.id, a.relative_path""",
-            (asset_id,),
-        )
-        return [(self._source(r), r["relative_path"]) for r in rows]
-
     # --- import runs -----------------------------------------------------------------------
 
     def save_import_report(

@@ -97,25 +97,6 @@ class SqliteAILog(_Store):
             (before.astimezone(UTC).isoformat(),),
         ).rowcount
 
-    def recent(self, limit: int) -> list[dict[str, object]]:
-        """The latest AI calls, for inspection (tests; an admin view later, FEATURES 7)."""
-        rows = self._all("SELECT * FROM ai_log ORDER BY id DESC LIMIT ?", (limit,))
-        return [
-            {
-                "id": r["id"],
-                "capability": r["capability"],
-                "model": r["model"],
-                "attempt": r["attempt"],
-                "ok": bool(r["ok"]),
-                "duration_ms": r["duration_ms"],
-                "error": r["error"],
-                "request": json.loads(r["request_json"]),
-                "response": json.loads(r["response_json"]),
-                "created_at": r["created_at"],
-            }
-            for r in rows
-        ]
-
 
 class _SourceCreator(_Store):
     """A store that registers sources through the one ``SourceRegistry`` (B17)."""
