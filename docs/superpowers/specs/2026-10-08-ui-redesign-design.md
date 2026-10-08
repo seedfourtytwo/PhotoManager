@@ -146,8 +146,10 @@ or "N things need you"), storage meter, Sources, Working on, Accounts (each with
   saving anything; it ends on reload or "Stop trying". "Save for Donna" stores it on her
   account, and her app picks it up the next time it loads or returns to the foreground.
 - **Later, via the AI** (issue 5): each account may change its own dials and switches by
-  typing a sentence in the search box. The model proposes a new sheet; the account sees a
-  preview and accepts or discards; Undo restores the previous sheet. For an admin the same
+  typing a sentence in the search box ("change how this looks" enters a look-editing state).
+  While editing, each sentence produces a new sheet that is tried live on their own screen,
+  exactly like the admin's "Try on my screen"; a bar offers Keep and Discard, and nothing is
+  saved until Keep. Undo afterwards restores the previous sheet. For an admin the same
   action takes a target: "make it warmer with big text" tries it on the admin's screen, then
   "send this to Donna" saves the tried sheet on her account. Only admins may name another
   account; the server checks the role, not the model.
