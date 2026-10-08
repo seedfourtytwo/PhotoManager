@@ -184,9 +184,13 @@ class ImportSource:
     def _list_files(self, source: Source) -> list[SourceFile]:
         try:
             return list(self._reader.walk(source))
-        except FileNotFoundError as exc:
+        except OSError as exc:
+            if isinstance(exc, FileNotFoundError) and not Path(source.root).is_dir():
+                raise SourceUnavailableError(
+                    f"source '{source.label}' folder not found: {source.root}"
+                ) from exc
             raise SourceUnavailableError(
-                f"source '{source.label}' folder not found: {source.root}"
+                f"source '{source.label}' could not be read: {exc.strerror or exc}"
             ) from exc
 
     def _triage(

@@ -50,6 +50,9 @@ class FakeRemotes:
 @dataclass
 class FakeSync:
     fail: SyncError | None = None
+    report: SyncReport = field(
+        default_factory=lambda: SyncReport(copied=2, errors=1, error_messages=("x.jpg: broken",))
+    )
     pulls: list[tuple[RemoteConfig, Path]] = field(default_factory=list)
     remotes: list[str] = field(default_factory=lambda: ["mega", "proton"])
 
@@ -57,7 +60,7 @@ class FakeSync:
         self.pulls.append((remote, staging))
         if self.fail:
             raise self.fail
-        return SyncReport(copied=2, errors=1, error_messages=("x.jpg: broken",))
+        return self.report
 
     def list_remotes(self) -> list[str]:
         return self.remotes
@@ -222,3 +225,34 @@ def test_a_proton_source_is_only_added_for_a_place_that_exists(tmp_path: Path) -
     with pytest.raises(RemoteConfigError):
         add_proton_source(remotes, account, tmp_path, "x", "/trash")
     assert len(remotes.configs) == 2
+
+
+# --- a pull that brought only part of the remote --------------------------------------------------
+
+
+def test_a_partial_pull_is_imported_and_its_failures_go_to_the_import_history(
+    world: World,
+) -> None:
+    outcome = world.use_case.run(1)
+    assert world.library.imports == [1] and outcome.run_id == 42, "what arrived is imported"
+    (note,) = world.library.saved
+    assert (note.source_id, note.status) == (1, RunStatus.FAILED)
+    assert note.message is not None
+    assert "1 file could not be downloaded from 'MEGA'" in note.message
+    assert "x.jpg: broken" in note.message
+
+
+def test_a_partial_pull_names_only_its_first_few_failures(world: World) -> None:
+    messages = tuple(f"{n}.jpg: broken" for n in range(500))
+    world.sync.report = SyncReport(copied=1500, errors=500, error_messages=messages)
+    world.use_case.run(1)
+    message = world.library.saved[0].message or ""
+    assert "500 files could not be downloaded" in message
+    assert "0.jpg: broken; 1.jpg: broken; 2.jpg: broken" in message
+    assert "3.jpg" not in message and "497 more" in message
+
+
+def test_a_clean_pull_adds_nothing_to_the_import_history(world: World) -> None:
+    world.sync.report = SyncReport(copied=2)
+    world.use_case.run(1)
+    assert world.library.imports == [1] and world.library.saved == []

@@ -91,8 +91,10 @@ def _load_edge(spec: RenderSpec) -> int | None:
 class VipsRenderer:
     def __init__(self, quality: int = 80, concurrency: int | None = None) -> None:
         self._quality = quality
-        if concurrency:
-            os.environ.setdefault("VIPS_CONCURRENCY", str(concurrency))
+        # libvips read VIPS_CONCURRENCY when it was loaded (the import above), so setting the
+        # variable now would do nothing: use its setter. A variable the user set still wins.
+        if concurrency and "VIPS_CONCURRENCY" not in os.environ:
+            pyvips.concurrency_set(concurrency)
 
     def render(self, source: Path, destination: Path, max_edge: int) -> tuple[int, int]:
         return self.render_variant(
@@ -127,7 +129,9 @@ class VipsRenderer:
     @staticmethod
     def _save(image: pyvips.Image, destination: Path, spec: RenderSpec) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        partial = destination.with_name(f".{uuid.uuid4().hex}.partial{destination.suffix}")
+        # ends in .partial (exports, backups and the start-up sweep know that name) and sits
+        # beside the destination, so the rename is atomic
+        partial = destination.with_name(f".{uuid.uuid4().hex}{destination.suffix}.partial")
         try:
             _SAVERS[spec.format](image, str(partial), spec)
             partial.replace(destination)

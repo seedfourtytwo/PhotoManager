@@ -83,7 +83,6 @@ def build_services(settings: Settings) -> Services:
     db = Database.open(root / "library.db", backup_dir=root / "db-backups")
     repo = SqliteRepository(db)
     store = DiskLibraryStore(root)
-    store.sweep_tmp()
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)
     exiftool = ExifToolReader()
     clock = SystemClock()

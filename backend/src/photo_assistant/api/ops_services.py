@@ -75,7 +75,12 @@ def build_backup_service(
     store = SqliteBackupStore(db or Database.open(database, backup_dir=data_root / "db-backups"))
     service = BackupService(
         store=store,
-        engine=ResticBackup(binary=ops.restic_binary, cache_dir=ops.restic_cache_dir),
+        engine=ResticBackup(
+            binary=ops.restic_binary,
+            cache_dir=ops.restic_cache_dir,
+            rclone_binary=rclone.binary,
+            rclone_config=rclone.config,
+        ),
         snapshotter=SqliteSnapshotter(database),
         hasher=Blake3Hasher(),
         clock=SystemClock(),

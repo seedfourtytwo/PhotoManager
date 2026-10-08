@@ -4,13 +4,13 @@ import os
 import re
 import shutil
 import sqlite3
-import subprocess
 import tempfile
 from pathlib import Path
 
 import pyvips  # type: ignore[import-untyped]
 
 from photo_assistant.adapters.sqlite_snapshot import open_read_only
+from photo_assistant.adapters.tool_runner import ToolMissingError, ToolTimeoutError, run_tool
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 
 _VERSION_ARGS = {"exiftool": ["-ver"], "restic": ["version"], "rclone": ["version"]}
@@ -26,15 +26,8 @@ def _existing(folder: Path) -> Path:
 class LocalSystemProbe:
     def tool_version(self, tool: str) -> str | None:
         try:
-            done = subprocess.run(  # an argument list, never a shell
-                [tool, *_VERSION_ARGS.get(tool, ["--version"])],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=30,
-                stdin=subprocess.DEVNULL,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+            done = run_tool([tool, *_VERSION_ARGS.get(tool, ["--version"])], timeout=30)
+        except (ToolMissingError, ToolTimeoutError):
             return None
         found = _VERSION.search(done.stdout)
         return found.group(0) if done.returncode == 0 and found else None
