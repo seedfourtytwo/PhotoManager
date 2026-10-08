@@ -39,6 +39,12 @@ export class TimelineLoader {
 		return this.reset(this.#filters);
 	}
 
+	/** After a failed page: ask for that same page again, keeping what is already loaded. */
+	retry(): Promise<void> {
+		this.error = null;
+		return this.loadMore();
+	}
+
 	loadMore(): Promise<void> {
 		if (this.done || this.error) return Promise.resolve();
 		if (this.#pending) return this.#pending;
@@ -47,7 +53,10 @@ export class TimelineLoader {
 		this.#pending = this.#fetch(this.#filters, this.#cursor)
 			.then((page) => {
 				if (generation !== this.#generation) return;
-				this.items = [...this.items, ...page.items];
+				// Pages can overlap (offset paging after a change): a repeated id would collide
+				// in the grid's keyed blocks.
+				const seen = new Set(this.items.map((a) => a.id));
+				this.items = [...this.items, ...page.items.filter((a) => !seen.has(a.id))];
 				this.#cursor = page.next_cursor;
 				this.done = page.next_cursor === null;
 			})
