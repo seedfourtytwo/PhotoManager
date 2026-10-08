@@ -114,6 +114,11 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	await page.getByRole('button', { name: 'Edit' }).click();
 	const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/edit'));
 	await page.getByRole('button', { name: 'Revert to original' }).click();
+	// It asks first: the saved edit is deleted.
+	await page
+		.getByRole('dialog', { name: 'Go back to the original?' })
+		.getByRole('button', { name: 'Revert', exact: true })
+		.click();
 	await del;
 	await expect(page.getByRole('status')).toContainText('Back to the original');
 });
