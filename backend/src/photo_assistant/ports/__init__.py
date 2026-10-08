@@ -286,11 +286,21 @@ class Repository(SourceRegistry, Protocol):
         ``excluding`` (job lanes, B24)."""
         ...
 
-    def complete_job(self, job_id: int) -> None: ...
+    def complete_job(self, job_id: int, now: datetime | None = None) -> None:
+        """Done at ``now``: the history of finished jobs is pruned by that time."""
+        ...
+
     def fail_job(
-        self, job_id: int, error: str, retry: bool, run_after: datetime | None = None
+        self,
+        job_id: int,
+        error: str,
+        retry: bool,
+        run_after: datetime | None = None,
+        *,
+        now: datetime | None = None,
     ) -> None:
-        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once)."""
+        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once).
+        ``now``: when the attempt ended."""
         ...
 
     def renew_claim(self, job_id: int, owner: str, now: datetime) -> None:

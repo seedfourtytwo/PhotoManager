@@ -138,14 +138,16 @@ class SqliteRepository(
 
     def last_check_attempts(self, job_kind: str) -> dict[int, datetime]:
         """Source id → when its latest check started, whether it worked or not: the later of
-        its newest import run and its newest check job a worker picked up (``updated_at`` is
-        set when a job is claimed). The job covers a check that died before any report."""
+        its newest import run and its newest check job that a worker picked up and that did
+        not finish. That job covers a check that died before any report: its ``updated_at``
+        is when it was claimed or, once it failed, when it failed. A finished job has its
+        run, whose start counts (the job's own time is by then the end of the check)."""
         runs = self._all(
             """SELECT source_id, started_at FROM import_run
                WHERE id IN (SELECT MAX(id) FROM import_run GROUP BY source_id)"""
         )
         attempts = {int(r["source_id"]): datetime.fromisoformat(r["started_at"]) for r in runs}
-        for source_id, claimed_at in self._check_jobs(job_kind, "attempts > 0"):
+        for source_id, claimed_at in self._check_jobs(job_kind, "attempts > 0 AND status <> 'done'"):
             last = attempts.get(source_id)
             attempts[source_id] = claimed_at if last is None else max(last, claimed_at)
         return attempts
@@ -485,18 +487,32 @@ class SqliteRepository(
             "DELETE FROM job WHERE status = 'done' AND updated_at < ?", (_iso(finished_before),)
         )
 
-    def complete_job(self, job_id: int) -> None:
-        self._write("UPDATE job SET status = 'done', error = NULL WHERE id = ?", (job_id,))
+    def complete_job(self, job_id: int, now: datetime | None = None) -> None:
+        """``now``: when the run ended; finished jobs are pruned by that time."""
+        self._write(
+            """UPDATE job SET status = 'done', error = NULL, updated_at = COALESCE(?, updated_at)
+               WHERE id = ?""",
+            (_iso(now) if now else None, job_id),
+        )
 
     def fail_job(
-        self, job_id: int, error: str, retry: bool, run_after: datetime | None = None
+        self,
+        job_id: int,
+        error: str,
+        retry: bool,
+        run_after: datetime | None = None,
+        *,
+        now: datetime | None = None,
     ) -> None:
-        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once)."""
+        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once).
+        ``now``: when the attempt ended."""
         status = "queued" if retry else "failed"
         wait = utc_text(run_after) if retry and run_after is not None else None
         self._write(
-            "UPDATE job SET status = ?, error = ?, run_after = ? WHERE id = ?",
-            (status, error, wait, job_id),
+            """UPDATE job SET status = ?, error = ?, run_after = ?,
+                   updated_at = COALESCE(?, updated_at)
+               WHERE id = ?""",
+            (status, error, wait, _iso(now) if now else None, job_id),
         )
 
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]:

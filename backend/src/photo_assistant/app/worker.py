@@ -78,14 +78,14 @@ class Worker:
             return False
         handler = self._handlers.get(job.kind)
         if handler is None:
-            self._repo.fail_job(job.id, f"no handler for job kind '{job.kind}'", retry=False)
+            self._fail(job.id, f"no handler for job kind '{job.kind}'")
             return True
         if job.attempts > self._max_attempts:
             # Only reachable when earlier runs never came back (the process was killed by a
             # crash or the OOM killer and its stale claim was requeued): stop the loop.
             log.warning("job given up on", extra={"job_id": job.id, "kind": job.kind})
             reason = f"never finished (did it crash the server?): gave up after {job.attempts - 1}"
-            self._repo.fail_job(job.id, f"{reason} attempts", retry=False)
+            self._fail(job.id, f"{reason} attempts")
             return True
         try:
             with self._renewing_claim(job.id):
@@ -97,16 +97,21 @@ class Worker:
         except DomainError as exc:
             # not transient (a folder is gone, a value is invalid): retrying changes nothing
             log.warning("job failed", extra={"job_id": job.id, "kind": job.kind, "retry": False})
-            self._repo.fail_job(job.id, f"{type(exc).__name__}: {exc}", retry=False)
+            self._fail(job.id, f"{type(exc).__name__}: {exc}")
         except Exception as exc:
             retry = job.attempts < self._max_attempts
             log.warning("job failed", extra={"job_id": job.id, "kind": job.kind, "retry": retry})
             # what failed may pass (network, a locked repository, an unplugged disk): wait
-            run_after = self._clock.now() + retry_delay(job.attempts) if retry else None
-            self._repo.fail_job(job.id, f"{type(exc).__name__}: {exc}", retry, run_after)
+            now = self._clock.now()
+            run_after = now + retry_delay(job.attempts) if retry else None
+            self._repo.fail_job(job.id, f"{type(exc).__name__}: {exc}", retry, run_after, now=now)
         else:
-            self._repo.complete_job(job.id)
+            self._repo.complete_job(job.id, self._clock.now())
         return True
+
+    def _fail(self, job_id: int, error: str) -> None:
+        """For good: no retry."""
+        self._repo.fail_job(job_id, error, retry=False, now=self._clock.now())
 
     @contextmanager
     def _renewing_claim(self, job_id: int) -> Iterator[None]:
