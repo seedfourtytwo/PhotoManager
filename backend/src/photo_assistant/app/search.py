@@ -6,6 +6,7 @@ by the visibility function and SQL filters elsewhere). They only rank within tha
 
 from collections.abc import Collection
 
+from photo_assistant.domain.errors import ConflictError, UnavailableError
 from photo_assistant.domain.search_query import ParsedQuery, parse_query
 from photo_assistant.ports.ml import MlStore, ModelUnavailableError, ScoredAsset, TextEmbedder
 
@@ -19,11 +20,11 @@ __all__ = [
 ]
 
 
-class SearchUnavailableError(RuntimeError):
+class SearchUnavailableError(UnavailableError):
     """No CLIP model on this machine; the API answers 503 and the UI falls back to keywords."""
 
 
-class NotIndexedError(RuntimeError):
+class NotIndexedError(ConflictError):
     """The photo has no embedding yet (still queued, or the model is missing)."""
 
 

@@ -23,10 +23,9 @@ from photo_assistant.api.deps import (
 from photo_assistant.api.filters import FilterDep, checked
 from photo_assistant.api.schemas import AssetOut, Id
 from photo_assistant.api.services import Services
-from photo_assistant.app.people import FaceNotFoundError, PersonNotFoundError
 from photo_assistant.app.search import NotIndexedError, SearchUnavailableError, parse_query
 from photo_assistant.domain.access import Viewer
-from photo_assistant.domain.search_query import InvalidFacetError, ParsedQuery, with_facets
+from photo_assistant.domain.search_query import ParsedQuery, with_facets
 from photo_assistant.ports.ml import PersonSummary, StoredFace
 
 router = APIRouter(prefix="/api", tags=["ml"], dependencies=LOGGED_IN)
@@ -189,10 +188,6 @@ def _scored(
     ]
 
 
-def _person_or_404(exc: LookupError) -> HTTPException:
-    return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
-
-
 # --- search ----------------------------------------------------------------------------------
 
 
@@ -206,10 +201,7 @@ def search(
     """``q`` as on the timeline, plus facets (``date:2023 person:Lea tag:beach place:… camera:…``).
     Free text is ranked by CLIP when the model is installed, else matched as words."""
     parsed = parse_query(f.q or "")
-    try:
-        narrowed = checked(with_facets(replace(f, q=None), parsed))
-    except InvalidFacetError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    narrowed = checked(with_facets(replace(f, q=None), parsed))
     candidates = services.repo.visible_asset_ids(viewer, narrowed)
     candidates = _narrow_by_people_and_tags(services, parsed, candidates)
     facets = [FacetOut(name=k, value=v) for k, v in parsed.facets]
@@ -282,20 +274,14 @@ def list_people(services: ServicesDep, viewer: ViewerDep) -> list[PersonOut]:
 
 @router.get("/people/{person_id}")
 def get_person(services: ServicesDep, viewer: ViewerDep, person_id: int) -> PersonOut:
-    try:
-        return PersonOut.of(services.ml.people.get(person_id, _visible(services, viewer)))
-    except PersonNotFoundError as exc:
-        raise _person_or_404(exc) from exc
+    return PersonOut.of(services.ml.people.get(person_id, _visible(services, viewer)))
 
 
 @router.patch("/people/{person_id}", dependencies=NOT_GUEST)
 def rename_person(
     services: ServicesDep, viewer: ViewerDep, person_id: int, body: PersonPatch
 ) -> PersonOut:
-    try:
-        person = services.ml.people.rename(person_id, body.name, _visible(services, viewer))
-    except PersonNotFoundError as exc:
-        raise _person_or_404(exc) from exc
+    person = services.ml.people.rename(person_id, body.name, _visible(services, viewer))
     return PersonOut.of(person)
 
 
@@ -303,12 +289,7 @@ def rename_person(
 def merge_people(
     services: ServicesDep, viewer: ViewerDep, person_id: int, body: MergeIn
 ) -> PersonOut:
-    try:
-        person = services.ml.people.merge(person_id, body.source_ids, _visible(services, viewer))
-    except PersonNotFoundError as exc:
-        raise _person_or_404(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    person = services.ml.people.merge(person_id, body.source_ids, _visible(services, viewer))
     return PersonOut.of(person)
 
 
@@ -318,9 +299,7 @@ def split_people(services: ServicesDep, viewer: ViewerDep, body: SplitIn) -> Per
         person = services.ml.people.split(
             body.face_ids, _visible(services, viewer), person_id=body.person_id, name=body.name
         )
-    except (PersonNotFoundError, FaceNotFoundError) as exc:
-        raise _person_or_404(exc) from exc
-    except ValueError as exc:
+    except ValueError as exc:  # a name that is too long: bare in people.py, see _clean_name
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return PersonOut.of(person)
 
@@ -334,10 +313,7 @@ def person_assets(
     cursor: str | None = None,
 ) -> PersonAssets:
     visible = _visible(services, viewer)
-    try:
-        ids = set(services.ml.people.assets(person_id, visible))
-    except PersonNotFoundError as exc:
-        raise _person_or_404(exc) from exc
+    ids = set(services.ml.people.assets(person_id, visible))
     ordered = [i for i in visible if i in ids]  # timeline order, newest first
     start = int(cursor) if cursor and cursor.isdigit() else 0
     page = ordered[start : start + limit]

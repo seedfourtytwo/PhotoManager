@@ -7,22 +7,29 @@ whole library, so edits are library-wide (the API lets only members and admins e
 
 from collections.abc import Collection, Sequence
 
+from photo_assistant.domain.errors import InvalidError, NotFoundError
 from photo_assistant.ports.ml import MlStore, PersonSummary, StoredFace
 
 MAX_NAME = 100
 
 
-class PersonNotFoundError(LookupError):
+class PersonNotFoundError(NotFoundError):
     pass
 
 
-class FaceNotFoundError(LookupError):
+class FaceNotFoundError(NotFoundError):
     pass
+
+
+class InvalidPeopleChangeError(InvalidError, ValueError):
+    """A merge or a move of faces that makes no sense as asked."""
 
 
 def _clean_name(name: str | None) -> str | None:
     cleaned = " ".join((name or "").split())
     if len(cleaned) > MAX_NAME:
+        # Bare on purpose: the split route answers it with a 422, the rename route does not
+        # catch it. A domain error here would change what a rename answers.
         raise ValueError(f"name too long (max {MAX_NAME} characters)")
     return cleaned or None
 
@@ -49,7 +56,7 @@ class People:
         self, target_id: int, source_ids: Sequence[int], visible: Collection[int]
     ) -> PersonSummary:
         if target_id in source_ids:
-            raise ValueError("cannot merge a person into itself")
+            raise InvalidPeopleChangeError("cannot merge a person into itself")
         for person_id in (target_id, *source_ids):
             self.get(person_id, visible)
         self._store.merge_persons(target_id, source_ids)
@@ -65,7 +72,7 @@ class People:
     ) -> PersonSummary:
         """Move faces to ``person_id``, or to a new person called ``name``."""
         if not face_ids:
-            raise ValueError("choose at least one face to move")
+            raise InvalidPeopleChangeError("choose at least one face to move")
         for face_id in face_ids:
             face = self._store.get_face(face_id)
             if face is None or face.asset_id not in visible:
