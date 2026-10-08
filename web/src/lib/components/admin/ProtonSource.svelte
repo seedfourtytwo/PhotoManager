@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ProtonSource, ProtonStatus } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PROTON_FILES, PROTON_PHOTOS } from '$lib/proton';
 	import { suggester } from '$lib/suggest';
 	import Dialog from '../Dialog.svelte';
@@ -37,7 +38,7 @@
 		try {
 			status = await api.proton();
 		} catch (e) {
-			status = { ready: false, problem: e instanceof Error ? e.message : 'Could not ask.' };
+			status = { ready: false, problem: errorMessage(e, 'Could not ask.') };
 		}
 	}
 	$effect(() => void check());
@@ -48,7 +49,7 @@
 		try {
 			onadded(await api.addProtonSource({ label: label.trim(), path }));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not add it.';
+			error = errorMessage(e, 'Could not add it.');
 		} finally {
 			saving = false;
 		}

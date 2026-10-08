@@ -11,6 +11,7 @@
 
 <script lang="ts">
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PROTON_FILES, protonPlaceName } from '$lib/proton';
 	import FolderList from './FolderList.svelte';
 
@@ -42,7 +43,7 @@
 			folders = found.folders;
 		} catch (e) {
 			if (mine !== asked) return;
-			error = e instanceof Error ? e.message : 'Could not read that folder.';
+			error = errorMessage(e, 'Could not read that folder.');
 		} finally {
 			if (mine === asked) loading = false;
 		}
@@ -61,7 +62,7 @@
 			folders = made.folders;
 		} catch (e) {
 			if (mine !== asked) return;
-			error = e instanceof Error ? e.message : 'Could not make that folder.';
+			error = errorMessage(e, 'Could not make that folder.');
 		} finally {
 			if (mine === asked) loading = false;
 		}

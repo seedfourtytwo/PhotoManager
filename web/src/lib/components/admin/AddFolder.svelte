@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Source } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { suggester } from '$lib/suggest';
 	import Dialog from '../Dialog.svelte';
 	import FolderPicker, { type Picked } from './FolderPicker.svelte';
@@ -28,7 +29,7 @@
 		try {
 			onadded(await api.addSource({ label: label.trim(), path }));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not add the folder.';
+			error = errorMessage(e, 'Could not add the folder.');
 		} finally {
 			saving = false;
 		}

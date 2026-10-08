@@ -3,6 +3,7 @@
 	import type { FolderListing } from '$lib/api';
 	import { ApiError } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import FolderList from './FolderList.svelte';
 
 	/** What the picker shows right now. */
@@ -57,7 +58,7 @@
 			if (mine !== asked) return;
 			listing = listing && { ...listing, folders: [] };
 			shown = '';
-			error = e instanceof Error ? e.message : 'Could not read that folder.';
+			error = errorMessage(e, 'Could not read that folder.');
 			missing = !create && folder && e instanceof ApiError && e.status === 404 ? folder : '';
 		} finally {
 			if (mine === asked) loading = false;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { RemoteSource } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import Dialog from '../Dialog.svelte';
 
 	type Props = { onclose: () => void; onadded: (source: RemoteSource) => void };
@@ -21,7 +22,7 @@
 			if (remotes.length) remote = remotes[0];
 		} catch (e) {
 			remotes = [];
-			remotesError = e instanceof Error ? e.message : 'rclone is not available on the server.';
+			remotesError = errorMessage(e, 'rclone is not available on the server.');
 		}
 	}
 	$effect(() => void loadRemotes());
@@ -33,7 +34,7 @@
 		try {
 			onadded(await api.addRemoteSource({ label: label.trim(), remote, path: path.trim() }));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not add the cloud folder.';
+			error = errorMessage(e, 'Could not add the cloud folder.');
 		} finally {
 			saving = false;
 		}
