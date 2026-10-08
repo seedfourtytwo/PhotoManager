@@ -41,12 +41,14 @@
 	--s-7: 3rem; /* 48 */
 	--s-8: 4rem; /* 64 */
 
-	/* Shape — photos are never rounded; controls barely; surfaces a little. */
-	--r-1: 3px;
-	--r-2: 8px;
+	/* Shape — photos are never rounded; controls and surfaces are soft. */
+	--r-1: 12px;
+	--r-2: 20px;
+	--r-pill: 999px;
+	--check-radius: 4px; /* a 16 px box: --r-1 would turn it into a circle */
 
 	/* Layout */
-	--gutter: 3px;
+	--gutter: 2px;
 	--rail: 7.5rem;
 	--margin: 16rem; /* right-margin notes and filters on desktop */
 	--bar: 3.5rem; /* phone bottom bar */
@@ -54,8 +56,9 @@
 	--page-x: var(--s-5); /* page side padding on a laptop */
 	--measure: 36rem; /* line length for prose */
 
-	/* Motion — only to explain; ≤ 150 ms. */
-	--motion: 120ms;
+	/* Motion — short, and it follows the finger; off under prefers-reduced-motion. */
+	--motion: 200ms;
+	--motion-sheet: 240ms;
 	--ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -64,6 +67,9 @@
 	--font-title: var(--font-serif);
 	--title-weight: 500;
 	--voice-style: italic;
+	--r-1: 3px;
+	--r-2: 8px;
+	--gutter: 3px;
 }
 
 @media (max-width: 1023px) {
@@ -232,18 +238,22 @@ button.primary:disabled {
 }
 
 /* ——— Fields ———
-   Text fields are a line to write on, not a box; focus turns the line to the accent. */
+   Text fields are a soft box; focus rings it in the accent. */
 input,
 select,
 textarea {
 	font: inherit;
 	color: inherit;
-	background: transparent;
-	border: 0;
-	border-bottom: 1px solid var(--hairline);
-	padding: var(--s-2) 0.1rem;
-	border-radius: 0;
 	min-width: 0;
+}
+/* Text fields are a soft box; focus rings it in the accent. */
+input:where(:not([type='checkbox'], [type='radio'], [type='range'])),
+select,
+textarea {
+	background: var(--tint);
+	border: 1px solid transparent;
+	border-radius: var(--r-1);
+	padding: var(--s-2) var(--s-3);
 	transition: border-color var(--motion) var(--ease);
 }
 
@@ -262,19 +272,17 @@ textarea::placeholder {
 	opacity: 1;
 }
 
-input:hover,
+input:where(:not([type='checkbox'], [type='radio'], [type='range'])):hover,
 select:hover,
 textarea:hover {
-	border-bottom-color: var(--ink-3);
+	border-color: var(--hairline);
 }
 
-input:focus-visible,
+input:where(:not([type='checkbox'], [type='radio'], [type='range'])):focus-visible,
 select:focus-visible,
 textarea:focus-visible {
 	outline: none;
-	border-radius: 0;
-	border-bottom-color: var(--accent);
-	box-shadow: 0 1px 0 0 var(--accent);
+	border-color: var(--accent);
 }
 
 /* The clear button of a search field: a thin cross in the secondary ink. */
@@ -297,8 +305,6 @@ input[type='search']::-webkit-search-cancel-button:hover {
 
 select {
 	cursor: pointer;
-	padding-left: 0;
-	padding-right: var(--s-1);
 }
 
 select option {
@@ -317,7 +323,7 @@ input[type='radio'] {
 	margin: 0;
 	padding: 0;
 	border: 1.5px solid var(--ink-2);
-	border-radius: var(--r-1);
+	border-radius: var(--check-radius);
 	background: transparent center / 100% no-repeat;
 	box-sizing: border-box;
 	cursor: pointer;
@@ -352,7 +358,7 @@ input[type='checkbox']:focus-visible,
 input[type='radio']:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
-	border-radius: var(--r-1);
+	border-radius: var(--check-radius);
 }
 input[type='checkbox']:focus-visible {
 	box-shadow: none;
@@ -431,7 +437,7 @@ label:has(> input[type='radio']) {
 	cursor: pointer;
 }
 
-/* A labelled field: the label above, the line to write on below. */
+/* A labelled field: the label above, the soft box below. */
 .field {
 	display: grid;
 	gap: var(--s-1);
@@ -523,6 +529,21 @@ legend {
 	overflow: hidden;
 	clip-path: inset(50%);
 	white-space: nowrap;
+}
+
+/* Floating bars over photos. Solid when blur is unavailable or the device asks for less. */
+.glass {
+	background: var(--raised);
+	border: 1px solid var(--hairline);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	@media not (prefers-reduced-transparency: reduce) {
+		.glass {
+			background: var(--glass);
+			-webkit-backdrop-filter: blur(18px) saturate(1.4);
+			backdrop-filter: blur(18px) saturate(1.4);
+		}
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

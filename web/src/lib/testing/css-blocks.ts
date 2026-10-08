@@ -7,7 +7,7 @@ export function readBlocks(css: string): Map<string, Record<string, string>> {
 	const blocks = new Map<string, Record<string, string>>();
 	const path: string[] = [];
 	let text = '';
-	for (const char of css.replace(/\/\*[\s\S]*?\*\//g, '')) {
+	for (const char of css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import[^;]*;/g, '')) {
 		if (char === '{') {
 			path.push(squash(text));
 			text = '';

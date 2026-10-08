@@ -28,6 +28,12 @@ describe('readBlocks', () => {
 			'url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E")'
 		);
 	});
+	it('ignores @import lines in front of the first rule', () => {
+		const imported = readBlocks(
+			"@import './fonts.css';\n@import './themes.css';\n:root { --a: 1; }"
+		);
+		expect(imported.get(':root')).toEqual({ '--a': '1' });
+	});
 	it('returns no entry for an empty stylesheet', () => {
 		expect(readBlocks('').size).toBe(0);
 	});
