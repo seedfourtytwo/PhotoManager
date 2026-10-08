@@ -112,19 +112,8 @@ body with the real admin check, or `app.dependency_overrides[backup.require_admi
 
 ## 6. CLI (`__main__.py`)
 
-```python
-from photo_assistant.api import cli_ops
-
-sub = parser.add_subparsers(dest="command")
-...                                   # import, sources as today
-cli_ops.register(sub)                 # export-library, verify-library, doctor, backup …
-args = parser.parse_args(argv)
-if (code := cli_ops.dispatch(args)) is not None:
-    return code
-```
-
-Then the justfile recipes can call `python -m photo_assistant <cmd>` instead of
-`python -m photo_assistant.api.cli_ops <cmd>` (optional; both work).
+There is one command line: `python -m photo_assistant --help` lists every command, the
+operations ones included (`api/cli_command.py` describes a command, `__main__.py` holds the list).
 
 ## 7. Docs to touch at merge
 
