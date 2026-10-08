@@ -153,9 +153,10 @@ def require_view(
     level: Level = Level.VIEW,
     *,
     trashed: bool = False,
+    held: bool = False,
 ) -> AssetView:
     """The photo as this viewer sees it: 404 if hidden from them, 403 if their level is too low."""
-    view = services.repo.get_view(viewer, asset_id, trashed=trashed)
+    view = services.repo.get_view(viewer, asset_id, trashed=trashed, held=held)
     if view is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "photo not found")
     if view.level < level:
@@ -164,11 +165,17 @@ def require_view(
 
 
 def require_views(
-    services: Services, viewer: Viewer, ids: list[int], level: Level, *, trashed: bool = False
+    services: Services,
+    viewer: Viewer,
+    ids: list[int],
+    level: Level,
+    *,
+    trashed: bool = False,
+    held: bool = False,
 ) -> list[AssetView]:
     """All of ids or an error: 404 if any is hidden from the viewer, 403 if any is below
     level."""
-    views = services.repo.views_by_ids(viewer, ids, trashed=trashed)
+    views = services.repo.views_by_ids(viewer, ids, trashed=trashed, held=held)
     if len(views) != len(set(ids)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "some of these photos were not found")
     if any(v.level < level for v in views):

@@ -20,10 +20,11 @@ export const REAL_BACKEND = !!process.env.E2E_RESET_URL;
 /** Fresh, known state (the mock's seed, or the real backend's seeded snapshot). */
 export async function resetMock(
 	users: 'seed' | 'none' = 'seed',
-	options: { models?: boolean; count?: number } = {}
+	options: { models?: boolean; count?: number; review?: boolean } = {}
 ) {
 	test.skip(!RESET_URL, 'needs a reset endpoint (mock API or backend test mode)');
 	test.skip(REAL_BACKEND && !!options.models, 'ML models are a mock-only switch');
+	test.skip(REAL_BACKEND && !!options.review, 'photos held for review are a mock-only switch');
 	const response = await fetch(RESET_URL, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },

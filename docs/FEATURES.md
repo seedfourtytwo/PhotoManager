@@ -48,6 +48,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | 2.3 | Thumbnails (fit 640 px, made during import from the source file, which also proves the file decodes) and previews (fit 2048 px, background job), orientation-corrected WebP via libvips | Must | M1 ✅ |
 | 2.4 | Offline reverse geocoding (country / region / city) — no network call | Should | M2 ✅ (API) |
 | 2.5 | Near-duplicate & burst detection (perceptual hash + time window), "pick the best" helper — *pHash + time-window groups done in the API; "pick the best" helper to do* | Should | M2 |
+| 2.5b | **To review** (issue 8): a newly imported photo that looks like one already in the library, or that the auto-tagger sees as a screenshot, document, receipt or meme, is copied in but held out of the library. A grouped review screen offers Keep (joins the library, never held again) or Discard (30-day trash). Applies to every source | Should | M2 ✅ |
 | 2.6 | Quality signals: blur, exposure, eyes-closed (from face landmarks) → used for "best of" picks | Could | M3 |
 | 2.7 | Semantic embeddings (CLIP-family) for every photo | Must | M3 |
 | 2.8 | Face detection + clustering into people; user names clusters; merge/split | Should | M3 |
@@ -198,6 +199,7 @@ fixed now so nothing in M1–M5 makes it harder (data folder layout, DB snapshot
 | 9b.9 | Full restore guide (new machine → working library) — tested once per milestone | Should | M6 |
 | 9b.10 | **Guided setup in the web app**: pick a disk, folder or cloud remote; space check; the app makes the key and insists on a saved copy; first backup starts at once | Must | ✅ |
 | 9b.11 | **Proven restores**: an automatic restore test after the first backup and every week; a failed proof raises the banner | Must | ✅ |
+| 9b.12 | **Off-site copy on Proton Drive** (issue 14): a local backup is also copied, encrypted, to a Proton Drive folder after every run, through Proton's own CLI (no Proton password in the app); a failed copy raises the banner; restore steps in the backup guide | Should | ✅ |
 
 ## 10. Web and phone app
 
@@ -219,7 +221,7 @@ itself. The phone has to push, and only an installed app can do that on its own.
 | 10.2 | Web: **hand-picked upload** from any device (phone: pick from the Photos library; laptop: pick files or a folder) into your inbox | Must | M2 |
 | 10.3 | Server side of sync: per-user inbox + upload API (resumable, "which of these hashes do you already have?", per-device tokens) | Should | M4 |
 | 10.4 | **Free automatic iPhone upload via Apple Shortcuts** (built into iOS, no app, no cost): a personal automation — e.g. "when charging" or "every night" — finds photos added since the last run and posts them to the upload API. We ship the shortcut + a setup guide. Needs a spike first: batch-size limits and whether it runs without a tap on current iOS | Should | M4 |
-| 10.4b | **Partner's iPhone via Proton**: her phone backs up to Proton, we pull from Proton. Blocked today: Proton's automatic backup lands in its Photos section, which rclone can't read yet. Works now only for photos she puts in a normal Proton folder by hand. Re-check each milestone | Could | M4 |
+| 10.4b | **Partner's iPhone via Proton**: her phone backs up to Proton, we pull from Proton. Done through Proton's own `proton-drive` CLI (issue 8): the Photos section, the whole Drive or one folder; the sign-in stays in Proton's tool. Still to do: timed re-checks | Could | M4 ✅ (manual pull) |
 | 10.5 | **Own phone app** — full web feature parity + background sync. Parked: an iPhone app needs the paid Apple Developer Program ($99/yr) or re-signing every 7 days with a free Apple ID | Later | — |
 | 10.6 | Phone app: server → phone sync ("keep this album on my phone") | Later | — |
 | 10.7 | Phone app: free-up-space helper | Later | — |

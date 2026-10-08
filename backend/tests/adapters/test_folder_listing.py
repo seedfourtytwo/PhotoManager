@@ -64,3 +64,24 @@ def test_a_missing_folder_a_file_and_an_unreadable_folder_say_why(tmp_path: Path
                 LocalFolders().list(locked)
         finally:
             locked.chmod(0o700)
+
+
+def test_a_missing_folder_is_told_apart_from_an_unreadable_one(tmp_path: Path) -> None:
+    from photo_assistant.adapters.folder_listing import FolderMissingError
+
+    with pytest.raises(FolderMissingError):
+        LocalFolders().list(tmp_path / "nope")
+
+
+def test_create_makes_one_folder_and_explains_refusals(tmp_path: Path) -> None:
+    folders = LocalFolders()
+    assert folders.create(tmp_path / "new") == tmp_path / "new"
+    assert (tmp_path / "new").is_dir()
+    with pytest.raises(FolderUnavailableError, match="already exists"):
+        folders.create(tmp_path / "new")
+    with pytest.raises(FolderUnavailableError, match="does not exist"):
+        folders.create(tmp_path / "a" / "b")
+    (tmp_path / "file").write_text("x")
+    with pytest.raises(FolderUnavailableError, match="does not exist"):
+        folders.create(tmp_path / "file" / "b")
+    assert not (tmp_path / "a").exists()

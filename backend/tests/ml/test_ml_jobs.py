@@ -261,6 +261,26 @@ def test_auto_tag_embeds_if_needed_then_tags_and_flags(
     assert store.task_status(sea, EMBED_CLIP, clip.name) == TaskStatus.DONE
 
 
+def test_auto_tag_hands_each_photos_tags_on_for_the_review_check(
+    repo: SqliteRepository, store: SqliteMlStore, library: FakeLibrary
+) -> None:
+    sea, screen = add(repo, 1, "sea.webp"), add(repo, 2, "screen.webp")
+    clip = tag_clip()
+    seen: dict[int, list[str]] = {}
+    handler = AutoTag(
+        EmbedClip(repo, library, store, clip),
+        store,
+        clip,
+        TagParams(0.1),
+        VOCAB,
+        on_tags=lambda asset_id, tags: seen.update({asset_id: [t.name for t in tags]}),
+    )
+    handler({"asset_id": sea})
+    handler({"asset_id": screen})
+    handler({"asset_id": screen})  # done: not handed on twice
+    assert seen == {sea: ["beach"], screen: ["screenshot"]}
+
+
 def test_auto_tag_with_missing_model(
     repo: SqliteRepository, store: SqliteMlStore, library: FakeLibrary
 ) -> None:

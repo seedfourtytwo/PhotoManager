@@ -1,7 +1,8 @@
 """SourceSync with Proton's own ``proton-drive`` CLI: list, then download what is new.
 
-Read-only on Proton: only ``photo timeline``, ``photo download``, ``filesystem list`` and
-``filesystem download`` are ever built (tested). The sign-in is the CLI's business (browser
+Pulling is read-only on Proton: only ``photo timeline``, ``photo download``, ``filesystem
+list`` and ``filesystem download`` are ever built (tested). The one write offered here is
+making a new, empty folder, for a backup copy to go in. The sign-in is the CLI's business (browser
 login, session in the system keyring); this adapter never sees a password.
 
 Proton has no "copy what changed" command, so the adapter keeps its own list of what it has
@@ -162,7 +163,7 @@ class ProtonDrive:
 
     def check(self) -> None:
         """Raises SyncAuthError when not signed in, SyncError when the tool is missing."""
-        self._call(["filesystem", "list", "/"], _ASK_TIMEOUT)
+        self.run(["filesystem", "list", "/"], _ASK_TIMEOUT)
 
     def folders(self, path: str) -> list[str]:
         """Names of the folders directly inside ``path``, for the folder picker."""
@@ -172,6 +173,11 @@ class ProtonDrive:
             if node.get("type") == "folder" and (name := _name(node)) is not None
         ]
         return sorted(names, key=str.casefold)
+
+    def create_folder(self, parent: str, name: str) -> str:
+        """Make a new folder inside ``parent`` (a place in My files); its path."""
+        self.run(["filesystem", "create-folder", parent, name, "--json"], _LIST_TIMEOUT, parent)
+        return f"{parent}/{name}"
 
     def pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
         try:
@@ -247,7 +253,7 @@ class ProtonDrive:
     def _list(
         self, args: list[str], path: str, timeout: float = _LIST_TIMEOUT
     ) -> list[dict[str, object]]:
-        out = self._call([*args, "--json"], timeout, path)
+        out = self.run([*args, "--json"], timeout, path)
         try:
             nodes = json.loads(out)
         except json.JSONDecodeError as exc:
@@ -280,7 +286,7 @@ class ProtonDrive:
                 raise _PullStoppedError(_OUT_OF_TIME)
             args = [*run.verb, *(item.remote for item in batch), str(work), "--json"]
             try:
-                summary = json.loads(self._call(args, remaining, out_of_time=_OUT_OF_TIME))
+                summary = json.loads(self.run(args, remaining, out_of_time=_OUT_OF_TIME))
             except (SyncAuthError, _PullStoppedError):
                 raise
             except (SyncError, json.JSONDecodeError) as exc:
@@ -304,9 +310,11 @@ class ProtonDrive:
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
-    def _call(
+    def run(
         self, args: list[str], timeout: float, path: str = "", out_of_time: str = _SLOW_ANSWER
     ) -> str:
+        """Run one command of the tool and return what it printed. ``path``: the remote place
+        asked about, named in the error when Proton says it is not there."""
         try:
             result = run_tool(
                 [self._binary, *args],

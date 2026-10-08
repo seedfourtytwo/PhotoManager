@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { session } from '$lib/app.svelte';
+	import { api, library, session } from '$lib/app.svelte';
 
-	type Link = { href: string; label: string; match: (p: string) => boolean };
+	type Link = { href: string; label: string; match: (p: string) => boolean; count?: number };
 	const path = $derived(page.url.pathname);
 
 	/** The five places of DESIGN_PRINCIPLES §3, the same on laptop and phone. */
@@ -14,7 +14,17 @@
 		{ href: '/search', label: 'Search', match: (p) => p === '/search' }
 	];
 	/** Everything else: in the rail's foot on a laptop, under "More" on a phone. */
+	let waiting = $state(0); // photos held for review; asked again as you move around
+	$effect(() => {
+		void path;
+		void library.version;
+		api
+			.reviewCount()
+			.then((r) => (waiting = r.count))
+			.catch(() => undefined); // the menu works without it
+	});
 	const rest = $derived<Link[]>([
+		{ href: '/review', label: 'To review', match: (p) => p === '/review', count: waiting },
 		{ href: '/trash', label: 'Trash', match: (p) => p === '/trash' },
 		{ href: '/settings', label: 'Settings', match: (p) => p.startsWith('/settings') },
 		...(session.isAdmin
@@ -68,13 +78,19 @@
 	<ul class="rest" class:open={more} id="nav-more">
 		{#each rest as link (link.href)}
 			<li>
-				<a href={link.href} aria-current={link.match(path) ? 'page' : undefined}>{link.label}</a>
+				<a href={link.href} aria-current={link.match(path) ? 'page' : undefined}
+					>{link.label}{#if link.count}&nbsp;<span class="count">{link.count}</span>{/if}</a
+				>
 			</li>
 		{/each}
 	</ul>
 </nav>
 
 <style>
+	.count {
+		font-variant-numeric: tabular-nums;
+		color: var(--ink-2);
+	}
 	nav {
 		position: sticky;
 		top: 0;
@@ -89,8 +105,9 @@
 	.mark {
 		margin: 0 0 var(--s-5);
 		padding: var(--s-1) var(--s-2) 0;
-		font-family: var(--font-text);
-		font-style: italic;
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
+		font-style: var(--voice-style);
 		font-size: var(--fs-20);
 		line-height: 1;
 		color: var(--ink);

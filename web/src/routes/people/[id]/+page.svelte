@@ -252,11 +252,10 @@
 	}
 	h1 {
 		font-size: var(--fs-40);
-		font-weight: 350;
-		letter-spacing: -0.015em;
+		font-weight: var(--title-weight);
 	}
 	h1.quiet {
-		font-style: italic;
+		font-style: var(--voice-style);
 	}
 	.tools {
 		display: flex;

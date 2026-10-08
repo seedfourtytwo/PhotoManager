@@ -34,7 +34,7 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<link rel="manifest" href="/manifest.webmanifest" />
-	<meta name="theme-color" content="#181817" />
+	<meta name="theme-color" content="#0d0f12" />
 	<link rel="apple-touch-icon" href="/icon-192.png" />
 	<title>Photos</title>
 </svelte:head>
@@ -95,8 +95,9 @@
 	}
 	.opening {
 		padding: var(--s-6) var(--page-x);
-		font-family: var(--font-text);
-		font-style: italic;
+		font-family: var(--font-title);
+		font-weight: 400;
+		font-style: var(--voice-style);
 		font-size: var(--fs-16);
 	}
 	.skip:focus {

@@ -563,3 +563,56 @@ test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialo
 		page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabel('PIN')
 	).toHaveValue('');
 });
+
+test('folder picker: a folder that is not there yet can be created on the spot', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, "uses the mock machine's folders");
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+	const field = dialog.getByLabel('Folder', { exact: true });
+	await field.fill('/home/c/missing drop box');
+	await field.press('Enter');
+	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);
+	await dialog.getByRole('button', { name: 'Create this folder' }).click();
+	await expect(dialog.getByRole('alert')).toHaveCount(0);
+	await expect(field).toHaveValue('/home/c/missing drop box');
+	await expect(dialog.getByText('No folders inside.')).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Create this folder' })).toHaveCount(0);
+});
+
+test('backups: keep a copy on Proton Drive in a folder made on the spot, then stop', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool');
+	await page.evaluate(() =>
+		fetch('/api/backups', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				label: 'USB disk',
+				repository: '/media/c/USB disk/photos',
+				password_file: '/home/c/.backup-key'
+			})
+		})
+	);
+	await page.reload();
+	const backups = page.getByRole('region', { name: 'Backups' });
+	const cloud = backups.getByRole('listitem').filter({ hasText: 'Home server' });
+	await expect(cloud.getByRole('button', { name: 'Copy to Proton' })).toHaveCount(0);
+	const row = backups.getByRole('listitem').filter({ hasText: 'USB disk' });
+	await row.getByRole('button', { name: 'Copy to Proton' }).click();
+
+	const dialog = page.getByRole('dialog', { name: 'Copy this backup to Proton Drive' });
+	await expect(dialog.getByText('My files', { exact: true })).toBeVisible();
+	await dialog.getByLabel('New folder').fill('Photo backup');
+	await dialog.getByRole('button', { name: 'Create' }).click();
+	await expect(dialog.getByText('My files / Photo backup')).toBeVisible();
+	await dialog.getByRole('button', { name: 'Keep a copy here' }).click();
+	await expect(row.getByText(/Proton copy: My files \/ Photo backup/)).toBeVisible();
+	await expect(row.getByText(/first copy after the next backup/)).toBeVisible();
+
+	await row.getByRole('button', { name: 'Copy to Proton' }).click();
+	await dialog.getByRole('button', { name: 'Stop copying' }).click();
+	await expect(row.getByText(/Proton copy/)).toHaveCount(0);
+});

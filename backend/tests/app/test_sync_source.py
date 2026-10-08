@@ -210,6 +210,9 @@ class FakeAccount:
             raise SyncNotFoundError(f"folder '{path}' not found on Proton Drive")
         return []
 
+    def create_folder(self, parent: str, name: str) -> str:
+        return f"{parent}/{name}"
+
 
 def test_a_proton_source_is_only_added_for_a_place_that_exists(tmp_path: Path) -> None:
     from photo_assistant.app.sync_source import add_proton_source

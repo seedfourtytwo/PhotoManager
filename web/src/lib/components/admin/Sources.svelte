@@ -336,6 +336,7 @@
 	}
 	.path {
 		font-family: var(--font-mono);
+		font-stretch: 80%;
 		overflow-wrap: anywhere;
 	}
 	.actions {

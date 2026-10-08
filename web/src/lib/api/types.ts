@@ -311,7 +311,7 @@ export type PrintedPdf = { blob: Blob; filename: string; warnings: number };
 
 export type BackupRun = {
 	id: Id;
-	kind: 'backup' | 'check' | 'restore_test';
+	kind: 'backup' | 'check' | 'restore_test' | 'mirror';
 	status: 'running' | 'succeeded' | 'failed';
 	started_at: string;
 	finished_at: string | null;
@@ -342,6 +342,11 @@ export type BackupTarget = {
 	restore_failing: boolean;
 	/** Someone confirmed a copy of the recovery key exists outside this machine. */
 	key_saved: boolean;
+	/** The Proton Drive folder (`/my-files/...`) that holds an off-site copy, if any. */
+	mirror_path: string | null;
+	last_mirror_at: string | null;
+	/** Why the last copy to Proton failed. */
+	mirror_error: string | null;
 	/** Drives the warning banner. */
 	needs_attention: boolean;
 };
@@ -410,3 +415,11 @@ export type ProtonStatus = { ready: boolean; problem: string | null };
 /** `path`: `/photos` (the Photos section) or `/my-files[/folder...]`. */
 export type ProtonSourceIn = { label: string; path: string };
 export type ProtonSource = ProtonSourceIn & { id: Id };
+
+// --- to review (issue 8) ----------------------------------------------------------------------
+
+/** A photo held out of the library; `like`: for a look-alike, the library photo it resembles. */
+export type HeldItem = { asset: AssetOut; like: AssetOut | null };
+/** `reason`: "lookalike", or the kind of clutter ("screenshot", "document", "receipt", "meme"). */
+export type ReviewGroup = { reason: string; items: HeldItem[] };
+export type ReviewList = { count: number; groups: ReviewGroup[] };

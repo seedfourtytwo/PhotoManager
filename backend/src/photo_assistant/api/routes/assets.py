@@ -154,10 +154,12 @@ def _serve_webp(services: Services, view: AssetView, kind: str) -> Response:
 
 
 def _image_view(services: Services, viewer: Viewer, asset_id: int) -> AssetView:
-    """Thumbnails and previews also serve photos in the trash, to whoever sees them there
-    (QA A10: the trash page must show what it lists). Nothing else does."""
-    view = services.repo.get_view(viewer, asset_id) or services.repo.get_view(
-        viewer, asset_id, trashed=True
+    """Thumbnails and previews also serve photos in the trash or held for review, to whoever
+    sees them there (QA A10: those pages must show what they list). Nothing else does."""
+    view = (
+        services.repo.get_view(viewer, asset_id)
+        or services.repo.get_view(viewer, asset_id, trashed=True)
+        or services.repo.get_view(viewer, asset_id, held=True)
     )
     if view is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "photo not found")

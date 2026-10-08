@@ -203,9 +203,12 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 | CI | GitHub Actions, defined in `ci/github-ci.yml`, not yet switched on (`ci/README.md`): backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step. Until then the checks run locally: `just check` and pre-commit |
 | Versioning | Conventional Commits. No release tooling yet |
 
-## Typefaces (decided 2026-10-02)
+## Typefaces (decided 2026-10-08)
 
-Newsreader (serif, optical sizes) for titles, dates and captions; Instrument Sans for controls.
-Both are SIL Open Font License; the woff2 files and licences are vendored in `web/static/fonts/`
-(about 520 KB), served by the app itself — no font CDN, nothing fetched at runtime. Fallbacks:
-Iowan/Charter/Georgia and the system sans.
+Hanken Grotesk (sans, variable weight) for everything you read or operate, including titles;
+Martian Mono (variable weight and width, set at 80 % width) for data: dates, counts, camera
+settings, file names, system status. Newsreader (serif, optical sizes) stays as the title face
+of the Album theme. All SIL Open Font License; the woff2 files and licences are vendored in
+`web/static/fonts/`, served by the app itself — no font CDN, nothing fetched at runtime.
+Fallbacks: the system sans, the system monospace, Iowan/Charter/Georgia.
+Replaced Instrument Sans (2026-10-02) in the 2026-10-08 redesign.

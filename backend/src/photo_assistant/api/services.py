@@ -15,6 +15,7 @@ from photo_assistant.adapters.geocoder import OfflineGeocoder
 from photo_assistant.adapters.ollama_ai import OllamaProvider
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
+from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
@@ -33,6 +34,7 @@ from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, Gr
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
+from photo_assistant.app.review import Review
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
@@ -58,6 +60,7 @@ class Services:
     clock: SystemClock
     downloads: Downloads
     trash: Trash
+    review: Review
     integrations: Integrations
     ml: MlServices
     ops: OpsServices
@@ -105,6 +108,7 @@ def build_services(settings: Settings) -> Services:
         settings=ImportSettings(min_free_bytes=min_free_bytes, thumb_edge=settings.thumb_edge),
     )
     trash = Trash(repo, store, clock)
+    review = Review(repo, clock)
     integrations = build_integrations(
         data_root=root,
         settings=settings.integrations,
@@ -114,7 +118,7 @@ def build_services(settings: Settings) -> Services:
         clock=clock,
         min_free_bytes=min_free_bytes,
     )
-    ml = build_ml_services(root, settings.ml, repo, store, db)
+    ml = build_ml_services(root, settings.ml, repo, store, db, on_tags=review.hold_clutter)
 
     def scan(payload: dict[str, object]) -> object:
         # rclone sources are pulled into staging/ first; every kind is then imported
@@ -162,6 +166,7 @@ def build_services(settings: Settings) -> Services:
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
         db=db,
         rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
+        mirror=ProtonMirror(integrations.proton),
     )
     editor = Editor(
         repo,
@@ -180,7 +185,9 @@ def build_services(settings: Settings) -> Services:
             ),
             SCAN_JOB_KIND: scan,  # one handler: pulls rclone sources, then imports any kind
             GEOCODE_JOB: GeocodeAssets(repo, OfflineGeocoder()),
-            GROUP_JOB: GroupSimilar(repo, ImageHashPhash(), lambda rel: store.absolute(rel)),
+            GROUP_JOB: GroupSimilar(
+                repo, ImageHashPhash(), lambda rel: store.absolute(rel), review=review
+            ),
             PURGE_JOB: trash.purge_expired,
             RENDER_EDIT_JOB: editor.render_edits,
             **ml.handlers,
@@ -210,6 +217,7 @@ def build_services(settings: Settings) -> Services:
         clock,
         downloads,
         trash,
+        review,
         integrations,
         ml,
         ops,

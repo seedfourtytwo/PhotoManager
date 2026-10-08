@@ -61,6 +61,7 @@ import type {
 	ProtonStatus,
 	RemoteSource,
 	RemoteSourceIn,
+	ReviewList,
 	ScoredAsset,
 	SearchResult,
 	SetupBody,
@@ -233,6 +234,7 @@ export function createApi(options: ApiOptions = {}) {
 		addSource: (body: SourceIn) => request<Source>('POST', '/api/sources', body),
 		/** Admin: the sub-folders of `path` on the server (the home folder when omitted). */
 		folders: (path?: string) => get<FolderListing>(query('/api/folders', { path })),
+		createFolder: (path: string) => request<FolderListing>('POST', '/api/folders', { path }),
 		updateSource: (id: Id, body: SourcePatch) =>
 			request<Source>('PATCH', `/api/sources/${id}`, body),
 		scanSource: (id: Id) => request<Queued>('POST', `/api/sources/${id}/scan`),
@@ -309,6 +311,13 @@ export function createApi(options: ApiOptions = {}) {
 		setAlbumMembers: (id: Id, members: AlbumMember[]) =>
 			request<AlbumMember[]>('PUT', `/api/albums/${id}/members`, members),
 
+		// to review: photos held out of the library until someone decides
+		review: () => get<ReviewList>('/api/review'),
+		reviewCount: () => get<{ count: number }>('/api/review/count'),
+		keepHeld: (ids: Id[]) => request<{ kept: number }>('POST', '/api/review/keep', { ids }),
+		discardHeld: (ids: Id[]) =>
+			request<{ discarded: number }>('POST', '/api/review/discard', { ids }),
+
 		// trash
 		trashAssets: (ids: Id[]) => request<{ trashed: number }>('DELETE', '/api/assets', { ids }),
 		trash: () => get<TrashItem[]>('/api/trash'),
@@ -371,6 +380,9 @@ export function createApi(options: ApiOptions = {}) {
 		updateBackup: (id: Id, body: BackupPatch) =>
 			request<BackupTarget>('PATCH', `/api/backups/${id}`, body),
 		runBackup: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/run`),
+		/** Keep an off-site copy in this Proton Drive folder; null stops it. */
+		setProtonCopy: (id: Id, path: string | null) =>
+			request<BackupTarget>('PUT', `/api/backups/${id}/proton-copy`, { path }),
 		restoreTest: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/restore-test`),
 		backupRuns: (id: Id, limit = 10) =>
 			get<BackupRun[]>(query(`/api/backups/${id}/runs`, { limit })),
@@ -391,6 +403,8 @@ export function createApi(options: ApiOptions = {}) {
 		proton: () => get<ProtonStatus>('/api/proton'),
 		protonFolders: (path: string) =>
 			get<{ path: string; folders: string[] }>(query('/api/proton/folders', { path })),
+		createProtonFolder: (parent: string, name: string) =>
+			request<{ path: string; folders: string[] }>('POST', '/api/proton/folders', { parent, name }),
 		addProtonSource: (body: ProtonSourceIn) =>
 			request<ProtonSource>('POST', '/api/proton/sources', body)
 	};

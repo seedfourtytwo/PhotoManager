@@ -6,6 +6,7 @@ Both are safe to run any number of times: they only look at photos still missing
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 from photo_assistant.domain.grouping import group_shots, runs_with
 from photo_assistant.ports.enrich import EnrichmentStore, Geocoder, PerceptualHasher
@@ -15,6 +16,12 @@ log = logging.getLogger(__name__)
 GEOCODE_JOB = "geocode"
 GROUP_JOB = "group"
 FULL_REGROUP: dict[str, object] = {"full": True}  # payload: regroup the whole library
+
+
+class LookalikeCheck(Protocol):
+    def hold_lookalikes(self, new: set[int]) -> int:
+        """Hold the new photos that look like one already in the library (issue 8)."""
+        ...
 
 
 class GeocodeAssets:
@@ -45,16 +52,21 @@ class GroupSimilar:
         hasher: PerceptualHasher,
         absolute: Callable[[str], Path],
         batch: int = 500,
+        review: LookalikeCheck | None = None,
     ) -> None:
         self._repo = repo
         self._hasher = hasher
         self._absolute = absolute
         self._batch = batch
+        self._review = review
 
     def __call__(self, payload: dict[str, object]) -> int:
         """``{}``: hash the new photos and regroup only the stretches of time they landed in
         (C29). ``{"full": true}``: regroup the whole library."""
         new = self._hash_missing()
+        if new and self._review is not None:
+            # before grouping: a photo held for review is in no group
+            self._review.hold_lookalikes(new)
         if payload.get("full"):
             return self._repo.set_groups(group_shots(self._repo.shots()))
         if not new:

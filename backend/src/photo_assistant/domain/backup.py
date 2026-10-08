@@ -30,6 +30,7 @@ class RunKind(StrEnum):
     BACKUP = "backup"
     CHECK = "check"
     RESTORE_TEST = "restore_test"
+    MIRROR = "mirror"  # bring the off-site copy (Proton Drive) up to date
 
 
 class BackupRunStatus(StrEnum):
@@ -108,6 +109,7 @@ class BackupTarget:
     enabled: bool
     created_at: datetime
     key_saved_at: datetime | None = None  # None: nobody confirmed a copy of the key exists
+    mirror_path: str | None = None  # the Proton Drive folder holding an off-site copy
 
     @property
     def kind(self) -> TargetKind:
@@ -165,6 +167,12 @@ class TargetStatus:
     overdue: bool
     last_proven_at: datetime | None = None  # the last restore test that matched every hash
     restore_failing: bool = False  # the last restore test did not
+    last_mirror_at: datetime | None = None  # the off-site copy was last brought up to date
+    mirror_error: str | None = None  # why the last copy run failed
+
+    @property
+    def mirror_failing(self) -> bool:
+        return self.mirror_error is not None
 
     @property
     def failing(self) -> bool:
@@ -176,10 +184,10 @@ class TargetStatus:
 
     @property
     def needs_attention(self) -> bool:
-        """Drives the warning banner: overdue, the last backup or restore test failed, or
-        nobody confirmed a copy of the recovery key."""
+        """Drives the warning banner: overdue, the last backup, restore test or off-site copy
+        failed, or nobody confirmed a copy of the recovery key."""
         trouble = self.overdue or self.failing or self.restore_failing or self.key_unsaved
-        return self.target.enabled and trouble
+        return self.target.enabled and (trouble or self.mirror_failing)
 
 
 @dataclass(frozen=True, slots=True)

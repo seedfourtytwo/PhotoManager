@@ -130,6 +130,33 @@ PA_DATA_ROOT=~/PhotoAssistant/restored just verify-library --skip-derived
 Then point `PA_DATA_ROOT` at it and start the app; thumbnails are rebuilt in the background.
 Restore into a **new** folder, never over an existing library.
 
+## 7. A copy on Proton Drive (off-site)
+
+A backup on a disk or folder of this machine can also be kept on Proton Drive. In the web
+app: **Admin → Backups → Copy to Proton**, open (or create) the folder it should go in, and
+choose **Keep a copy here**. From then on, after every successful backup the app uploads what
+is new and removes from Proton what the backup itself no longer keeps. The Backups list shows
+"Proton copy: … up to date" with the date; a failed copy raises the banner.
+
+- The copy is the backup's encrypted folder, nothing else. Proton (or anyone with the Drive)
+  cannot read it without the recovery key.
+- The sign-in is Proton's own: run `proton-drive auth login` once on this computer (a browser
+  opens). The app never sees the Proton password.
+- The app only ever writes inside `<your folder>/<the backup folder's name>` on Proton.
+- Stopping the copy leaves what is already on Proton where it is.
+
+**Restore from the Proton copy** (this computer and its disk are gone). On a new machine,
+install `restic` and Proton's `proton-drive` tool, sign in, then:
+
+```bash
+proton-drive filesystem download "/my-files/<your folder>/photo-assistant-backup" ~/from-proton
+restic -r ~/from-proton/photo-assistant-backup check          # asks for the recovery key
+mkdir -p ~/PhotoAssistant/restored
+restic -r ~/from-proton/photo-assistant-backup restore latest --target ~/PhotoAssistant/restored
+```
+
+and continue as in section 6 (move the database into place, verify the library).
+
 ## Troubleshooting
 
 | Message | Fix |

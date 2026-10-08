@@ -36,8 +36,10 @@ from photo_assistant.domain.backup import (
     TargetStatus,
     plan_backup,
     restore_proof_due,
+    size_text,
 )
 from photo_assistant.domain.library_paths import nested_or_same
+from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.domain.schedule import is_due, is_overdue, next_run, parse_window
 from photo_assistant.ports import Clock, Hasher
 from photo_assistant.ports.backup import (
@@ -50,7 +52,9 @@ from photo_assistant.ports.backup import (
     Disk,
     JobQueue,
     KeyVault,
+    MirrorReport,
     PasswordFileError,
+    RepositoryMirror,
     RepositoryRef,
 )
 
@@ -59,7 +63,9 @@ log = logging.getLogger(__name__)
 BACKUP_JOB = "backup_run"
 RESTORE_TEST_JOB = "backup_restore_test"
 BACKUP_DUE_JOB = "backup_due"  # queued by the periodic check: runs every target that is due
-LONG_JOBS = frozenset({BACKUP_JOB, RESTORE_TEST_JOB, BACKUP_DUE_JOB})
+MIRROR_JOB = "backup_mirror"  # bring one target's off-site copy up to date
+LONG_JOBS = frozenset({BACKUP_JOB, RESTORE_TEST_JOB, BACKUP_DUE_JOB, MIRROR_JOB})
+MIRROR_STATE_DIR = "mirror"  # in the data root, outside what a backup contains
 DB_SNAPSHOT_PATH = f"{DB_SNAPSHOT_DIR}/{DB_SNAPSHOT_FILE}"
 REPOSITORY_FOLDER = "photo-assistant-backup"  # a guided setup always makes its own folder
 RCLONE_PREFIX = "rclone:"
@@ -110,6 +116,15 @@ def _inside(a: Path, b: Path) -> bool:
     return nested_or_same(a.expanduser().resolve(), b.expanduser().resolve())
 
 
+def _files(count: int, word: str) -> str:
+    return f"{count} {word} file{'' if count == 1 else 's'}"
+
+
+def _mirror_summary(report: MirrorReport) -> str:
+    sent = f"{_files(report.uploaded, 'new')} sent ({size_text(report.bytes_sent)})"
+    return f"{sent}, {_files(report.removed, 'old')} removed"
+
+
 def _message(exc: BaseException) -> str:
     return str(exc) or type(exc).__name__
 
@@ -126,6 +141,7 @@ class BackupService:
         queue: JobQueue | None = None,
         places: BackupPlaces | None = None,
         vault: KeyVault | None = None,
+        mirror: RepositoryMirror | None = None,
         *,
         database_integrity: Callable[[Path], str],
     ) -> None:
@@ -143,6 +159,7 @@ class BackupService:
         self._places = places
         self._vault = vault
         self._database_integrity = database_integrity
+        self._mirror = mirror
         self._lock = threading.Lock()  # one run at a time per process; restic locks the repo
 
     # --- targets ---------------------------------------------------------------------------
@@ -304,7 +321,47 @@ class BackupService:
 
     def run_now(self, target_id: int) -> BackupRun:
         target = self.target(target_id)
-        return self._record(target, RunKind.BACKUP, lambda: self._backup(target))
+        run = self._record(target, RunKind.BACKUP, lambda: self._backup(target))
+        if run.status is BackupRunStatus.SUCCEEDED:
+            self.mirror_now(target_id)
+        return run
+
+    # --- the off-site copy (issue 14) --------------------------------------------------------
+
+    def set_mirror(self, target_id: int, mirror_path: str | None) -> BackupTarget:
+        """Keep a copy of this backup in a Proton Drive folder (None: stop). The first copy
+        is queued at once when there is a backup to copy."""
+        target = self.target(target_id)
+        if mirror_path is not None:
+            if self._mirror is None:
+                raise ValueError("a copy on Proton Drive is not available on this machine")
+            if target.kind is not TargetKind.LOCAL:
+                raise ValueError("only a backup in a folder or disk of this machine can be copied")
+            try:
+                if mirror_path == PROTON_PHOTOS:
+                    raise RemoteConfigError
+                RemoteConfig.proton(mirror_path)
+            except RemoteConfigError as exc:
+                raise ValueError("choose a folder in My files on Proton Drive") from exc
+        self._store.set_target_mirror(target_id, mirror_path)
+        has_backup = self._store.last_run(target_id, RunKind.BACKUP, succeeded_only=True)
+        if mirror_path is not None and has_backup is not None and self._queue is not None:
+            self._queue.enqueue(MIRROR_JOB, {"target_id": target_id})
+        return self.target(target_id)
+
+    def mirror_now(self, target_id: int) -> BackupRun | None:
+        """Bring the off-site copy up to date; None when this target has none."""
+        target = self.target(target_id)
+        mirror, remote = self._mirror, target.mirror_path
+        if mirror is None or remote is None:
+            return None
+        state = self._config.data_root / MIRROR_STATE_DIR / f"{target.id}.json"
+
+        def work() -> RunOutcome:
+            report = mirror.mirror(Path(target.repository), remote, state)
+            return RunOutcome(BackupRunStatus.SUCCEEDED, details=_mirror_summary(report))
+
+        return self._record(target, RunKind.MIRROR, work)
 
     def check(self, target_id: int, read_data_subset: str | None = None) -> BackupRun:
         target = self.target(target_id)
@@ -476,6 +533,13 @@ class BackupService:
         )
         test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven = self._store.last_run(target.id, RunKind.RESTORE_TEST, succeeded_only=True)
+        copy = self._store.last_run(target.id, RunKind.MIRROR) if target.mirror_path else None
+        copied = (
+            self._store.last_run(target.id, RunKind.MIRROR, succeeded_only=True)
+            if target.mirror_path
+            else None
+        )
+        copy_failed = copy is not None and copy.status is BackupRunStatus.FAILED
         return TargetStatus(
             target=target,
             last_success_at=success_at,
@@ -485,6 +549,8 @@ class BackupService:
             overdue=overdue,
             last_proven_at=(proven.finished_at or proven.started_at) if proven else None,
             restore_failing=test is not None and test.status is BackupRunStatus.FAILED,
+            last_mirror_at=(copied.finished_at or copied.started_at) if copied else None,
+            mirror_error=(copy.error or "the copy failed") if copy and copy_failed else None,
         )
 
     def _local(self, moment: datetime) -> datetime:
@@ -515,4 +581,5 @@ class BackupService:
             BACKUP_JOB: lambda payload: self._run_and_prove(int(str(payload["target_id"]))),
             RESTORE_TEST_JOB: lambda payload: self.restore_test(int(str(payload["target_id"]))),
             BACKUP_DUE_JOB: lambda payload: self.run_due(),
+            MIRROR_JOB: lambda payload: self.mirror_now(int(str(payload["target_id"]))),
         }

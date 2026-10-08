@@ -131,7 +131,8 @@
 		display: block;
 	}
 	.title {
-		font-family: var(--font-text);
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-size: var(--fs-20);
 		line-height: var(--lh-tight);
 	}

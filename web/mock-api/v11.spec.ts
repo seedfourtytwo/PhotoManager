@@ -159,7 +159,10 @@ describe('backups, devices and remote sources', () => {
 		await api.addSource({ label: 'Pics', path: pictures.path });
 		expect((await api.folders(pictures.path)).source_problem).toBe('already added as “Pics”');
 		expect((await api.folders('/')).parent).toBeNull();
-		await expect(api.folders('/home/c/missing')).rejects.toMatchObject({ status: 422 });
+		await expect(api.folders('/home/c/missing')).rejects.toMatchObject({ status: 404 });
+		expect((await api.createFolder('/home/c/missing')).folders).toEqual([]);
+		expect((await api.folders('/home/c/missing')).path).toBe('/home/c/missing');
+		await expect(api.createFolder('/home/c/missing')).rejects.toMatchObject({ status: 422 });
 		await expect(api.folders('Pictures')).rejects.toMatchObject({ status: 422 });
 		const member = await h.signedIn('partner', '2345');
 		await expect(member.folders()).rejects.toMatchObject({ status: 403 });

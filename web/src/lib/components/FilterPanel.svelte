@@ -182,7 +182,7 @@
 			bind:value={q}
 			oninput={onSearch}
 			type="search"
-			placeholder="Names, places, cameras, albums"
+			placeholder="Names, places, cameras"
 			aria-label="Search"
 		/>
 	</label>

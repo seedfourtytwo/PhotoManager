@@ -91,7 +91,8 @@
 		margin-bottom: var(--s-1);
 	}
 	.name {
-		font-family: var(--font-text);
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-size: var(--fs-16);
 		line-height: var(--lh-tight);
 		overflow: hidden;
@@ -99,7 +100,8 @@
 		white-space: nowrap;
 	}
 	.name.quiet {
-		font-style: italic;
+		font-weight: 400;
+		font-style: var(--voice-style);
 	}
 	@media (hover: hover) {
 		a:hover .name {
