@@ -12,12 +12,12 @@ from photo_assistant.app.accounts import (
     AlreadySetUpError,
     InvalidCredentialsError,
     LastAdminError,
-    NotFoundError,
     TooManyAttemptsError,
     UserPatch,
 )
 from photo_assistant.domain import errors
 from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, Role
+from photo_assistant.domain.errors import NotFoundError
 from tests.fakes import FakeClock
 
 GOOD = "1234"

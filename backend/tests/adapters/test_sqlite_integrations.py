@@ -3,6 +3,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -153,7 +154,7 @@ def test_every_kind_of_source_is_created_by_the_one_repository_method(
     kinds: list[str] = []
     real = repo.add_source
 
-    def spy(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def spy(*args: Any, **kwargs: Any) -> Any:
         kinds.append(kwargs.get("kind", "folder"))
         return real(*args, **kwargs)
 

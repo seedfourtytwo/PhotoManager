@@ -364,7 +364,7 @@ def test_rerun_repairs_a_photo_left_without_thumbnail_by_a_crash(
     asset = world.repo.get_asset(asset_id)
     assert asset is not None and asset.thumb_path is not None
     assert world.store.absolute(asset.thumb_path).is_file()
-    assert {j["payload"]["asset_id"] for j in world.repo.list_jobs("queued")} == {asset_id}
+    assert {j["payload"]["asset_id"] for j in world.repo.list_jobs("queued")} == {asset_id}  # type: ignore[index]
 
 
 def test_only_one_import_runs_at_a_time_per_library(world: World, source_guard: Path) -> None:

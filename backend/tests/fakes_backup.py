@@ -258,6 +258,11 @@ class FakeQueue:
         self.jobs.append((kind, payload))
         return len(self.jobs)
 
+    def enqueue_once(self, kind: str, payload: dict[str, object] | None = None) -> int | None:
+        if (kind, payload or {}) in self.jobs:
+            return None
+        return self.enqueue(kind, payload or {})
+
 
 class FakeMirror:
     """Remembers what it was asked to copy where; fails on demand."""

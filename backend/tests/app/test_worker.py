@@ -242,7 +242,7 @@ def test_run_until_idle_can_be_limited_to_some_job_kinds(repo: SqliteRepository)
         repo.enqueue(kind, {})
     lanes = Lanes(
         repo,
-        {k: (lambda p, k=k: done.append(k)) for k in ("backup_run", "preview", "geocode")},
+        {k: (lambda p, k=k: done.append(k)) for k in ("backup_run", "preview", "geocode")},  # type: ignore[misc]
         FakeClock(),
         long_kinds={"backup_run"},
         pooled={"preview": 2},

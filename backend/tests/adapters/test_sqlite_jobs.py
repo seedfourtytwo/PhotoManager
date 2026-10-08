@@ -5,6 +5,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -244,7 +245,7 @@ def busy_queue(repo: SqliteRepository) -> SqliteRepository:
     ids=["every kind", "preview pool", "long lane", "quick lane"],
 )
 def test_claiming_never_walks_the_waiting_jobs_of_other_lanes(
-    busy_queue: SqliteRepository, lane: dict[str, list[str]]
+    busy_queue: SqliteRepository, lane: dict[str, Any]
 ) -> None:
     plans = _plans(busy_queue, lambda: busy_queue.claim_next_job(NOW, **lane))
     reads = [p for p in _reads_of(plans, "job") if "INTEGER PRIMARY KEY" not in p]

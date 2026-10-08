@@ -166,7 +166,10 @@ def test_replace_faces_stores_geometry_and_replaces_on_rerun(
     (stored,) = store.faces_of_asset(a)
     assert stored.id == only and stored.score == pytest.approx(0.8)
     assert stored.box == BoundingBox(
-        pytest.approx(0.1), pytest.approx(0.2), pytest.approx(0.3), pytest.approx(0.4)
+        pytest.approx(0.1),  # type: ignore[arg-type]
+        pytest.approx(0.2),  # type: ignore[arg-type]
+        pytest.approx(0.3),  # type: ignore[arg-type]
+        pytest.approx(0.4),  # type: ignore[arg-type]
     )
     assert store.get_face(only) == stored
     assert store.get_face(9999) is None

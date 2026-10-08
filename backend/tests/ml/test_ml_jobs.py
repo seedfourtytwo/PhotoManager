@@ -41,7 +41,7 @@ def add(repo: SqliteRepository, n: int, image: str | None = None) -> int:
     return asset_id
 
 
-def queued(repo: SqliteRepository) -> list[tuple[str, object]]:
+def queued(repo: SqliteRepository) -> list[tuple[object, object]]:
     return [(j["kind"], j["payload"]) for j in repo.list_jobs("queued")]
 
 

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -38,7 +39,7 @@ def review(repo: SqliteRepository) -> Review:
     return Review(repo, FakeClock())
 
 
-def photo(repo: SqliteRepository, n: int, look: str = "own", **kw: object) -> int:
+def photo(repo: SqliteRepository, n: int, look: str = "own", **kw: Any) -> int:
     asset_id = repo.add_asset(new_asset(n, **kw), NOW)
     repo.set_thumbnail(asset_id, RenderedImage(f"derived/thumb/{look}-{n}.webp", 1, 1))
     return asset_id

@@ -147,7 +147,7 @@ def test_asset_round_trip_keeps_every_field(repo: SqliteRepository) -> None:
     asset_id = repo.add_asset(new, imported_at=NOW)
     got = repo.get_asset(asset_id)
     assert got is not None
-    for field in new.__slots__:  # type: ignore[attr-defined]
+    for field in new.__slots__:
         assert getattr(got, field) == getattr(new, field), field
     assert repo.find_asset_id_by_hash(new.content_hash) == asset_id
     assert repo.find_asset_id_by_hash("f" * 64) is None

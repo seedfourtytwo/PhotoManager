@@ -1,6 +1,7 @@
 """API tests: the HTTP surface M1 exposes (the web UI builds on these in M2)."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,7 +22,7 @@ def services(client: TestClient) -> Services:
     return s
 
 
-def add_and_scan(client: TestClient, folder: Path) -> dict[str, object]:
+def add_and_scan(client: TestClient, folder: Path) -> dict[str, Any]:
     source = client.post("/api/sources", json={"label": "Fixtures", "path": str(folder)}).json()
     response = client.post(f"/api/sources/{source['id']}/scan")
     assert response.status_code == 202

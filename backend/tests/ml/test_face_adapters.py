@@ -2,6 +2,7 @@
 YuNet + SFace fallback via OpenCV (fake OpenCV objects: real models aren't available here)."""
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -20,7 +21,11 @@ def red_image(h: int = 32, w: int = 64) -> np.ndarray:
 
 
 def buffalo(
-    folder: Path, *, outputs: int = 9, rec_size: int = 112, det_shape: tuple = (1, 3, 32, 32)
+    folder: Path,
+    *,
+    outputs: int = 9,
+    rec_size: int = 112,
+    det_shape: tuple[int | str, ...] = (1, 3, 32, 32),
 ) -> Path:
     outs = scrfd_outputs(size=32)[:outputs]
     constant_outputs_model(
@@ -128,11 +133,13 @@ def yunet_folder(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def yunet(tmp_path: Path, rows: np.ndarray | None, image: np.ndarray) -> tuple:
+def yunet(tmp_path: Path, rows: np.ndarray | None, image: np.ndarray) -> tuple[Any, ...]:
     detector, recognizer = FakeDetector(rows), FakeRecognizer()
-    made: list[tuple] = []
+    made: list[tuple[str, float]] = []
 
-    def make_detector(model: str, config: str, size: tuple, score: float, nms: float) -> object:
+    def make_detector(
+        model: str, config: str, size: tuple[int, int], score: float, nms: float
+    ) -> object:
         made.append((Path(model).name, score))
         return detector
 

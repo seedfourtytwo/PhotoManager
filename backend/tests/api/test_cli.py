@@ -1,12 +1,16 @@
 """Headless bootstrap: create the first admin from the command line."""
 
 import dataclasses
+import getpass
+from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from photo_assistant import __main__ as cli
+from photo_assistant.api.cli_command import Command
+from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.accounts import AccountLockedError
 from photo_assistant.domain.access import LOCK_AFTER_FAILED_PINS, Role
@@ -15,7 +19,7 @@ PIN = "1234"
 
 
 @pytest.fixture
-def data_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+def data_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
     get_settings.cache_clear()
     monkeypatch.setenv("PA_DATA_ROOT", str(tmp_path / "data"))
     monkeypatch.setenv("PA_ARGON2_TIME_COST", "1")
@@ -28,10 +32,10 @@ def test_create_user_prompts_for_the_pin_twice(
     data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answers = iter([PIN, PIN])
-    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(answers))
     assert cli.main(["create-user", "c", "--role", "admin"]) == 0
     assert "Created admin 'c'" in capsys.readouterr().out
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         found = services.repo.find_user_by_username("c")
         assert found is not None and found[0].role is Role.ADMIN
@@ -43,7 +47,7 @@ def test_create_user_refuses_mismatched_or_malformed_pins(
     data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answers = iter([PIN, "4321", "12345", "12345"])
-    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(answers))
     assert cli.main(["create-user", "c"]) == 2
     assert "do not match" in capsys.readouterr().err
     assert cli.main(["create-user", "c"]) == 2
@@ -54,11 +58,11 @@ def test_set_pin_gives_an_account_a_new_pin_without_a_session(
     data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answers = iter([PIN, PIN, "5678", "5678", "5678", "8765", "abcd", "abcd", "5678", "5678"])
-    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(answers))
     assert cli.main(["create-user", "c", "--role", "admin"]) == 0
     assert cli.main(["set-pin", "C"]) == 0
     assert "New PIN set for 'c'" in capsys.readouterr().out
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         services.accounts.login("c", "5678", "127.0.0.1")
     finally:
@@ -76,9 +80,9 @@ def test_set_pin_unlocks_an_account_locked_by_wrong_pins(
 ) -> None:
     """The way back in for an only admin who is locked out: nobody else can unlock them."""
     answers = iter([PIN, PIN, "5678", "5678"])
-    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(answers))
     assert cli.main(["create-user", "c", "--role", "admin"]) == 0
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         clock = services.clock.now()
         for n in range(LOCK_AFTER_FAILED_PINS):  # spread out: never ten in one 15-minute window
@@ -90,7 +94,7 @@ def test_set_pin_unlocks_an_account_locked_by_wrong_pins(
         services.close()
     assert cli.main(["set-pin", "c"]) == 0
     assert "unlocked" in capsys.readouterr().out
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         user, _ = services.accounts.login("c", "5678", "127.0.0.1")
         assert not user.locked
@@ -128,7 +132,7 @@ def test_a_cli_import_leaves_the_servers_other_jobs_in_the_queue(
     """With the server running, its backups, scans and ML jobs are not the CLI's to run."""
     from tests.synthetic import write_photo
 
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         for kind in ("backup_due", "purge_trash", "scan_source", "cluster_faces"):
             services.repo.enqueue(kind, {"source_id": 999} if kind == "scan_source" else {})
@@ -137,7 +141,7 @@ def test_a_cli_import_leaves_the_servers_other_jobs_in_the_queue(
     write_photo(tmp_path / "pics" / "a.jpg", seed=1)
     assert cli.main(["import", str(tmp_path / "pics")]) == 0
     assert "Making 3 " in capsys.readouterr().out, "its own preview, places and groups"
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         waiting = [(j["kind"], j["attempts"]) for j in services.repo.list_jobs("queued")]
         done = {j["kind"] for j in services.repo.list_jobs("done")}
@@ -174,7 +178,7 @@ def test_backup_settings_come_from_the_main_settings(
 
 
 def _source_owners() -> list[int | None]:
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         return [s.owner_id for s in services.repo.list_sources()]
     finally:
@@ -182,9 +186,9 @@ def _source_owners() -> list[int | None]:
 
 
 def _admin_id(monkeypatch: pytest.MonkeyPatch, username: str = "c") -> int:
-    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": PIN)
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": PIN)
     assert cli.main(["create-user", username, "--role", "admin"]) == 0
-    services = cli.build_services(get_settings())
+    services = build_services(get_settings())
     try:
         found = services.repo.find_user_by_username(username)
         assert found is not None
@@ -299,8 +303,12 @@ def test_the_dispatcher_reaches_each_sub_command(
 ) -> None:
     reached: list[str] = []
 
-    def stub(command: cli.Command) -> cli.Command:
-        return dataclasses.replace(command, run=lambda args: reached.append(command.name) or 7)
+    def stub(command: Command) -> Command:
+        def run(args: object) -> int:
+            reached.append(command.name)
+            return 7
+
+        return dataclasses.replace(command, run=run)
 
     monkeypatch.setattr(cli, "COMMANDS", tuple(stub(command) for command in cli.COMMANDS))
     assert cli.main(MINIMAL_ARGV[name]) == 7

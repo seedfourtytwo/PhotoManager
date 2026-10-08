@@ -6,6 +6,7 @@ Prints the median (ms) per query and viewer. Synthetic libraries only (docs/PERF
 Users 1-4 must be admin, member, member, guest (as in the QA libraries).
 """
 
+import functools
 import shutil
 import statistics
 import sys
@@ -55,7 +56,7 @@ def main() -> None:
     }
     print(f"{'op':14s} " + " ".join(f"{n:>8s}" for n in viewers))
     for name, op in ops.items():
-        cells = " ".join(f"{median(lambda v=v, op=op: op(v)):8.1f}" for v in viewers.values())
+        cells = " ".join(f"{median(functools.partial(op, v)):8.1f}" for v in viewers.values())
         print(f"{name:14s} {cells}", flush=True)
     shutil.rmtree(tmp)
 

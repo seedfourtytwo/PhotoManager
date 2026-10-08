@@ -67,7 +67,8 @@ def rotation(scale: float, degrees: float, tx: float, ty: float) -> np.ndarray:
 
 
 def apply(matrix: np.ndarray, points: np.ndarray) -> np.ndarray:
-    return points @ matrix[:, :2].T + matrix[:, 2]
+    moved: np.ndarray = points @ matrix[:, :2].T + matrix[:, 2]
+    return moved
 
 
 def test_similarity_transform_recovers_a_known_transform() -> None:
@@ -79,7 +80,7 @@ def test_similarity_transform_recovers_a_known_transform() -> None:
 
 def test_similarity_transform_rejects_degenerate_points() -> None:
     with pytest.raises(ValueError, match="degenerate"):
-        similarity_transform(np.ones((5, 2)), ARCFACE_DST)
+        similarity_transform(np.ones((5, 2)), ARCFACE_DST.astype(np.float64))
 
 
 def test_alignment_moves_landmarks_to_the_arcface_template() -> None:

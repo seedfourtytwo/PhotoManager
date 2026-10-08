@@ -1,6 +1,7 @@
 """The ML composition helper, end to end with the real Worker, SQLite and synthetic models."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -34,7 +35,7 @@ def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
     assert custom.tag_params().max_tags == 3
 
 
-def setup(root: Path, ml: MlSettings) -> tuple:
+def setup(root: Path, ml: MlSettings) -> tuple[Any, ...]:
     db = Database.open(root / "library.db")  # one Database for both stores, as in the app
     repo = SqliteRepository(db)
     library = DiskLibraryStore(root)
