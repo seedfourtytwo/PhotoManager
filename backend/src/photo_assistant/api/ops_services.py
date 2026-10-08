@@ -17,6 +17,7 @@ from photo_assistant.adapters.restic_backup import ResticBackup
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
+from photo_assistant.adapters.system_probe import LocalSystemProbe
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupService
 from photo_assistant.app.doctor import DoctorConfig
@@ -88,6 +89,7 @@ def build_backup_service(
         queue=queue,
         places=LocalBackupPlaces(rclone.binary, rclone.config),
         vault=FileKeyVault(key_dir),
+        database_integrity=LocalSystemProbe().database_integrity,
     )
     return service, store
 

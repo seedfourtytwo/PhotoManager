@@ -125,7 +125,11 @@ class BackupService:
         queue: JobQueue | None = None,
         places: BackupPlaces | None = None,
         vault: KeyVault | None = None,
+        *,
+        database_integrity: Callable[[Path], str],
     ) -> None:
+        """``database_integrity``: the probe ``just doctor`` uses (SystemProbe): "ok", or what
+        is wrong with the SQLite file at that path."""
         if config.scratch_dir is not None and _inside(config.scratch_dir, config.data_root):
             raise ValueError("the restore-test folder must be outside the library")
         self._store = store
@@ -137,6 +141,7 @@ class BackupService:
         self._queue = queue
         self._places = places
         self._vault = vault
+        self._database_integrity = database_integrity
         self._lock = threading.Lock()  # one run at a time per process; restic locks the repo
 
     # --- targets ---------------------------------------------------------------------------
@@ -417,9 +422,13 @@ class BackupService:
 
     def _check_database(self, scratch: Path) -> RestoreCheck:
         restored = scratch / DB_SNAPSHOT_PATH
-        if restored.is_file() and restored.stat().st_size > 0:
-            return RestoreCheck(DB_SNAPSHOT_PATH, True)
-        return RestoreCheck(DB_SNAPSHOT_PATH, False, "database snapshot missing from the backup")
+        if not restored.is_file() or restored.stat().st_size == 0:
+            reason = "database snapshot missing from the backup"
+            return RestoreCheck(DB_SNAPSHOT_PATH, False, reason)
+        verdict = self._database_integrity(restored)
+        if verdict != "ok":
+            return RestoreCheck(DB_SNAPSHOT_PATH, False, f"database snapshot is damaged: {verdict}")
+        return RestoreCheck(DB_SNAPSHOT_PATH, True)
 
     def _check(self, scratch: Path, asset: AssetFile) -> RestoreCheck:
         restored = scratch / asset.library_path

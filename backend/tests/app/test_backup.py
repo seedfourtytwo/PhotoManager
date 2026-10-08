@@ -52,6 +52,8 @@ class World:
         self.queue = FakeQueue()
         self.places = FakePlaces()
         self.vault = FakeVault(tmp_path / "keys")
+        self.probed: list[Path] = []
+        self.integrity = "ok"  # what the integrity probe says of a restored database
         self.disk = tmp_path / "usb"
         self.disk.mkdir()
         self.service = BackupService(
@@ -64,7 +66,12 @@ class World:
             queue=self.queue,
             places=self.places,
             vault=self.vault,
+            database_integrity=self.probe_database,
         )
+
+    def probe_database(self, database: Path) -> str:
+        self.probed.append(database)
+        return self.integrity
 
     def _make_assets(self) -> list[AssetFile]:
         hasher = Blake3Hasher()
@@ -314,6 +321,47 @@ def test_restore_test_flags_a_missing_database_snapshot(world: World) -> None:
     assert "database snapshot missing" in (run.error or "")
 
 
+def test_restore_test_fails_when_the_restored_database_is_damaged(world: World) -> None:
+    """A file that is there and not empty proves nothing: it has to open and check out."""
+    target_id = world.target()
+    world.service.run_now(target_id)
+    world.integrity = "database disk image is malformed"
+    run = world.service.restore_test(target_id, sample_size=0)
+    assert run.status is BackupRunStatus.FAILED
+    assert "database snapshot is damaged: database disk image is malformed" in (run.error or "")
+    (probed,) = world.probed
+    assert probed.name == "library.db" and world.root not in probed.parents, "the restored copy"
+
+
+def test_restore_test_runs_the_real_integrity_probe_on_the_restored_database(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    from photo_assistant.adapters.system_probe import LocalSystemProbe
+
+    world = World(tmp_path)
+    service = BackupService(
+        world.store,
+        world.engine,
+        world.snapshotter,
+        Blake3Hasher(),
+        world.clock,
+        BackupConfig(data_root=world.root, local_tz=UTC),
+        database_integrity=LocalSystemProbe().database_integrity,
+    )
+    target_id = world.target()
+    service.run_now(target_id)
+    snapshot = world.root / "db-snapshot" / "library.db"
+    snapshot.write_bytes(b"SQLite format 3\x00" + b"not really" * 500)
+    assert service.restore_test(target_id, sample_size=0).status is BackupRunStatus.FAILED
+    snapshot.unlink()
+    with sqlite3.connect(snapshot) as conn:
+        conn.execute("CREATE TABLE asset (id INTEGER PRIMARY KEY)")
+    conn.close()
+    assert service.restore_test(target_id, sample_size=0).status is BackupRunStatus.SUCCEEDED
+
+
 def test_restore_test_without_any_snapshot_fails_clearly(world: World) -> None:
     run = world.service.restore_test(world.target())
     assert run.status is BackupRunStatus.FAILED
@@ -371,6 +419,7 @@ def test_queueing_needs_a_queue(tmp_path: Path) -> None:
         Blake3Hasher(),
         world.clock,
         BackupConfig(data_root=world.root),
+        database_integrity=world.probe_database,
     )
     target_id = world.target()
     with pytest.raises(RuntimeError, match="job queue"):
