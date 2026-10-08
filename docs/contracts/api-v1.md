@@ -91,7 +91,7 @@ such a source fails visibly: its import run is `failed` with that message, and t
 is `failed` without retries.
 A job that failed and will be tried again stays `queued` with `run_after` (UTC ISO time, else
 `null`) and its last `error`; `GET /api/stats` counts such jobs under `jobs.waiting`, not
-under `jobs.queued`. `GET /api/jobs?status=waiting` lists just those jobs (the admin screen
+under `jobs.queued`. `GET /api/jobs` with `status=waiting` lists just those jobs (the admin screen
 shows them with the time of the next attempt); `status=queued` still lists every queued job.
 
 `PATCH /api/sources/{id}` (admin) takes `{enabled?, label?, owner_id?}` and answers the
