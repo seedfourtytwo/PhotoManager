@@ -215,6 +215,8 @@ class Settings(BaseSettings):
     web_dir: Path | None = None  # built web app to serve at "/" (just run sets it)
     # argon2id cost (RFC 9106 low-memory profile). Tests lower it; never lower it in use.
     trash_purge_every_hours: float = 6.0  # how often the 30-day trash expiry runs
+    # how often the server looks for sources whose automatic re-check is due
+    source_recheck_poll_seconds: float = 300.0
     argon2_time_cost: int = 3
     argon2_memory_kib: int = 65536
     # Sections, filled from their flat names (see _FlatSections and docs/wiring/*.md):

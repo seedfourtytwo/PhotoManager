@@ -34,6 +34,7 @@ from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, Gr
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
+from photo_assistant.app.recheck import ScheduledChecks
 from photo_assistant.app.review import Review
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
@@ -59,6 +60,7 @@ class Services:
     ops: OpsServices
     db: Database  # the one library database: every store shares its writer and lock
     printer: AlbumPrinter
+    rechecks: ScheduledChecks
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -121,7 +123,10 @@ def build_services(settings: Settings) -> Services:
         repo.enqueue_once(GROUP_JOB)
         return outcome
 
+    rechecks = ScheduledChecks(repo, clock)
     housekeeping = [
+        # only queues the scan job of each source whose timer has run out (issues 7 and 8)
+        PeriodicTask("due folder checks", settings.source_recheck_poll_seconds, rechecks.queue_due),
         PeriodicTask(
             "trash purge",
             settings.trash_purge_every_hours * 3600,
@@ -204,4 +209,5 @@ def build_services(settings: Settings) -> Services:
         ops,
         db,
         printer,
+        rechecks,
     )

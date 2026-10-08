@@ -204,8 +204,9 @@ the **quick lane** (one thread: geocode, group, purge, ML, edited renders), the 
 (one thread: `scan_source` — rclone pulls and folder imports —, `backup_run`,
 `backup_restore_test`, `backup_due`) and a **preview pool** (max(1, cores − 2) threads). Each
 claims only its kinds, atomically, so a backup or a big import never starves previews and
-uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering)
-or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
+uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering,
+and a `scan_source` for each source whose automatic re-check is due: `app/recheck.py`, rule in
+`domain/recheck.py`) or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
 Domain errors (`domain/errors.py`) fail a job without retries; anything else is retried 3×.
 ML jobs are planned only when their model files are installed.
 

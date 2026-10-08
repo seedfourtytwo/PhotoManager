@@ -49,22 +49,25 @@ def _place(services: Services, source: Source) -> str | None:
     return config.place if config else None
 
 
+def _outs(services: Services, viewer: Viewer) -> list[SourceOut]:
+    next_checks = services.rechecks.next_checks()
+    return [
+        SourceOut.of(s, n, viewer.is_admin, _problem(s), _place(services, s), next_checks.get(s.id))
+        for s, n in services.repo.sources_for(viewer)
+    ]
+
+
 def _out(services: Services, viewer: Viewer, source_id: int) -> SourceOut:
-    for source, count in services.repo.sources_for(viewer):
-        if source.id == source_id:
-            return SourceOut.of(
-                source, count, viewer.is_admin, _problem(source), _place(services, source)
-            )
+    for out in _outs(services, viewer):
+        if out.id == source_id:
+            return out
     raise HTTPException(status.HTTP_404_NOT_FOUND, "source not found")
 
 
 @router.get("", dependencies=LOGGED_IN)
 def list_sources(services: ServicesDep, viewer: ViewerDep) -> list[SourceOut]:
     """The sources you may see (all of them for an admin)."""
-    return [
-        SourceOut.of(s, n, viewer.is_admin, _problem(s), _place(services, s))
-        for s, n in services.repo.sources_for(viewer)
-    ]
+    return _outs(services, viewer)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -94,6 +97,8 @@ def patch_source(
         services.repo.set_source_enabled(source_id, body.enabled)
     if body.owner_id is not None:
         services.repo.set_source_owner(source_id, body.owner_id)  # unknown user: 422
+    if body.recheck is not None:
+        services.repo.set_source_recheck(source_id, body.recheck)
     return _out(services, viewer, source_id)
 
 

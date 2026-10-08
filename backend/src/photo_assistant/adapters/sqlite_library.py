@@ -16,6 +16,7 @@ from photo_assistant.adapters.sqlite_base import (
     asset_from_row,
     decode_cursor,
     encode_cursor,
+    source_from_row,
 )
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.edit_recipe import Recipe
@@ -429,15 +430,7 @@ class LibraryMixin(SqliteBase):
                 ORDER BY s.id, x.relative_path""",
             params | {"asset": asset_id},
         )
-        return [
-            (
-                Source(
-                    r["id"], r["label"], r["root"], bool(r["enabled"]), r["kind"], r["owner_id"]
-                ),
-                r["relative_path"],
-            )
-            for r in rows
-        ]
+        return [(source_from_row(r), r["relative_path"]) for r in rows]
 
     def albums_of(self, viewer: Viewer, asset_id: int) -> list[tuple[int, str]]:
         _, _, params = visibility(viewer)
