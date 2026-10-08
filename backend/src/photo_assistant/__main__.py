@@ -34,7 +34,13 @@ from photo_assistant.ports import ImportBusyError
 
 def _serve() -> int:
     settings = get_settings()
-    uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
+    uvicorn.run(
+        create_app(settings),
+        host=settings.host,
+        port=settings.port,
+        proxy_headers=True,
+        forwarded_allow_ips=settings.trusted_proxies,
+    )
     return 0
 
 

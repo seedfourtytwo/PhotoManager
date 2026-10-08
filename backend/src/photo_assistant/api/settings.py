@@ -212,6 +212,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Host names the server answers to. Add the Tailscale name when remote access arrives (M6).
     allowed_hosts: list[str] = ["127.0.0.1", "localhost"]
+    # Who may tell the server "this request arrived over https, from that address"
+    # (X-Forwarded-Proto / X-Forwarded-For): the TLS proxy in front, as uvicorn sees it.
+    # Comma-separated addresses or networks. Docker + tailscale serve: the Docker gateway.
+    trusted_proxies: str = "127.0.0.1"
     web_dir: Path | None = None  # built web app to serve at "/" (just run sets it)
     # argon2id cost (RFC 9106 low-memory profile). Tests lower it; never lower it in use.
     trash_purge_every_hours: float = 6.0  # how often the 30-day trash expiry runs
