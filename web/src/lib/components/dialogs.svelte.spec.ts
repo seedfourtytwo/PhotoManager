@@ -69,14 +69,7 @@ describe('ShareDialog', () => {
 	it('lets a non-admin owner pick people by name from the directory', async () => {
 		const { default: ShareDialog } = await import('./ShareDialog.svelte');
 		const { session } = await import('$lib/app.svelte');
-		session.user = {
-			id: 2,
-			username: 'lea',
-			display_name: 'Lea',
-			role: 'member',
-			disabled: false,
-			locked: false
-		};
+		session.user = { id: 2, username: 'lea', display_name: 'Lea', role: 'member', disabled: false };
 		const sent = stubFetch((url) => {
 			if (url.endsWith('/members')) return [];
 			if (url === '/api/users/directory')

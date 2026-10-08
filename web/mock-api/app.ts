@@ -13,6 +13,7 @@ import type {
 	AssetOut,
 	DownloadRequest,
 	Level,
+	ManagedUser,
 	Recipe,
 	Role,
 	User
@@ -57,8 +58,7 @@ function publicUser(u: MockUser): User {
 		username: u.username,
 		display_name: u.display_name,
 		role: u.role,
-		disabled: u.disabled,
-		locked: u.locked
+		disabled: u.disabled
 	};
 }
 
@@ -462,14 +462,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		if (user.locked)
 			throw new HttpError(
 				423,
-				"This account is locked after too many wrong PINs. Ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
 			);
-		const recent = user.recentWrongPins.filter((t) => now() - t < WRONG_PIN_WINDOW);
+		const recent = wrongPinsInWindow(user);
 		if (recent.length >= MAX_RECENT_WRONG_PINS) {
 			const minutes = Math.max(1, Math.ceil((recent[0] + WRONG_PIN_WINDOW - now()) / 60_000));
 			throw new HttpError(
 				429,
-				`Too many wrong PINs. Wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account.`
+				`Too many wrong PINs; wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account.`
 			);
 		}
 		user.recentWrongPins = [...recent, now()];
@@ -477,6 +477,15 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		user.locked = user.failedPins >= LOCK_AFTER_WRONG_PINS;
 		return user.pin === pin;
 	}
+
+	const wrongPinsInWindow = (user: MockUser) =>
+		user.recentWrongPins.filter((t) => now() - t < WRONG_PIN_WINDOW);
+
+	/** What only admins are told: the lock, or the 15-minute wait, that wrong PINs caused. */
+	const managedUser = (u: MockUser): ManagedUser => ({
+		...publicUser(u),
+		locked: u.locked || wrongPinsInWindow(u).length >= MAX_RECENT_WRONG_PINS
+	});
 
 	function sessionUser(req: IncomingMessage): MockUser | null {
 		const cookie = req.headers.cookie ?? '';
@@ -737,7 +746,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		],
 
 		// users
-		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(publicUser)))],
+		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(managedUser)))],
 		[
 			'GET',
 			/^\/api\/users\/directory$/,
@@ -808,7 +817,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					...noWrongPins()
 				};
 				state.users.push(user);
-				return ok(publicUser(user), 201);
+				return ok(managedUser(user), 201);
 			}
 		],
 		[
@@ -836,7 +845,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				if (body.pin !== undefined) forgiveWrongPins(user); // a new PIN lifts the lock
 				if (user.disabled)
 					for (const [t, id] of state.sessions) if (id === user.id) state.sessions.delete(t);
-				return ok(publicUser(user));
+				return ok(managedUser(user));
 			}
 		],
 		[

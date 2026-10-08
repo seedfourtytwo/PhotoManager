@@ -167,14 +167,7 @@ describe('SelectionBar on a phone', () => {
 
 describe('SelectionActions', () => {
 	it('a refused Favourite puts every photo back as it was, favourites included', async () => {
-		session.user = {
-			id: 1,
-			username: 'c',
-			display_name: 'C',
-			role: 'admin',
-			disabled: false,
-			locked: false
-		};
+		session.user = { id: 1, username: 'c', display_name: 'C', role: 'admin', disabled: false };
 		vi.stubGlobal(
 			'fetch',
 			async () =>

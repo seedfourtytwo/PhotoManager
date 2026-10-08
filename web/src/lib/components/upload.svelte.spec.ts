@@ -50,14 +50,7 @@ afterEach(() => {
 
 describe('UploadButton', () => {
 	it('uploads the chosen photos, waits for the import, then reloads', async () => {
-		session.user = {
-			id: 2,
-			username: 'lea',
-			display_name: 'Lea',
-			role: 'member',
-			disabled: false,
-			locked: false
-		};
+		session.user = { id: 2, username: 'lea', display_name: 'Lea', role: 'member', disabled: false };
 		vi.stubGlobal('XMLHttpRequest', FakeXhr);
 		let polls = 0;
 		vi.stubGlobal('fetch', async () => {
@@ -85,14 +78,7 @@ describe('UploadButton', () => {
 	});
 
 	it('is not offered to guests', async () => {
-		session.user = {
-			id: 3,
-			username: 'gus',
-			display_name: 'Gus',
-			role: 'guest',
-			disabled: false,
-			locked: false
-		};
+		session.user = { id: 3, username: 'gus', display_name: 'Gus', role: 'guest', disabled: false };
 		render(UploadButton, {});
 		await expect
 			.element(page.getByRole('button', { name: 'Upload', exact: true }))
@@ -141,14 +127,7 @@ describe('UploadButton: many photos at once', () => {
 		Array.from({ length: n }, (_, i) => new File([new Uint8Array([1])], `p${i}.jpg`));
 
 	function setup(stats: () => Response | Promise<Response>) {
-		session.user = {
-			id: 2,
-			username: 'lea',
-			display_name: 'Lea',
-			role: 'member',
-			disabled: false,
-			locked: false
-		};
+		session.user = { id: 2, username: 'lea', display_name: 'Lea', role: 'member', disabled: false };
 		ChunkXhr.sent = [];
 		ChunkXhr.outcome = () => 'stored';
 		vi.stubGlobal('XMLHttpRequest', ChunkXhr);

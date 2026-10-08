@@ -43,6 +43,7 @@ import type {
 	JobStatus,
 	AccountName,
 	LoginBody,
+	ManagedUser,
 	MapPoint,
 	MlStatus,
 	NewDevice,
@@ -220,9 +221,10 @@ export function createApi(options: ApiOptions = {}) {
 		changePin: (body: PinBody) => request<void>('POST', '/api/auth/pin', body),
 
 		// users (admin)
-		users: () => get<User[]>('/api/users'),
-		createUser: (body: NewUser) => request<User>('POST', '/api/users', body),
-		updateUser: (id: Id, body: UserPatch) => request<User>('PATCH', `/api/users/${id}`, body),
+		users: () => get<ManagedUser[]>('/api/users'),
+		createUser: (body: NewUser) => request<ManagedUser>('POST', '/api/users', body),
+		updateUser: (id: Id, body: UserPatch) =>
+			request<ManagedUser>('PATCH', `/api/users/${id}`, body),
 		/** Lift the wait (429) and the lock (423) that wrong PINs put on this account. */
 		unlockUser: (id: Id) => request<void>('POST', `/api/users/${id}/unlock`),
 		/** v1.1: names to share albums with, for any member (not only admins). */

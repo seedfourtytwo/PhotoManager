@@ -132,11 +132,15 @@ describe('with seeded users', () => {
 		await expect(browser().login({ username: 'Partner', pin: '2345' })).rejects.toMatchObject({
 			status: 429,
 			message:
-				'Too many wrong PINs. Wait 6 minutes and try again, or ask an admin to unlock this account.'
+				'Too many wrong PINs; wait 6 minutes and try again, or ask an admin to unlock this account.'
 		});
 		await expect(signedIn()).resolves.toBeTruthy(); // another account is not held up
+		const admin = await signedIn();
+		expect((await lockedFlags(admin)).partner).toBe(true); // the wait shows as locked to admins
 		clock += 5.5 * MINUTE;
-		await expect(browser().login(PARTNER)).resolves.toMatchObject({ locked: false });
+		expect((await lockedFlags(admin)).partner).toBe(false);
+		const partner = await browser().login(PARTNER);
+		expect(partner).not.toHaveProperty('locked'); // told to admins only
 	});
 
 	it('does not count tries at a user name nobody has', async () => {
@@ -156,7 +160,7 @@ describe('with seeded users', () => {
 		await expect(browser().login(PARTNER)).rejects.toMatchObject({
 			status: 423,
 			message:
-				"This account is locked after too many wrong PINs. Ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
 		});
 		expect(await browser().loginAccounts()).toContainEqual({
 			username: 'partner',
@@ -176,7 +180,7 @@ describe('with seeded users', () => {
 		await expect(browser().login(PARTNER)).resolves.toBeTruthy();
 		await guessWrong(29);
 		clock += 15 * MINUTE;
-		await expect(browser().login(PARTNER)).resolves.toMatchObject({ locked: false });
+		await expect(browser().login(PARTNER)).resolves.toMatchObject({ username: 'partner' });
 	});
 
 	it('lifts the lock when an admin sets a new PIN, not for other changes', async () => {
@@ -204,7 +208,7 @@ describe('with seeded users', () => {
 		await expect(partner.changePin({ current_pin: '2345', new_pin: '5678' })).rejects.toMatchObject(
 			{ status: 423 }
 		);
-		expect(await partner.me()).toMatchObject({ locked: true }); // the open session goes on
+		expect(await partner.me()).toMatchObject({ username: 'partner' }); // the open session goes on
 	});
 
 	it('can start with a locked account (for the E2E suite)', async () => {
