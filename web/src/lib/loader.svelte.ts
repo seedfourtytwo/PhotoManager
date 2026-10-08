@@ -55,6 +55,7 @@ export class TimelineLoader {
 				if (generation !== this.#generation) return;
 				// Pages can overlap (offset paging after a change): a repeated id would collide
 				// in the grid's keyed blocks.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a throw-away lookup, not state
 				const seen = new Set(this.items.map((a) => a.id));
 				this.items = [...this.items, ...page.items.filter((a) => !seen.has(a.id))];
 				this.#cursor = page.next_cursor;

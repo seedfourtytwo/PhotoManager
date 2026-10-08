@@ -401,7 +401,7 @@ test('a link to an old photo opens it at once, not after paging through the libr
 	await signIn(page, '/settings');
 	// The oldest photo: the last one of the last page.
 	let cursor: string | null = null;
-	let oldest = 0;
+	let oldest: number;
 	do {
 		const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
 		const list = await (await page.request.get(`/api/assets?limit=200${query}`)).json();
