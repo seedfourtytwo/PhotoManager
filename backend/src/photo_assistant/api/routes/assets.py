@@ -188,5 +188,5 @@ def original(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Respons
     path = services.store.absolute(a.library_path)
     if not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "original missing from the library")
-    name = services.repo.first_origin_name(asset_id) or path.name
+    name = services.repo.first_origin_name(viewer, asset_id) or path.name
     return FileResponse(path, media_type=a.mime_type or "application/octet-stream", filename=name)

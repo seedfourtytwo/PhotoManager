@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 
+from photo_assistant.adapters.sqlite_access import UnknownUserError
 from photo_assistant.adapters.sqlite_repository import (
     DuplicateAssetError,
     SqliteRepository,
     open_database,
 )
+from photo_assistant.domain.access import Level, Role, SourceAccess
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
 from photo_assistant.ports import Fingerprint, RenderedImage
 from tests.factories import NOW, new_asset
@@ -64,6 +66,33 @@ def test_the_same_folder_cannot_be_added_twice(repo: SqliteRepository) -> None:
     repo.add_source("one", "/x")
     with pytest.raises(ValueError, match="already"):
         repo.add_source("two", "/x")
+
+
+def test_a_source_for_an_unknown_account_is_not_reported_as_a_duplicate_folder(
+    repo: SqliteRepository,
+) -> None:
+    lea = repo.add_user("lea", "Lea", "h", Role.MEMBER)
+    with pytest.raises(UnknownUserError, match="no user with id 99"):
+        repo.add_source("owner", "/owner", owner_id=99)
+    with pytest.raises(UnknownUserError, match="no user with id 77"):
+        repo.add_source(
+            "grant",
+            "/grant",
+            lea.id,
+            access=SourceAccess(None, ((lea.id, Level.EDIT), (77, Level.VIEW))),
+        )
+    with pytest.raises(UnknownUserError, match="no user with id 99"):
+        repo.add_source("remote", lambda source_id: f"/staging/{source_id}", owner_id=99)
+    assert repo.list_sources() == [], "nothing half-made is left behind"
+
+
+def test_a_folder_clash_names_the_folder_even_when_the_root_depends_on_the_id(
+    repo: SqliteRepository,
+) -> None:
+    repo.add_source("one", "/staging/taken")
+    with pytest.raises(ValueError, match="already a source: /staging/taken"):
+        repo.add_source("two", lambda _source_id: "/staging/taken")
+    assert [s.label for s in repo.list_sources()] == ["one"]
 
 
 # --- assets --------------------------------------------------------------------------------
@@ -129,7 +158,11 @@ def test_asset_sources_track_every_origin(repo: SqliteRepository) -> None:
     assert repo.asset_id_for_source_path(s1.id, "y.jpg") is None
     assert repo.asset_id_for_source_path(s2.id, "copy/x.jpg") == asset_id
     assert repo.asset_id_for_source_path(s2.id, "nope.jpg") is None
-    assert repo.origins_of(asset_id) == [(s1, "x.jpg"), (s2, "copy/x.jpg")]
+    origins = repo._conn.execute(
+        "SELECT source_id, relative_path FROM asset_source WHERE asset_id = ? ORDER BY 1, 2",
+        (asset_id,),
+    ).fetchall()
+    assert [tuple(r) for r in origins] == [(s1.id, "x.jpg"), (s2.id, "copy/x.jpg")]
 
 
 # --- import runs ---------------------------------------------------------------------------
@@ -223,6 +256,20 @@ def test_record_import_of_known_content_changes_nothing_and_says_which(
     assert caught.value.asset_id == first
     assert repo.asset_id_for_source_path(source.id, "b.jpg") is None
     assert len(repo.list_jobs("queued")) == 1, "rolled back: no second job"
+
+
+def test_import_writes_join_a_transaction_that_is_already_open(repo: SqliteRepository) -> None:
+    """They go through the one transaction() like every other write, so they nest."""
+    source = repo.add_source("s", "/s")
+    thumb = RenderedImage("derived/thumb/x.webp", 64, 48)
+    report = ImportReport(source_id=source.id, status=RunStatus.DONE)
+    report.add(ItemResult("a.jpg", Outcome.IMPORTED))
+    with pytest.raises(RuntimeError, match="undo"), repo._transaction():
+        repo.record_import(new_asset(1), NOW, source.id, "a.jpg", thumb, "preview")
+        repo.save_import_report(report, NOW, NOW)
+        raise RuntimeError("undo")
+    assert repo.count_assets() == 0 and repo.list_import_runs() == []
+    assert not repo._conn.in_transaction
 
 
 def test_two_processes_never_claim_the_same_job(tmp_path: Path) -> None:

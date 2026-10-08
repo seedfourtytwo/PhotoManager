@@ -57,19 +57,3 @@ class EditsMixin(SqliteBase):
                     (new_time.isoformat(), DateSource.MANUAL.value, asset_id),
                 )
         return len(changes)
-
-    def date_history(self, asset_id: int) -> list[tuple[datetime, str, datetime]]:
-        """(old time, old date source, new time), oldest change first."""
-        rows = self._all(
-            """SELECT old_taken_at, old_date_source, new_taken_at FROM date_change
-               WHERE asset_id = ? ORDER BY id""",
-            (asset_id,),
-        )
-        return [
-            (
-                datetime.fromisoformat(r["old_taken_at"]),
-                str(r["old_date_source"]),
-                datetime.fromisoformat(r["new_taken_at"]),
-            )
-            for r in rows
-        ]

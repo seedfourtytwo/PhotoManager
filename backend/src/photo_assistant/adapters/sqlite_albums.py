@@ -143,7 +143,8 @@ class AlbumsMixin(SqliteBase):
         keeps photos other members see but the caller doesn't in place (QA A15)."""
         with self._transaction():
             current = self.album_asset_ids(album_id)
-            new = [i for i in dict.fromkeys(asset_ids) if i not in set(current)]
+            present = set(current)
+            new = [i for i in dict.fromkeys(asset_ids) if i not in present]
             at = current.index(before) if before in current else len(current)
             self._conn.executemany(
                 "INSERT INTO album_item (album_id, asset_id, position) VALUES (?, ?, 0)",
@@ -171,10 +172,10 @@ class AlbumsMixin(SqliteBase):
         Raises ValueError for ids that are not in the album."""
         with self._transaction():
             current = self.album_asset_ids(album_id)
-            unknown = set(asset_ids) - set(current)
-            if unknown or len(set(asset_ids)) != len(asset_ids):
+            listed = set(asset_ids)
+            if listed - set(current) or len(listed) != len(asset_ids):
                 raise ValueError("the order must list photos of this album, each once")
-            rest = [i for i in current if i not in set(asset_ids)]
+            rest = [i for i in current if i not in listed]
             self._write_order(album_id, [*asset_ids, *rest])
             self._touch(album_id, now)
 
