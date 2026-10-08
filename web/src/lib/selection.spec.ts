@@ -98,4 +98,3 @@ describe('selecting everything, honestly', () => {
 		expect([...limitSelection(some, 2).ids]).toEqual([1, 2]);
 	});
 });
-
