@@ -16,10 +16,20 @@ from photo_assistant.domain.backup import (
     RunOutcome,
     TargetSettings,
 )
+from photo_assistant.domain.errors import ConflictError, UnavailableError
+
+
+class BackupTargetExistsError(ConflictError, ValueError):
+    """The name is taken by another backup target. (Still a ValueError, as it was before it
+    joined the hierarchy.)"""
 
 
 class BackupError(RuntimeError):
-    """A backup operation failed. The message says what happened and what to do."""
+    """A backup operation failed. The message says what happened and what to do.
+
+    Not a DomainError: BackupService records it on the backup run, and what failed may pass
+    (a locked repository, an unplugged disk). The subclasses that can never pass by waiting
+    and that a route answers are DomainErrors as well."""
 
 
 class WrongPasswordError(BackupError):
@@ -30,16 +40,17 @@ class RepositoryNotFoundError(BackupError):
     pass
 
 
-class PasswordFileError(BackupError):
-    pass
+class PasswordFileError(BackupError, ConflictError):
+    """The key file is gone, unreadable, or not one the app may show (409 on the recovery
+    sheet)."""
 
 
 class RepositoryLockedError(BackupError):
     pass
 
 
-class BackupToolMissingError(BackupError):
-    pass
+class BackupToolMissingError(BackupError, UnavailableError):
+    """restic is not installed: waiting does not install it."""
 
 
 class IncompleteBackupError(BackupError):
@@ -178,7 +189,7 @@ class AssetFile:
 
 class BackupStore(Protocol):
     def add_target(self, target: NewBackupTarget, created_at: datetime) -> BackupTarget:
-        """Raises ValueError if the label is taken."""
+        """Raises BackupTargetExistsError if the label is taken."""
         ...
 
     def get_target(self, target_id: int) -> BackupTarget | None: ...

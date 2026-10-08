@@ -5,7 +5,7 @@ admin). Device tokens go through the same single auth dependency (api/deps.py).
 """
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -18,7 +18,7 @@ from photo_assistant.api.deps import SESSION_COOKIE
 from photo_assistant.api.integrations import Integrations
 from photo_assistant.api.main import create_app
 from photo_assistant.api.settings import IntegrationSettings
-from tests.api.conftest import BASE, PIN, make_settings, services_of
+from tests.api.conftest import BASE, PIN, make_settings, refusal, services_of
 from tests.factories import NOW, new_asset
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "photos"
@@ -337,6 +337,32 @@ def test_bad_device_names_are_422(world: World) -> None:
         "/api/devices", json={"name": "", "platform": "ios"}, headers=_as(1)
     )
     assert response.status_code == 422
+
+
+def test_check_and_device_refusals_say_why(world: World) -> None:
+    malformed = world.client.post("/api/upload/check", json={"hashes": ["zz"]}, headers=_as(1))
+    assert refusal(malformed) == (
+        422,
+        {"detail": "not a content hash (64 lowercase hex characters): 'zz'"},
+    )
+    world.integrations.upload._settings = replace(  # type: ignore[attr-defined]
+        world.integrations.upload._settings,  # type: ignore[attr-defined]
+        max_check_hashes=1,
+    )
+    many = world.client.post("/api/upload/check", json={"hashes": ["a", "b"]}, headers=_as(1))
+    assert refusal(many) == (422, {"detail": "send at most 1 hashes at a time"})
+
+    def device(**body: str) -> tuple[int, object]:
+        return refusal(world.client.post("/api/devices", json=body, headers=_as(1)))
+
+    assert device(name="", platform="ios") == (
+        422,
+        {"detail": "give the device a name of 1 to 60 characters"},
+    )
+    assert device(name="Phone", platform="toaster") == (
+        422,
+        {"detail": "platform must be one of: android, desktop, ios, other"},
+    )
 
 
 def test_a_multipart_type_without_boundary_is_a_bad_request(world: World) -> None:

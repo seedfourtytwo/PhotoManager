@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
@@ -31,7 +32,7 @@ __all__ = [
 ]
 
 
-class ModelUnavailableError(RuntimeError):
+class ModelUnavailableError(UnavailableError):
     """The model files are not on this machine (run `just models`), or can't be loaded."""
 
 

@@ -17,6 +17,7 @@ from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.media_types import MediaKind
 from photo_assistant.domain.model import Asset, Source
 from photo_assistant.domain.recheck import Recheck
+from photo_assistant.ports import InvalidCursorError
 
 Params = Sequence[object] | Mapping[str, object]
 
@@ -74,7 +75,7 @@ def decode_cursor(cursor: str) -> tuple[str, int]:
         taken_at, asset_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
         return str(taken_at), int(asset_id)
     except (ValueError, TypeError) as exc:
-        raise ValueError(f"invalid cursor: {cursor!r}") from exc
+        raise InvalidCursorError(f"invalid cursor: {cursor!r}") from exc
 
 
 class SqliteBase:

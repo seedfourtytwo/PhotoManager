@@ -44,6 +44,7 @@ from photo_assistant.ports import (
     Job,
     Page,
     RenderedImage,
+    SourceExistsError,
 )
 
 __all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
@@ -117,7 +118,7 @@ class SqliteRepository(
         except sqlite3.IntegrityError as exc:
             if "source.root" not in str(exc):
                 raise  # not a folder clash: don't report it as one
-            raise ValueError(f"folder is already a source: {placeholder}") from exc
+            raise SourceExistsError(f"folder is already a source: {placeholder}") from exc
         source = self.get_source(source_id)
         assert source is not None
         return source

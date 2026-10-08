@@ -57,8 +57,18 @@ Never commit real family photos.
 - **Pure core, thin shell.** Decisions live in `domain/` as pure functions; I/O at the edges.
 - **Types everywhere.** mypy strict on `domain/` and `app/`; TypeScript strict; no `Any`
   without a comment explaining why.
-- **Explicit errors.** Domain errors are typed (`UnsupportedFormat`, `SourceUnavailable`);
-  never swallow exceptions; user-facing messages say what happened and what to do.
+- **Explicit errors.** Never swallow exceptions; user-facing messages say what happened and
+  what to do. An error a person can cause or must read is a named subclass of a family in
+  `domain/errors.py` (`NotFoundError`, `ForbiddenError`, `InvalidError`, `ConflictError`,
+  `UnavailableError`; plain `DomainError` is a 400), raised where the rule lives
+  (`SourceUnavailableError`, `InvalidScheduleError`). The family is the HTTP status: one
+  handler in `api/main.py` answers them all, so routes do not write
+  `except …: raise HTTPException`, and never catch a bare `ValueError` of our own.
+  The job worker does not retry a `DomainError`, so an error that may pass by waiting (network,
+  a locked repository, a slow tool) stays outside the hierarchy. Every class outside it is
+  listed with its reason in `tests/unit/test_error_hierarchy.py`; that test fails for a new
+  exception class that is neither. The routes that still translate by hand are listed in
+  `ARCHITECTURE.md` §7.
 - **No speculative generality.** Build the second implementation when the second case exists
   (exception: the AI port, which exists by design with a Null implementation).
 - **Comments explain *why*.** The code explains what.

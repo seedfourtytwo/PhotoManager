@@ -19,6 +19,7 @@ from photo_assistant.api.routes import remote_sources
 from photo_assistant.api.settings import IntegrationSettings
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.model import ImportReport, RunStatus
+from tests.api.conftest import answer_domain_errors
 
 pytestmark = pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone not installed")
 ADMIN = {"X-Test-User": "1"}
@@ -52,6 +53,7 @@ def world(tmp_path: Path) -> Iterator[World]:
     repo = SqliteRepository(db)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
+    answer_domain_errors(app)
     app.include_router(remote_sources.router)
     integrations = build_integrations(
         data_root=tmp_path / "data",
@@ -117,6 +119,33 @@ def test_rclone_missing_is_a_clear_503(world: World, tmp_path: Path) -> None:
     response = world.client.get("/api/remote-sources/remotes", headers=ADMIN)
     assert response.status_code == 503
     assert "rclone is not installed" in response.json()["detail"]
+
+
+def test_remote_source_refusals_say_why(world: World, tmp_path: Path) -> None:
+    def add(remote: str) -> tuple[int, object]:
+        body = {"label": "x", "remote": remote}
+        response = world.client.post("/api/remote-sources", json=body, headers=ADMIN)
+        return response.status_code, response.json()
+
+    assert add("megaa") == (
+        422,
+        {
+            "detail": "no remote called 'megaa' on this machine: create it first with "
+            "'rclone config' (see the cloud sources guide)"
+        },
+    )
+    assert add(":local:") == (
+        422,
+        {
+            "detail": "remote must be the name of a remote set up with 'rclone config' "
+            "(letters, digits, spaces, . _ - + @)"
+        },
+    )
+    world.client.app.state.services.integrations.rclone._binary = str(tmp_path / "none")  # type: ignore[attr-defined]
+    no_tool = {"detail": "rclone is not installed on this machine (sudo apt install rclone)"}
+    assert add("mega") == (503, no_tool)
+    listed = world.client.get("/api/remote-sources/remotes", headers=ADMIN)
+    assert (listed.status_code, listed.json()) == (503, no_tool)
 
 
 def test_remote_sources_need_a_session(world: World) -> None:

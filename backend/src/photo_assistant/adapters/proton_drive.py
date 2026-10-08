@@ -33,6 +33,7 @@ from photo_assistant.ports.sync import (
     SyncNotFoundError,
     SyncOptions,
     SyncReport,
+    SyncToolMissingError,
 )
 
 SIGN_IN = "proton-drive auth login"
@@ -55,6 +56,10 @@ _DISK_FULL = (errno.ENOSPC, errno.EDQUOT)
 
 class _PullStoppedError(SyncError):
     """Nothing more can be pulled now (tool gone, out of time): asking again cannot help."""
+
+
+class _ToolMissingError(_PullStoppedError, SyncToolMissingError):
+    """The pull stops, and no later attempt can do better until the tool is installed."""
 
 
 def find_binary(name: str) -> str:
@@ -322,7 +327,7 @@ class ProtonDrive:
                 env=os.environ | {"PROTON_DRIVE_LOG_LEVEL": "ERROR"},
             )
         except ToolMissingError as exc:
-            raise _PullStoppedError(
+            raise _ToolMissingError(
                 "Proton Drive's tool (proton-drive) is not installed on this machine"
             ) from exc
         except ToolTimeoutError as exc:

@@ -18,9 +18,12 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from enum import StrEnum
 
+from photo_assistant.domain.errors import InvalidError
 
-class InvalidScheduleError(ValueError):
-    """A schedule or quiet window the user typed that we cannot understand."""
+
+class InvalidScheduleError(InvalidError, ValueError):
+    """A schedule or quiet window the user typed that we cannot understand. (Still a
+    ValueError, as it was before it joined the hierarchy.)"""
 
 
 class Every(StrEnum):
