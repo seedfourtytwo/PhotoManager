@@ -100,7 +100,7 @@ class AccountsMixin(SqliteBase):
             if admins == 0:
                 raise NoActiveAdminError("the library needs at least one active admin")
 
-    def set_password_hash(self, user_id: int, password_hash: str) -> None:
+    def set_pin_hash(self, user_id: int, password_hash: str) -> None:
         self._write("UPDATE user SET password_hash = ? WHERE id = ?", (password_hash, user_id))
 
     def count_active_admins(self) -> int:

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError, createApi } from './client';
-import type { AssetOut } from './types';
+import { isPin, type AssetOut } from './types';
 
 type Call = { url: string; method: string; body: unknown; credentials?: RequestCredentials };
 
@@ -49,12 +49,12 @@ describe('createApi', () => {
 	it('sends JSON with the session cookie and parses the answer', async () => {
 		const { calls, fetcher } = fakeServer([json({ id: 1, username: 'c' }, 201)]);
 		const api = createApi({ fetch: fetcher });
-		const user = await api.setup({ username: 'c', display_name: 'C', password: 'long enough!' });
+		const user = await api.setup({ username: 'c', display_name: 'C', pin: '1234' });
 		expect(user.username).toBe('c');
 		expect(calls[0]).toEqual({
 			url: '/api/setup',
 			method: 'POST',
-			body: { username: 'c', display_name: 'C', password: 'long enough!' },
+			body: { username: 'c', display_name: 'C', pin: '1234' },
 			credentials: 'same-origin'
 		});
 	});
@@ -66,14 +66,14 @@ describe('createApi', () => {
 	});
 
 	it('turns error bodies into ApiError with the server sentence', async () => {
-		const { fetcher } = fakeServer([json({ detail: 'wrong password' }, 400)]);
+		const { fetcher } = fakeServer([json({ detail: 'the current PIN is wrong' }, 400)]);
 		const api = createApi({ fetch: fetcher });
 		const error = await api
-			.changePassword({ current_password: 'x', new_password: 'y' })
+			.changePin({ current_pin: '0000', new_pin: '5678' })
 			.catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(ApiError);
 		expect((error as ApiError).status).toBe(400);
-		expect((error as ApiError).message).toBe('Wrong password'); // shown as a sentence
+		expect((error as ApiError).message).toBe('The current PIN is wrong'); // shown as a sentence
 	});
 
 	it('falls back to a readable message when the error body is not JSON', async () => {
@@ -88,7 +88,7 @@ describe('createApi', () => {
 		const { fetcher } = fakeServer([
 			json(
 				{
-					detail: [{ loc: ['body', 'password'], msg: 'String should have at least 10 characters' }]
+					detail: [{ loc: ['body', 'pin'], msg: 'String should have at least 10 characters' }]
 				},
 				422
 			)
@@ -106,7 +106,7 @@ describe('createApi', () => {
 		]);
 		const api = createApi({ fetch: fetcher, onUnauthorized: () => lost++ });
 		await expect(api.me()).rejects.toThrow('No session');
-		await expect(api.login({ username: 'a', password: 'b' })).rejects.toThrow('Wrong');
+		await expect(api.login({ username: 'a', pin: '0000' })).rejects.toThrow('Wrong');
 		expect(lost).toBe(1);
 	});
 
@@ -193,7 +193,7 @@ describe('createApi', () => {
 		await Promise.all([
 			api.health(),
 			api.users(),
-			api.createUser({ username: 'u', display_name: 'U', password: 'p', role: 'member' }),
+			api.createUser({ username: 'u', display_name: 'U', pin: '1234', role: 'member' }),
 			api.updateUser(2, { disabled: true }),
 			api.sources(),
 			api.addSource({ label: 'L', path: '/p' }),
@@ -285,10 +285,15 @@ describe('contract v1.1', () => {
 
 describe('error sentences', () => {
 	it('start with a capital letter, whatever the server sent', async () => {
-		const { fetcher } = fakeServer([json({ detail: 'wrong user name or password' }, 401)]);
+		const { fetcher } = fakeServer([json({ detail: 'wrong PIN' }, 401)]);
 		const api = createApi({ fetch: fetcher });
-		await expect(api.login({ username: 'c', password: 'x' })).rejects.toThrow(
-			'Wrong user name or password'
-		);
+		await expect(api.login({ username: 'c', pin: '0000' })).rejects.toThrow('Wrong PIN');
 	});
+});
+
+describe('isPin', () => {
+	it.each(['0000', '1234', '9999'])('accepts %s', (pin) => expect(isPin(pin)).toBe(true));
+	it.each(['', '123', '12345', '12a4', ' 123', '1234 ', '١٢٣٤'])('refuses "%s"', (pin) =>
+		expect(isPin(pin)).toBe(false)
+	);
 });

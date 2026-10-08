@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from photo_assistant.api.main import create_app
 from tests.api.conftest import (
     BASE,
-    PASSWORD,
+    PIN,
     add_user,
     asset_id_of,
     import_folder,
@@ -66,7 +66,7 @@ def shared_lib(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Lib]:
     Tests taking it must not change it."""
     root = tmp_path_factory.mktemp("shared")
     with TestClient(create_app(make_settings(root / "data")), base_url=BASE) as admin:
-        setup = {"username": "admin", "display_name": "C", "password": PASSWORD}
+        setup = {"username": "admin", "display_name": "C", "pin": PIN}
         assert admin.post("/api/setup", json=setup).status_code == 201
         yield _build_lib(admin, root / "photos")
 

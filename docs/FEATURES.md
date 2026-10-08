@@ -237,5 +237,5 @@ photos from the laptop go in by web upload (10.2) or by adding a folder as a sou
 | 11.7 | **Laptop-friendly:** image-processing concurrency is a setting (default 2 threads) ✅; ML jobs run niced (M3) | Must | M1 |
 | 11.8 | **iPhone file quirks:** `IMG_E1234` (edited copies) grouped with their original, `.AAE` edit files ignored, Live Photo `.MOV` halves paired and hidden until video support | Must | M1 ✅ |
 | 11.9 | **Videos in sources:** counted and reported as "skipped: video (not supported yet)" instead of silently ignored | Must | M1 ✅ |
-| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting, session expiry, password change | Must | M2 ✅ (API) |
+| 11.10 | **Account safety:** no public sign-up (admin creates accounts), login rate limiting, session expiry, 4-digit PIN login and PIN change | Must | M2 ✅ (API) |
 | 11.11 | Share link for someone without an account (expiring, view-only, one album) — only over Tailscale Funnel or similar; decide when needed | Later | — |

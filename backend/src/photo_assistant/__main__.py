@@ -4,7 +4,8 @@ python -m photo_assistant                    start the server (API + worker)
 python -m photo_assistant import FOLDER      add FOLDER as a source (if new) and import it
 python -m photo_assistant sources            list sources
 python -m photo_assistant create-user NAME [--role admin|member|guest]
-                                             create an account (prompts for the password)
+                                             create an account (prompts for the PIN)
+python -m photo_assistant set-pin NAME       give an account a new PIN (a forgotten one)
 python -m photo_assistant doctor             check this machine is ready
 python -m photo_assistant export-library DEST / verify-library [ROOT]
 python -m photo_assistant backup list|add|run|check|restore-test …
@@ -26,7 +27,7 @@ from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.accounts import AccountError
 from photo_assistant.app.import_source import SourceUnavailableError
-from photo_assistant.domain.access import Role
+from photo_assistant.domain.access import PIN_LENGTH, Role
 from photo_assistant.domain.model import ImportReport, Outcome
 from photo_assistant.ports import ImportBusyError
 
@@ -120,20 +121,43 @@ def _sources() -> int:
         services.close()
 
 
+def _ask_pin(username: str) -> str | None:
+    pin = getpass.getpass(f"PIN for {username} ({PIN_LENGTH} digits): ")
+    if getpass.getpass("Repeat the PIN: ") != pin:
+        print("The PINs do not match.", file=sys.stderr)
+        return None
+    return pin
+
+
 def _create_user(username: str, role: Role, display_name: str | None) -> int:
-    password = getpass.getpass(f"Password for {username}: ")
-    if getpass.getpass("Repeat the password: ") != password:
-        print("The passwords do not match.", file=sys.stderr)
+    pin = _ask_pin(username)
+    if pin is None:
         return 2
     services = build_services(get_settings())
     try:
-        services.accounts.create_user(username, display_name or username, password, role)
+        services.accounts.create_user(username, display_name or username, pin, role)
     except AccountError as exc:
         print(exc, file=sys.stderr)
         return 2
     finally:
         services.close()
     print(f"Created {role.value} '{username}'.")
+    return 0
+
+
+def _set_pin(username: str) -> int:
+    pin = _ask_pin(username)
+    if pin is None:
+        return 2
+    services = build_services(get_settings())
+    try:
+        user = services.accounts.set_pin(username, pin)
+    except AccountError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    finally:
+        services.close()
+    print(f"New PIN set for '{user.username}'. Their other logins and phone tokens are ended.")
     return 0
 
 
@@ -158,10 +182,12 @@ def main(argv: list[str] | None = None) -> int:
     imp.add_argument("--label", help="name shown for this source (default: folder name)")
     imp.add_argument("--show", type=int, default=15, help="how many skips/failures to list")
     sub.add_parser("sources", help="list sources")
-    user = sub.add_parser("create-user", help="create an account (asks for the password)")
+    user = sub.add_parser("create-user", help="create an account (asks for the PIN)")
     user.add_argument("username")
     user.add_argument("--role", type=Role, choices=list(Role), default=Role.MEMBER)
     user.add_argument("--display-name")
+    pin = sub.add_parser("set-pin", help="give an account a new PIN (asks for it)")
+    pin.add_argument("username")
     sub.add_parser("ml-backfill", help="queue ML analysis of every photo not analysed yet")
     cli_ops.register(sub)
     args = parser.parse_args(argv)
@@ -169,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
         return code
     if args.command == "ml-backfill":
         return _ml_backfill()
+    if args.command == "set-pin":
+        return _set_pin(args.username)
     if args.command == "create-user":
         return _create_user(args.username, args.role, args.display_name)
     if args.command == "import":

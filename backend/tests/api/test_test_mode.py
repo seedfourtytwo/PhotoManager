@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
 from photo_assistant.api.main import create_app
-from tests.api.conftest import BASE, PASSWORD, add_user, make_settings, services_of
+from tests.api.conftest import BASE, PIN, add_user, make_settings, services_of
 
 LOCAL = ("127.0.0.1", 50000)
 
@@ -54,14 +54,14 @@ def _snapshot(client: TestClient, name: str) -> None:
 
 def test_reset_restores_a_snapshot_of_the_library(test_app: TestClient) -> None:
     _snapshot(test_app, "none")
-    test_app.post("/api/setup", json={"username": "c", "display_name": "C", "password": PASSWORD})
+    test_app.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
     _snapshot(test_app, "seed")
     add_user(test_app, "lea")
     assert len(test_app.get("/api/users").json()) == 2
 
     assert test_app.post("/__test/reset", json={"users": "seed"}).status_code == 204
     signed_in = TestClient(test_app.app, base_url=BASE, client=LOCAL)
-    login = {"username": "c", "password": PASSWORD}
+    login = {"username": "c", "pin": PIN}
     assert signed_in.post("/api/auth/login", json=login).status_code == 200
     assert [u["username"] for u in signed_in.get("/api/users").json()] == ["c"]
 

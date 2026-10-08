@@ -15,5 +15,5 @@ const api = createMockApi(makeState({ users, count }));
 
 createServer((req, res) => void api.handle(req, res)).listen(port, '127.0.0.1', () => {
 	console.log(`mock API on http://127.0.0.1:${port} (${count} photos, users: ${users})`);
-	if (users === 'seed') console.log('sign in as admin / correct horse');
+	if (users === 'seed') console.log('sign in as C, PIN 1234');
 });

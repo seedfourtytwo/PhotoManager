@@ -112,7 +112,7 @@ One dependency in `api/deps.py`, `session_or_device_user`, resolves the caller o
 
 `require_not_guest` (the same one used by albums, people and the share directory) then refuses
 guests with **403**. Device management (`/api/devices`) is session-only (`session_only_user`).
-An admin password reset revokes the user's device tokens. Tests sign in for real
+An admin PIN reset revokes the user's device tokens. Tests sign in for real
 (tests/api/test_upload_api.py).
 
 ## 7. Inbox privacy (needs core's access model)

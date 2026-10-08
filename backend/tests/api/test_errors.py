@@ -55,7 +55,7 @@ def test_account_errors_use_the_hierarchy(admin: TestClient) -> None:
         json={
             "username": "ADMIN",
             "display_name": "x",
-            "password": "a long password!",
+            "pin": "1234",
             "role": "member",
         },
     )

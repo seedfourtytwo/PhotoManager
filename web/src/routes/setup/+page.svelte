@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { MIN_PASSWORD } from '$lib/api';
+	import { isPin, PIN_LENGTH } from '$lib/api';
 	import { api, session } from '$lib/app.svelte';
+	import { PIN_FIELD } from '$lib/pin';
 
 	let username = $state('');
 	let displayName = $state('');
-	let password = $state('');
+	let pin = $state('');
 	let confirm = $state('');
 	let error = $state('');
 	let busy = $state(false);
@@ -19,12 +20,12 @@
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
-		if (password.length < MIN_PASSWORD) {
-			error = `Use at least ${MIN_PASSWORD} characters for the password.`;
+		if (!isPin(pin)) {
+			error = `Use exactly ${PIN_LENGTH} digits for the PIN.`;
 			return;
 		}
-		if (password !== confirm) {
-			error = 'The two passwords are not the same.';
+		if (pin !== confirm) {
+			error = 'The two PINs are not the same.';
 			return;
 		}
 		busy = true;
@@ -32,7 +33,7 @@
 			const user = await api.setup({
 				username: username.trim(),
 				display_name: displayName.trim() || username.trim(),
-				password
+				pin
 			});
 			session.signedIn(user, '/');
 		} catch (e) {
@@ -55,19 +56,19 @@
 	<label>User name <input bind:value={username} autocomplete="username" required /></label>
 	<label>Your name <input bind:value={displayName} autocomplete="name" /></label>
 	<label>
-		Password
+		PIN
 		<input
-			bind:value={password}
-			type="password"
-			autocomplete="new-password"
+			{...PIN_FIELD}
+			bind:value={pin}
+			autocomplete="off"
 			required
-			aria-describedby="pw-hint"
+			aria-describedby="pin-hint"
 		/>
 	</label>
-	<p id="pw-hint" class="quiet small hint">At least {MIN_PASSWORD} characters.</p>
+	<p id="pin-hint" class="quiet small hint">Exactly {PIN_LENGTH} digits.</p>
 	<label>
-		Password again
-		<input bind:value={confirm} type="password" autocomplete="new-password" required />
+		PIN again
+		<input {...PIN_FIELD} bind:value={confirm} autocomplete="off" required />
 	</label>
 	{#if error}<p role="alert">{error}</p>{/if}
 	<button class="primary" type="submit" disabled={busy}>Create admin account</button>

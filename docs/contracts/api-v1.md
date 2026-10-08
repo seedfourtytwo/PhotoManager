@@ -10,7 +10,7 @@ Conventions
   `tz_offset_minutes` may be null. Day filters use `YYYY-MM-DD`.
 - Auth: session cookie `pa_session` (HttpOnly, SameSite=Strict, Secure when served over HTTPS).
   Every `/api/*` route needs a session **except** `/api/health`, `/api/setup` (GET/POST),
-  `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
+  `/api/auth/accounts`, `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
 - Roles: `admin` (everything, manages users/sources/access), `member`, `guest`
   (view + download only; never edits).
 - Access levels on a source: `view` < `download` < `edit`. Admins have `edit` everywhere.
@@ -34,21 +34,22 @@ Conventions
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/setup` | – | `{needs_admin: bool}` |
-| POST | `/api/setup` | `{username, display_name, password}` | `201 User` + session; `409` if users exist |
-| POST | `/api/auth/login` | `{username, password}` | `200 User` + session; `401`; `429` after 10 fails/15 min per username+IP |
+| POST | `/api/setup` | `{username, display_name, pin}` | `201 User` + session; `409` if users exist |
+| GET | `/api/auth/accounts` | – | `[{username, display_name}]`: the active accounts, for the login screen to offer (open; names only) |
+| POST | `/api/auth/login` | `{username, pin}` | `200 User` + session; `401`; `429` after 10 fails/15 min per username+IP |
 | POST | `/api/auth/logout` | – | `204` |
 | GET | `/api/auth/me` | – | `User` |
-| POST | `/api/auth/password` | `{current_password, new_password}` | `204`; `400` if current wrong. Ends every **other** session of the user; this one stays (v1.2) |
+| POST | `/api/auth/pin` | `{current_pin, new_pin}` | `204`; `400` if current wrong. Ends every **other** session of the user; this one stays (v1.2) |
 
 `User = {id, username, display_name, role: "admin"|"member"|"guest", disabled: bool}`.
-Passwords ≥ 10 characters. Sessions expire after 30 days idle.
+A PIN is exactly 4 digits (`422` otherwise). Sessions expire after 30 days idle.
 
 ## Users (admin)
 
 | GET | `/api/users` | – | `User[]` |
 |---|---|---|---|
-| POST | `/api/users` | `{username, display_name, password, role}` | `201 User` |
-| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, password?}` | `User`; cannot remove the last admin (`409`). A `password` reset ends **all** the user's sessions and revokes their device tokens (v1.2) |
+| POST | `/api/users` | `{username, display_name, pin, role}` | `201 User` |
+| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, pin?}` | `User`; cannot remove the last admin (`409`). A `pin` reset ends **all** the user's sessions and revokes their device tokens (v1.2) |
 | POST | `/api/users/{id}/unlock` | – | `204`; clears the failed-login block (`429`) for that username from every address (v1.3); `404` unknown id |
 
 ## Sources (existing, plus access)
@@ -286,7 +287,7 @@ Each change is also written next to the route it concerns above. For the web app
 | Access | `private` is set by a *marker* (needs `edit`); it hides the photo only from people who reach it solely through the marker's own sources or albums. | None (the `private` flag is unchanged). |
 | Access | `GET /api/sources/{id}/access` is admin-only (`403` for others); `SourceOut.path` is `null` for non-admins. | Don't show folder paths or access lists to members. |
 | Sources | `SourceOut.problem`: `"folder not found"` or `null`. A scan of a vanished folder records a `failed` import run with that message. | Show `problem` next to the source; show failed runs. |
-| Auth | Password change ends the user's *other* sessions; an admin reset ends all of them and revokes device tokens. | After an admin reset the user must sign in again (their phone too). |
+| Auth | PIN change ends the user's *other* sessions; an admin reset ends all of them and revokes device tokens. | After an admin reset the user must sign in again (their phone too). |
 | Upload | `/api/upload/check` answers for **you**: purged = present; hidden from you = missing (an upload links it to your inbox). `asset_id` is `null` unless you can see that photo. | None. |
 | Trash | `POST /api/trash/empty` purges only what you see in the trash; trashed photos keep their `thumb`/`preview` URLs for those who see them there. | Trash thumbnails now load. |
 | Albums | `POST /api/albums/{id}/items` `position` counts the items you see; removing the cover keeps it remembered (an undo restores it). | Undo: post each removed photo back at its old index, smallest first. |

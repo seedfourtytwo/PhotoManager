@@ -1,13 +1,14 @@
 <script lang="ts">
-	import { MIN_PASSWORD, type Role, type User } from '$lib/api';
+	import { isPin, PIN_LENGTH, type Role, type User } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
+	import { PIN_FIELD } from '$lib/pin';
 	import Dialog from '../Dialog.svelte';
 
 	let users = $state<User[]>([]);
 	let creating = $state(false);
 	let resetting = $state<User | null>(null);
-	let form = $state({ username: '', display_name: '', password: '', role: 'member' as Role });
-	let newPassword = $state('');
+	let form = $state({ username: '', display_name: '', pin: '', role: 'member' as Role });
+	let newPin = $state('');
 
 	async function load() {
 		try {
@@ -46,9 +47,9 @@
 	async function create() {
 		try {
 			await api.createUser({ ...form, username: form.username.trim() });
-			notice.show(`Created ${form.username}. Give them their password in person.`);
+			notice.show(`Created ${form.username}. Give them their PIN in person.`);
 			creating = false;
-			form = { username: '', display_name: '', password: '', role: 'member' };
+			form = { username: '', display_name: '', pin: '', role: 'member' };
 			await load();
 		} catch (e) {
 			notice.error(e);
@@ -57,10 +58,10 @@
 
 	async function reset() {
 		if (!resetting) return;
-		await patch(resetting, { password: newPassword });
-		notice.show(`New password set for ${resetting.username}.`);
+		await patch(resetting, { pin: newPin });
+		notice.show(`New PIN set for ${resetting.username}.`);
 		resetting = null;
-		newPassword = '';
+		newPin = '';
 	}
 </script>
 
@@ -105,7 +106,7 @@
 							</button>
 						{:else}<span class="quiet">· you</span>{/if}
 					</td>
-					<td><button type="button" onclick={() => (resetting = user)}>Reset password</button></td>
+					<td><button type="button" onclick={() => (resetting = user)}>Reset PIN</button></td>
 				</tr>
 			{/each}
 		</tbody>
@@ -117,23 +118,15 @@
 		<label class="field">User name <input bind:value={form.username} autocomplete="off" /></label>
 		<label class="field">Name <input bind:value={form.display_name} /></label>
 		<label class="field"
-			>Password <input
-				type="password"
-				bind:value={form.password}
-				autocomplete="new-password"
-				aria-describedby="new-pw-hint"
+			>PIN <input
+				{...PIN_FIELD}
+				bind:value={form.pin}
+				autocomplete="off"
+				aria-describedby="new-pin-hint"
 			/></label
 		>
-		<p class="quiet small hint" id="new-pw-hint" aria-live="polite">
-			{#if form.password.length && form.password.length < MIN_PASSWORD}
-				{MIN_PASSWORD - form.password.length} more character{MIN_PASSWORD - form.password.length ===
-				1
-					? ''
-					: 's'} needed.
-			{:else}
-				At least {MIN_PASSWORD} characters.
-			{/if}
-			Give it to them in person; they can change it in Settings.
+		<p class="quiet small hint" id="new-pin-hint">
+			Exactly {PIN_LENGTH} digits. Give it to them in person; they can change it in Settings.
 		</p>
 		<label class="field">
 			Role
@@ -147,27 +140,18 @@
 			<button
 				class="primary"
 				type="button"
-				disabled={!form.username.trim() || form.password.length < MIN_PASSWORD}
+				disabled={!form.username.trim() || !isPin(form.pin)}
 				onclick={create}>Add</button
 			>
 		{/snippet}
 	</Dialog>
 {:else if resetting}
-	<Dialog title={`New password for ${resetting.username}`} onclose={() => (resetting = null)}>
-		<label class="field"
-			>Password <input
-				type="password"
-				bind:value={newPassword}
-				autocomplete="new-password"
-			/></label
-		>
-		<p class="quiet small">At least {MIN_PASSWORD} characters.</p>
+	<Dialog title={`New PIN for ${resetting.username}`} onclose={() => (resetting = null)}>
+		<label class="field">PIN <input {...PIN_FIELD} bind:value={newPin} autocomplete="off" /></label>
+		<p class="quiet small">Exactly {PIN_LENGTH} digits.</p>
 		{#snippet actions()}
-			<button
-				class="primary"
-				type="button"
-				disabled={newPassword.length < MIN_PASSWORD}
-				onclick={reset}>Set password</button
+			<button class="primary" type="button" disabled={!isPin(newPin)} onclick={reset}
+				>Set PIN</button
 			>
 		{/snippet}
 	</Dialog>

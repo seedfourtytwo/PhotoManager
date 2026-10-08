@@ -18,7 +18,7 @@ from photo_assistant.api.deps import SESSION_COOKIE
 from photo_assistant.api.integrations import Integrations
 from photo_assistant.api.main import create_app
 from photo_assistant.api.settings import IntegrationSettings
-from tests.api.conftest import BASE, PASSWORD, make_settings, services_of
+from tests.api.conftest import BASE, PIN, make_settings, services_of
 from tests.factories import NOW, new_asset
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "photos"
@@ -47,15 +47,13 @@ def world(tmp_path: Path) -> Iterator[World]:
     settings = make_settings(data, integrations=IntegrationSettings(upload_max_mb=0.01))
     app = create_app(settings)
     with TestClient(app, base_url=BASE) as admin:
-        admin.post(
-            "/api/setup", json={"username": "u1", "display_name": "U1", "password": PASSWORD}
-        )
+        admin.post("/api/setup", json={"username": "u1", "display_name": "U1", "pin": PIN})
         sessions = {1: admin.cookies[SESSION_COOKIE]}
         for n in (2, 3, 4):
-            body = {"username": f"u{n}", "display_name": f"U{n}", "password": PASSWORD}
+            body = {"username": f"u{n}", "display_name": f"U{n}", "pin": PIN}
             assert admin.post("/api/users", json=body | {"role": "member"}).status_code == 201
             other = TestClient(app, base_url=BASE)
-            assert other.post("/api/auth/login", json={"username": f"u{n}", "password": PASSWORD})
+            assert other.post("/api/auth/login", json={"username": f"u{n}", "pin": PIN})
             sessions[n] = other.cookies[SESSION_COOKIE]
         services = services_of(admin)
         services.integrations.upload._clock = FixedClock()  # type: ignore[attr-defined]

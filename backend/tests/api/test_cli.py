@@ -8,7 +8,7 @@ from photo_assistant import __main__ as cli
 from photo_assistant.api.settings import get_settings
 from photo_assistant.domain.access import Role
 
-PASSWORD = "a long enough password"
+PIN = "1234"
 
 
 @pytest.fixture
@@ -21,10 +21,10 @@ def data_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     get_settings.cache_clear()
 
 
-def test_create_user_prompts_for_the_password_twice(
+def test_create_user_prompts_for_the_pin_twice(
     data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    answers = iter([PASSWORD, PASSWORD])
+    answers = iter([PIN, PIN])
     monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
     assert cli.main(["create-user", "c", "--role", "admin"]) == 0
     assert "Created admin 'c'" in capsys.readouterr().out
@@ -36,15 +36,36 @@ def test_create_user_prompts_for_the_password_twice(
         services.close()
 
 
-def test_create_user_refuses_mismatched_or_short_passwords(
+def test_create_user_refuses_mismatched_or_malformed_pins(
     data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    answers = iter([PASSWORD, "something else entirely", "short", "short"])
+    answers = iter([PIN, "4321", "12345", "12345"])
     monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
     assert cli.main(["create-user", "c"]) == 2
     assert "do not match" in capsys.readouterr().err
     assert cli.main(["create-user", "c"]) == 2
-    assert "10 characters" in capsys.readouterr().err
+    assert "4 digits" in capsys.readouterr().err
+
+
+def test_set_pin_gives_an_account_a_new_pin_without_a_session(
+    data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answers = iter([PIN, PIN, "5678", "5678", "5678", "8765", "abcd", "abcd", "5678", "5678"])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    assert cli.main(["create-user", "c", "--role", "admin"]) == 0
+    assert cli.main(["set-pin", "C"]) == 0
+    assert "New PIN set for 'c'" in capsys.readouterr().out
+    services = cli.build_services(get_settings())
+    try:
+        services.accounts.login("c", "5678", "127.0.0.1")
+    finally:
+        services.close()
+    assert cli.main(["set-pin", "c"]) == 2
+    assert "do not match" in capsys.readouterr().err
+    assert cli.main(["set-pin", "c"]) == 2
+    assert "4 digits" in capsys.readouterr().err
+    assert cli.main(["set-pin", "nobody"]) == 2
+    assert "no such user" in capsys.readouterr().err
 
 
 # --- ops commands are subcommands of the main CLI (docs/wiring/ops.md) -----------------------

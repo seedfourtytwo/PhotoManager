@@ -30,9 +30,9 @@ async function start(users: 'none' | 'seed') {
 	base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-async function signedIn(username = 'admin', password = 'correct horse'): Promise<Api> {
+async function signedIn(username = 'admin', pin = '1234'): Promise<Api> {
 	const api = browser();
-	await api.login({ username, password });
+	await api.login({ username, pin });
 	return api;
 }
 
@@ -44,17 +44,17 @@ describe('first run', () => {
 	it('asks for an admin, creates one with a session, then refuses a second setup', async () => {
 		const api = browser();
 		expect(await api.setupState()).toEqual({ needs_admin: true });
-		const user = await api.setup({ username: 'c', display_name: 'C', password: 'long enough!' });
+		const user = await api.setup({ username: 'c', display_name: 'C', pin: '1234' });
 		expect(user.role).toBe('admin');
 		expect((await api.me()).username).toBe('c');
 		await expect(
-			api.setup({ username: 'x', display_name: 'X', password: 'long enough!' })
+			api.setup({ username: 'x', display_name: 'X', pin: '1234' })
 		).rejects.toMatchObject({ status: 409 });
 	});
 
-	it('rejects short passwords', async () => {
+	it('rejects PINs that are not 4 digits', async () => {
 		await expect(
-			browser().setup({ username: 'c', display_name: 'C', password: 'short' })
+			browser().setup({ username: 'c', display_name: 'C', pin: '12345' })
 		).rejects.toMatchObject({ status: 422 });
 	});
 });
@@ -70,26 +70,36 @@ describe('with seeded users', () => {
 		expect((error as ApiError).status).toBe(401);
 	});
 
+	it('lists the active accounts for the login screen, without a session', async () => {
+		const admin = await signedIn();
+		const guest = (await admin.users()).find((u) => u.username === 'guest')!;
+		await admin.updateUser(guest.id, { disabled: true });
+		expect(await browser().loginAccounts()).toEqual([
+			{ username: 'admin', display_name: 'C' },
+			{ username: 'partner', display_name: 'Partner' }
+		]);
+	});
+
 	it('rate-limits login after 10 failures', async () => {
 		const api = browser();
 		for (let i = 0; i < 10; i++)
-			await expect(api.login({ username: 'admin', password: 'nope' })).rejects.toMatchObject({
+			await expect(api.login({ username: 'admin', pin: '0000' })).rejects.toMatchObject({
 				status: 401
 			});
-		await expect(api.login({ username: 'admin', password: 'correct horse' })).rejects.toMatchObject(
-			{ status: 429 }
-		);
+		await expect(api.login({ username: 'admin', pin: '1234' })).rejects.toMatchObject({
+			status: 429
+		});
 	});
 
 	it('lets an admin unlock a rate-limited account', async () => {
 		const api = browser();
 		for (let i = 0; i < 10; i++)
-			await api.login({ username: 'partner', password: 'nope' }).catch(() => undefined);
-		const blocked = { username: 'partner', password: 'battery staple' };
+			await api.login({ username: 'partner', pin: '0000' }).catch(() => undefined);
+		const blocked = { username: 'partner', pin: '2345' };
 		await expect(api.login(blocked)).rejects.toMatchObject({ status: 429 });
 		const admin = await signedIn();
 		const partner = (await admin.users()).find((u) => u.username === 'partner')!;
-		const member = await signedIn('guest', 'guest password');
+		const member = await signedIn('guest', '3456');
 		await expect(member.unlockUser(partner.id)).rejects.toMatchObject({ status: 403 });
 		await admin.unlockUser(partner.id);
 		await expect(api.login(blocked)).resolves.toMatchObject({ username: 'partner' });
@@ -135,7 +145,7 @@ describe('with seeded users', () => {
 
 	it('limits what a member sees by source access', async () => {
 		const admin = await signedIn();
-		const guest = await signedIn('guest', 'guest password');
+		const guest = await signedIn('guest', '3456');
 		const all = (await admin.facets({})).total;
 		const seen = (await guest.facets({})).total;
 		expect(seen).toBeLessThan(all);
@@ -247,7 +257,7 @@ describe('with seeded users', () => {
 		const user = await api.createUser({
 			username: 'kid',
 			display_name: 'Kid',
-			password: 'long enough!',
+			pin: '1234',
 			role: 'guest'
 		});
 		expect((await api.updateUser(user.id, { disabled: true })).disabled).toBe(true);
@@ -296,7 +306,7 @@ async function sessionCookie(): Promise<string> {
 	const response = await fetch(`${base}/api/auth/login`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ username: 'admin', password: 'correct horse' })
+		body: JSON.stringify({ username: 'admin', pin: '1234' })
 	});
 	return (response.headers.get('set-cookie') ?? '').split(';')[0];
 }
