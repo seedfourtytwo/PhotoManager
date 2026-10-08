@@ -50,9 +50,14 @@ export type Source = {
 	asset_count: number;
 	/** v1.2: "folder not found" when the folder is gone, else null (absent before v1.2). */
 	problem?: string | null;
+	/** How often the folder checks itself again; "off" = only when someone asks. */
+	recheck: Recheck;
+	/** When it next checks itself; null when it never does (off, or disabled). */
+	next_check_at: string | null;
 };
+export type Recheck = 'off' | 'hourly' | 'daily' | 'weekly';
 export type SourceIn = { label: string; path: string };
-export type SourcePatch = Partial<{ enabled: boolean; label: string }>;
+export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Recheck }>;
 
 export type Access = { everyone: Level | null; users: { user_id: Id; level: Level }[] };
 

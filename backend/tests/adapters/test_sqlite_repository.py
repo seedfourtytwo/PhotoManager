@@ -12,6 +12,7 @@ from photo_assistant.adapters.sqlite_repository import (
 )
 from photo_assistant.domain.access import Level, Role, SourceAccess
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports import Fingerprint, RenderedImage
 from tests.factories import NOW, new_asset
 
@@ -60,6 +61,54 @@ def test_sources_round_trip(repo: SqliteRepository) -> None:
     assert got is not None and not got.enabled
     assert repo.get_source(a.id) == a
     assert repo.get_source(999) is None
+
+
+def test_a_source_does_not_check_itself_until_it_is_told_to(repo: SqliteRepository) -> None:
+    source = repo.add_source("a", "/a")
+    assert source.recheck is Recheck.OFF
+    repo.set_source_recheck(source.id, Recheck.DAILY)
+    assert [s.recheck for s in repo.list_sources()] == [Recheck.DAILY]
+    with pytest.raises(sqlite3.IntegrityError):
+        repo._write("UPDATE source SET recheck = 'monthly' WHERE id = ?", (source.id,))
+
+
+def test_the_last_check_of_a_source_is_the_start_of_its_latest_import_run(
+    repo: SqliteRepository,
+) -> None:
+    checked, failed, never = (repo.add_source(n, f"/{n}") for n in "abc")
+    hour = timedelta(hours=1)
+    repo.save_import_report(ImportReport(checked.id, RunStatus.DONE), NOW - 2 * hour, NOW - hour)
+    repo.save_import_report(ImportReport(checked.id, RunStatus.DONE), NOW - hour, NOW)
+    repo.save_import_report(ImportReport(failed.id, RunStatus.FAILED), NOW, NOW)
+    assert repo.last_check_attempts("scan_source") == {checked.id: NOW - hour, failed.id: NOW}
+    assert never.id not in repo.last_check_attempts("scan_source")
+
+
+def test_a_check_that_ended_without_a_report_still_counts_as_an_attempt(
+    repo: SqliteRepository,
+) -> None:
+    """Else a source whose check dies before the import would be queued again at every look."""
+    source = repo.add_source("a", "/a")
+    repo.save_import_report(ImportReport(source.id, RunStatus.DONE), NOW, NOW)
+    job_id = repo.enqueue("scan_source", {"source_id": source.id})
+    repo.enqueue("preview", {"source_id": source.id})
+    assert repo.last_check_attempts("scan_source") == {source.id: NOW}, "waiting is no attempt"
+    later = NOW + timedelta(hours=3)
+    assert repo.claim_next_job(later, only={"scan_source"}) is not None
+    repo.fail_job(job_id, "SourceUnavailableError: gone", retry=False)
+    assert repo.last_check_attempts("scan_source") == {source.id: later}
+
+
+def test_sources_being_checked_have_a_check_waiting_or_running(repo: SqliteRepository) -> None:
+    waiting, running, done, failed, idle = (repo.add_source(n, f"/{n}") for n in "abcde")
+    for source in (running, done, failed, waiting):
+        repo.enqueue("scan_source", {"source_id": source.id})
+    repo.enqueue("preview", {"source_id": idle.id})
+    claimed = [repo.claim_next_job(NOW, only={"scan_source"}) for _ in range(3)]
+    assert claimed[1] is not None and claimed[2] is not None
+    repo.complete_job(claimed[1].id)
+    repo.fail_job(claimed[2].id, "boom", retry=False)
+    assert repo.sources_being_checked("scan_source") == {waiting.id, running.id}
 
 
 def test_the_same_folder_cannot_be_added_twice(repo: SqliteRepository) -> None:

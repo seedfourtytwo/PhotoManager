@@ -15,6 +15,8 @@ import type {
 	Level,
 	Recipe,
 	Role,
+	Source,
+	SourcePatch,
 	User
 } from '../src/lib/api/types.ts';
 import { isPin } from '../src/lib/api/types.ts';
@@ -27,6 +29,7 @@ import {
 	rng,
 	type MockAlbum,
 	type MockAsset,
+	type MockSource,
 	type MockState,
 	type MockUser
 } from './data.ts';
@@ -46,6 +49,8 @@ import {
 	type Route
 } from './http.ts';
 
+/** How long a source that checks itself waits between checks. */
+const RECHECK_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
 const LEVELS: Level[] = ['view', 'download', 'edit'];
 const rank = (level: Level | null) => (level ? LEVELS.indexOf(level) : -1);
 const maxLevel = (a: Level | null, b: Level | null) => (rank(a) >= rank(b) ? a : b);
@@ -379,6 +384,28 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			summary,
 			items
 		});
+	}
+
+	/** A source as the API sends it: counted, its path for admins only (v1.2), its next check. */
+	function sourceOut(s: MockSource, isAdmin: boolean): Source {
+		const recheck = s.recheck ?? 'off';
+		const last = state.reports.find((r) => r.source_id === s.id); // newest first
+		const next =
+			recheck === 'off' || !s.enabled
+				? null
+				: last
+					? Date.parse(last.started_at) + RECHECK_MS[recheck]
+					: now(); // never checked: due at once
+		return {
+			...s,
+			path: isAdmin ? s.path : null,
+			problem: s.path.includes('gone') ? 'folder not found' : null,
+			asset_count: state.assets.filter(
+				(a) => live(a) && a.sources.some((o) => o.source_id === s.id)
+			).length,
+			recheck,
+			next_check_at: next === null ? null : new Date(next).toISOString()
+		};
 	}
 
 	function inboxFor(user: MockUser) {
@@ -829,10 +856,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					state.sources
 						.filter((s) => user.role === 'admin' || s.owner_id === user.id || shared(s.id))
 						.map((s) => ({
-							...s,
-							// v1.2: paths only for admins; a folder that has gone says so.
-							path: user.role === 'admin' ? s.path : null,
-							problem: s.path.includes('gone') ? 'folder not found' : null,
+							...sourceOut(s, user.role === 'admin'),
 							asset_count: visible(user).filter((a) => a.sources.some((o) => o.source_id === s.id))
 								.length
 						}))
@@ -865,7 +889,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				};
 				state.sources.push(source);
 				state.access.set(source.id, { everyone: 'download', users: [] });
-				return ok(source, 201);
+				return ok(sourceOut(source, true), 201);
 			}
 		],
 		[
@@ -875,10 +899,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				admin(ctx);
 				const source = state.sources.find((s) => s.id === idParam(ctx));
 				if (!source) throw new HttpError(404, 'Source not found.');
-				const body = (ctx.body ?? {}) as { enabled?: boolean; label?: string };
+				const body = (ctx.body ?? {}) as SourcePatch;
+				if (body.recheck !== undefined && !(body.recheck === 'off' || body.recheck in RECHECK_MS))
+					throw new HttpError(422, 'Check automatically: off, hourly, daily or weekly.');
 				if (body.enabled !== undefined) source.enabled = body.enabled;
 				if (body.label) source.label = body.label;
-				return ok(source);
+				if (body.recheck !== undefined) source.recheck = body.recheck;
+				return ok(sourceOut(source, true));
 			}
 		],
 		[

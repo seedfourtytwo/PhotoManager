@@ -16,6 +16,7 @@ from photo_assistant.adapters.sqlite_base import (
     asset_from_row,
     decode_cursor,
     encode_cursor,
+    source_from_row,
 )
 from photo_assistant.adapters.sqlite_base import iso_text as _iso
 from photo_assistant.adapters.sqlite_database import Database, open_database
@@ -35,6 +36,7 @@ from photo_assistant.domain.model import (
     RunStatus,
     Source,
 )
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports import (
     IMPORT_RUNS_LISTED,
     DuplicateAssetError,
@@ -79,16 +81,7 @@ class SqliteRepository(
 
     # --- sources ---------------------------------------------------------------------------
 
-    @staticmethod
-    def _source(row: sqlite3.Row) -> Source:
-        return Source(
-            row["id"],
-            row["label"],
-            row["root"],
-            bool(row["enabled"]),
-            row["kind"],
-            row["owner_id"],
-        )
+    _source = staticmethod(source_from_row)
 
     def add_source(
         self,
@@ -138,6 +131,41 @@ class SqliteRepository(
 
     def set_source_enabled(self, source_id: int, enabled: bool) -> None:
         self._write("UPDATE source SET enabled = ? WHERE id = ?", (int(enabled), source_id))
+
+    def set_source_recheck(self, source_id: int, recheck: Recheck) -> None:
+        self._write("UPDATE source SET recheck = ? WHERE id = ?", (recheck.value, source_id))
+
+    def last_check_attempts(self, job_kind: str) -> dict[int, datetime]:
+        """Source id → when its latest check started, whether it worked or not: the later of
+        its newest import run and its newest check job a worker picked up (``updated_at`` is
+        set when a job is claimed). The job covers a check that died before any report."""
+        runs = self._all(
+            """SELECT source_id, started_at FROM import_run
+               WHERE id IN (SELECT MAX(id) FROM import_run GROUP BY source_id)"""
+        )
+        attempts = {int(r["source_id"]): datetime.fromisoformat(r["started_at"]) for r in runs}
+        for source_id, claimed_at in self._check_jobs(job_kind, "attempts > 0"):
+            last = attempts.get(source_id)
+            attempts[source_id] = claimed_at if last is None else max(last, claimed_at)
+        return attempts
+
+    def sources_being_checked(self, job_kind: str) -> set[int]:
+        """Sources with a check waiting or running."""
+        jobs = self._check_jobs(job_kind, "status IN ('queued', 'running')")
+        return {source_id for source_id, _ in jobs}
+
+    def _check_jobs(self, job_kind: str, where: str) -> list[tuple[int, datetime]]:
+        """(source id, last touched) of the jobs of this kind that match ``where``."""
+        rows = self._all(
+            f"""SELECT json_extract(payload_json, '$.source_id') AS source_id, updated_at
+                FROM job WHERE kind = ? AND {where}""",
+            (job_kind,),
+        )
+        return [
+            (int(r["source_id"]), datetime.fromisoformat(r["updated_at"]))
+            for r in rows
+            if r["source_id"] is not None
+        ]
 
     def rename_source(self, source_id: int, label: str) -> None:
         self._write("UPDATE source SET label = ? WHERE id = ?", (label, source_id))

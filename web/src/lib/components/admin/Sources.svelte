@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { ImportRun, ProtonSource as AddedProton, Source } from '$lib/api';
+	import type { ImportRun, ProtonSource as AddedProton, Recheck, Source } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
-	import { formatWhen } from '$lib/format';
+	import { formatWhen, nextCheckText } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
 	import AccessDialog from './AccessDialog.svelte';
@@ -162,6 +162,16 @@
 		}
 	}
 
+	async function setRecheck(source: Source, recheck: Recheck, control: HTMLSelectElement) {
+		try {
+			await api.updateSource(source.id, { recheck });
+		} catch (e) {
+			notice.error(e);
+			control.value = source.recheck; // the select already shows the refused choice
+		}
+		await load();
+	}
+
 	async function toggle(source: Source) {
 		try {
 			await api.updateSource(source.id, { enabled: !source.enabled });
@@ -208,6 +218,22 @@
 								run.finished_at
 							)}{/if}
 					{/if}
+				</div>
+				<div class="auto quiet small">
+					<label
+						>Check automatically
+						<select
+							value={source.recheck}
+							onchange={(e) =>
+								setRecheck(source, e.currentTarget.value as Recheck, e.currentTarget)}
+						>
+							<option value="off">Off</option>
+							<option value="hourly">Every hour</option>
+							<option value="daily">Every day</option>
+							<option value="weekly">Every week</option>
+						</select>
+					</label>
+					{#if source.next_check_at}<span>{nextCheckText(source.next_check_at)}</span>{/if}
 				</div>
 				<div class="actions">
 					{#if source.kind === 'rclone'}
@@ -338,6 +364,18 @@
 		font-family: var(--font-mono);
 		font-stretch: 80%;
 		overflow-wrap: anywhere;
+	}
+	.auto {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 var(--s-3);
+		margin-top: var(--s-1);
+	}
+	.auto label {
+		display: flex;
+		align-items: baseline;
+		gap: var(--s-2);
 	}
 	.actions {
 		display: flex;

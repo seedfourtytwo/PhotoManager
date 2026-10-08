@@ -13,6 +13,7 @@ import type {
 	ImportRun,
 	Job,
 	Place,
+	Recheck,
 	Recipe,
 	Role,
 	Source
@@ -134,8 +135,14 @@ export type MockAlbum = {
 
 export type MockReport = ImportRun & { items: ImportItem[] };
 
-/** The mock keeps every folder's path; the API hides it from non-admins. */
-export type MockSource = Source & { path: string };
+/**
+ * The mock keeps every folder's path; the API hides it from non-admins. No `recheck` means
+ * "off"; `next_check_at` is worked out when a source is sent.
+ */
+export type MockSource = Omit<Source, 'recheck' | 'next_check_at'> & {
+	path: string;
+	recheck?: Recheck;
+};
 
 export type MockFace = {
 	id: number;

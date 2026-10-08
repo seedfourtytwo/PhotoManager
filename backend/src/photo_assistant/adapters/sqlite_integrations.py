@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+from photo_assistant.adapters.sqlite_base import source_from_row
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.access import INBOX_KIND
 from photo_assistant.domain.model import Source
@@ -59,12 +60,6 @@ class _Store:
         """Several writes as one; inside another transaction it joins that one."""
         with self._db.transaction():
             yield
-
-
-def _source(row: sqlite3.Row) -> Source:
-    return Source(
-        row["id"], row["label"], row["root"], bool(row["enabled"]), row["kind"], row["owner_id"]
-    )
 
 
 def _time(value: str | None) -> datetime | None:
@@ -148,7 +143,7 @@ class SqliteInboxes(_SourceCreator):
                 self._write("UPDATE source SET root = ? WHERE id = ?", (root, row["id"]))
                 row = self._one("SELECT * FROM source WHERE id = ?", (row["id"],))
                 assert row is not None
-            return _source(row)
+            return source_from_row(row)
 
     def _create(self, user_id: int, root: str) -> Source:
         """Inside the caller's transaction: the source and its inbox row, or neither."""
@@ -158,7 +153,7 @@ class SqliteInboxes(_SourceCreator):
         self._write("INSERT INTO inbox (user_id, source_id) VALUES (?, ?)", (user_id, source.id))
         row = self._one("SELECT * FROM source WHERE id = ?", (source.id,))
         assert row is not None
-        return _source(row)
+        return source_from_row(row)
 
 
 class SqliteDevices(_Store):

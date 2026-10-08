@@ -52,6 +52,8 @@ MEANINGS = {
     "and the Docker image set it; not set = API only.",
     "PA_TRASH_PURGE_EVERY_HOURS": "How often the server deletes photos that have been in the "
     "trash for 30 days.",
+    "PA_SOURCE_RECHECK_POLL_SECONDS": "How often the server looks for folders whose automatic "
+    "re-check is due.",
     "PA_ARGON2_TIME_COST": "Work factor of the PIN hash. Tests lower it; never lower it in use.",
     "PA_ARGON2_MEMORY_KIB": "Memory used by one PIN hash, in KiB. Tests lower it; never lower "
     "it in use.",
