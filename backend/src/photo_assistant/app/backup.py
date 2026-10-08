@@ -24,6 +24,7 @@ from photo_assistant.domain.backup import (
     BackupRun,
     BackupRunStatus,
     BackupTarget,
+    InvalidBackupTargetError,
     NewBackupTarget,
     PlaceFacts,
     RestoreCheck,
@@ -48,6 +49,7 @@ from photo_assistant.ports.backup import (
     BackupError,
     BackupPlaces,
     BackupStore,
+    BackupTargetExistsError,
     DatabaseSnapshotter,
     Disk,
     JobQueue,
@@ -88,16 +90,16 @@ class RecoverySheet:
 
 def repository_in(place: str) -> str:
     """The repository a guided setup uses inside ``place``: a folder path, or
-    ``rclone:<remote>:<folder>``. Raises ValueError for anything else."""
+    ``rclone:<remote>:<folder>``. Raises InvalidBackupTargetError for anything else."""
     place = place.strip()
     if place.startswith(RCLONE_PREFIX):
         remote, colon, folder = place.removeprefix(RCLONE_PREFIX).partition(":")
         if not remote or not colon:
-            raise ValueError("a cloud location looks like rclone:<name>:<folder>")
+            raise InvalidBackupTargetError("a cloud location looks like rclone:<name>:<folder>")
         inside = f"{folder.rstrip('/')}/" if folder.strip("/") else ""
         return f"{RCLONE_PREFIX}{remote}:{inside}{REPOSITORY_FOLDER}"
     if not Path(place).is_absolute():
-        raise ValueError("a local backup location must be an absolute path")
+        raise InvalidBackupTargetError("a local backup location must be an absolute path")
     return str(Path(place) / REPOSITORY_FOLDER)
 
 
@@ -170,7 +172,7 @@ class BackupService:
         vault's own files. The recovery sheet shows that file, so a free path would let a
         browser session read any file; the command line may still point anywhere."""
         if own_key_only and not self._need_vault().holds(Path(new.password_file)):
-            raise ValueError(
+            raise InvalidBackupTargetError(
                 "the password file must be a key file in this app's key folder; for a file "
                 "elsewhere on the server use the command line (just backup add)"
             )
@@ -180,22 +182,24 @@ class BackupService:
     def _validate_locations(self, new: NewBackupTarget) -> None:
         password = Path(new.password_file)
         if not password.is_absolute():
-            raise ValueError("the password file path must be absolute")
+            raise InvalidBackupTargetError("the password file path must be absolute")
         if _inside(password, self._config.data_root):
-            raise ValueError("keep the password file outside the library, e.g. ~/.config")
+            raise InvalidBackupTargetError(
+                "keep the password file outside the library, e.g. ~/.config"
+            )
         if not password.is_file():
-            raise ValueError(f"password file not found: {password} (create it first)")
+            raise InvalidBackupTargetError(f"password file not found: {password} (create it first)")
         if new.kind is TargetKind.LOCAL:
             self._validate_local_repository(Path(new.repository))
 
     def _validate_local_repository(self, repo: Path) -> None:
         if not repo.is_absolute():
-            raise ValueError("a local backup location must be an absolute path")
+            raise InvalidBackupTargetError("a local backup location must be an absolute path")
         if _inside(repo, self._config.data_root):
-            raise ValueError("a backup cannot live inside the library, or contain it")
+            raise InvalidBackupTargetError("a backup cannot live inside the library, or contain it")
         for root in self._config.source_roots():
             if _inside(repo, root):
-                raise ValueError(
+                raise InvalidBackupTargetError(
                     f"a backup cannot live inside a source folder, or contain one: {root}"
                 )
 
@@ -221,7 +225,7 @@ class BackupService:
             repository = repository_in(place)
             if not repository.startswith(RCLONE_PREFIX):
                 self._validate_local_repository(Path(repository))
-        except ValueError as exc:
+        except InvalidBackupTargetError as exc:
             return place, BackupPlan(size, None, str(exc))
         facts: PlaceFacts = self._need_places().facts(repository, self._config.data_root)
         return repository, plan_backup(size, facts)
@@ -234,15 +238,15 @@ class BackupService:
         retention: Retention | None = None,
     ) -> tuple[BackupTarget, str]:
         """A new target with a key made here, and its first backup queued. Returns the key:
-        the owner must keep a copy (``confirm_key_saved``). Raises ValueError with the reason
-        when the place won't do or the name is taken."""
+        the owner must keep a copy (``confirm_key_saved``). Raises InvalidBackupTargetError
+        with the reason when the place won't do, BackupTargetExistsError for a name taken."""
         vault = self._need_vault()
         repository, plan = self.plan(place)
         if plan.problem:
-            raise ValueError(plan.problem)
+            raise InvalidBackupTargetError(plan.problem)
         label = label.strip()
         if any(t.label.casefold() == label.casefold() for t in self._store.list_targets()):
-            raise ValueError(f"a backup target named {label!r} already exists")
+            raise BackupTargetExistsError(f"a backup target named {label!r} already exists")
         keep = retention or Retention()
         # checks the name and the schedule before a key exists: a refused setup leaves no key
         NewBackupTarget(label, repository, "/unset", schedule, None, keep)
@@ -335,15 +339,21 @@ class BackupService:
         target = self.target(target_id)
         if mirror_path is not None:
             if self._mirror is None:
-                raise ValueError("a copy on Proton Drive is not available on this machine")
+                raise InvalidBackupTargetError(
+                    "a copy on Proton Drive is not available on this machine"
+                )
             if target.kind is not TargetKind.LOCAL:
-                raise ValueError("only a backup in a folder or disk of this machine can be copied")
+                raise InvalidBackupTargetError(
+                    "only a backup in a folder or disk of this machine can be copied"
+                )
             try:
                 if mirror_path == PROTON_PHOTOS:
                     raise RemoteConfigError
                 RemoteConfig.proton(mirror_path)
             except RemoteConfigError as exc:
-                raise ValueError("choose a folder in My files on Proton Drive") from exc
+                raise InvalidBackupTargetError(
+                    "choose a folder in My files on Proton Drive"
+                ) from exc
         self._store.set_target_mirror(target_id, mirror_path)
         has_backup = self._store.last_run(target_id, RunKind.BACKUP, succeeded_only=True)
         if mirror_path is not None and has_backup is not None and self._queue is not None:

@@ -20,7 +20,7 @@ from photo_assistant.domain.backup import (
     RunOutcome,
     TargetSettings,
 )
-from photo_assistant.ports.backup import AssetFile
+from photo_assistant.ports.backup import AssetFile, BackupTargetExistsError
 
 
 def _when(value: str | None) -> datetime | None:
@@ -106,7 +106,9 @@ class SqliteBackupStore:
                 ),
             )
         except sqlite3.IntegrityError as exc:
-            raise ValueError(f"a backup target named {target.label!r} already exists") from exc
+            raise BackupTargetExistsError(
+                f"a backup target named {target.label!r} already exists"
+            ) from exc
         found = self.get_target(target_id)
         assert found is not None
         return found
