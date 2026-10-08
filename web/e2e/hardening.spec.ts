@@ -1,6 +1,15 @@
 /** Failure states and edge cases from the architecture review: each one was a real dead end. */
 import type { Page } from '@playwright/test';
-import { expect, isPhone, REAL_BACKEND, resetMock, selectTiles, signIn, test } from './helpers.ts';
+import {
+	ADMIN,
+	expect,
+	isPhone,
+	REAL_BACKEND,
+	resetMock,
+	selectTiles,
+	signIn,
+	test
+} from './helpers.ts';
 
 test.beforeEach(async () => {
 	await resetMock();
@@ -298,4 +307,74 @@ test('album: two quick moves reach the server in order, the last one last', asyn
 	expect(arrived[1]).toEqual(moved);
 	await page.reload();
 	await expect.poll(ids).toEqual(moved);
+});
+
+/** Count the requests a route gets and hold each one a moment, so a double click overlaps. */
+async function countSlow(page: Page, url: string, method: string) {
+	const seen = { count: 0 };
+	await page.route(url, async (route) => {
+		if (route.request().method() !== method) return route.continue();
+		seen.count++;
+		await new Promise((r) => setTimeout(r, 300));
+		await route.continue();
+	});
+	return seen;
+}
+
+test.describe('a double click sends one request', () => {
+	test.beforeEach(({ page }) => test.skip(isPhone(page), 'double click'));
+
+	test('New album creates one album', async ({ page }) => {
+		const posts = await countSlow(page, '**/api/albums', 'POST');
+		await signIn(page, '/albums');
+		await page.getByRole('button', { name: 'New album' }).click();
+		const dialog = page.getByRole('dialog', { name: 'New album' });
+		await dialog.getByLabel('Title').fill('Only once');
+		await dialog.getByRole('button', { name: 'Create' }).dblclick();
+		await expect(page.getByRole('heading', { name: 'Only once' })).toBeVisible();
+		expect(posts.count).toBe(1);
+	});
+
+	test('Rename album saves once', async ({ page }) => {
+		const patches = await countSlow(page, '**/api/albums/1', 'PATCH');
+		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'Rename' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Rename album' });
+		await dialog.getByLabel('Title').fill('Renamed once');
+		await dialog.getByRole('button', { name: 'Save' }).dblclick();
+		await expect(page.getByRole('heading', { name: 'Renamed once' })).toBeVisible();
+		expect(patches.count).toBe(1);
+	});
+
+	test('Delete album deletes once, without a “not found” afterwards', async ({ page }) => {
+		const deletes = await countSlow(page, '**/api/albums/1', 'DELETE');
+		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'Delete album' }).click();
+		await page
+			.getByRole('dialog', { name: 'Delete album?' })
+			.getByRole('button', { name: 'Delete album' })
+			.dblclick();
+		await expect(page.getByRole('status')).toContainText('Album deleted');
+		await expect(page).toHaveURL(/\/albums$/);
+		expect(deletes.count).toBe(1);
+	});
+
+	test('Change PIN changes it once, without “the current PIN is wrong”', async ({ page }) => {
+		const posts = await countSlow(page, '**/api/auth/pin', 'POST');
+		await signIn(page, '/settings');
+		await page.getByLabel('Current PIN').fill(ADMIN.pin);
+		await page.getByLabel('New PIN').fill('8642');
+		await page.getByRole('button', { name: 'Change PIN' }).dblclick();
+		await expect(page.getByRole('status')).toContainText('PIN changed');
+		expect(posts.count).toBe(1);
+		await expect(page.getByRole('alert')).toHaveCount(0);
+	});
+
+	test('Analyse photos queues once', async ({ page }) => {
+		const posts = await countSlow(page, '**/api/ml/backfill', 'POST');
+		await signIn(page, '/admin');
+		await page.getByRole('button', { name: 'Analyse photos not done yet' }).dblclick();
+		await expect(page.getByRole('status')).toContainText(/Queued/);
+		expect(posts.count).toBe(1);
+	});
 });

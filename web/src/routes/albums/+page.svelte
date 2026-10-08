@@ -8,6 +8,7 @@
 	let creating = $state(false);
 	let title = $state('');
 	let description = $state('');
+	let busy = $state(false);
 
 	$effect(() => {
 		api
@@ -17,6 +18,8 @@
 	});
 
 	async function create() {
+		if (busy) return;
+		busy = true;
 		try {
 			const album = await api.createAlbum({
 				title: title.trim(),
@@ -26,6 +29,8 @@
 			await goto(`/albums/${album.id}`);
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			busy = false;
 		}
 	}
 </script>
@@ -73,7 +78,8 @@
 		<label class="field">Title <input bind:value={title} /></label>
 		<label class="field">Description <input bind:value={description} /></label>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={!title.trim()} onclick={create}>Create</button
+			<button class="primary" type="button" disabled={busy || !title.trim()} onclick={create}
+				>Create</button
 			>
 		{/snippet}
 	</Dialog>

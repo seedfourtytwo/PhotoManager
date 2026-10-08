@@ -13,6 +13,7 @@
 	let backups = $state<BackupTarget[]>([]);
 	let ml = $state<MlStatus | null>(null);
 	let refresh = $state(0);
+	let analysing = $state(false);
 	const count = new Intl.NumberFormat('en-GB');
 
 	const active = $derived(stats ? stats.jobs.queued + stats.jobs.running : 0);
@@ -58,12 +59,16 @@
 	}
 
 	async function backfill() {
+		if (analysing) return;
+		analysing = true;
 		try {
 			const { queued, detail } = await api.mlBackfill();
 			notice.show(detail ? `Queued ${queued}. ${detail}` : `Queued ${queued} photos for analysis.`);
 			await poll();
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			analysing = false;
 		}
 	}
 </script>
@@ -128,7 +133,7 @@
 						Until then, search matches words.
 					{/if}
 				</p>
-				<button type="button" class="quiet-button" onclick={backfill}
+				<button type="button" class="quiet-button" disabled={analysing} onclick={backfill}
 					>Analyse photos not done yet</button
 				>
 			{/if}

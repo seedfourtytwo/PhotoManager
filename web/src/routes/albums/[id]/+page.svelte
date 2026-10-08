@@ -24,6 +24,8 @@
 	let description = $state('');
 	let width = $state(0);
 	let error = $state('');
+	/** Renaming or deleting: one request at a time, a double click must not send two. */
+	let busy = $state(false);
 
 	const canEdit = $derived(album?.role === 'owner' || album?.role === 'editor');
 	const layout = $derived(
@@ -145,22 +147,30 @@
 	}
 
 	async function rename() {
+		if (busy) return;
+		busy = true;
 		try {
 			await api.updateAlbum(id, { title: title.trim(), description: description.trim() });
 			dialog = null;
 			await load();
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			busy = false;
 		}
 	}
 
 	async function remove() {
+		if (busy) return;
+		busy = true;
 		try {
 			await api.deleteAlbum(id);
 			notice.show('Album deleted. Its photos are still in the library.');
 			await goto('/albums');
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			busy = false;
 		}
 	}
 </script>
@@ -261,14 +271,16 @@
 		<label class="field">Title <input bind:value={title} /></label>
 		<label class="field">Description <input bind:value={description} /></label>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={!title.trim()} onclick={rename}>Save</button>
+			<button class="primary" type="button" disabled={busy || !title.trim()} onclick={rename}
+				>Save</button
+			>
 		{/snippet}
 	</Dialog>
 {:else if dialog === 'delete'}
 	<Dialog title="Delete album?" onclose={() => (dialog = null)}>
 		<p>The album goes away; its photos stay in the library.</p>
 		{#snippet actions()}
-			<button class="primary" type="button" onclick={remove}>Delete album</button>
+			<button class="primary" type="button" disabled={busy} onclick={remove}>Delete album</button>
 		{/snippet}
 	</Dialog>
 {/if}
