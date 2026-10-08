@@ -28,6 +28,7 @@ from photo_assistant.adapters.sqlite_review import ReviewMixin
 from photo_assistant.adapters.sqlite_trash import TrashMixin
 from photo_assistant.domain.access import SourceAccess, default_source_access
 from photo_assistant.domain.model import (
+    REPORT_ORDER,
     Asset,
     ImportReport,
     ItemResult,
@@ -48,6 +49,21 @@ from photo_assistant.ports import (
 )
 
 __all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
+
+# REPORT_ORDER as the WHEN arms of a SQL CASE over import_item.outcome (fixed enum values)
+_REPORT_ORDER = " ".join(f"WHEN '{o.value}' THEN {n}" for n, o in enumerate(REPORT_ORDER))
+
+
+def _run_row(r: sqlite3.Row) -> dict[str, object]:
+    return {
+        "id": r["id"],
+        "source_id": r["source_id"],
+        "status": r["status"],
+        "started_at": r["started_at"],
+        "finished_at": r["finished_at"],
+        "summary": json.loads(r["summary_json"]),
+        "message": r["message"],
+    }
 
 
 class SqliteRepository(
@@ -147,7 +163,9 @@ class SqliteRepository(
                WHERE id IN (SELECT MAX(id) FROM import_run GROUP BY source_id)"""
         )
         attempts = {int(r["source_id"]): datetime.fromisoformat(r["started_at"]) for r in runs}
-        for source_id, claimed_at in self._check_jobs(job_kind, "attempts > 0 AND status <> 'done'"):
+        for source_id, claimed_at in self._check_jobs(
+            job_kind, "attempts > 0 AND status <> 'done'"
+        ):
             last = attempts.get(source_id)
             attempts[source_id] = claimed_at if last is None else max(last, claimed_at)
         return attempts
@@ -363,6 +381,11 @@ class SqliteRepository(
     def set_import_run_message(self, run_id: int, message: str) -> None:
         self._write("UPDATE import_run SET message = ? WHERE id = ?", (message, run_id))
 
+    def get_import_run(self, run_id: int) -> dict[str, object] | None:
+        """One run as ``list_import_runs`` gives it, without its files."""
+        row = self._one("SELECT * FROM import_run WHERE id = ?", (run_id,))
+        return _run_row(row) if row else None
+
     def get_import_report(self, run_id: int) -> ImportReport | None:
         run = self._one("SELECT * FROM import_run WHERE id = ?", (run_id,))
         if run is None:
@@ -378,6 +401,28 @@ class SqliteRepository(
             ignored=run["ignored"],
             message=run["message"],
         )
+
+    def import_items_page(
+        self, run_id: int, outcome: Outcome | None, limit: int, offset: int
+    ) -> tuple[list[ItemResult], int]:
+        """One page of a run's files and how many there are in all (of ``outcome``, if given).
+        What needs a look comes first (failed, skipped, duplicates), then the files seen
+        before and the imported ones; within an outcome, in the order they were handled."""
+        where, params = "run_id = ?", list[object]([run_id])
+        if outcome is not None:
+            where += " AND outcome = ?"
+            params.append(outcome.value)
+        total = self._scalar(f"SELECT COUNT(*) FROM import_item WHERE {where}", params)
+        rows = self._all(
+            f"""SELECT * FROM import_item WHERE {where}
+                ORDER BY CASE outcome {_REPORT_ORDER} END, rowid LIMIT ? OFFSET ?""",
+            (*params, limit, offset),
+        )
+        items = [
+            ItemResult(r["relative_path"], Outcome(r["outcome"]), r["reason"], r["asset_id"])
+            for r in rows
+        ]
+        return items, total
 
     def import_run_summary(self, run_id: int) -> dict[str, int] | None:
         """The counts saved with the run: they outlive its per-file rows (prune_import_items)."""
@@ -406,18 +451,7 @@ class SqliteRepository(
             sql += " WHERE source_id = ?"
             params = (source_id,)
         rows = self._all(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
-        return [
-            {
-                "id": r["id"],
-                "source_id": r["source_id"],
-                "status": r["status"],
-                "started_at": r["started_at"],
-                "finished_at": r["finished_at"],
-                "summary": json.loads(r["summary_json"]),
-                "message": r["message"],
-            }
-            for r in rows
-        ]
+        return [_run_row(r) for r in rows]
 
     # --- job queue -------------------------------------------------------------------------
 

@@ -96,8 +96,17 @@ export type ImportReport = {
 	status: RunStatus;
 	message: string | null;
 	summary: ImportSummary;
+	/** One page: what needs a look first (failed, skipped, duplicates), then the rest. */
 	items: ImportItem[];
+	/** Files of the run (of the asked outcome), over all pages. */
+	total: number;
+	limit: number;
+	offset: number;
+	/** The offset of the next page; null on the last one. */
+	next_offset: number | null;
 };
+/** Default page: the first 500 files; `limit` at most 2000. */
+export type ImportReportPage = { outcome?: Outcome; limit?: number; offset?: number };
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 export type Job = {

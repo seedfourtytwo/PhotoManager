@@ -37,6 +37,7 @@ import type {
 	Health,
 	Id,
 	ImportReport,
+	ImportReportPage,
 	FolderListing,
 	ImportRun,
 	Job,
@@ -245,7 +246,8 @@ export function createApi(options: ApiOptions = {}) {
 		setSourceAccess: (id: Id, body: Access) =>
 			request<Access>('PUT', `/api/sources/${id}/access`, body),
 		imports: (sourceId?: Id) => get<ImportRun[]>(query('/api/imports', { source_id: sourceId })),
-		importReport: (id: Id) => get<ImportReport>(`/api/imports/${id}`),
+		importReport: (id: Id, page: ImportReportPage = {}) =>
+			get<ImportReport>(query(`/api/imports/${id}`, page)),
 		jobs: (status?: JobStatus) => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),

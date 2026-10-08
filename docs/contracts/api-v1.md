@@ -97,6 +97,15 @@ under `jobs.queued`.
 `GET /api/imports` (admin; `?source_id=` for one source) lists the newest 200 runs, newest
 first (v1.4): older runs are not returned.
 
+`GET /api/imports/{id}` (admin) answers one page of the run's files:
+`{id, source_id, status, message, summary, items: [{relative_path, outcome, reason, asset_id}],
+total, limit, offset, next_offset}`. Query: `outcome` (only that outcome), `limit` (default 500,
+1–2000, else `422`), `offset` (default 0). `items` list what needs a look first — `failed`,
+`skipped`, `duplicate`, then `already_known` and `imported` — and within an outcome the order
+the run handled them. `total` counts the files of the asked outcome (all, without `outcome`);
+`next_offset` is the `offset` of the next page, `null` on the last. `summary` is always the whole
+run's counts. A run of up to 500 files answers as before, plus the four paging fields.
+
 **Automatic re-checks.** `SourceOut.recheck` is `off` (default), `hourly`, `daily` or `weekly`;
 `PATCH /api/sources/{id}` takes `{recheck}` (admin; any other value `422`). Every few minutes
 the server queues the ordinary scan job for each enabled source whose last check *started* at
