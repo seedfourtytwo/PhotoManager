@@ -152,6 +152,8 @@ export type MockBackup = {
 	quiet_window: string | null;
 	retention: Record<string, number>;
 	enabled: boolean;
+	key: string;
+	key_saved: boolean;
 	/** Runs newest first; `ends_at` is when a running run finishes (mock clock). */
 	runs: (BackupRun & { ends_at: number })[];
 };
@@ -511,6 +513,8 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 				quiet_window: '22:00-06:00',
 				retention: { daily: 7, weekly: 4, monthly: 12 },
 				enabled: true,
+				key: 'mock-key-home-server',
+				key_saved: true,
 				runs: [
 					{
 						id: 1,

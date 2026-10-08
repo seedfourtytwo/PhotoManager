@@ -24,6 +24,8 @@ def make_settings(data_root: Path, **overrides: Any) -> Settings:
         "argon2_time_cost": 1,
         "argon2_memory_kib": 64,
     }
+    # never the developer's own ~/.config: backup keys made by a test stay in its folder
+    values["ops"] = {"backup_key_dir": data_root.parent / "backup-keys"}
     values.update(overrides)
     return Settings(**values)
 

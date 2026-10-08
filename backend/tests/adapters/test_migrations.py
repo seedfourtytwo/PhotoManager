@@ -71,7 +71,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 17
+    assert _latest() == 18
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -160,7 +160,7 @@ def test_a_v16_library_upgrades_with_foreign_keys_and_its_data(tmp_path: Path) -
     db = tmp_path / "library.db"
     _make_v16_library(db)
     conn = open_database(db, backup_dir=tmp_path / "backups")
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     assert [tuple(r) for r in conn.execute("SELECT user_id, source_id FROM inbox")] == [(2, 2)]
@@ -192,3 +192,12 @@ def test_a_v16_library_upgrades_with_foreign_keys_and_its_data(tmp_path: Path) -
     )
     conn.execute("DELETE FROM user WHERE id = 3")
     assert conn.execute("SELECT COUNT(*) FROM device WHERE user_id = 3").fetchone()[0] == 0
+
+
+def test_backup_targets_from_before_0018_count_as_having_their_key_saved(tmp_path: Path) -> None:
+    """0018 (issue 3): those targets use a password file their owner wrote and keeps."""
+    db = tmp_path / "library.db"
+    _make_v16_library(db)
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    rows = conn.execute("SELECT created_at, key_saved_at FROM backup_target").fetchall()
+    assert [tuple(r) for r in rows] == [("2026-09-01", "2026-09-01")]

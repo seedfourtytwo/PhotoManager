@@ -132,6 +132,9 @@ class OpsSettings(BaseModel):
     backup_poll_seconds: float = 60.0  # how often the server looks for due backups
     backup_restore_sample: int = 20  # photos per restore test (FEATURES 9b.8)
     backup_scratch_dir: Path | None = None  # restore tests unpack here; None = system temp
+    # keys the app makes for its backups; None = ~/.config/photo-assistant/backup-keys.
+    # Always outside the library: a backup must not carry its own key.
+    backup_key_dir: Path | None = None
     restic_binary: str = "restic"
     restic_cache_dir: Path | None = None  # None = restic's default (~/.cache/restic)
 

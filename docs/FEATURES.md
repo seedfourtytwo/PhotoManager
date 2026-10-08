@@ -195,6 +195,8 @@ fixed now so nothing in M1–M5 makes it harder (data folder layout, DB snapshot
 | 9b.7 | Status page: last success per target, size, next run; warning banner when a backup is overdue or failed | Must | M6 |
 | 9b.8 | One-click **restore test**: restores a random sample to a temp folder and verifies hashes (also part of every QA session) | Should | M6 |
 | 9b.9 | Full restore guide (new machine → working library) — tested once per milestone | Should | M6 |
+| 9b.10 | **Guided setup in the web app**: pick a disk, folder or cloud remote; space check; the app makes the key and insists on a saved copy; first backup starts at once | Must | ✅ |
+| 9b.11 | **Proven restores**: an automatic restore test after the first backup and every week; a failed proof raises the banner | Must | ✅ |
 
 ## 10. Web and phone app
 

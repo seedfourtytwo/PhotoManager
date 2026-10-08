@@ -20,17 +20,22 @@ from photo_assistant.domain.backup import (
     BACKUP_FOLDERS,
     DB_SNAPSHOT_DIR,
     DB_SNAPSHOT_FILE,
+    BackupPlan,
     BackupRun,
     BackupRunStatus,
     BackupTarget,
     NewBackupTarget,
+    PlaceFacts,
     RestoreCheck,
     RestoreTestReport,
+    Retention,
     RunKind,
     RunOutcome,
     TargetKind,
     TargetSettings,
     TargetStatus,
+    plan_backup,
+    restore_proof_due,
 )
 from photo_assistant.domain.library_paths import nested_or_same
 from photo_assistant.domain.schedule import is_due, is_overdue, next_run, parse_window
@@ -39,9 +44,12 @@ from photo_assistant.ports.backup import (
     AssetFile,
     BackupEngine,
     BackupError,
+    BackupPlaces,
     BackupStore,
     DatabaseSnapshotter,
+    Disk,
     JobQueue,
+    KeyVault,
     RepositoryRef,
 )
 
@@ -52,12 +60,38 @@ RESTORE_TEST_JOB = "backup_restore_test"
 BACKUP_DUE_JOB = "backup_due"  # queued by the periodic check: runs every target that is due
 LONG_JOBS = frozenset({BACKUP_JOB, RESTORE_TEST_JOB, BACKUP_DUE_JOB})
 DB_SNAPSHOT_PATH = f"{DB_SNAPSHOT_DIR}/{DB_SNAPSHOT_FILE}"
+REPOSITORY_FOLDER = "photo-assistant-backup"  # a guided setup always makes its own folder
+RCLONE_PREFIX = "rclone:"
 
 Handler = Callable[[dict[str, object]], object]
 
 
 class UnknownTargetError(LookupError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class RecoverySheet:
+    """Everything needed to read a backup without this machine: keep it somewhere else."""
+
+    label: str
+    repository: str
+    key: str
+
+
+def repository_in(place: str) -> str:
+    """The repository a guided setup uses inside ``place``: a folder path, or
+    ``rclone:<remote>:<folder>``. Raises ValueError for anything else."""
+    place = place.strip()
+    if place.startswith(RCLONE_PREFIX):
+        remote, colon, folder = place.removeprefix(RCLONE_PREFIX).partition(":")
+        if not remote or not colon:
+            raise ValueError("a cloud location looks like rclone:<name>:<folder>")
+        inside = f"{folder.rstrip('/')}/" if folder.strip("/") else ""
+        return f"{RCLONE_PREFIX}{remote}:{inside}{REPOSITORY_FOLDER}"
+    if not Path(place).is_absolute():
+        raise ValueError("a local backup location must be an absolute path")
+    return str(Path(place) / REPOSITORY_FOLDER)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +123,8 @@ class BackupService:
         clock: Clock,
         config: BackupConfig,
         queue: JobQueue | None = None,
+        places: BackupPlaces | None = None,
+        vault: KeyVault | None = None,
     ) -> None:
         if config.scratch_dir is not None and _inside(config.scratch_dir, config.data_root):
             raise ValueError("the restore-test folder must be outside the library")
@@ -99,6 +135,8 @@ class BackupService:
         self._clock = clock
         self._config = config
         self._queue = queue
+        self._places = places
+        self._vault = vault
         self._lock = threading.Lock()  # one run at a time per process; restic locks the repo
 
     # --- targets ---------------------------------------------------------------------------
@@ -128,6 +166,80 @@ class BackupService:
                 raise ValueError(
                     f"a backup cannot live inside a source folder, or contain one: {root}"
                 )
+
+    # --- guided setup (issue 3) ------------------------------------------------------------
+
+    def places(self) -> tuple[list[Disk], list[str]]:
+        """Plugged-in disks and rclone remotes a backup could go to."""
+        found = self._need_places()
+        return found.disks(), found.remotes()
+
+    def library_bytes(self) -> int:
+        return self._store.library_bytes()
+
+    def plan(self, place: str) -> tuple[str, BackupPlan]:
+        """The repository a setup in ``place`` would use, and whether it can go ahead.
+        Changes nothing."""
+        size = self._store.library_bytes()
+        try:
+            repository = repository_in(place)
+            if not repository.startswith(RCLONE_PREFIX):
+                self._validate_local_repository(Path(repository))
+        except ValueError as exc:
+            return place, BackupPlan(size, None, str(exc))
+        facts: PlaceFacts = self._need_places().facts(repository, self._config.data_root)
+        return repository, plan_backup(size, facts)
+
+    def set_up(
+        self,
+        label: str,
+        place: str,
+        schedule: str = "daily 02:30",
+        retention: Retention | None = None,
+    ) -> tuple[BackupTarget, str]:
+        """A new target with a key made here, and its first backup queued. Returns the key:
+        the owner must keep a copy (``confirm_key_saved``). Raises ValueError with the reason
+        when the place won't do or the name is taken."""
+        vault = self._need_vault()
+        repository, plan = self.plan(place)
+        if plan.problem:
+            raise ValueError(plan.problem)
+        label = label.strip()
+        if any(t.label.casefold() == label.casefold() for t in self._store.list_targets()):
+            raise ValueError(f"a backup target named {label!r} already exists")
+        keep = retention or Retention()
+        # checks the name and the schedule before a key exists: a refused setup leaves no key
+        NewBackupTarget(label, repository, "/unset", schedule, None, keep)
+        key_file, key = vault.create()
+        try:
+            new = NewBackupTarget(label, repository, str(key_file), schedule, None, keep, False)
+            target = self.add_target(new)
+        except BaseException:
+            vault.discard(key_file)
+            raise
+        if self._queue is not None:
+            self._queue.enqueue(BACKUP_JOB, {"target_id": target.id})
+        return target, key
+
+    def recovery(self, target_id: int) -> RecoverySheet:
+        target = self.target(target_id)
+        key = self._need_vault().read(Path(target.password_file))
+        return RecoverySheet(target.label, target.repository, key)
+
+    def confirm_key_saved(self, target_id: int) -> None:
+        """The owner says a copy of the key exists outside this machine. The first time counts."""
+        if self.target(target_id).key_saved_at is None:
+            self._store.mark_key_saved(target_id, self._clock.now())
+
+    def _need_places(self) -> BackupPlaces:
+        if self._places is None:
+            raise RuntimeError("no backup places configured")
+        return self._places
+
+    def _need_vault(self) -> KeyVault:
+        if self._vault is None:
+            raise RuntimeError("no key vault configured for backups")
+        return self._vault
 
     def repository_overlaps(self, folder: Path) -> bool:
         """Is ``folder`` inside a local backup repository, or does it contain one? (A source
@@ -196,13 +308,31 @@ class BackupService:
         return self._record(target, RunKind.RESTORE_TEST, work)
 
     def run_due(self) -> list[BackupRun]:
-        """Called periodically: run every enabled target whose schedule says so."""
+        """Called periodically: run every enabled target whose schedule says so, then prove
+        the backups whose restore test is due. Returns the backup runs."""
         now = self._local(self._clock.now())
         done = []
         for target in self._store.list_targets():
             if target.enabled and self._is_due(target, now):
                 done.append(self.run_now(target.id))
+        for target in self._store.list_targets():
+            if target.enabled:
+                self._prove_if_due(target)
         return done
+
+    def _prove_if_due(self, target: BackupTarget) -> None:
+        """The recovery guarantee: restore a sample after the first backup, then weekly."""
+        success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
+        last_test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
+        proven_from = (success.finished_at or success.started_at) if success else None
+        if restore_proof_due(proven_from, last_test, self._clock.now()):
+            self.restore_test(target.id)
+
+    def _run_and_prove(self, target_id: int) -> BackupRun:
+        run = self.run_now(target_id)
+        if run.status is BackupRunStatus.SUCCEEDED:
+            self._prove_if_due(self.target(target_id))
+        return run
 
     def _is_due(self, target: BackupTarget, now: datetime) -> bool:
         window = parse_window(target.quiet_window)
@@ -303,6 +433,8 @@ class BackupService:
             self._local(target.created_at),
             now,
         )
+        test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
+        proven = self._store.last_run(target.id, RunKind.RESTORE_TEST, succeeded_only=True)
         return TargetStatus(
             target=target,
             last_success_at=success_at,
@@ -310,6 +442,8 @@ class BackupService:
             repo_bytes=success.repo_bytes if success else None,
             next_run_at=self._aware(upcoming) if upcoming else None,
             overdue=overdue,
+            last_proven_at=(proven.finished_at or proven.started_at) if proven else None,
+            restore_failing=test is not None and test.status is BackupRunStatus.FAILED,
         )
 
     def _local(self, moment: datetime) -> datetime:
@@ -337,7 +471,7 @@ class BackupService:
     def job_handlers(self) -> dict[str, Handler]:
         """Register these with the Worker: manual runs go through the job queue."""
         return {
-            BACKUP_JOB: lambda payload: self.run_now(int(str(payload["target_id"]))),
+            BACKUP_JOB: lambda payload: self._run_and_prove(int(str(payload["target_id"]))),
             RESTORE_TEST_JOB: lambda payload: self.restore_test(int(str(payload["target_id"]))),
             BACKUP_DUE_JOB: lambda payload: self.run_due(),
         }

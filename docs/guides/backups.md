@@ -11,6 +11,31 @@ originals. Your library is only ever read; a failed backup changes nothing in it
 Have **two** targets: an external disk at home and a second machine (the server, later a
 friend's or a cloud). Each has its own schedule.
 
+## The easy way: in the web app
+
+**Admin → Backups → Add backup.**
+
+1. **Where.** Plugged-in disks and connected cloud accounts are listed; or type a folder. The
+   backup always goes into its own `photo-assistant-backup` folder there.
+2. **Check.** The app compares the library's size with the free space, and refuses a place
+   that is too small, read-only, inside the library or a source folder, or already holding
+   another backup. It warns when the place is on the same disk as the library.
+3. **Start.** Default: every night, only what changed, keeping 7 daily, 4 weekly and 12
+   monthly versions.
+4. **Recovery key.** The app makes the encryption key and shows it. **Save it somewhere that
+   is not this computer** (password manager, or download the recovery sheet and print it),
+   then tick the box. Until you do, Admin shows a warning. Without the key nobody can read
+   the backup; with it, any computer with restic can.
+
+**The guarantee.** Right after the first backup, and then every week, the app restores a
+random sample of photos plus the database to a temporary folder and checks every file against
+its fingerprint. The Backups list shows "restore proven" with the date; a failed proof raises
+the same warning as a failed backup and is retried the next day.
+
+The key file itself lives in `~/.config/photo-assistant/backup-keys/` (`PA_BACKUP_KEY_DIR`),
+outside the library, readable only by you. The sections below are the same thing by hand,
+with a password file you write yourself.
+
 ## 1. The password file (once)
 
 restic encrypts everything with a password. Keep it **outside** the library, and keep a copy

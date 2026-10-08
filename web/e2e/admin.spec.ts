@@ -119,30 +119,71 @@ test('“Add person” needs a 4-digit PIN', async ({ page }) => {
 	await expect(dialog.getByRole('button', { name: 'Add' })).toBeEnabled();
 });
 
-test('backups: banner, add a target, run now, restore test, recent runs', async ({ page }) => {
-	test.skip(REAL_BACKEND, 'needs restic; the mock simulates runs');
+test('backups: guided setup refuses a place too small, then backs up and proves the restore', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'the mock simulates the disks and the runs (real restic: API tests)');
 	await expect(page.getByRole('alert')).toContainText(/backup needs attention/i);
 	const backups = page.getByRole('region', { name: 'Backups' });
 	await expect(backups.getByText('Home server')).toBeVisible();
 	await expect(backups.getByText(/repository not reachable/)).toBeVisible();
+
 	await backups.getByRole('button', { name: 'Add backup' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Add a backup' });
-	await dialog.getByLabel('Name').fill('USB disk');
-	await dialog.getByLabel('Repository').fill('/media/usb/restic');
-	await dialog.getByLabel('Password file').fill('/home/c/.restic-pass');
-	await dialog.getByLabel('Schedule').fill('every day');
-	await dialog.getByRole('button', { name: 'Add' }).click();
-	await expect(dialog.getByRole('alert')).toContainText(/unknown schedule/i);
-	await dialog.getByLabel('Schedule').fill('daily 03:00');
-	await dialog.getByRole('button', { name: 'Add' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Set up a backup' });
+	await expect(dialog.getByText(/full copy of the library \(38\.4 GB\)/)).toBeVisible();
+	await expect(dialog.getByLabel(/Tiny stick/)).toBeChecked();
+	await expect(dialog.getByLabel('Name')).toHaveValue('Tiny stick');
+	await expectAccessible(page);
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	await expect(dialog.getByRole('alert')).toContainText('Not enough room');
+	await expect(dialog.getByRole('alert')).toContainText('36.4 GB missing');
+
+	await dialog.getByLabel('Another folder').check();
+	await expect(dialog.getByRole('alert')).toHaveCount(0); // the verdict was about the other place
+	await expect(dialog.getByRole('button', { name: 'Check this place' })).toBeDisabled();
+	await dialog.getByRole('textbox', { name: 'Folder' }).fill('/media/c/Unplugged');
+	await dialog.getByLabel('Name').fill('Old disk');
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	await expect(dialog.getByRole('alert')).toContainText('is the disk plugged in?');
+
+	await dialog.getByLabel(/USB disk/).check();
+	await expect(dialog.getByLabel('Name')).toHaveValue('USB disk');
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	await expect(dialog.getByText(/It fits\. The library is 38\.4 GB, and\s+500 GB is free there/)).toBeVisible(); // prettier-ignore
+	await expect(dialog.getByLabel('How often')).toHaveValue('daily 02:30');
+	await expectAccessible(page);
+	await dialog.getByRole('button', { name: 'Start the backup' }).click();
+
+	const key = page.getByRole('dialog', { name: 'Recovery key for USB disk' });
+	await expect(key.getByText('The first backup has started.')).toBeVisible();
+	await expect(key.locator('code')).toHaveText(/^[\w-]{40,}$/);
+	await expect(key.getByRole('link', { name: 'Download the recovery sheet' })).toHaveAttribute(
+		'download',
+		'photo-backup-recovery-USB disk.txt'
+	);
+	await expect(key.getByRole('button', { name: 'Done' })).toBeDisabled();
+	await expectAccessible(page);
+	await key.getByRole('button', { name: 'Later' }).click();
+
 	const row = backups.getByRole('listitem').filter({ hasText: 'USB disk' });
+	await expect(row.getByText(/recovery key is not saved yet/)).toBeVisible();
+	await expect(row.getByText(/last backup .* succeeded/)).toBeVisible({ timeout: 10_000 });
+	await expect(row.getByText(/restore proven/)).toBeVisible({ timeout: 10_000 });
+
+	await row.getByRole('button', { name: 'Recovery key' }).click();
+	await key.getByLabel('I saved the recovery key somewhere else').check();
+	await key.getByRole('button', { name: 'Done' }).click();
+	await expect(key).toBeHidden();
+	await expect(row.getByText(/recovery key is not saved yet/)).toBeHidden();
+	await row.getByRole('button', { name: 'Recovery key' }).click();
+	await expect(key.getByRole('button', { name: 'Close' })).toBeVisible();
+	await expect(key.getByRole('checkbox')).toHaveCount(0);
+	await key.getByRole('button', { name: 'Close' }).click();
+
 	await row.getByRole('button', { name: 'Back up now' }).click();
 	await expect(row.getByText(/running/)).toBeVisible();
-	await expect(row.getByText(/last backup .* succeeded/)).toBeVisible({ timeout: 10_000 });
-	await row.getByRole('button', { name: 'Test a restore' }).click();
 	await row.getByRole('button', { name: 'Recent runs' }).click();
 	await expect(row.getByRole('table')).toContainText(/restore test/);
-	await expectAccessible(page);
 });
 
 test('cloud folders: add an rclone remote and pull it now', async ({ page }) => {

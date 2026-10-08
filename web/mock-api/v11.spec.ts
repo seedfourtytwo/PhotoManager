@@ -146,6 +146,57 @@ describe('print', () => {
 });
 
 describe('backups, devices and remote sources', () => {
+	it('guided setup: checks the place, hands over the key, backs up and proves the restore', async () => {
+		const api = await h.signedIn();
+		const places = await api.backupPlaces();
+		expect(places.disks.map((d) => d.label)).toEqual(['Tiny stick', 'USB disk']);
+		expect(places.remotes).toEqual(['proton']);
+
+		const small = await api.planBackup('/media/c/Tiny stick');
+		expect(small.ok).toBe(false);
+		expect(small.problem).toContain('36.4 GB missing');
+		expect((await api.planBackup('/media/c/Gone')).problem).toContain('plugged in');
+		expect((await api.planBackup('backups')).problem).toContain('absolute path');
+		expect((await api.planBackup('/home/c/backups')).warnings[0]).toContain('same disk');
+		expect((await api.planBackup('rclone:proton:')).repository).toBe(
+			'rclone:proton:photo-assistant-backup'
+		);
+		await expect(
+			api.setUpBackup({ label: 'Stick', place: '/media/c/Tiny stick' })
+		).rejects.toMatchObject({ status: 422 });
+
+		const { target, recovery } = await api.setUpBackup({
+			label: 'USB',
+			place: '/media/c/USB disk'
+		});
+		expect(target).toMatchObject({
+			key_saved: false,
+			needs_attention: true,
+			schedule: 'daily 02:30'
+		});
+		expect(recovery.repository).toBe('/media/c/USB disk/photo-assistant-backup');
+		expect(recovery.key.length).toBeGreaterThanOrEqual(40);
+		expect(target.last_run?.status).toBe('running');
+		await expect(
+			api.setUpBackup({ label: 'usb', place: '/home/c/elsewhere' })
+		).rejects.toMatchObject({ status: 409 });
+		expect((await api.planBackup('/media/c/USB disk')).problem).toContain('already a backup');
+
+		h.clock.now += 5000;
+		const runs = await api.backupRuns(target.id);
+		expect(runs.map((r) => [r.kind, r.status])).toEqual([
+			['restore_test', 'succeeded'],
+			['backup', 'succeeded']
+		]);
+		expect(await api.backupRecovery(target.id)).toEqual(recovery);
+		const saved = await api.confirmBackupKey(target.id);
+		expect(saved).toMatchObject({ key_saved: true, needs_attention: false });
+		expect(saved.last_proven_at).toBeTruthy();
+		const member = await h.signedIn('partner', '2345');
+		await expect(member.backupPlaces()).rejects.toMatchObject({ status: 403 });
+		await expect(member.backupRecovery(target.id)).rejects.toMatchObject({ status: 403 });
+	});
+
 	it('adds a backup target, runs it, and lists the runs', async () => {
 		const api = await h.signedIn();
 		const [existing] = await api.backups();
