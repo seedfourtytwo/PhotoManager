@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { ProtonSource, ProtonStatus } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PROTON_FILES, PROTON_PHOTOS } from '$lib/proton';
+	import { suggester } from '$lib/suggest';
 	import Dialog from '../Dialog.svelte';
 	import ProtonFolders, { type PickedFolder } from './ProtonFolders.svelte';
 
@@ -16,7 +18,7 @@
 	let label = $state('');
 	let error = $state('');
 	let saving = $state(false);
-	let suggested = ''; // the name we filled in: replaced as the choice changes, unless edited
+	const suggest = suggester(); // the name follows the choice, unless edited
 
 	const path = $derived(
 		scope === 'photos' ? PROTON_PHOTOS : scope === 'drive' ? PROTON_FILES : picked.path
@@ -28,8 +30,7 @@
 				: path === PROTON_FILES
 					? 'Proton Drive'
 					: (path.split('/').pop() ?? '');
-		if (label === suggested) label = name;
-		suggested = name;
+		label = suggest(label, name);
 	});
 
 	async function check() {
@@ -37,7 +38,7 @@
 		try {
 			status = await api.proton();
 		} catch (e) {
-			status = { ready: false, problem: e instanceof Error ? e.message : 'Could not ask.' };
+			status = { ready: false, problem: errorMessage(e, 'Could not ask.') };
 		}
 	}
 	$effect(() => void check());
@@ -48,7 +49,7 @@
 		try {
 			onadded(await api.addProtonSource({ label: label.trim(), path }));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not add it.';
+			error = errorMessage(e, 'Could not add it.');
 		} finally {
 			saving = false;
 		}

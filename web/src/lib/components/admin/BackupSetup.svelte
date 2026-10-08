@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { BackupPlaces, BackupPlan, BackupRecovery } from '$lib/api';
 	import { api } from '$lib/app.svelte';
-	import { formatBytes } from '$lib/format';
+	import { errorMessage, formatBytes } from '$lib/format';
 	import Dialog from '../Dialog.svelte';
 	import FolderPicker from './FolderPicker.svelte';
 	import RecoveryKey from './RecoveryKey.svelte';
@@ -44,10 +44,8 @@
 				choice = first ? first.path : OTHER;
 				label = first ? first.label : '';
 			})
-			.catch((e) => (error = message(e, 'Could not look for places to back up to.')));
+			.catch((e) => (error = errorMessage(e, 'Could not look for places to back up to.')));
 	});
-
-	const message = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 	function choose(value: string, name: string) {
 		choice = value;
@@ -63,7 +61,7 @@
 		try {
 			return await work();
 		} catch (e) {
-			error = message(e, fallback);
+			error = errorMessage(e, fallback);
 			return undefined;
 		} finally {
 			busy = false;

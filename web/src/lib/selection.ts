@@ -68,7 +68,7 @@ export function selectAllLabel(loaded: number, complete: boolean): string {
 }
 
 export type Rect = { x1: number; y1: number; x2: number; y2: number };
-type Placed = { id: Id; x: number; y: number; w: number; h: number };
+export type Placed = { id: Id; x: number; y: number; w: number; h: number };
 
 /** Ids of boxes the lasso rectangle overlaps (the rectangle may be dragged in any direction). */
 export function idsInRect(boxes: readonly Placed[], rect: Rect): Id[] {
