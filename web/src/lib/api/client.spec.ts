@@ -91,7 +91,7 @@ describe('createApi', () => {
 		const api = createApi({ fetch: offline });
 		const calls = [
 			() => api.me(),
-			() => api.printPdf(1, { trim: 'a4', theme: 'quiet', cover: true })
+			() => api.printPdf(1, { trim: 'a4', theme: 'quiet', cover: true, crop_marks: false })
 		];
 		for (const call of calls) {
 			const error = (await call().catch((e: unknown) => e)) as ApiError;
