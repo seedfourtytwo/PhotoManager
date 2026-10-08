@@ -11,6 +11,18 @@
 	/** On a phone the first actions stay in the bar; the rest open from "More". */
 	const INLINE_ON_PHONE = 3;
 	let more = $state(false);
+	let moreButton: HTMLButtonElement | undefined = $state();
+
+	/** The menu closes like any menu: Escape (focus back on "More") or a tap anywhere else. */
+	function onkeydown(event: KeyboardEvent) {
+		if (!more || event.key !== 'Escape') return;
+		more = false;
+		moreButton?.focus();
+	}
+	function onclick(event: MouseEvent) {
+		const target = event.target as Element;
+		if (more && target !== moreButton && !target.closest('#selection-more')) more = false;
+	}
 	const shown = $derived(actions.filter((a) => !a.hidden));
 	const inline = $derived(viewport.phone ? shown.slice(0, INLINE_ON_PHONE) : shown);
 	const overflow = $derived(viewport.phone ? shown.slice(INLINE_ON_PHONE) : []);
@@ -21,8 +33,10 @@
 	}
 </script>
 
+<svelte:window {onkeydown} {onclick} />
+
 <div class="bar" role="toolbar" aria-label="Selected photos" aria-busy={busy}>
-	<span class="count">{count} selected</span>
+	<span class="count" role="status">{count} selected</span>
 	<span class="actions">
 		{#each inline as action (action.label)}
 			<button type="button" disabled={busy} onclick={() => run(action)}>{action.label}</button>
@@ -32,6 +46,7 @@
 				type="button"
 				aria-expanded={more}
 				aria-controls="selection-more"
+				bind:this={moreButton}
 				onclick={() => (more = !more)}>More</button
 			>
 		{/if}

@@ -6,7 +6,10 @@
 	type Props = { albumId: number; ownerId: number; onclose: () => void };
 	let { albumId, ownerId, onclose }: Props = $props();
 
-	let members = $state<AlbumMember[]>([]);
+	// null until the current members are in: Save replaces the whole list, so saving a list
+	// that never loaded would remove everyone who was already there.
+	let members = $state<AlbumMember[] | null>(null);
+	let failed = $state(false);
 	let users = $state<DirectoryEntry[]>([]);
 	let adding = $state('');
 	let busy = $state(false);
@@ -15,7 +18,10 @@
 		api
 			.albumMembers(albumId)
 			.then((m) => (members = m))
-			.catch((e: unknown) => notice.error(e));
+			.catch((e: unknown) => {
+				failed = true;
+				notice.error(e);
+			});
 		// v1.1: any member may read the directory (ids and names), so owners share by name.
 		api
 			.userDirectory()
@@ -27,18 +33,19 @@
 	const candidates = $derived(
 		users.filter(
 			(u) =>
-				u.id !== ownerId && u.id !== session.user?.id && !members.some((m) => m.user_id === u.id)
+				u.id !== ownerId && u.id !== session.user?.id && !members?.some((m) => m.user_id === u.id)
 		)
 	);
 
 	function add() {
 		const id = Number(adding);
-		if (!id || members.some((m) => m.user_id === id)) return;
+		if (!members || !id || members.some((m) => m.user_id === id)) return;
 		members = [...members, { user_id: id, role: 'viewer' }];
 		adding = '';
 	}
 
 	async function save() {
+		if (!members) return;
 		busy = true;
 		try {
 			members = await api.setAlbumMembers(albumId, members);
@@ -54,32 +61,40 @@
 
 <Dialog title="Share album" {onclose}>
 	<p class="quiet small">Viewers see the photos; editors can also add, remove and reorder them.</p>
-	{#if members.length === 0}<p class="quiet">Only you, for now.</p>{/if}
-	<ul>
-		{#each members as member, i (member.user_id)}
-			<li>
-				<span>{nameOf(member.user_id)}</span>
-				<select aria-label={`Role for ${nameOf(member.user_id)}`} bind:value={members[i].role}>
-					<option value="viewer">Viewer</option>
-					<option value="editor">Editor</option>
-				</select>
-				<button
-					type="button"
-					onclick={() => (members = members.filter((m) => m.user_id !== member.user_id))}
-					>Remove</button
-				>
-			</li>
-		{/each}
-	</ul>
-	<div class="add">
-		<select bind:value={adding} aria-label="Person to add">
-			<option value="">Add a person…</option>
-			{#each candidates as u (u.id)}<option value={String(u.id)}>{u.display_name}</option>{/each}
-		</select>
-		<button type="button" disabled={!adding} onclick={add}>Add</button>
-	</div>
+	{#if members}
+		{#if members.length === 0}<p class="quiet">Only you, for now.</p>{/if}
+		<ul>
+			{#each members as member, i (member.user_id)}
+				<li>
+					<span>{nameOf(member.user_id)}</span>
+					<select aria-label={`Role for ${nameOf(member.user_id)}`} bind:value={members[i].role}>
+						<option value="viewer">Viewer</option>
+						<option value="editor">Editor</option>
+					</select>
+					<button
+						type="button"
+						onclick={() => (members = members!.filter((m) => m.user_id !== member.user_id))}
+						>Remove</button
+					>
+				</li>
+			{/each}
+		</ul>
+		<div class="add">
+			<select bind:value={adding} aria-label="Person to add">
+				<option value="">Add a person…</option>
+				{#each candidates as u (u.id)}<option value={String(u.id)}>{u.display_name}</option>{/each}
+			</select>
+			<button type="button" disabled={!adding} onclick={add}>Add</button>
+		</div>
+	{:else if failed}
+		<p role="alert">
+			Could not load who this album is shared with. Close this and open Share again.
+		</p>
+	{:else}
+		<p class="quiet" role="status">Loading…</p>
+	{/if}
 	{#snippet actions()}
-		<button class="primary" type="button" disabled={busy} onclick={save}>Save</button>
+		<button class="primary" type="button" disabled={busy || !members} onclick={save}>Save</button>
 	{/snippet}
 </Dialog>
 
