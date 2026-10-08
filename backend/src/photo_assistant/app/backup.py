@@ -374,14 +374,28 @@ class BackupService:
         self._engine.ensure_repository(repo)
         self._snapshotter.snapshot(root / DB_SNAPSHOT_DIR / DB_SNAPSHOT_FILE)
         summary = self._engine.backup(repo, root, BACKUP_FOLDERS)
-        self._engine.forget(repo, target.retention)
+        # The snapshot exists from here on: trouble while tidying up (a locked repository, a
+        # network blip) is reported in the details, never as a failed backup.
+        problems = []
+        try:
+            self._engine.forget(repo, target.retention)
+        except (BackupError, OSError) as exc:
+            problems.append(f"pruning failed: {_message(exc)}")
+        repo_bytes = None
+        try:
+            repo_bytes = self._engine.repository_size(repo)
+        except (BackupError, OSError) as exc:
+            problems.append(f"measuring the backup failed: {_message(exc)}")
+        if problems:
+            log.warning("backup written, tidying up failed", extra={"target": target.label})
         return RunOutcome(
             BackupRunStatus.SUCCEEDED,
             snapshot_id=summary.snapshot_id,
             bytes_added=summary.bytes_added,
             files_new=summary.files_new,
             files_changed=summary.files_changed,
-            repo_bytes=self._engine.repository_size(repo),
+            repo_bytes=repo_bytes,
+            details="; ".join(["snapshot ok", *problems]) if problems else None,
         )
 
     # --- restore test (FEATURES 9b.8) ------------------------------------------------------

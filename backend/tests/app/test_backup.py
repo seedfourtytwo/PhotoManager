@@ -126,6 +126,25 @@ def test_a_failing_backup_is_recorded_with_its_reason_and_nothing_is_pruned(
     assert "forget" not in world.engine.calls
 
 
+def test_a_snapshot_that_was_written_counts_even_when_pruning_fails(world: World) -> None:
+    world.engine.fail["forget"] = BackupError("repository is locked")
+    target_id = world.target()
+    run = world.service.run_now(target_id)
+    assert run.status is BackupRunStatus.SUCCEEDED and run.error is None
+    assert run.snapshot_id == f"{1:064x}" and run.repo_bytes == 99_000
+    assert run.details == "snapshot ok; pruning failed: repository is locked"
+    (status,) = world.service.status()
+    assert status.last_success_at is not None and not status.failing
+
+
+def test_a_snapshot_that_was_written_counts_even_when_its_size_is_unknown(world: World) -> None:
+    world.engine.fail["size"] = OSError("network is unreachable")
+    run = world.service.run_now(world.target())
+    assert run.status is BackupRunStatus.SUCCEEDED and run.snapshot_id == f"{1:064x}"
+    assert run.repo_bytes is None
+    assert run.details == "snapshot ok; measuring the backup failed: network is unreachable"
+
+
 def test_a_failed_database_snapshot_stops_the_run_before_restic(world: World) -> None:
     world.snapshotter.fail = BackupError("could not snapshot the library database: disk I/O")
     run = world.service.run_now(world.target())
