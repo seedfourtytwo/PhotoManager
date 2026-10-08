@@ -3,7 +3,8 @@
 ``export`` writes a consistent database snapshot plus a hash-verified copy of everything that
 is not rebuildable. It is resumable: files already at the destination with the same bytes are
 skipped, so an interrupted copy of 500 GB just continues. ``verify`` checks that every asset in
-a library's database resolves to a file whose BLAKE3 matches (ARCHITECTURE §6).
+a library's database resolves to a file whose BLAKE3 matches (ARCHITECTURE §6), and counts the
+originals no asset refers to.
 
 The source library is only ever read.
 """
@@ -30,6 +31,8 @@ DATABASE = "library.db"
 EXPORT_FOLDERS = ("originals", "recipes", "config", "inbox")
 DERIVED_FOLDER = "derived"  # thumbnails and previews: rebuildable, but saves hours of work
 IN_PROGRESS_MARKER = ".export-in-progress"
+ORIGINALS_FOLDER = "originals"
+UNREFERENCED_SAMPLE = 20  # how many leftover originals a report names; the count is exact
 
 Progress = Callable[[str], None]
 
@@ -45,6 +48,10 @@ class VerifyReport:
     missing: list[str] = field(default_factory=list)
     corrupt: list[str] = field(default_factory=list)
     missing_derived: list[str] = field(default_factory=list)
+    # originals on disk that no photo refers to (a purge that stopped half-way): reported,
+    # never deleted, and not damage, so they do not make the library "not ok"
+    unreferenced: int = 0
+    unreferenced_sample: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -61,6 +68,11 @@ class VerifyReport:
             out += [f"      {path}" for path in items[:show]]
             if len(items) > show:
                 out.append(f"      … and {len(items) - show} more")
+        shown = self.unreferenced_sample[:show]
+        out.append(f"  {'unreferenced':<15} {self.unreferenced:>8}")
+        out += [f"      {path}" for path in shown]
+        if self.unreferenced > len(shown):
+            out.append(f"      … and {self.unreferenced - len(shown)} more")
         return out
 
 
@@ -159,8 +171,10 @@ class LibraryTransfer:
         self, root: Path, assets: Iterable[AssetFile], check_derived: bool
     ) -> VerifyReport:
         report = VerifyReport(root)
+        referenced = set()
         for asset in assets:
             report.assets_checked += 1
+            referenced.add(asset.library_path)
             original = self._inside(root, asset.library_path)
             if original is None or not self._files.is_file(original):
                 report.missing.append(asset.library_path)
@@ -168,6 +182,11 @@ class LibraryTransfer:
                 report.corrupt.append(asset.library_path)
             if check_derived:
                 report.missing_derived += self._missing_derived(root, asset)
+        for relative in self._files.files_under(root, ORIGINALS_FOLDER):
+            if relative not in referenced:
+                report.unreferenced += 1
+                if len(report.unreferenced_sample) < UNREFERENCED_SAMPLE:
+                    report.unreferenced_sample.append(relative)
         return report
 
     def _missing_derived(self, root: Path, asset: AssetFile) -> list[str]:

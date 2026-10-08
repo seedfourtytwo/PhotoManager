@@ -14,6 +14,7 @@ from photo_assistant.api.ops_services import build_library_transfer
 from photo_assistant.api.services import build_services
 from photo_assistant.app.library_transfer import (
     IN_PROGRESS_MARKER,
+    UNREFERENCED_SAMPLE,
     LibraryTransfer,
     LibraryTransferError,
 )
@@ -191,3 +192,29 @@ def test_verify_never_follows_paths_out_of_the_library(tmp_path: Path) -> None:
         .lines(show=10)
     )
     assert "      … and 5 more" in lines
+
+
+def test_verify_reports_originals_that_no_photo_refers_to_and_leaves_them_alone(
+    laptop: Path,
+) -> None:
+    """What a purge leaves behind when it stops between the database and the files."""
+    orphans = [laptop / "originals" / "2020" / "01" / f"orphan{n:02d}.jpg" for n in range(25)]
+    for orphan in orphans:
+        orphan.parent.mkdir(parents=True, exist_ok=True)
+        orphan.write_bytes(b"left behind")
+    before = _library_files(laptop)
+    report = build_library_transfer().verify(laptop)
+    assert report.ok, "leftovers are reported, they are not damage"
+    assert report.unreferenced == 25
+    assert report.unreferenced_sample == [
+        o.relative_to(laptop).as_posix() for o in orphans[:UNREFERENCED_SAMPLE]
+    ]
+    text = "\n".join(report.lines())
+    assert "unreferenced" in text and "orphan00.jpg" in text and "… and 15 more" in text
+    assert _library_files(laptop) == before, "verify never deletes anything"
+
+
+def test_verify_of_a_clean_library_reports_no_unreferenced_originals(laptop: Path) -> None:
+    report = build_library_transfer().verify(laptop)
+    assert report.assets_checked == len(IMPORTED)
+    assert report.unreferenced == 0 and report.unreferenced_sample == []
