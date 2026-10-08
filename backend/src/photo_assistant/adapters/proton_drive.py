@@ -117,6 +117,12 @@ def _is_photo(node: dict[str, object], name: str) -> bool:
     return media.startswith("image/") or extension in IMPORTABLE_EXTENSIONS
 
 
+def _usable(name: str, is_folder: bool) -> bool:
+    """Whether a name can be one part of the path handed to the tool. A *file* called ``.``
+    or ``..`` would make that path mean a folder."""
+    return "/" not in name and (is_folder or name not in (".", ".."))
+
+
 def _safe(name: str) -> str:
     """A folder name that stays inside staging whatever it is called on Proton."""
     cleaned = "".join("_" if c in "/\\" or ord(c) < 32 else c for c in name)
@@ -244,9 +250,10 @@ class ProtonDrive:
                 continue
             for node in nodes:
                 uid, name = str(node.get("uid", "")), _name(node)
-                if name is None or not uid or "/" in name:
+                is_folder = node.get("type") == "folder"
+                if name is None or not uid or not _usable(name, is_folder):
                     tally.errors.append(f"{path}: an item's name could not be read by Proton Drive")
-                elif node.get("type") == "folder":
+                elif is_folder:
                     pending.append((f"{path}/{name}", local / _safe(name)))
                 elif _is_photo(node, name):
                     items.append(_Item(uid, name, f"{path}/{name}", local))

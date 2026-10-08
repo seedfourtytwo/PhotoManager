@@ -175,3 +175,18 @@ def test_a_working_folder_that_cannot_be_made_is_a_pull_error(cloud: Cloud) -> N
     cloud.staging.parent.write_text("a file where the staging folder should go")
     with pytest.raises(SyncError, match="could not write"):
         cloud.pull()
+
+
+# --- names that are not names ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", [".", ".."])
+def test_a_file_called_dot_or_dot_dot_is_never_handed_to_the_tool_as_a_path(
+    cloud: Cloud, name: str
+) -> None:
+    cloud.folder("/my-files/X", cloud.image("f1", "ok.jpg"), cloud.image("bad", name))
+    report = cloud.pull(RemoteConfig.proton("/my-files/X"))
+    assert (report.copied, report.errors) == (1, 1)
+    assert "could not be read" in report.error_messages[0]
+    assert not any(f"/my-files/X/{name}" in call for call in cloud.downloads())
+    assert cloud.staged() == ["ok.jpg"]
