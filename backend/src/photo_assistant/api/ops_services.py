@@ -23,10 +23,8 @@ from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupServi
 from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer
 from photo_assistant.app.periodic import Periodic, PeriodicTask
-from photo_assistant.domain.library_paths import nested_or_same
+from photo_assistant.domain.library_paths import DATABASE_FILE, nested_or_same
 from photo_assistant.ports.backup import JobQueue, RepositoryMirror
-
-DATABASE = "library.db"
 
 
 def default_key_dir() -> Path:
@@ -60,21 +58,22 @@ class OpsServices:
 def build_backup_service(
     data_root: Path,
     ops: OpsSettings,
+    *,
+    db: Database,
+    rclone: RcloneTool,
     queue: JobQueue | None = None,
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
-    db: Database | None = None,
-    rclone: RcloneTool | None = None,
     mirror: RepositoryMirror | None = None,
 ) -> tuple[BackupService, SqliteBackupStore]:
-    """``db``: the app's one Database; None (the CLI) opens the library database here."""
-    database = data_root / DATABASE
+    """``db``: the process's one Database. ``queue``: the server's job queue; the command
+    line has none and runs a backup itself, in the foreground."""
+    database = data_root / DATABASE_FILE
     key_dir = (ops.backup_key_dir or default_key_dir()).expanduser()
     if nested_or_same(key_dir.resolve(), data_root.expanduser().resolve()):
         raise ValueError(
             "PA_BACKUP_KEY_DIR must be outside the library: a backup can't hold its key"
         )
-    rclone = rclone or RcloneTool()
-    store = SqliteBackupStore(db or Database.open(database, backup_dir=data_root / "db-backups"))
+    store = SqliteBackupStore(db)
     service = BackupService(
         store=store,
         engine=ResticBackup(
@@ -103,26 +102,34 @@ def build_backup_service(
 
 def build_ops_services(
     data_root: Path,
-    ops: OpsSettings | None = None,
-    queue: JobQueue | None = None,
+    ops: OpsSettings,
+    *,
+    db: Database,
+    rclone: RcloneTool,
+    queue: JobQueue,
     housekeeping: Sequence[PeriodicTask] = (),
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
-    db: Database | None = None,
-    rclone: RcloneTool | None = None,
     mirror: RepositoryMirror | None = None,
 ) -> OpsServices:
-    """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering).
-    ``source_roots``: the library's source folders (backups may not overlap them).
-    ``mirror``: where local backups can keep an off-site copy (Proton Drive), if anywhere."""
-    ops = ops or OpsSettings()
-    backup, store = build_backup_service(data_root, ops, queue, source_roots, db, rclone, mirror)
-    # with a job queue (the server) the check only enqueues: backups run on the long-job lane
-    check: Callable[[], object] = (
-        (lambda: queue.enqueue_once(BACKUP_DUE_JOB)) if queue is not None else backup.run_due
+    """For the server. ``housekeeping``: further periodic tasks of other areas (trash purge,
+    face clustering). ``source_roots``: the library's source folders (backups may not overlap
+    them). ``mirror``: where local backups can keep an off-site copy (Proton Drive), if
+    anywhere."""
+    backup, store = build_backup_service(
+        data_root,
+        ops,
+        db=db,
+        rclone=rclone,
+        queue=queue,
+        source_roots=source_roots,
+        mirror=mirror,
     )
-    tasks = [PeriodicTask("due backups", ops.backup_poll_seconds, check)]
+    # the check only enqueues: the backups themselves run on the worker's long-job lane
+    check = PeriodicTask(
+        "due backups", ops.backup_poll_seconds, lambda: queue.enqueue_once(BACKUP_DUE_JOB)
+    )
     return OpsServices(
-        backup, store, Periodic([*(tasks if ops.backup_enabled else []), *housekeeping])
+        backup, store, Periodic([*([check] if ops.backup_enabled else []), *housekeeping])
     )
 
 

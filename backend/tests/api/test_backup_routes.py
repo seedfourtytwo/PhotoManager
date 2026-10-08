@@ -9,9 +9,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.deps import admin_user
-from photo_assistant.api.ops_services import OpsServices, build_ops_services
+from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.routes import backup
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.access import Role, User
@@ -28,10 +29,13 @@ class Env:
     def __init__(self, tmp_path: Path, mirror: RepositoryMirror | None = None) -> None:
         self.root = tmp_path / "data"
         self.root.mkdir()
-        self.repo = SqliteRepository(open_database(self.root / "library.db"))
+        db = Database.open(self.root / "library.db")
+        self.repo = SqliteRepository(db)
         self.ops: OpsServices = build_ops_services(
             self.root,
             OpsSettings(restic_cache_dir=tmp_path / "cache", backup_key_dir=tmp_path / "keys"),
+            db=db,
+            rclone=RcloneTool(),
             queue=self.repo,
             mirror=mirror,
         )

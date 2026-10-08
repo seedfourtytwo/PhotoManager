@@ -21,6 +21,7 @@ import uvicorn
 
 from photo_assistant.adapters.filesystem import DiskLibraryStore
 from photo_assistant.api import cli_ops
+from photo_assistant.api.cli_command import Command
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.main import create_app
 from photo_assistant.api.services import Services, build_services
@@ -204,38 +205,66 @@ def _ml_backfill() -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def _import_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("folder", type=Path)
+    parser.add_argument("--label", help="name shown for this source (default: folder name)")
+    parser.add_argument("--show", type=int, default=15, help="how many skips/failures to list")
+
+
+def _create_user_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("username")
+    parser.add_argument("--role", type=Role, choices=list(Role), default=Role.MEMBER)
+    parser.add_argument("--display-name")
+
+
+def _username_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("username")
+
+
+# THE table of sub-commands, in the order ``--help`` lists them. A new command is one more
+# entry here (the ops ones have theirs in api/cli_ops.py). Without a sub-command: the server.
+COMMANDS: tuple[Command, ...] = (
+    Command(
+        "import",
+        "import a folder (read-only) into the library",
+        lambda args: _import(args.folder, args.label, args.show),
+        _import_arguments,
+    ),
+    Command("sources", "list sources", lambda args: _sources()),
+    Command(
+        "create-user",
+        "create an account (asks for the PIN)",
+        lambda args: _create_user(args.username, args.role, args.display_name),
+        _create_user_arguments,
+    ),
+    Command(
+        "set-pin",
+        "give an account a new PIN (asks for it); this also unlocks it",
+        lambda args: _set_pin(args.username),
+        _username_argument,
+    ),
+    Command(
+        "ml-backfill",
+        "queue ML analysis of every photo not analysed yet",
+        lambda args: _ml_backfill(),
+    ),
+    *cli_ops.COMMANDS,
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="photo_assistant")
     sub = parser.add_subparsers(dest="command")
-    imp = sub.add_parser("import", help="import a folder (read-only) into the library")
-    imp.add_argument("folder", type=Path)
-    imp.add_argument("--label", help="name shown for this source (default: folder name)")
-    imp.add_argument("--show", type=int, default=15, help="how many skips/failures to list")
-    sub.add_parser("sources", help="list sources")
-    user = sub.add_parser("create-user", help="create an account (asks for the PIN)")
-    user.add_argument("username")
-    user.add_argument("--role", type=Role, choices=list(Role), default=Role.MEMBER)
-    user.add_argument("--display-name")
-    pin = sub.add_parser(
-        "set-pin", help="give an account a new PIN (asks for it); this also unlocks it"
-    )
-    pin.add_argument("username")
-    sub.add_parser("ml-backfill", help="queue ML analysis of every photo not analysed yet")
-    cli_ops.register(sub)
-    args = parser.parse_args(argv)
-    if (code := cli_ops.dispatch(args)) is not None:
-        return code
-    if args.command == "ml-backfill":
-        return _ml_backfill()
-    if args.command == "set-pin":
-        return _set_pin(args.username)
-    if args.command == "create-user":
-        return _create_user(args.username, args.role, args.display_name)
-    if args.command == "import":
-        return _import(args.folder, args.label, args.show)
-    if args.command == "sources":
-        return _sources()
-    return _serve()
+    for command in COMMANDS:
+        command.arguments(sub.add_parser(command.name, help=command.help))
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.command is None:
+        return _serve()
+    return next(c for c in COMMANDS if c.name == args.command).run(args)
 
 
 if __name__ == "__main__":

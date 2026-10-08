@@ -11,7 +11,6 @@ import sqlite3
 import struct
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
 
 import sqlite_vec  # type: ignore[import-untyped]
@@ -39,11 +38,6 @@ def load_sqlite_vec(conn: sqlite3.Connection) -> None:
         sqlite_vec.load(conn)
     finally:
         conn.enable_load_extension(False)
-
-
-def open_ml_store(path: str | Path) -> "SqliteMlStore":
-    """The ML store on its own Database (tools and tests; the app shares its Database)."""
-    return SqliteMlStore(Database.open(path))
 
 
 def _stored_face(row: sqlite3.Row) -> StoredFace:

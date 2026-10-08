@@ -15,3 +15,6 @@ class NullAIProvider:
 
     def plan_album(self, prompt: str, context: LibrarySummary) -> AlbumPlan:
         raise AIUnavailableError(_NOT_CONFIGURED)
+
+    def close(self) -> None:
+        """Nothing to release."""

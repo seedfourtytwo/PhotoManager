@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
-from photo_assistant.adapters.sqlite_database import Database, NewerDatabaseError, migrations
+from photo_assistant.adapters.sqlite_database import (
+    Database,
+    NewerDatabaseError,
+    migrations,
+    open_library_database,
+)
 from photo_assistant.adapters.sqlite_integrations import SqliteAILog
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.ports.ai import AICall
@@ -161,3 +166,16 @@ def test_a_database_from_a_newer_version_of_the_app_is_refused(tmp_path: Path) -
     conn = sqlite3.connect(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == newest + 2
     conn.close()
+
+
+def test_the_library_database_lives_in_the_data_root_with_its_snapshots_beside_it(
+    tmp_path: Path,
+) -> None:
+    sqlite3.connect(tmp_path / "library.db").execute("CREATE TABLE legacy (x)").connection.commit()
+    db = open_library_database(tmp_path)
+    try:
+        assert db.path == tmp_path / "library.db"
+        assert db.writer.execute("PRAGMA user_version").fetchone()[0] >= 1
+        assert len(list((tmp_path / "db-backups").glob("library-v0-*.db"))) == 1
+    finally:
+        db.close()

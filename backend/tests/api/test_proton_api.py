@@ -11,7 +11,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.filesystem import SystemClock
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.deps import admin_user
 from photo_assistant.api.integrations import Integrations, build_integrations
 from photo_assistant.api.routes import proton, remote_sources
@@ -39,8 +41,8 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         {"type": "folder", "uid": "a", "name": "archive"},
     )
     cloud.folder("/my-files/Trips", cloud.image("f1", "peak.jpg"))
-    conn = open_database(":memory:")
-    repo = SqliteRepository(conn)
+    db = Database.open(":memory:")
+    repo = SqliteRepository(db)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
     app.include_router(proton.router)
@@ -48,15 +50,16 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
     integrations = build_integrations(
         data_root=tmp_path / "data",
         settings=IntegrationSettings(proton_drive_binary=str(cloud.binary)),
-        conn=conn,
+        db=db,
         repo=repo,
+        clock=SystemClock(),
         importer=StubImporter(),
     )
     app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     client = TestClient(app, base_url="http://127.0.0.1")
     yield World(client, repo, tmp_path / "data", cloud, integrations)
-    conn.close()
+    db.close()
 
 
 def test_status_says_ready_when_signed_in(world: World) -> None:
