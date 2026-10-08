@@ -666,3 +666,13 @@ def test_without_proton_set_up_on_the_server_the_copy_cannot_be_switched_on(
     world.service._mirror = None
     with pytest.raises(ValueError, match="not available"):
         world.service.set_mirror(world.target(), PROTON)
+
+
+def test_old_files_that_could_not_be_deleted_for_good_are_mentioned(world: World) -> None:
+    from photo_assistant.ports.backup import MirrorReport
+
+    target_id = mirrored(world)
+    world.mirror.report = MirrorReport(uploaded=0, removed=3, bytes_sent=0, left_in_trash=2)
+    world.service.run_now(target_id)
+    details = world.service.runs(target_id)[0].details
+    assert details == "0 new files sent (0 MB), 3 old files removed (2 left in Proton's trash)"
