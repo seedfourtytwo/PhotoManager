@@ -26,6 +26,7 @@ more would hurt understanding.
 9. **Motion follows the hand.** Transitions ≤ 240 ms. Sheets and the photo view move with the
    finger; everything else moves only to show where something went. Respect
    `prefers-reduced-motion`.
+10. **Same thing, same place.** Laptop and phone share the information architecture; only the
     layout adapts.
 
 ## 2. Character, tokens and components
@@ -72,7 +73,7 @@ Three families, all self-hosted under `web/static/fonts` (SIL OFL; nothing fetch
   the Album theme).
 - **Martian Mono** (variable, set at 80 % width) — `--font-data`, class `.data`: dates, counts,
   camera settings, file names, paths, system status. Never a control, never a sentence.
-- **Newsreader** — `--font-serif`: the title face of the Album theme only.
+- **Newsreader** — `--font-serif`: the Album theme's title and voice face only.
 
 | Token | Size | Role |
 |---|---|---|
@@ -109,7 +110,8 @@ case** — no uppercase tracking. A count beside a title is set in the sans at 1
 - **Fields** are a soft box (`--tint` fill, `--r-1`) that takes an accent border on focus.
   Labels sit above (`.field`), 12 px. Selects keep the native chevron.
 - **Checkboxes and radios** are drawn (1.5 px `--ink-2` outline, `--check-radius` corners;
-  checked = ink fill with a `--bg` check / inner ring), so both themes match. `.choice` lays an option out in a row.
+  checked = ink fill with a `--bg` check / inner ring), so both themes match. `.choice` lays an
+  option out in a row.
 - **Sliders**: hairline track, small ink thumb; larger thumb on touch.
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
   right, Cancel left of the primary. On a phone every dialog, the filters and the loupe's info
@@ -126,8 +128,8 @@ case** — no uppercase tracking. A count beside a title is set in the sans at 1
 - **Glass** (`.glass`): only for bars that float over photos (dock, top bar, photo actions,
   selection, time ruler). It turns solid `--raised` where blur is unavailable, under
   "reduce transparency", or if it costs the 60 fps scroll budget.
-- **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a plain
-  sentence saying what to do, with a link where there is one.
+- **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
+  plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
   are a title with their actions on the same baseline, separated by one hairline.
 - **The loupe** draws nothing over the photo: one band of words above it (Close … actions …
