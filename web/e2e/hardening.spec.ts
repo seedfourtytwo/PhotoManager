@@ -1,4 +1,5 @@
 /** Failure states and edge cases from the architecture review: each one was a real dead end. */
+import type { Page } from '@playwright/test';
 import { expect, isPhone, resetMock, signIn, test } from './helpers.ts';
 
 test.beforeEach(async () => {
@@ -75,4 +76,48 @@ test('a server error on opening is shown, and the app retries when the network r
 	await page.unroute('**/api/auth/me');
 	await page.evaluate(() => window.dispatchEvent(new Event('online')));
 	await expect(page.locator('.tile').first()).toBeVisible();
+});
+
+/** /api/stats answering that work is running, with a queue that shrinks on every call. */
+async function busyStats(page: Page, delayMs = 0) {
+	const asked: number[] = [];
+	await page.route('**/api/stats', async (route) => {
+		asked.push(Date.now());
+		const answer = await route.fetch();
+		const stats = await answer.json();
+		stats.jobs = { ...stats.jobs, running: 1, queued: Math.max(1, 500 - asked.length) };
+		if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+		await route.fulfill({ response: answer, json: stats }).catch(() => undefined);
+	});
+	return asked;
+}
+
+test('admin: counts are polled at a steady pace while work is running', async ({ page }) => {
+	const asked = await busyStats(page);
+	await signIn(page, '/admin');
+	await expect(page.getByText(/working: 1 running/)).toBeVisible();
+	const from = asked.length;
+	await page.waitForTimeout(3200);
+	// One request every 1.5 s: two in this window (three with timing slack), not dozens.
+	expect(asked.length - from).toBeGreaterThanOrEqual(1);
+	expect(asked.length - from).toBeLessThanOrEqual(3);
+});
+
+test('admin: polling stops when you leave the page, also with a request in flight', async ({
+	page
+}) => {
+	const asked = await busyStats(page, 400);
+	await signIn(page, '/admin');
+	await expect(page.getByText(/working: 1 running/)).toBeVisible();
+	const next = asked.length + 1;
+	await expect.poll(() => asked.length).toBeGreaterThanOrEqual(next); // one is in flight now
+	await page
+		.getByRole('navigation', { name: 'Main' })
+		.getByRole('link', { name: 'Albums' })
+		.click();
+	await expect(page.getByRole('heading', { name: 'Albums' })).toBeVisible();
+	await page.waitForTimeout(600); // let the request in flight come back
+	const settled = asked.length;
+	await page.waitForTimeout(3200);
+	expect(asked.length).toBe(settled);
 });

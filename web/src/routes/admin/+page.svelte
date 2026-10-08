@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import type { BackupTarget, Job, MlStatus, Stats } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { formatBytes } from '$lib/format';
+	import { Poller } from '$lib/poller';
 	import Backups from '$lib/components/admin/Backups.svelte';
 	import Sources from '$lib/components/admin/Sources.svelte';
 	import Users from '$lib/components/admin/Users.svelte';
@@ -12,7 +13,6 @@
 	let backups = $state<BackupTarget[]>([]);
 	let ml = $state<MlStatus | null>(null);
 	let refresh = $state(0);
-	let timer: ReturnType<typeof setTimeout> | undefined;
 	const count = new Intl.NumberFormat('en-GB');
 
 	const active = $derived(stats ? stats.jobs.queued + stats.jobs.running : 0);
@@ -23,31 +23,29 @@
 	 * Poll while work is queued or running: counts, failed jobs, the folders' live import
 	 * progress and backup runs all follow; a finished batch refreshes the library's counts.
 	 */
-	async function poll() {
-		clearTimeout(timer);
-		try {
+	const poller = new Poller(
+		() => Promise.all([api.stats(), api.jobs('failed'), api.backups().catch(() => [])]),
+		(answer) => {
 			const wasActive = active > 0 || backingUp;
-			[stats, failed, backups] = await Promise.all([
-				api.stats(),
-				api.jobs('failed'),
-				api.backups().catch(() => [])
-			]);
+			[stats, failed, backups] = answer;
 			if (active > 0 || wasActive) refresh++;
 			if (wasActive && active === 0) library.changed();
-			if (active > 0 || backingUp) timer = setTimeout(poll, 1500);
-		} catch (e) {
-			notice.error(e);
-		}
-	}
+			return active > 0 || backingUp;
+		},
+		{ every: 1500, onerror: (e) => notice.error(e) }
+	);
+	const poll = () => poller.now();
+
 	$effect(() => {
 		if (!session.isAdmin) return;
-		void poll();
+		// Untracked: the counts the poll reads must not re-run this effect (and the poll).
+		untrack(() => void poll());
 		library
 			.ml()
 			.then((s) => (ml = s))
 			.catch(() => undefined);
 	});
-	onDestroy(() => clearTimeout(timer));
+	onDestroy(() => poller.stop());
 
 	async function retry(job: Job) {
 		try {
