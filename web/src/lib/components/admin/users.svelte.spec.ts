@@ -6,9 +6,16 @@ import { notice, session } from '$lib/app.svelte';
 import Users from './Users.svelte';
 
 const people: User[] = [
-	{ id: 1, username: 'admin', display_name: 'C', role: 'admin', disabled: false },
-	{ id: 2, username: 'partner', display_name: 'Partner', role: 'member', disabled: false },
-	{ id: 3, username: 'guest', display_name: 'Guest', role: 'guest', disabled: false }
+	{ id: 1, username: 'admin', display_name: 'C', role: 'admin', disabled: false, locked: false },
+	{
+		id: 2,
+		username: 'partner',
+		display_name: 'Partner',
+		role: 'member',
+		disabled: false,
+		locked: false
+	},
+	{ id: 3, username: 'guest', display_name: 'Guest', role: 'guest', disabled: false, locked: false }
 ];
 
 type Call = { method: string; url: string; body: unknown };

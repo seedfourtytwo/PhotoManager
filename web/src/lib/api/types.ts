@@ -15,6 +15,8 @@ export type User = {
 	display_name: string;
 	role: Role;
 	disabled: boolean;
+	/** Too many wrong PINs: no sign-in until an admin unlocks it or sets a new PIN. */
+	locked: boolean;
 };
 
 export type SetupState = { needs_admin: boolean };

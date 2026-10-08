@@ -106,6 +106,124 @@ describe('with seeded users', () => {
 		await expect(admin.unlockUser(999)).rejects.toMatchObject({ status: 404 });
 	});
 
+	const MINUTE = 60_000;
+	const PARTNER = { username: 'partner', pin: '2345' };
+
+	/** Wrong PINs for partner, waiting out the 15-minute block whenever it comes. */
+	async function guessWrong(times: number) {
+		const api = browser();
+		for (let i = 0; i < times; i++) {
+			const refused = await api.login({ ...PARTNER, pin: '0000' }).catch((e: ApiError) => e.status);
+			if (refused !== 429) continue;
+			clock += 15 * MINUTE;
+			await expect(api.login({ ...PARTNER, pin: '0000' })).rejects.toMatchObject({ status: 401 });
+		}
+	}
+
+	const lockedFlags = async (admin: Api) =>
+		Object.fromEntries((await admin.users()).map((u) => [u.username, u.locked]));
+
+	it('counts wrong PINs per account, from any browser, and says how long to wait', async () => {
+		for (let i = 0; i < 10; i++)
+			await expect(browser().login({ ...PARTNER, pin: '0000' })).rejects.toMatchObject({
+				status: 401
+			});
+		clock += 9.5 * MINUTE;
+		await expect(browser().login({ username: 'Partner', pin: '2345' })).rejects.toMatchObject({
+			status: 429,
+			message:
+				'Too many wrong PINs. Wait 6 minutes and try again, or ask an admin to unlock this account.'
+		});
+		await expect(signedIn()).resolves.toBeTruthy(); // another account is not held up
+		clock += 5.5 * MINUTE;
+		await expect(browser().login(PARTNER)).resolves.toMatchObject({ locked: false });
+	});
+
+	it('does not count tries at a user name nobody has', async () => {
+		for (let i = 0; i < 12; i++)
+			await expect(browser().login({ username: 'nobody', pin: '0000' })).rejects.toMatchObject({
+				status: 401
+			});
+	});
+
+	it('locks an account after 30 wrong PINs, whatever PIN comes next, until an admin unlocks it', async () => {
+		const admin = await signedIn();
+		await guessWrong(29);
+		expect(await lockedFlags(admin)).toEqual({ admin: false, partner: false, guest: false });
+		await guessWrong(1);
+		expect(await lockedFlags(admin)).toEqual({ admin: false, partner: true, guest: false });
+		clock += 400 * 24 * 60 * MINUTE; // no window ends this
+		await expect(browser().login(PARTNER)).rejects.toMatchObject({
+			status: 423,
+			message:
+				"This account is locked after too many wrong PINs. Ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+		});
+		expect(await browser().loginAccounts()).toContainEqual({
+			username: 'partner',
+			display_name: 'Partner'
+		}); // names only: the open list says nothing about locks
+		const guest = await signedIn('guest', '3456');
+		const partner = (await admin.users()).find((u) => u.username === 'partner')!;
+		await expect(guest.unlockUser(partner.id)).rejects.toMatchObject({ status: 403 });
+		await admin.unlockUser(partner.id);
+		expect((await lockedFlags(admin)).partner).toBe(false);
+		await expect(browser().login(PARTNER)).resolves.toMatchObject({ username: 'partner' });
+	});
+
+	it('starts the count again after a good sign-in', async () => {
+		await guessWrong(29);
+		clock += 15 * MINUTE;
+		await expect(browser().login(PARTNER)).resolves.toBeTruthy();
+		await guessWrong(29);
+		clock += 15 * MINUTE;
+		await expect(browser().login(PARTNER)).resolves.toMatchObject({ locked: false });
+	});
+
+	it('lifts the lock when an admin sets a new PIN, not for other changes', async () => {
+		const admin = await signedIn();
+		await guessWrong(30);
+		const partner = (await admin.users()).find((u) => u.username === 'partner')!;
+		expect(await admin.updateUser(partner.id, { display_name: 'P' })).toMatchObject({
+			locked: true
+		});
+		expect(await admin.updateUser(partner.id, { pin: '9999' })).toMatchObject({ locked: false });
+		await expect(browser().login({ ...PARTNER, pin: '9999' })).resolves.toBeTruthy();
+	});
+
+	it('counts wrong current PINs in Settings like wrong PINs at sign-in', async () => {
+		const partner = await signedIn('partner', '2345');
+		for (let i = 0; i < 10; i++)
+			await expect(
+				partner.changePin({ current_pin: '0000', new_pin: '5678' })
+			).rejects.toMatchObject({ status: 400 });
+		await expect(partner.changePin({ current_pin: '2345', new_pin: '5678' })).rejects.toMatchObject(
+			{ status: 429 }
+		);
+		await expect(browser().login(PARTNER)).rejects.toMatchObject({ status: 429 });
+		await guessWrong(20);
+		await expect(partner.changePin({ current_pin: '2345', new_pin: '5678' })).rejects.toMatchObject(
+			{ status: 423 }
+		);
+		expect(await partner.me()).toMatchObject({ locked: true }); // the open session goes on
+	});
+
+	it('can start with a locked account (for the E2E suite)', async () => {
+		const reset = await fetch(`${base}/__mock/reset`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ locked: 'guest' })
+		});
+		expect(reset.status).toBe(204);
+		await expect(browser().login({ username: 'guest', pin: '3456' })).rejects.toMatchObject({
+			status: 423
+		});
+		expect(await lockedFlags(await signedIn())).toEqual({
+			admin: false,
+			partner: false,
+			guest: true
+		});
+	});
+
 	it('logs out', async () => {
 		const api = await signedIn();
 		await api.logout();

@@ -223,7 +223,7 @@ export function createApi(options: ApiOptions = {}) {
 		users: () => get<User[]>('/api/users'),
 		createUser: (body: NewUser) => request<User>('POST', '/api/users', body),
 		updateUser: (id: Id, body: UserPatch) => request<User>('PATCH', `/api/users/${id}`, body),
-		/** v1.3: lift the failed-login block (429) on this account. */
+		/** Lift the wait (429) and the lock (423) that wrong PINs put on this account. */
 		unlockUser: (id: Id) => request<void>('POST', `/api/users/${id}/unlock`),
 		/** v1.1: names to share albums with, for any member (not only admins). */
 		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
