@@ -9,6 +9,7 @@ from typing import Protocol
 
 from photo_assistant.domain.access import SourceAccess, Viewer
 from photo_assistant.domain.edit_recipe import Recipe
+from photo_assistant.domain.errors import ConflictError
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -28,6 +29,11 @@ class DuplicateAssetError(ValueError):
     def __init__(self, asset_id: int) -> None:
         super().__init__(f"content already in the library as asset {asset_id}")
         self.asset_id = asset_id
+
+
+class SourceExistsError(ConflictError, ValueError):
+    """The folder is a source already. (Still a ValueError, as it was before it joined the
+    hierarchy: code that catches ValueError keeps working.)"""
 
 
 class Clock(Protocol):
@@ -178,7 +184,7 @@ class SourceRegistry(Protocol):
         config: Mapping[str, object] | None = None,
     ) -> Source:
         """The one way to create a source (any kind); access defaults to the domain rule.
-        Raises ValueError if its folder is already a source, and an InvalidError if the owner
+        Raises SourceExistsError if its folder is already a source, an InvalidError if the owner
         or someone on the access list is not an account."""
         ...
 
