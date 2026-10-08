@@ -16,13 +16,14 @@ import errno
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import time
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from photo_assistant.adapters.sync_tally import PullTally
+from photo_assistant.adapters.tool_runner import ToolMissingError, ToolTimeoutError, run_tool
 from photo_assistant.domain.media_types import IMPORTABLE_EXTENSIONS
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig
 from photo_assistant.ports.sync import (
@@ -82,24 +83,7 @@ class _Run:
     deadline: float
     manifest: Path
     fetched: set[str]  # node uids already in staging
-    tally: "_Tally"
-
-
-@dataclass(slots=True)
-class _Tally:
-    copied: int = 0
-    unchanged: int = 0
-    size: int = 0
-    errors: list[str] = field(default_factory=list)
-
-    def report(self) -> SyncReport:
-        return SyncReport(
-            copied=self.copied,
-            unchanged=self.unchanged,
-            errors=len(self.errors),
-            bytes_transferred=self.size,
-            error_messages=tuple(self.errors),
-        )
+    tally: PullTally
 
 
 def _name(node: dict[str, object]) -> str | None:
@@ -197,7 +181,7 @@ class ProtonDrive:
 
     def _pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
         deadline = time.monotonic() + options.timeout_seconds
-        tally = _Tally()
+        tally = PullTally()
         if remote.path == PROTON_PHOTOS:
             items = self._timeline(tally)
             verb = ["photo", "download", "-c", "rename"]
@@ -227,7 +211,7 @@ class ProtonDrive:
 
     # --- what is there ----------------------------------------------------------------------
 
-    def _timeline(self, tally: _Tally) -> list[_Item]:
+    def _timeline(self, tally: PullTally) -> list[_Item]:
         items = []
         for node in self._list(["photo", "timeline", "-d"], PROTON_PHOTOS):
             uid, name = str(node.get("uid", "")), _name(node)
@@ -237,7 +221,7 @@ class ProtonDrive:
                 items.append(_Item(uid, name, f"{PROTON_PHOTOS}/{uid}", PurePosixPath()))
         return items
 
-    def _walk(self, root: str, tally: _Tally) -> list[_Item]:
+    def _walk(self, root: str, tally: PullTally) -> list[_Item]:
         items: list[_Item] = []
         pending = [(root, PurePosixPath())]
         while pending:
@@ -324,20 +308,16 @@ class ProtonDrive:
         self, args: list[str], timeout: float, path: str = "", out_of_time: str = _SLOW_ANSWER
     ) -> str:
         try:
-            result = subprocess.run(  # an argument list, never a shell
+            result = run_tool(
                 [self._binary, *args],
-                capture_output=True,
-                text=True,
                 timeout=timeout,
-                check=False,
-                stdin=subprocess.DEVNULL,
                 env=os.environ | {"PROTON_DRIVE_LOG_LEVEL": "ERROR"},
             )
-        except FileNotFoundError as exc:
+        except ToolMissingError as exc:
             raise _PullStoppedError(
                 "Proton Drive's tool (proton-drive) is not installed on this machine"
             ) from exc
-        except subprocess.TimeoutExpired as exc:
+        except ToolTimeoutError as exc:
             raise _PullStoppedError(out_of_time) from exc
         if result.returncode == 0:
             return result.stdout

@@ -19,6 +19,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from photo_assistant.adapters.tool_runner import ToolMissingError, ToolTimeoutError, run_tool
 from photo_assistant.domain.backup import Retention, TargetKind, target_kind
 from photo_assistant.ports.backup import (
     BackupError,
@@ -163,21 +164,12 @@ class ResticBackup:
     ) -> subprocess.CompletedProcess[str]:
         timeout = self._quick_timeout if args[0] in _QUICK_COMMANDS else self._long_timeout
         try:
-            done = subprocess.run(  # an argument list, never a shell
-                self._command(repo, args),
-                cwd=cwd,
-                env=self._env(),
-                capture_output=True,
-                text=True,
-                check=False,
-                stdin=subprocess.DEVNULL,
-                timeout=timeout,
-            )
-        except FileNotFoundError as exc:
+            done = run_tool(self._command(repo, args), timeout=timeout, env=self._env(), cwd=cwd)
+        except ToolMissingError as exc:
             raise BackupToolMissingError(
                 f"'{self._binary}' is not installed: sudo apt install restic"
             ) from exc
-        except subprocess.TimeoutExpired as exc:
+        except ToolTimeoutError as exc:
             raise BackupError(
                 f"restic did not answer within {_duration(timeout)} for {repo.location} "
                 f"('{args[0]}') and was stopped; check the connection to the backup, then retry"

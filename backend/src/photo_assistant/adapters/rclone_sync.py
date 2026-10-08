@@ -16,9 +16,10 @@ import re
 import subprocess
 import tempfile
 from collections.abc import Iterable
-from dataclasses import dataclass, field
 from pathlib import Path
 
+from photo_assistant.adapters.sync_tally import PullTally
+from photo_assistant.adapters.tool_runner import ToolMissingError, ToolTimeoutError, run_tool
 from photo_assistant.domain.media_types import IMPORTABLE_EXTENSIONS
 from photo_assistant.domain.remote_source import RemoteConfig
 from photo_assistant.ports.sync import (
@@ -29,6 +30,9 @@ from photo_assistant.ports.sync import (
     SyncRateLimitedError,
     SyncReport,
 )
+
+_ANSWER_TIMEOUT = 30.0  # for questions about rclone's own config
+_NOT_INSTALLED = "rclone is not installed on this machine (sudo apt install rclone)"
 
 _AUTH = re.compile(
     r"couldn't login|login failed|unauthori[sz]ed|\b401\b|\b403\b|forbidden|invalid "
@@ -60,17 +64,33 @@ def build_command(
     options: SyncOptions,
     config_path: Path | None = None,
 ) -> list[str]:
-    # never wait at a keyboard for a config password: fail with rclone's own explanation
-    args = [binary, "copy", remote.target, str(staging), "--ask-password=false"]
+    args = ["copy", remote.target, str(staging)]
     args += ["--filter-from", str(filter_file), "--ignore-case"]
     args += ["--transfers", str(options.transfers), "--checkers", str(options.checkers)]
     args += ["--retries", str(options.retries)]
     if options.tpslimit > 0:
         args += ["--tpslimit", f"{options.tpslimit:g}"]
     args += ["--use-json-log", "--log-level", "INFO", "--stats", "24h"]
+    return rclone_command(binary, args, config_path)
+
+
+def rclone_command(binary: str, args: list[str], config_path: Path | None) -> list[str]:
+    """Any rclone call of this app: never waits at a keyboard for a config password (rclone
+    then fails with its own explanation), and reads the config file the settings name."""
+    command = [binary, *args, "--ask-password=false"]
     if config_path is not None:
-        args += ["--config", str(config_path)]
-    return args
+        command += ["--config", str(config_path)]
+    return command
+
+
+def read_remotes(binary: str, config_path: Path | None) -> list[str]:
+    """Names of the remotes in rclone's config; none when rclone refuses.
+    Raises ToolMissingError / ToolTimeoutError."""
+    command = rclone_command(binary, ["listremotes"], config_path)
+    done = run_tool(command, timeout=_ANSWER_TIMEOUT)
+    if done.returncode != 0:
+        return []
+    return sorted(line.rstrip(":") for line in done.stdout.splitlines() if line.strip())
 
 
 def classify_failure(code: int, messages: list[str], remote: RemoteConfig) -> SyncError:
@@ -97,48 +117,25 @@ def classify_failure(code: int, messages: list[str], remote: RemoteConfig) -> Sy
     return SyncError(f"pulling from '{name}' failed: {last}")
 
 
-@dataclass(slots=True)
-class _Tally:
-    copied: int = 0
-    updated: int = 0
-    errors: list[str] = field(default_factory=list)
-    stats: dict[str, object] = field(default_factory=dict)
-
-    def add(self, entry: dict[str, object]) -> None:
-        msg = str(entry.get("msg", ""))
-        if msg.startswith("Copied (new)"):
-            self.copied += 1
-        elif msg.startswith("Copied (replaced existing)"):
-            self.updated += 1
-        elif entry.get("level") in ("error", "critical"):  # fatal setup errors are critical
-            obj = entry.get("object")
-            self.errors.append(f"{obj}: {msg}" if obj else msg)
-        stats = entry.get("stats")
-        if isinstance(stats, dict):
-            self.stats = stats
-
-    def report(self) -> SyncReport:
-        checks = _int(self.stats.get("checks"))
-        return SyncReport(
-            copied=self.copied,
-            updated=self.updated,
-            unchanged=max(checks - self.updated, 0),
-            errors=_int(self.stats.get("errors")) or len(self.file_errors()),
-            bytes_transferred=_int(self.stats.get("bytes")),
-            error_messages=tuple(self.file_errors()),
-        )
-
-    def file_errors(self) -> list[str]:
-        """Per-file problems, without rclone's "Attempt 1/3 failed" summaries."""
-        return list(dict.fromkeys(e for e in self.errors if not e.startswith("Attempt ")))
+def _count(tally: PullTally, entry: dict[str, object]) -> None:
+    msg = str(entry.get("msg", ""))
+    if msg.startswith("Copied (new)"):
+        tally.copied += 1
+    elif msg.startswith("Copied (replaced existing)"):
+        tally.updated += 1
+    elif entry.get("level") in ("error", "critical"):  # fatal setup errors are critical
+        obj = entry.get("object")
+        tally.errors.append(f"{obj}: {msg}" if obj else msg)
 
 
 def _int(value: object) -> int:
     return int(value) if isinstance(value, int | float) else 0
 
 
-def parse_log(stderr: str) -> _Tally:
-    tally = _Tally()
+def parse_log(stderr: str) -> PullTally:
+    """rclone's JSON log as a tally; ``errors`` holds every error line, summaries included."""
+    tally = PullTally()
+    stats: dict[str, object] = {}
     for line in stderr.splitlines():
         try:
             entry = json.loads(line)
@@ -147,8 +144,19 @@ def parse_log(stderr: str) -> _Tally:
                 tally.errors.append(line.strip().split(" ", 2)[-1])
             continue
         if isinstance(entry, dict):
-            tally.add(entry)
+            _count(tally, entry)
+            if isinstance(entry.get("stats"), dict):
+                stats = entry["stats"]  # the last one is the total
+    tally.unchanged = max(_int(stats.get("checks")) - tally.updated, 0)
+    tally.size = _int(stats.get("bytes"))
+    tally.failed = _int(stats.get("errors"))
     return tally
+
+
+def _report(tally: PullTally) -> SyncReport:
+    """Per-file problems only, without rclone's "Attempt 1/3 failed" summaries."""
+    tally.errors = list(dict.fromkeys(e for e in tally.errors if not e.startswith("Attempt ")))
+    return tally.report()
 
 
 class RcloneSync:
@@ -170,35 +178,26 @@ class RcloneSync:
             args = build_command(self._binary, remote, staging, filter_file, options, self._config)
             result = self._run(args, options.timeout_seconds)
         tally = parse_log(result.stderr)
-        if result.returncode == 0:
-            return tally.report()
-        if tally.copied or tally.updated:
-            return tally.report()  # partial: keep what arrived, report the rest
-        raise classify_failure(result.returncode, tally.errors, remote)
+        # a failed run that still brought something is partial: keep it, report the rest
+        if result.returncode != 0 and not (tally.copied or tally.updated):
+            raise classify_failure(result.returncode, tally.errors, remote)
+        return _report(tally)
 
     def list_remotes(self) -> list[str]:
         """Names of the remotes set up in rclone's config (to catch typos early)."""
-        args = [self._binary, "listremotes", "--ask-password=false"]
-        if self._config is not None:
-            args += ["--config", str(self._config)]
-        result = self._run(args, 30)
-        return sorted(line.rstrip(":") for line in result.stdout.splitlines() if line.strip())
+        try:
+            return read_remotes(self._binary, self._config)
+        except ToolMissingError as exc:
+            raise SyncError(_NOT_INSTALLED) from exc
+        except ToolTimeoutError as exc:
+            raise SyncError("rclone took too long to list its remotes; try again") from exc
 
     def _run(self, args: list[str], timeout: float) -> "subprocess.CompletedProcess[str]":
         try:
-            return subprocess.run(  # an argument list, never a shell
-                args,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-                stdin=subprocess.DEVNULL,
-            )
-        except FileNotFoundError as exc:
-            raise SyncError(
-                "rclone is not installed on this machine (sudo apt install rclone)"
-            ) from exc
-        except subprocess.TimeoutExpired as exc:
+            return run_tool(args, timeout=timeout)
+        except ToolMissingError as exc:
+            raise SyncError(_NOT_INSTALLED) from exc
+        except ToolTimeoutError as exc:
             raise SyncError(
                 f"the pull took longer than {timeout / 3600:.1f} h and was stopped; run it "
                 "again to continue (files already pulled are kept)"
