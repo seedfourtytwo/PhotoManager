@@ -350,3 +350,33 @@ def test_an_unknown_user_name_is_refused_without_hashing_or_leaving_a_row(
             accounts.login("nobody", GOOD, IP)
     assert hasher.verified == 0
     assert repo._scalar("SELECT COUNT(*) FROM login_failure") == 0
+
+
+# --- an admin's patch is all or nothing --------------------------------------------------------
+
+
+class MiscountingStore:
+    """The real store, but the early last-admin check sees an admin who is about to go (what
+    a concurrent demotion looks like): only the store's own check, in its transaction, is left."""
+
+    def __init__(self, repo: SqliteRepository) -> None:
+        self._repo = repo
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._repo, name)
+
+    def count_active_admins(self) -> int:
+        return self._repo.count_active_admins() + 1
+
+
+def test_a_refused_patch_changes_neither_the_pin_nor_the_sessions(
+    repo: SqliteRepository, clock: MovableClock
+) -> None:
+    accounts = Accounts(MiscountingStore(repo), FakeHasher(), clock)  # type: ignore[arg-type]
+    admin, token = accounts.setup("c", "C", GOOD)
+    with pytest.raises(LastAdminError):
+        accounts.update_user(admin.id, UserPatch(role=Role.MEMBER, pin="5678"))
+    assert accounts.authenticate(token) == admin, "still signed in, still an admin"
+    accounts.login("c", GOOD, IP)
+    with pytest.raises(InvalidCredentialsError):
+        accounts.login("c", "5678", IP)

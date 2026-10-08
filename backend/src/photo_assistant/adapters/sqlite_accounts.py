@@ -81,16 +81,19 @@ class AccountsMixin(SqliteBase):
         display_name: str | None = None,
         role: Role | None = None,
         disabled: bool | None = None,
+        password_hash: str | None = None,
     ) -> None:
         with self._transaction():  # the last-admin rule is checked inside (QA A8)
             self._conn.execute(
                 """UPDATE user SET display_name = COALESCE(?, display_name),
-                       role = COALESCE(?, role), disabled = COALESCE(?, disabled)
+                       role = COALESCE(?, role), disabled = COALESCE(?, disabled),
+                       password_hash = COALESCE(?, password_hash)
                    WHERE id = ?""",
                 (
                     display_name,
                     role.value if role else None,
                     None if disabled is None else int(disabled),
+                    password_hash,
                     user_id,
                 ),
             )

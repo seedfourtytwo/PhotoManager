@@ -51,9 +51,10 @@ class AccountStore(Protocol):
         display_name: str | None = None,
         role: Role | None = None,
         disabled: bool | None = None,
+        password_hash: str | None = None,
     ) -> None:
         """One transaction; raises NoActiveAdminError (and changes nothing) if afterwards no
-        active admin is left."""
+        active admin is left. None leaves a value as it is."""
         ...
 
     def set_pin_hash(self, user_id: int, password_hash: str) -> None: ...

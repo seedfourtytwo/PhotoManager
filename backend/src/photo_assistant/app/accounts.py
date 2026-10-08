@@ -165,17 +165,20 @@ class Accounts:
         self._guard_last_admin(user, patch)
         if patch.pin is not None:
             _check_pin(patch.pin)
-            self._store.set_pin_hash(user_id, self._hasher.hash(patch.pin))
-            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays
-            self._store.delete_sessions_of(user_id)
-            self._store.revoke_devices_of(user_id, self._clock.now())
-        try:
+        try:  # the one step that can still be refused goes first, and writes the PIN with it
             self._store.update_user(
-                user_id, display_name=patch.display_name, role=patch.role, disabled=patch.disabled
+                user_id,
+                display_name=patch.display_name,
+                role=patch.role,
+                disabled=patch.disabled,
+                password_hash=None if patch.pin is None else self._hasher.hash(patch.pin),
             )
         except NoActiveAdminError as exc:  # a concurrent change got past the early check
             raise LastAdminError() from exc
-        if patch.disabled:
+        if patch.pin is not None:
+            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays
+            self._store.revoke_devices_of(user_id, self._clock.now())
+        if patch.pin is not None or patch.disabled:
             self._store.delete_sessions_of(user_id)
         updated = self._store.get_user(user_id)
         assert updated is not None
