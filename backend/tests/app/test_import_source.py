@@ -6,7 +6,6 @@ fixture fails any test that changes a single byte or timestamp in a source folde
 
 import os
 import shutil
-import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -503,9 +502,10 @@ def test_replaced_file_with_same_size_and_restored_mtime_is_noticed(
     world.importer._renderer = _FakeRenderer()  # type: ignore[assignment]
     world.importer.run(source.id)
     stat = photo.stat()
-    time.sleep(0.01)
     photo.write_bytes(b"B" * 1000)
     os.utime(photo, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    while photo.stat().st_ctime_ns == stat.st_ctime_ns:  # until the file system's clock ticks
+        os.utime(photo, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     _, report = world.importer.run(source.id)
     assert report.items[0].outcome is Outcome.IMPORTED
 
