@@ -173,8 +173,11 @@ after a failed one; a failed proof or an unconfirmed key raises the banner.
 ### Phone inbox
 `data/inbox/<user id>/` is each user's inbox: a normal `source`, private to its owner by
 default. Files only arrive through the upload API below (there is no WebDAV share and no file
-watcher); each upload request queues one import of that inbox. Files stay in the inbox after
-import. Not built: clearing old inbox files.
+watcher); each upload request queues one import of that inbox. A safety net runs every hour
+for a file whose request died before that: it queues an import only for an inbox that got a
+file since its last import started (or whose last import did not finish), so an unchanged
+inbox adds nothing to the import history. Files stay in the inbox after import. Not built:
+clearing old inbox files.
 
 ### Phone upload
 The client asks `POST /api/upload/check {hashes}` which ones this user lacks, then sends them

@@ -146,7 +146,14 @@ def test_housekeeping_rescans_upload_inboxes_without_piling_up(admin: TestClient
     def waiting() -> list[object]:
         return [j["payload"] for j in repo.list_jobs("queued") if j["kind"] == "scan_source"]
 
-    assert waiting() == []
+    services.ops.periodic.tick()
+    assert waiting() == [], "nothing in the inbox is waiting: no scan, no empty import report"
+    inbox = repo.get_source(claimed.payload["source_id"])
+    assert inbox is not None
+    stranded = Path(inbox.root) / "2026-10" / "b.jpg"
+    stranded.parent.mkdir(parents=True)
+    stranded.write_bytes(JPEG)
+    services.ops.periodic._next_at["inbox rescan"] = 0.0  # due again
     services.ops.periodic.tick()
     assert waiting() == [claimed.payload], "the inbox only, not other sources"
     services.ops.periodic._next_at["inbox rescan"] = 0.0  # due again
