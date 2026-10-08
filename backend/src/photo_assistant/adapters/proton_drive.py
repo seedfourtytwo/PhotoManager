@@ -12,6 +12,7 @@ ever overwritten. If the bookkeeping is lost, photos are fetched again rather th
 the importer recognises a second copy by its content.
 """
 
+import errno
 import json
 import os
 import shutil
@@ -45,6 +46,8 @@ _OUT_OF_TIME = (
 # Whole batches failing in a row before failed batches stop being taken apart: when Proton is
 # down, asking for every photo on its own only multiplies the failures.
 _SPLIT_LIMIT = 3
+_MAX_NAME_BYTES = 255  # what one file or folder name may take on Linux file systems
+_DISK_FULL = (errno.ENOSPC, errno.EDQUOT)
 
 
 class _PullStoppedError(SyncError):
@@ -117,7 +120,35 @@ def _is_photo(node: dict[str, object], name: str) -> bool:
 def _safe(name: str) -> str:
     """A folder name that stays inside staging whatever it is called on Proton."""
     cleaned = "".join("_" if c in "/\\" or ord(c) < 32 else c for c in name)
+    cleaned = cleaned.encode()[:_MAX_NAME_BYTES].decode(errors="ignore")  # whole characters
     return "_" if cleaned.strip(". ") == "" else cleaned
+
+
+def _disk_error(exc: OSError, where: Path) -> SyncError:
+    if exc.errno in _DISK_FULL:
+        return _PullStoppedError(
+            f"the disk holding {where} is full: free some space, then pull again "
+            "(photos already pulled are kept)"
+        )
+    return SyncError(f"the pull could not write to {where}: {exc.strerror or exc}")
+
+
+def _move_all(arrived: Sequence[Path], target: Path) -> int:
+    """Move a downloaded batch into ``target`` under free names, all or nothing; its bytes."""
+    target.mkdir(parents=True, exist_ok=True)
+    placed: list[Path] = []
+    size = 0
+    try:
+        for path in arrived:
+            size += path.stat().st_size
+            place = _free_name(target, path.name)
+            path.replace(place)
+            placed.append(place)
+    except OSError:
+        for place in placed:  # only what this call just put there: the batch is tried again
+            place.unlink(missing_ok=True)
+        raise
+    return size
 
 
 def _free_name(folder: Path, name: str) -> Path:
@@ -152,6 +183,12 @@ class ProtonDrive:
         return sorted(names, key=str.casefold)
 
     def pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
+        try:
+            return self._pull(remote, staging, options)
+        except OSError as exc:  # this machine's disk, not Proton: say so in the import history
+            raise _disk_error(exc, staging.parent) from exc
+
+    def _pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
         deadline = time.monotonic() + options.timeout_seconds
         tally = _Tally()
         if remote.path == PROTON_PHOTOS:
@@ -259,10 +296,12 @@ class ProtonDrive:
             if failed or len(arrived) < len(batch):
                 return "the download failed"
             target = staging.joinpath(*batch[0].folder.parts)
-            target.mkdir(parents=True, exist_ok=True)
-            for path in arrived:
-                tally.size += path.stat().st_size
-                path.replace(_free_name(target, path.name))
+            try:
+                tally.size += _move_all(arrived, target)
+            except OSError as exc:
+                if exc.errno in _DISK_FULL:
+                    raise _disk_error(exc, staging) from exc
+                return f"could not be saved on this machine ({exc.strerror or exc})"
             tally.copied += len(batch)
             # remembered as it lands: a pull cut off later must not fetch it a second time
             run.fetched.update(item.uid for item in batch)

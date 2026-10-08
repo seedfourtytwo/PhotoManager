@@ -1,12 +1,14 @@
 """ProtonDrive when things go wrong mid-pull: nothing arrives, the tool goes away, the disk
 refuses, the pull is cut off. Same stand-in CLI as test_proton_drive.py."""
 
+import errno
 import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from photo_assistant.domain.remote_source import RemoteConfig
 from photo_assistant.ports.sync import SyncAuthError, SyncError
 from tests.proton_cloud import Cloud
 
@@ -117,3 +119,59 @@ def test_photos_that_landed_before_the_pull_was_cut_off_are_not_fetched_twice(
     report = cloud.pull()
     assert (report.copied, report.unchanged) == (2, 1)
     assert cloud.staged() == ["0.jpg", "1.jpg", "2.jpg"]
+
+
+# --- when this machine's disk refuses -------------------------------------------------------------
+
+
+def test_a_folder_name_too_long_for_this_disk_is_shortened_not_fatal(cloud: Cloud) -> None:
+    long_name = "ж" * 200  # 400 bytes: more than a file name may have on Linux
+    cloud.folder("/my-files/X", {"type": "folder", "uid": "s", "name": long_name})
+    cloud.folder(f"/my-files/X/{long_name}", cloud.image("f1", "a.jpg"))
+    report = cloud.pull(RemoteConfig.proton("/my-files/X"))
+    assert (report.copied, report.errors) == (1, 0)
+    (folder,) = (p.name for p in cloud.staging.iterdir())
+    assert folder == "ж" * 127, "255 bytes at most, cut between characters"
+    assert cloud.staged() == [f"{folder}/a.jpg"]
+
+
+def test_a_folder_that_cannot_be_written_to_is_one_problem_not_a_crash(cloud: Cloud) -> None:
+    cloud.folder(
+        "/my-files/X",
+        cloud.image("f0", "top.jpg"),
+        {"type": "folder", "uid": "s", "name": "Locked"},
+    )
+    cloud.folder("/my-files/X/Locked", cloud.image("f1", "a.jpg"))
+    locked = cloud.staging / "Locked"
+    locked.mkdir(parents=True)
+    locked.chmod(0o555)
+    try:
+        report = cloud.pull(RemoteConfig.proton("/my-files/X"))
+    finally:
+        locked.chmod(0o755)
+    assert (report.copied, report.errors) == (1, 1)
+    assert "Locked/a.jpg" in report.error_messages[0]
+    assert "Permission denied" in report.error_messages[0]
+    assert cloud.staged() == ["top.jpg"]
+
+
+def test_a_full_disk_stops_the_pull_with_a_plain_reason(
+    cloud: Cloud, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _photos(cloud, 9)
+
+    def full(self: Path, target: Path) -> Path:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(Path, "replace", full)
+    with pytest.raises(SyncError, match="is full"):
+        cloud.pull()
+    assert len(cloud.downloads()) == 1, "no point in trying the other photos"
+
+
+def test_a_working_folder_that_cannot_be_made_is_a_pull_error(cloud: Cloud) -> None:
+    cloud.photo("p1", "a.jpg")
+    cloud.staging.parent.parent.mkdir(parents=True)
+    cloud.staging.parent.write_text("a file where the staging folder should go")
+    with pytest.raises(SyncError, match="could not write"):
+        cloud.pull()
