@@ -564,3 +564,14 @@ def test_a_disabled_target_is_not_restore_tested(world: World) -> None:
     world.clock.current += timedelta(days=30)
     world.service.run_due()
     assert len(world.service.runs(target.id)) == 2
+
+
+def test_a_quiet_window_does_not_raise_the_overdue_banner_during_the_day(world: World) -> None:
+    target_id = world.target(schedule="hourly", quiet_window="22:00-06:00")
+    world.clock.current = T0.replace(hour=5)
+    world.service.run_now(target_id)
+    world.clock.current = T0.replace(hour=12)
+    (waiting,) = world.service.status()
+    assert not waiting.overdue and not waiting.needs_attention
+    world.clock.current = T0.replace(hour=23, minute=30)
+    assert world.service.status()[0].overdue, "the window opened and nothing ran"

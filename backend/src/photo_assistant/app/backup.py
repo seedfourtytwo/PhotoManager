@@ -439,17 +439,17 @@ class BackupService:
         last = self._store.last_run(target.id, RunKind.BACKUP)
         success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
         schedule = target.parsed_schedule
-        upcoming = None
-        if target.enabled:
-            upcoming = next_run(
-                schedule, self._last_attempt(target), parse_window(target.quiet_window)
-            )
+        window = parse_window(target.quiet_window)
+        upcoming = (
+            next_run(schedule, self._last_attempt(target), window) if target.enabled else None
+        )
         success_at = (success.finished_at or success.started_at) if success else None
         overdue = is_overdue(
             schedule,
             self._local(success_at) if success_at else None,
             self._local(target.created_at),
             now,
+            window,
         )
         test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven = self._store.last_run(target.id, RunKind.RESTORE_TEST, succeeded_only=True)
