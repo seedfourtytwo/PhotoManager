@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 import yaml  # type: ignore[import-untyped]  # PyYAML ships without stubs; comes with uvicorn
 
+from photo_assistant.api.ops_services import default_key_dir
+
 REPO = Path(__file__).parents[3]
 DEPLOY = REPO / "deploy"
 
@@ -126,6 +128,67 @@ def test_compose_service_is_private_and_persistent() -> None:
     assert "tailscale" not in compose["services"], "the sidecar stays opt-in (commented out)"
     for line in (DEPLOY / "compose.yml").read_text().splitlines():
         assert "image:" not in line or ":latest" not in line
+
+
+def _mounts() -> dict[str, str]:
+    """Container path -> mount options ("" = read-write) of the app service."""
+    service = yaml.safe_load((DEPLOY / "compose.yml").read_text())["services"]["photo-assistant"]
+    mounts = {}
+    for volume in service["volumes"]:
+        _, target, *options = re.sub(r"\$\{[^}]*\}", "host", str(volume)).split(":")
+        mounts[target] = ",".join(options)
+    return mounts
+
+
+def _server_env() -> dict[str, str]:
+    lines = (DEPLOY / "server.env.example").read_text().splitlines()
+    pairs = (line.partition("=") for line in lines if line and not line.startswith("#"))
+    return {key: value for key, _, value in pairs}
+
+
+def _container_home() -> Path:
+    (home,) = [args for kw, args, _ in dockerfile() if kw == "WORKDIR" and "/home/" in args]
+    return Path(home)
+
+
+def _writable_mount_holding(path: Path) -> str | None:
+    for target, options in _mounts().items():
+        if path.is_relative_to(target) and "ro" not in options.split(","):
+            return target
+    return None
+
+
+def test_backup_keys_and_rclone_config_survive_a_rebuilt_container() -> None:
+    """`up -d --build` makes a new container: what is not on a mount is gone, and the key
+    the guided backup setup made would go with it."""
+    home, env = _container_home(), _server_env()
+    default_keys = home / default_key_dir().relative_to(Path.home())
+    key_dir = Path(env.get("PA_BACKUP_KEY_DIR") or default_keys)
+    rclone = Path(env.get("PA_RCLONE_CONFIG") or home / ".config" / "rclone" / "rclone.conf")
+    assert _writable_mount_holding(key_dir), f"{key_dir} is lost when the container is rebuilt"
+    assert _writable_mount_holding(rclone), f"{rclone} is lost when the container is rebuilt"
+    assert not key_dir.is_relative_to("/data"), "a backup must not carry its own key"
+
+
+def test_mount_points_under_home_belong_to_the_app_user() -> None:
+    """Docker creates a missing mount point as root; the image must own it first."""
+    home = _container_home()
+    prepared = " ".join(args for kw, args, _ in dockerfile() if kw == "RUN")
+    compose = yaml.safe_load((DEPLOY / "compose.yml").read_text())
+    under_home = [t for t in _mounts() if Path(t).is_relative_to(home)]
+    assert under_home
+    for target in under_home:
+        assert re.search(rf"mkdir -p[^&]*{re.escape(target)}\b", prepared), target
+        assert re.search(rf"chown[^&]*{re.escape(target)}\b", prepared), target
+    assert set(compose["volumes"]) == {"restic-cache"}
+
+
+def test_source_folder_mounts_are_read_only() -> None:
+    """Originals are sacred: a photo folder is only ever offered to the container read-only."""
+    text = (DEPLOY / "compose.yml").read_text()
+    sources = re.findall(r"^\s*#?\s*-\s+\S+?:(/sources/\S*)$", text, flags=re.MULTILINE)
+    assert sources, "compose shows how to mount a photo folder"
+    assert all(target.endswith(":ro") for target in sources), sources
 
 
 def test_server_env_is_never_committed() -> None:
