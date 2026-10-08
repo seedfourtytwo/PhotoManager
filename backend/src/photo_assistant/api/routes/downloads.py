@@ -96,7 +96,7 @@ def _entries(
     scope = _scope(services, viewer, body)
     allowed = downloadable(scope.views)
     options = body.options()
-    names = [services.repo.first_origin_name(v.id) or "photo" for v in allowed]
+    names = [services.repo.first_origin_name(viewer, v.id) or "photo" for v in allowed]
     return services.downloads.plan(allowed, names, options), scope, options
 
 
@@ -135,7 +135,7 @@ def download_one(
     options = ExportOptions(  # OptionsError: 422
         format=fmt, quality=quality, max_edge=max_edge, strip_location=strip_location
     )
-    name = services.repo.first_origin_name(asset_id) or "photo"
+    name = services.repo.first_origin_name(viewer, asset_id) or "photo"
     entry = services.downloads.plan([view], [name], options)[0]
     out_format = services.downloads.output_format(view, options)
     media = MEDIA_TYPES.get(out_format, view.asset.mime_type or "application/octet-stream")

@@ -435,16 +435,25 @@ class LibraryMixin(SqliteBase):
         )
         return [(int(r["id"]), str(r["title"])) for r in rows]
 
-    def first_origin_name(self, asset_id: int) -> str | None:
-        row = self._one(
-            """SELECT x.relative_path FROM asset a JOIN asset_source x ON x.asset_id = a.id
-               WHERE a.id = ? ORDER BY x.source_id = a.first_source_id DESC, x.rowid LIMIT 1""",
-            (asset_id,),
+    def first_origin_names(self, viewer: Viewer, asset_ids: Sequence[int]) -> dict[int, str]:
+        """Each photo's original file name, from the first of its sources this viewer may see
+        (a hidden source's file names stay hidden: no entry). One query for any number."""
+        _, _, params = visibility(viewer)
+        rows = self._all(
+            f"""SELECT x.asset_id, x.relative_path FROM asset_source x
+                JOIN asset a ON a.id = x.asset_id JOIN source s ON s.id = x.source_id
+                WHERE x.asset_id IN (SELECT value FROM json_each(:assets)) AND {SOURCE_VISIBLE}
+                ORDER BY x.asset_id, x.source_id = a.first_source_id DESC, x.rowid""",
+            params | {"assets": json.dumps(list(asset_ids))},
         )
-        if row is None:
-            return None
-        # the bare file name: a (Linux) name may contain "\", which Windows reads as a path
-        return re.split(r"[/\\]", str(row["relative_path"]))[-1] or None
+        first: dict[int, str] = {}
+        for r in rows:
+            # the bare file name: a (Linux) name may contain "\", which Windows reads as a path
+            first.setdefault(int(r["asset_id"]), re.split(r"[/\\]", str(r["relative_path"]))[-1])
+        return {asset_id: name for asset_id, name in first.items() if name}
+
+    def first_origin_name(self, viewer: Viewer, asset_id: int) -> str | None:
+        return self.first_origin_names(viewer, [asset_id]).get(asset_id)
 
     # --- per-user state --------------------------------------------------------------------
 
