@@ -5,7 +5,15 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
-	import { applyTheme, isFilterable, notice, session, settings } from '$lib/app.svelte';
+	import BackupBanner from '$lib/components/BackupBanner.svelte';
+	import {
+		applyTheme,
+		backupWatch,
+		isFilterable,
+		notice,
+		session,
+		settings
+	} from '$lib/app.svelte';
 
 	let { children } = $props();
 
@@ -15,6 +23,12 @@
 	onMount(() => {
 		applyTheme(settings.theme);
 		if (!bare) session.load().catch((e: unknown) => notice.error(e));
+	});
+
+	// Admins see the backup warning on every page: ask again on each navigation.
+	$effect(() => {
+		void page.url.pathname;
+		if (session.isAdmin && !bare) void backupWatch.load();
 	});
 </script>
 
@@ -33,7 +47,10 @@
 {:else if session.user}
 	<div class="app" class:filters={filterable && settings.filtersOpen}>
 		<Nav />
-		<main id="main" tabindex="-1">{@render children()}</main>
+		<main id="main" tabindex="-1">
+			<BackupBanner health={session.isAdmin ? backupWatch.health : null} />
+			{@render children()}
+		</main>
 		{#if filterable}<FilterPanel />{/if}
 	</div>
 {:else if session.ready}

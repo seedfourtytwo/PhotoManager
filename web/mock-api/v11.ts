@@ -6,7 +6,9 @@ import { randomBytes } from 'node:crypto';
 import type {
 	AssetFilters,
 	AssetOut,
+	BackupHealth,
 	BackupPatch,
+	BackupProblem,
 	BackupPlan,
 	Level,
 	PrintPlan,
@@ -278,6 +280,8 @@ export function v11Routes(h: Helpers): Route[] {
 			mirror_path,
 			last_mirror_at: mirror_path ? mirrored_at : null,
 			mirror_error: null,
+			mirror_overdue: false,
+			skipped_since: null,
 			last_proven_at: proven?.finished_at ?? null,
 			restore_failing: lastTest?.status === 'failed',
 			last_success_at: lastSuccess?.finished_at ?? null,
@@ -287,6 +291,62 @@ export function v11Routes(h: Helpers): Route[] {
 			overdue,
 			needs_attention: target.enabled && (overdue || failing || !key_saved)
 		};
+	}
+
+	/** As the real one: each enabled target is a place, plus its Proton copy; alerts come first. */
+	function healthOut(): BackupHealth {
+		const places = h
+			.state()
+			.backups.filter((b) => b.enabled)
+			.map(targetOut);
+		const flags = places.flatMap((t) => [
+			t.last_success_at !== null && !t.overdue && t.last_run?.status !== 'failed' && !t.restore_failing,
+			...(t.mirror_path ? [t.last_mirror_at !== null] : [])
+		]); // prettier-ignore
+		const ok = flags.filter(Boolean).length;
+		const problems: BackupProblem[] = [];
+		if (flags.length === 0)
+			problems.push({
+				severity: 'warning',
+				message: 'No backup is set up: the photos exist only on this computer. Add two backup places.',
+				target_id: null
+			}); // prettier-ignore
+		else if (flags.length === 1)
+			problems.push({
+				severity: 'warning',
+				message: 'Only one backup place is set up: add a second, so one lost disk is not the end of the photos.',
+				target_id: null
+			}); // prettier-ignore
+		else if (ok < 2)
+			problems.push({
+				severity: 'alert',
+				message: `Only ${ok} of ${flags.length} backup places is up to date.`,
+				target_id: null
+			});
+		for (const t of places) {
+			if (t.last_run?.status === 'failed')
+				problems.push({
+					severity: 'alert',
+					message: `${t.label}: the last backup failed: ${t.last_run.error ?? 'no reason given'}`,
+					target_id: t.id
+				});
+			if (t.restore_failing)
+				problems.push({
+					severity: 'alert',
+					message: `${t.label}: the last restore test failed. Open Backups and run it again.`,
+					target_id: t.id
+				});
+			if (t.overdue && t.last_run?.status !== 'failed')
+				problems.push({ severity: 'warning', message: `${t.label}: the backup is overdue.`, target_id: t.id }); // prettier-ignore
+			if (!t.key_saved)
+				problems.push({
+					severity: 'warning',
+					message: `${t.label}: the recovery key is not saved yet. Without it this backup cannot be read.`,
+					target_id: t.id
+				});
+		}
+		problems.sort((a, b) => Number(a.severity === 'warning') - Number(b.severity === 'warning'));
+		return { protected: ok >= 2, places_ok: ok, places_total: flags.length, problems };
 	}
 
 	function findBackup(ctx: Ctx) {
@@ -563,6 +623,7 @@ export function v11Routes(h: Helpers): Route[] {
 
 		// backups (admin)
 		['GET', /^\/api\/backups$/, (ctx) => (admin(ctx), ok(h.state().backups.map(targetOut)))],
+		['GET', /^\/api\/backups\/health$/, (ctx) => (admin(ctx), ok(healthOut()))],
 		[
 			'POST',
 			/^\/api\/backups$/,

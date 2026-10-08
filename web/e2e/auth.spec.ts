@@ -53,7 +53,8 @@ test.describe('first run and sign-in', () => {
 		await page.getByLabel('Current PIN').fill('0000');
 		await page.getByLabel('New PIN').fill('5678');
 		await page.getByRole('button', { name: 'Change PIN' }).click();
-		await expect(page.getByRole('alert')).toContainText('current PIN');
+		// The admin's backup warning is also an alert on every page: pick this one by its words.
+		await expect(page.getByRole('alert').filter({ hasText: 'current PIN' })).toBeVisible();
 		await page.getByLabel('Current PIN').fill(ADMIN.pin);
 		await page.getByRole('button', { name: 'Change PIN' }).click();
 		await expect(page.getByRole('status')).toContainText('PIN changed');

@@ -3,7 +3,14 @@
  * Svelte runes in a module, so every component shares one instance.
  */
 import { goto } from '$app/navigation';
-import { ApiError, createApi, type MlStatus, type Source, type User } from '$lib/api';
+import {
+	ApiError,
+	createApi,
+	type BackupHealth,
+	type MlStatus,
+	type Source,
+	type User
+} from '$lib/api';
 
 const PUBLIC_ROUTES = ['/login', '/setup'];
 
@@ -97,6 +104,24 @@ class Library {
 }
 
 export const library = new Library();
+
+// --- backup health -----------------------------------------------------------------------
+
+class BackupWatch {
+	/** The last answer, for the banner and the backup section; null until one arrives. */
+	health = $state<BackupHealth | null>(null);
+
+	/** Ask again. A failed ask (offline, not an admin) leaves the last answer, never an error. */
+	async load(): Promise<void> {
+		try {
+			this.health = await api.backupHealth();
+		} catch {
+			// the banner is a helper: it must never get in the way of the page
+		}
+	}
+}
+
+export const backupWatch = new BackupWatch();
 
 // --- viewer settings (per browser) -----------------------------------------------------
 

@@ -1,4 +1,12 @@
-import { expect, expectAccessible, REAL_BACKEND, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	MEMBER,
+	REAL_BACKEND,
+	resetMock,
+	signIn,
+	test
+} from './helpers.ts';
 
 /** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
 const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
@@ -136,7 +144,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'the mock simulates the disks and the runs (real restic: API tests)');
-	await expect(page.getByRole('alert')).toContainText(/backup needs attention/i);
+	await expect(page.getByRole('alert')).toContainText(/Home server: the last backup failed/);
 	const backups = page.getByRole('region', { name: 'Backups' });
 	await expect(backups.getByText('Home server')).toBeVisible();
 	await expect(backups.getByText(/repository not reachable/)).toBeVisible();
@@ -313,10 +321,42 @@ test('backups: keep a copy on Proton Drive in a folder made on the spot, then st
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	await expect(dialog.getByText('My files / Photo backup')).toBeVisible();
 	await dialog.getByRole('button', { name: 'Keep a copy here' }).click();
-	await expect(row.getByText(/Proton copy: My files \/ Photo backup/)).toBeVisible();
+	await expect(row.getByText(/Copy on Proton Drive · My files \/ Photo backup/)).toBeVisible();
 	await expect(row.getByText(/first copy after the next backup/)).toBeVisible();
 
 	await row.getByRole('button', { name: 'Copy to Proton' }).click();
 	await dialog.getByRole('button', { name: 'Stop copying' }).click();
-	await expect(row.getByText(/Proton copy/)).toHaveCount(0);
+	await expect(row.getByText(/Copy on Proton Drive/)).toHaveCount(0);
+});
+
+test('backups: an admin sees the warning on every page, with one row per place', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'the mock holds one failing backup place');
+	await page.goto('/');
+	const banner = page.getByRole('alert');
+	await expect(banner).toContainText('Home server: the last backup failed');
+	await expect(banner).toContainText('and 1 more');
+	await expectAccessible(page);
+	// The warning is a line, not a cover: the navigation stays reachable beside or below it.
+	await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+	const width = await page.evaluate(() => [
+		document.documentElement.scrollWidth,
+		document.documentElement.clientWidth
+	]);
+	expect(width[0]).toBeLessThanOrEqual(width[1]);
+	await banner.getByRole('link', { name: 'Backups' }).click();
+	await expect(page).toHaveURL(/\/admin#a-backups$/);
+
+	const backups = page.getByRole('region', { name: 'Backups' });
+	await expect(backups.getByText('Only 0 of 1 places up to date')).toBeVisible();
+	await expect(backups.getByRole('img', { name: 'needs attention' })).toBeVisible();
+});
+
+test('backups: a member sees no backup warning', async ({ page }) => {
+	await page.context().clearCookies();
+	await signIn(page, '/', MEMBER);
+	await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Backups' })).toHaveCount(0);
 });

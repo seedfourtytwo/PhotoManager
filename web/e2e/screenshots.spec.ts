@@ -151,6 +151,8 @@ test('every screen', async ({ page }, info) => {
 	await page.goto('/admin');
 	await expect(page.getByRole('region', { name: 'Backups' })).toBeVisible();
 	await shot(page, '14-admin', p, true);
+	await page.getByRole('region', { name: 'Backups' }).scrollIntoViewIfNeeded();
+	await shot(page, '14b-backups', p);
 
 	await page.goto('/settings');
 	await shot(page, '16-settings', p);

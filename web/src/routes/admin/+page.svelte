@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import type { BackupTarget, Job, MlStatus, Stats } from '$lib/api';
-	import { api, library, notice, session } from '$lib/app.svelte';
+	import { api, backupWatch, library, notice, session } from '$lib/app.svelte';
 	import { formatBytes } from '$lib/format';
 	import Backups from '$lib/components/admin/Backups.svelte';
 	import Sources from '$lib/components/admin/Sources.svelte';
@@ -17,7 +17,6 @@
 
 	const active = $derived(stats ? stats.jobs.queued + stats.jobs.running : 0);
 	const backingUp = $derived(backups.some((b) => b.last_run?.status === 'running'));
-	const attention = $derived(backups.filter((b) => b.needs_attention));
 
 	/**
 	 * Poll while work is queued or running: counts, failed jobs, the folders' live import
@@ -30,7 +29,8 @@
 			[stats, failed, backups] = await Promise.all([
 				api.stats(),
 				api.jobs('failed'),
-				api.backups().catch(() => [])
+				api.backups().catch(() => []),
+				backupWatch.load()
 			]);
 			if (active > 0 || wasActive) refresh++;
 			if (wasActive && active === 0) library.changed();
@@ -77,13 +77,6 @@
 	{#if !session.isAdmin}
 		<p class="quiet">Only admins can see this page.</p>
 	{:else}
-		{#if attention.length}
-			<p class="banner" role="alert">
-				A backup needs attention: {attention
-					.map((b) => `${b.label}${b.overdue ? ' (overdue)' : ''}`)
-					.join(', ')}. See Backups below.
-			</p>
-		{/if}
 		<p class="quiet status" aria-live="polite">
 			{#if stats}
 				{count.format(stats.assets)} photos · {formatBytes(stats.free_bytes)} free on the library disk
@@ -117,7 +110,7 @@
 			{/if}
 		</section>
 
-		<Backups targets={backups} onchange={poll} />
+		<Backups targets={backups} health={backupWatch.health} onchange={poll} />
 
 		<section aria-labelledby="a-ml">
 			<h2 id="a-ml">Search and faces</h2>
@@ -144,15 +137,6 @@
 	.page {
 		padding: var(--s-5) var(--page-x) var(--s-7);
 		max-width: 60rem;
-	}
-	/* Something needs the admin: an ink rule in the margin, not a coloured box. */
-	.banner {
-		margin: var(--s-4) 0 0;
-		padding: var(--s-2) var(--s-3);
-		border-left: 2px solid var(--ink);
-		background: var(--tint);
-		color: var(--ink);
-		max-width: var(--measure);
 	}
 	.status {
 		margin: var(--s-3) 0 var(--s-5);

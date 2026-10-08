@@ -14,6 +14,7 @@ import type {
 	AssetFilters,
 	AssetOut,
 	AssetPage,
+	BackupHealth,
 	BackupIn,
 	BackupPatch,
 	BackupPlaces,
@@ -358,6 +359,7 @@ export function createApi(options: ApiOptions = {}) {
 
 		// backups (admin, v1.1)
 		backups: () => get<BackupTarget[]>('/api/backups'),
+		backupHealth: () => get<BackupHealth>('/api/backups/health'),
 		addBackup: (body: BackupIn) => request<BackupTarget>('POST', '/api/backups', body),
 		/** Guided setup: where a backup could go, whether a place will do, then create it. */
 		backupPlaces: () => get<BackupPlaces>('/api/backups/places'),
