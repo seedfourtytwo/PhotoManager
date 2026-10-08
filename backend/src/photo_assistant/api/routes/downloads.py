@@ -91,25 +91,25 @@ def _scope(services: Services, viewer: Viewer, body: DownloadRequest) -> _Scope:
 
 
 def _entries(
-    services: Services, viewer: Viewer, body: DownloadRequest
-) -> tuple[list[Entry], _Scope, ExportOptions]:
-    scope = _scope(services, viewer, body)
+    services: Services, viewer: Viewer, scope: _Scope, options: ExportOptions
+) -> list[Entry]:
+    """The photos of the scope you may download, each under its file name in the ZIP."""
     allowed = downloadable(scope.views)
-    options = body.options()
-    names = [services.repo.first_origin_name(viewer, v.id) or "photo" for v in allowed]
-    return services.downloads.plan(allowed, names, options), scope, options
+    original = services.repo.first_origin_names(viewer, [v.id for v in allowed])
+    names = [original.get(v.id, "photo") for v in allowed]
+    return services.downloads.plan(allowed, names, options)
 
 
 @router.post("/downloads/estimate")
 def estimate(services: ServicesDep, viewer: ViewerDep, body: DownloadRequest) -> Estimate:
-    entries, _, options = _entries(services, viewer, body)
-    views = [e.view for e in entries]
-    return Estimate(count=len(views), bytes=services.downloads.estimate(views, options))
+    views = downloadable(_scope(services, viewer, body).views)  # sizes need no file names
+    return Estimate(count=len(views), bytes=services.downloads.estimate(views, body.options()))
 
 
 @router.post("/downloads", openapi_extra=_BODY_SCHEMA)
 def download_zip(services: ServicesDep, viewer: ViewerDep, body: DownloadBody) -> StreamingResponse:
-    entries, scope, options = _entries(services, viewer, body)
+    scope, options = _scope(services, viewer, body), body.options()
+    entries = _entries(services, viewer, scope, options)
     files = ((e.name, services.downloads.content(e.view, options)) for e in entries)
     return StreamingResponse(
         zip_stream(files),

@@ -7,6 +7,7 @@
   soon as they have been sent.
 """
 
+import shutil
 import uuid
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -108,7 +109,7 @@ class Downloads:
         self, view: AssetView, source: Path, temp: Path, fmt: str, options: ExportOptions
     ) -> None:
         if fmt == "original":
-            temp.write_bytes(source.read_bytes())  # a copy: the library file is never changed
+            shutil.copyfile(source, temp)  # a copy: the library file is never changed
         else:
             spec = RenderSpec(
                 recipe=view.recipe,
