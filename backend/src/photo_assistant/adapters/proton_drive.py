@@ -1,7 +1,8 @@
 """SourceSync with Proton's own ``proton-drive`` CLI: list, then download what is new.
 
-Read-only on Proton: only ``photo timeline``, ``photo download``, ``filesystem list`` and
-``filesystem download`` are ever built (tested). The sign-in is the CLI's business (browser
+Pulling is read-only on Proton: only ``photo timeline``, ``photo download``, ``filesystem
+list`` and ``filesystem download`` are ever built (tested). The one write offered here is
+making a new, empty folder, for a backup copy to go in. The sign-in is the CLI's business (browser
 login, session in the system keyring); this adapter never sees a password.
 
 Proton has no "copy what changed" command, so the adapter keeps its own list of what it has
@@ -125,6 +126,11 @@ class ProtonDrive:
             if node.get("type") == "folder" and (name := _name(node)) is not None
         ]
         return sorted(names, key=str.casefold)
+
+    def create_folder(self, parent: str, name: str) -> str:
+        """Make a new folder inside ``parent`` (a place in My files); its path."""
+        self.run(["filesystem", "create-folder", parent, name, "--json"], _LIST_TIMEOUT, parent)
+        return f"{parent}/{name}"
 
     def pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
         deadline = time.monotonic() + options.timeout_seconds

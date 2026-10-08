@@ -15,6 +15,7 @@ from photo_assistant.adapters.geocoder import OfflineGeocoder
 from photo_assistant.adapters.ollama_ai import OllamaProvider
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
+from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
@@ -146,6 +147,7 @@ def build_services(settings: Settings) -> Services:
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
         db=db,
         rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
+        mirror=ProtonMirror(integrations.proton),
     )
     editor = Editor(
         repo,

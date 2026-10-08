@@ -83,3 +83,16 @@ class RemoteConfig:
         if not isinstance(path, str) or _CONTROL.search(path) or len(path) > MAX_PATH_CHARS:
             raise RemoteConfigError("path must be plain text without line breaks")
         return cls(remote, path)
+
+
+def proton_folder_name_problem(name: str) -> str | None:
+    """Why a new Proton Drive folder can't be called ``name``, or None."""
+    if not name.strip() or name in (".", ".."):
+        return "give the new folder a name"
+    if "/" in name or "\\" in name or _CONTROL.search(name):
+        return "a folder name can't contain / or \\ or line breaks"
+    if name.startswith("-") or name != name.strip():
+        return "a folder name can't start with - or start or end with a space"
+    if len(name) > 255:
+        return "that name is too long"
+    return None
