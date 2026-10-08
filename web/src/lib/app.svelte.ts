@@ -113,16 +113,17 @@ class BackupWatch {
 	/** Counts asks: only the latest answer may land, however late an older one arrives. */
 	#latest = 0;
 
-	/** Ask again. A failed ask (offline, session gone) leaves nothing to show, never an error. */
+	/** Ask again. Only a refusal (session gone, not an admin) leaves nothing to show; any other
+	 * failed ask (offline, a server hiccup) keeps the last answer, so the banner does not flicker. */
 	async load(): Promise<void> {
 		const mine = ++this.#latest;
-		let answer: BackupHealth | null = null;
 		try {
-			answer = await api.backupHealth();
-		} catch {
-			// the banner is a helper: it must never get in the way of the page
+			const answer = await api.backupHealth();
+			if (mine === this.#latest) this.health = answer;
+		} catch (error) {
+			const refused = error instanceof ApiError && (error.status === 401 || error.status === 403);
+			if (refused && mine === this.#latest) this.health = null;
 		}
-		if (mine === this.#latest) this.health = answer;
 	}
 
 	/** Forget the answer, and any ask still on its way. */

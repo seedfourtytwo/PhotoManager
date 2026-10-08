@@ -250,6 +250,14 @@ describe('backups, devices and remote sources', () => {
 		h.clock.now += 60_000; // the first backup finishes
 		const health = await api.backupHealth();
 		expect(health).toMatchObject({ places_ok: 1, places_total: 2, protected: false });
+		await api.runBackup(1); // the seeded server's last backup failed: a good run mends it
+		h.clock.now += 60_000;
+		expect(await api.backupHealth()).toEqual({
+			protected: true,
+			places_ok: 2,
+			places_total: 2,
+			problems: []
+		});
 		await api.setBackupEnabled(1, false);
 		const one = await api.backupHealth();
 		expect(one).toMatchObject({ places_ok: 1, places_total: 1 });
