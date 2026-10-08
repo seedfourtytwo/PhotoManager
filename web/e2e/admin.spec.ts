@@ -367,3 +367,89 @@ test.describe('adding a folder when the second step fails or the button is press
 		expect(posts).toBe(1);
 	});
 });
+
+test.describe('Proton Drive: one folder, on a slow or failing listing', () => {
+	test.beforeEach(() => test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool'));
+
+	/** Listings wait until released; `fail` makes the next ones answer with an error. */
+	async function slowListings(page: Page) {
+		const control = { release: () => {}, fail: false, hold: false };
+		await page.route('**/api/proton/folders**', async (route) => {
+			if (control.fail)
+				return route.fulfill({ status: 502, json: { detail: 'Proton Drive did not answer.' } });
+			if (control.hold) await new Promise<void>((resolve) => (control.release = resolve));
+			await route.fallback();
+		});
+		return control;
+	}
+
+	async function openOneFolder(page: Page) {
+		await page.getByRole('button', { name: 'Add from Proton' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
+		await dialog.getByRole('radio', { name: /One folder/ }).check();
+		return dialog;
+	}
+
+	test('“Add and import” waits for the folder you clicked, so it never adds its parent', async ({
+		page
+	}) => {
+		const listings = await slowListings(page);
+		const dialog = await openOneFolder(page);
+		const add = dialog.getByRole('button', { name: 'Add and import' });
+		const inside = dialog.getByRole('list', { name: 'Folders inside' });
+		await expect(inside.getByRole('button', { name: 'Trips' })).toBeVisible();
+		await expect(add).toBeEnabled();
+		listings.hold = true;
+		await inside.getByRole('button', { name: 'Trips' }).click();
+		await expect(dialog.getByRole('status')).toHaveText('Looking…');
+		await expect(add).toBeDisabled();
+		listings.hold = false;
+		listings.release();
+		await expect(dialog.getByText('My files / Trips', { exact: true })).toBeVisible();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
+		await add.click();
+		await expect(
+			page.getByRole('listitem').filter({ hasText: 'Proton Drive · My files / Trips' })
+		).toBeVisible();
+	});
+
+	test('switching to Photos and back starts again at “My files”, name and all', async ({
+		page
+	}) => {
+		const listings = await slowListings(page);
+		const dialog = await openOneFolder(page);
+		const add = dialog.getByRole('button', { name: 'Add and import' });
+		await dialog
+			.getByRole('list', { name: 'Folders inside' })
+			.getByRole('button', { name: 'Trips' })
+			.click();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
+		await dialog.getByRole('radio', { name: /My Proton photos/ }).check();
+		listings.hold = true;
+		await dialog.getByRole('radio', { name: /One folder/ }).check();
+		// The picker shows "My files" again: the old subfolder must not be what gets added.
+		await expect(dialog.getByText('My files', { exact: true })).toBeVisible();
+		await expect(add).toBeDisabled();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Proton Drive');
+		listings.hold = false;
+		listings.release();
+		await expect(add).toBeEnabled();
+	});
+
+	test('a listing that fails can be tried again; nothing can be added meanwhile', async ({
+		page
+	}) => {
+		const listings = await slowListings(page);
+		listings.fail = true;
+		const dialog = await openOneFolder(page);
+		await expect(dialog.getByRole('alert')).toContainText('Proton Drive did not answer.');
+		await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeDisabled();
+		listings.fail = false;
+		await dialog.getByRole('button', { name: 'Try again' }).click();
+		await expect(dialog.getByRole('alert')).toHaveCount(0);
+		await expect(
+			dialog.getByRole('list', { name: 'Folders inside' }).getByRole('button', { name: 'Trips' })
+		).toBeVisible();
+		await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
+	});
+});

@@ -3,7 +3,7 @@
 	import { api } from '$lib/app.svelte';
 	import { PROTON_FILES, PROTON_PHOTOS } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
-	import ProtonFolders from './ProtonFolders.svelte';
+	import ProtonFolders, { type PickedFolder } from './ProtonFolders.svelte';
 
 	type Props = { onclose: () => void; onadded: (source: ProtonSource) => void };
 	let { onclose, onadded }: Props = $props();
@@ -11,14 +11,15 @@
 	type Scope = 'photos' | 'drive' | 'folder';
 	let status = $state<ProtonStatus | null>(null);
 	let scope = $state<Scope>('photos');
-	let folder = $state(PROTON_FILES);
+	const FOLDER_START: PickedFolder = { path: PROTON_FILES, pending: true };
+	let picked = $state(FOLDER_START);
 	let label = $state('');
 	let error = $state('');
 	let saving = $state(false);
 	let suggested = ''; // the name we filled in: replaced as the choice changes, unless edited
 
 	const path = $derived(
-		scope === 'photos' ? PROTON_PHOTOS : scope === 'drive' ? PROTON_FILES : folder
+		scope === 'photos' ? PROTON_PHOTOS : scope === 'drive' ? PROTON_FILES : picked.path
 	);
 	$effect(() => {
 		const name =
@@ -69,14 +70,15 @@
 			Photos are copied into the library. Nothing on Proton is changed or deleted. Videos are left
 			out for now.
 		</p>
-		<fieldset>
+		<!-- The folder picker starts again at "My files" each time it is shown: so does the choice. -->
+		<fieldset onchange={() => (picked = FOLDER_START)}>
 			<legend>What to bring in</legend>
 			<label><input type="radio" bind:group={scope} value="photos" /> My Proton photos</label>
 			<label><input type="radio" bind:group={scope} value="drive" /> Everything in my Drive</label>
 			<label><input type="radio" bind:group={scope} value="folder" /> One folder in my Drive</label>
 		</fieldset>
 		{#if scope === 'folder'}
-			<ProtonFolders onpick={(p) => (folder = p)} />
+			<ProtonFolders onpick={(p) => (picked = p)} />
 		{/if}
 		<label class="field">Name <input bind:value={label} /></label>
 		{#if error}<p role="alert">{error}</p>{/if}
@@ -85,7 +87,7 @@
 		<button
 			class="primary"
 			type="button"
-			disabled={!status?.ready || !label.trim() || saving}
+			disabled={!status?.ready || !label.trim() || saving || (scope === 'folder' && picked.pending)}
 			onclick={add}>Add and import</button
 		>
 	{/snippet}
