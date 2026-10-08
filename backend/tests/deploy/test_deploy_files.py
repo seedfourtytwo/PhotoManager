@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml  # type: ignore[import-untyped]  # PyYAML ships without stubs; comes with uvicorn
+import yaml  # type: ignore[import-untyped]  # PyYAML ships without stubs
 
 from photo_assistant.api.ops_services import default_key_dir
 
