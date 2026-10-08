@@ -1,14 +1,21 @@
 import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { User } from '$lib/api';
+import type { ManagedUser } from '$lib/api';
 import { notice, session } from '$lib/app.svelte';
 import Users from './Users.svelte';
 
-const people: User[] = [
-	{ id: 1, username: 'admin', display_name: 'C', role: 'admin', disabled: false },
-	{ id: 2, username: 'partner', display_name: 'Partner', role: 'member', disabled: false },
-	{ id: 3, username: 'guest', display_name: 'Guest', role: 'guest', disabled: false }
+const people: ManagedUser[] = [
+	{ id: 1, username: 'admin', display_name: 'C', role: 'admin', disabled: false, locked: false },
+	{
+		id: 2,
+		username: 'partner',
+		display_name: 'Partner',
+		role: 'member',
+		disabled: false,
+		locked: false
+	},
+	{ id: 3, username: 'guest', display_name: 'Guest', role: 'guest', disabled: false, locked: false }
 ];
 
 type Call = { method: string; url: string; body: unknown };
@@ -119,23 +126,54 @@ describe('Users: one change at a time', () => {
 });
 
 describe('Users: Unlock', () => {
-	it('clears the sign-in lock of another account, never your own', async () => {
-		const calls = stubFetch((call) =>
-			call.method === 'POST' ? { status: 204 } : { json: people }
-		);
+	const withLocked = (...ids: number[]) =>
+		people.map((u) => ({ ...u, locked: ids.includes(u.id) }));
+
+	it('marks a locked account and offers Unlock for it alone; unlocking clears the mark', async () => {
+		let listed = withLocked(2);
+		const calls = stubFetch((call) => {
+			if (call.method !== 'POST') return { json: listed };
+			listed = withLocked();
+			return { status: 204 };
+		});
 		render(Users);
+		await expect.element(rowOf('partner').getByText('Locked', { exact: true })).toBeVisible();
 		await expect.element(rowOf('partner').getByRole('button', { name: 'Unlock' })).toBeVisible();
-		expect(rowOf('admin').getByRole('button', { name: 'Unlock' }).elements()).toHaveLength(0);
+		for (const other of ['admin', 'guest']) {
+			expect(rowOf(other).getByRole('button', { name: 'Unlock' }).elements()).toHaveLength(0);
+			expect(rowOf(other).getByText('Locked', { exact: true }).elements()).toHaveLength(0);
+		}
 		await rowOf('partner').getByRole('button', { name: 'Unlock' }).click();
 		await vi.waitFor(() => expect(notice.text).toBe('partner can try their PIN again.'));
-		expect(calls.at(-1)).toMatchObject({ method: 'POST', url: '/api/users/2/unlock' });
+		expect(calls.find((c) => c.method === 'POST')).toMatchObject({ url: '/api/users/2/unlock' });
+		await vi.waitFor(() =>
+			expect(rowOf('partner').getByText('Locked', { exact: true }).elements()).toHaveLength(0)
+		);
+		expect(rowOf('partner').getByRole('button', { name: 'Unlock' }).elements()).toHaveLength(0);
+	});
+
+	it('lets an admin who is still signed in unlock their own account', async () => {
+		stubFetch(() => ({ json: withLocked(1) }));
+		render(Users);
+		await expect.element(rowOf('admin').getByRole('button', { name: 'Unlock' })).toBeVisible();
+	});
+
+	it('clears the mark when a new PIN is set', async () => {
+		stubFetch((call) => (call.method === 'PATCH' ? { json: people[1] } : { json: withLocked(2) }));
+		render(Users);
+		await rowOf('partner').getByRole('button', { name: 'Reset PIN' }).click();
+		const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
+		await dialog.getByLabelText('PIN').fill('4321');
+		await dialog.getByRole('button', { name: 'Set PIN' }).click();
+		await vi.waitFor(() => expect(notice.text).toBe('New PIN set for partner.'));
+		expect(rowOf('partner').getByText('Locked', { exact: true }).elements()).toHaveLength(0);
 	});
 
 	it('says why when unlocking fails', async () => {
 		stubFetch((call) =>
 			call.method === 'POST'
 				? { status: 404, json: { detail: 'User not found.' } }
-				: { json: people }
+				: { json: withLocked(3) }
 		);
 		render(Users);
 		await rowOf('guest').getByRole('button', { name: 'Unlock' }).click();

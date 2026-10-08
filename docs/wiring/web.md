@@ -55,7 +55,8 @@ rclone remotes, backups with restic, the mock's scan timing) skip themselves the
 ## The mock API (`web/mock-api/`)
 
 Plain `node:http`, no dependencies, run directly by Node 22 type stripping. It implements every
-route in the contract in memory: sessions and cookie, 401/403/404 rules, login rate limit,
+route in the contract in memory: sessions and cookie, 401/403/404 rules, the wait and the
+lock after wrong PINs (`/__mock/reset` with `locked: <user name>` starts with a locked account),
 per-source access and album sharing, filters/facets/calendar/map, cursor paging, recipes
 (applied to the SVG thumbs), date fixes, albums, trash, stored-ZIP downloads, and scan jobs that
 move queued → running → done over ~3 s and write an import report with skipped/failed/duplicate

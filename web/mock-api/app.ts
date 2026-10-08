@@ -13,6 +13,7 @@ import type {
 	AssetOut,
 	DownloadRequest,
 	Level,
+	ManagedUser,
 	Recipe,
 	Role,
 	User
@@ -23,6 +24,7 @@ import { v11Routes } from './v11.ts';
 import {
 	makeAsset,
 	makeState,
+	noWrongPins,
 	PLACES,
 	rng,
 	type MockAlbum,
@@ -58,6 +60,15 @@ function publicUser(u: MockUser): User {
 		role: u.role,
 		disabled: u.disabled
 	};
+}
+
+// Wrong PINs, as the server counts them (backend: domain/access.py, app/accounts.py).
+const WRONG_PIN_WINDOW = 15 * 60_000;
+const MAX_RECENT_WRONG_PINS = 10;
+const LOCK_AFTER_WRONG_PINS = 30;
+
+function forgiveWrongPins(user: MockUser) {
+	Object.assign(user, noWrongPins());
 }
 
 function checkPin(pin: unknown) {
@@ -443,6 +454,40 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		};
 	}
 
+	/**
+	 * One counted try at an account's PIN: is it right? Counted per account, whatever browser
+	 * it comes from, and before the PIN is looked at. Refused while the account is locked (423)
+	 * or has ten tries in the last 15 minutes (429); the caller forgives after a right PIN.
+	 */
+	function tryPin(user: MockUser, pin: string): boolean {
+		if (user.locked)
+			throw new HttpError(
+				423,
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+			);
+		const recent = wrongPinsInWindow(user);
+		if (recent.length >= MAX_RECENT_WRONG_PINS) {
+			const minutes = Math.max(1, Math.ceil((recent[0] + WRONG_PIN_WINDOW - now()) / 60_000));
+			throw new HttpError(
+				429,
+				`Too many wrong PINs; wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account.`
+			);
+		}
+		user.recentWrongPins = [...recent, now()];
+		user.failedPins += 1;
+		user.locked = user.failedPins >= LOCK_AFTER_WRONG_PINS;
+		return user.pin === pin;
+	}
+
+	const wrongPinsInWindow = (user: MockUser) =>
+		user.recentWrongPins.filter((t) => now() - t < WRONG_PIN_WINDOW);
+
+	/** What only admins are told: the lock, or the 15-minute wait, that wrong PINs caused. */
+	const managedUser = (u: MockUser): ManagedUser => ({
+		...publicUser(u),
+		locked: u.locked || wrongPinsInWindow(u).length >= MAX_RECENT_WRONG_PINS
+	});
+
 	function sessionUser(req: IncomingMessage): MockUser | null {
 		const cookie = req.headers.cookie ?? '';
 		const token = /(?:^|;\s*)pa_session=([^;]+)/.exec(cookie)?.[1];
@@ -637,7 +682,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					display_name: body.display_name,
 					role: 'admin',
 					disabled: false,
-					pin: body.pin
+					pin: body.pin,
+					...noWrongPins()
 				};
 				state.users.push(user);
 				return { status: 201, json: publicUser(user), headers: startSession(user) };
@@ -661,16 +707,12 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					'username',
 					'pin'
 				]);
-				const key = `${body.username}|${ctx.req.socket.remoteAddress}`;
-				const recent = (state.failedLogins.get(key) ?? []).filter((t) => now() - t < 15 * 60_000);
-				if (recent.length >= 10)
-					throw new HttpError(429, 'Too many attempts. Wait 15 minutes and try again.');
-				const user = state.users.find((u) => u.username === body.username);
-				if (!user || user.pin !== body.pin || user.disabled) {
-					state.failedLogins.set(key, [...recent, now()]);
+				const name = body.username.toLowerCase(); // user names ignore case
+				const user = state.users.find((u) => u.username.toLowerCase() === name);
+				// a name nobody has is refused at once: nothing to count, nothing to lock
+				if (!user || !tryPin(user, body.pin) || user.disabled)
 					throw new HttpError(401, 'Wrong PIN.');
-				}
-				state.failedLogins.delete(key);
+				forgiveWrongPins(user);
 				return { status: 200, json: publicUser(user), headers: startSession(user) };
 			}
 		],
@@ -695,7 +737,9 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					'current_pin',
 					'new_pin'
 				]);
-				if (body.current_pin !== me(ctx).pin) throw new HttpError(400, 'The current PIN is wrong.');
+				if (!tryPin(me(ctx), body.current_pin))
+					throw new HttpError(400, 'The current PIN is wrong.');
+				forgiveWrongPins(me(ctx));
 				checkPin(body.new_pin);
 				me(ctx).pin = body.new_pin;
 				return noContent;
@@ -703,7 +747,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		],
 
 		// users
-		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(publicUser)))],
+		['GET', /^\/api\/users$/, (ctx) => (admin(ctx), ok(state.users.map(managedUser)))],
 		[
 			'GET',
 			/^\/api\/users\/directory$/,
@@ -767,9 +811,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				checkPin(body.pin);
 				if (state.users.some((u) => u.username === body.username))
 					throw new HttpError(409, 'That user name is taken.');
-				const user: MockUser = { ...body, id: state.nextId.user++, disabled: false };
+				const user: MockUser = {
+					...body,
+					id: state.nextId.user++,
+					disabled: false,
+					...noWrongPins()
+				};
 				state.users.push(user);
-				return ok(publicUser(user), 201);
+				return ok(managedUser(user), 201);
 			}
 		],
 		[
@@ -794,9 +843,10 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 						)
 					)
 				);
+				if (body.pin !== undefined) forgiveWrongPins(user); // a new PIN lifts the lock
 				if (user.disabled)
 					for (const [t, id] of state.sessions) if (id === user.id) state.sessions.delete(t);
-				return ok(publicUser(user));
+				return ok(managedUser(user));
 			}
 		],
 		[
@@ -806,10 +856,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				admin(ctx);
 				const user = state.users.find((u) => u.id === idParam(ctx));
 				if (!user) throw new HttpError(404, 'User not found.');
-				const name = user.username.toLowerCase();
-				for (const key of [...state.failedLogins.keys()])
-					if (key.slice(0, key.lastIndexOf('|')).toLowerCase() === name)
-						state.failedLogins.delete(key);
+				forgiveWrongPins(user);
 				return noContent;
 			}
 		],
@@ -1525,8 +1572,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				count?: number;
 				models?: boolean;
 				review?: boolean;
+				/** A user name to start locked, as after 30 wrong PINs. */
+				locked?: string;
 			};
 			state = makeState({ users: body.users ?? 'seed', count: body.count ?? initialCount });
+			for (const user of state.users)
+				if (user.username === body.locked)
+					Object.assign(user, { failedPins: LOCK_AFTER_WRONG_PINS, locked: true });
 			state.ml.installed = body.models ?? false;
 			if (body.review) holdSome();
 			return noContent;

@@ -17,6 +17,12 @@ export type User = {
 	disabled: boolean;
 };
 
+/**
+ * An account as an admin manages it. `locked`: wrong PINs stop it signing in, either for good
+ * (30 since the last good sign-in) or for the 15-minute wait after ten; Unlock lifts both.
+ */
+export type ManagedUser = User & { locked: boolean };
+
 export type SetupState = { needs_admin: boolean };
 export type SetupBody = { username: string; display_name: string; pin: string };
 export type LoginBody = { username: string; pin: string };

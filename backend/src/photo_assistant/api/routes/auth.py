@@ -53,7 +53,9 @@ def accounts(services: ServicesDep) -> list[AccountName]:
 def login(
     services: ServicesDep, body: Credentials, request: Request, response: Response
 ) -> UserOut:
-    user, token = services.accounts.login(body.username, body.pin, _address(request))  # 401 / 429
+    user, token = services.accounts.login(
+        body.username, body.pin, _address(request)
+    )  # 401 / 423 / 429
     _set_session(request, response, token)
     return UserOut.of(user)
 
@@ -78,7 +80,7 @@ def me(user: CurrentUser) -> UserOut:
 @router.post("/auth/pin", status_code=status.HTTP_204_NO_CONTENT)
 def change_pin(services: ServicesDep, user: CurrentUser, body: NewPin, request: Request) -> None:
     """Ends every other session of this user; this one stays signed in. Wrong current PINs
-    count as failed logins: 429 once there are too many."""
+    count as wrong PINs at login do: 429 once there are too many, 423 once it is locked."""
     token = request.cookies.get(SESSION_COOKIE, "")
     try:
         services.accounts.change_pin(user, body.current_pin, body.new_pin, token, _address(request))

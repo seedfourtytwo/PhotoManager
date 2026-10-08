@@ -1,12 +1,14 @@
 """Headless bootstrap: create the first admin from the command line."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from photo_assistant import __main__ as cli
 from photo_assistant.api.settings import get_settings
-from photo_assistant.domain.access import Role
+from photo_assistant.app.accounts import AccountLockedError
+from photo_assistant.domain.access import LOCK_AFTER_FAILED_PINS, Role
 
 PIN = "1234"
 
@@ -66,6 +68,33 @@ def test_set_pin_gives_an_account_a_new_pin_without_a_session(
     assert "4 digits" in capsys.readouterr().err
     assert cli.main(["set-pin", "nobody"]) == 2
     assert "no such user" in capsys.readouterr().err
+
+
+def test_set_pin_unlocks_an_account_locked_by_wrong_pins(
+    data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The way back in for an only admin who is locked out: nobody else can unlock them."""
+    answers = iter([PIN, PIN, "5678", "5678"])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    assert cli.main(["create-user", "c", "--role", "admin"]) == 0
+    services = cli.build_services(get_settings())
+    try:
+        clock = services.clock.now()
+        for n in range(LOCK_AFTER_FAILED_PINS):  # spread out: never ten in one 15-minute window
+            at = clock - timedelta(hours=LOCK_AFTER_FAILED_PINS - n)
+            assert services.repo.record_login_attempt("c", "10.0.0.1", at, at).allowed
+        with pytest.raises(AccountLockedError):
+            services.accounts.login("c", PIN, "127.0.0.1")
+    finally:
+        services.close()
+    assert cli.main(["set-pin", "c"]) == 0
+    assert "unlocked" in capsys.readouterr().out
+    services = cli.build_services(get_settings())
+    try:
+        user, _ = services.accounts.login("c", "5678", "127.0.0.1")
+        assert not user.locked
+    finally:
+        services.close()
 
 
 # --- ops commands are subcommands of the main CLI (docs/wiring/ops.md) -----------------------

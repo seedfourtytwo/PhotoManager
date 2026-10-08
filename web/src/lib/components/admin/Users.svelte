@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { isPin, PIN_LENGTH, type Role, type User } from '$lib/api';
+	import { isPin, PIN_LENGTH, type ManagedUser, type Role } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import { PIN_FIELD } from '$lib/pin';
 	import Dialog from '../Dialog.svelte';
 
-	let users = $state<User[]>([]);
+	let users = $state<ManagedUser[]>([]);
 	let creating = $state(false);
-	let resetting = $state<User | null>(null);
+	let resetting = $state<ManagedUser | null>(null);
 	let form = $state({ username: '', display_name: '', pin: '', role: 'member' as Role });
 	let newPin = $state('');
 
@@ -23,7 +23,7 @@
 
 	/** One change per person at a time; a refused one shows the server's reason and is undone. */
 	async function patch(
-		user: User,
+		user: ManagedUser,
 		body: Parameters<typeof api.updateUser>[1],
 		control?: HTMLSelectElement
 	) {
@@ -69,13 +69,14 @@
 		if (resetting?.id === who.id) closeReset();
 	}
 
-	/** Too many wrong PINs lock an account for a while; this lets them try again now. */
-	async function unlock(user: User) {
+	/** Thirty wrong PINs lock an account until someone lifts it here (or sets a new PIN). */
+	async function unlock(user: ManagedUser) {
 		if (pending !== null) return;
 		pending = user.id;
 		try {
 			await api.unlockUser(user.id);
 			notice.show(`${user.username} can try their PIN again.`);
+			await load();
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -115,6 +116,7 @@
 						<span class="state" class:quiet={!user.disabled}
 							>{user.disabled ? 'Disabled' : 'Active'}</span
 						>
+						{#if user.locked}<span class="state">Locked</span>{/if}
 						{#if user.id !== session.user?.id}
 							<button
 								type="button"
@@ -129,7 +131,7 @@
 						<button type="button" disabled={pending !== null} onclick={() => (resetting = user)}
 							>Reset PIN</button
 						>
-						{#if user.id !== session.user?.id}
+						{#if user.locked}
 							<button type="button" disabled={pending !== null} onclick={() => unlock(user)}
 								>Unlock</button
 							>

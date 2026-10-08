@@ -5,7 +5,7 @@ python -m photo_assistant import FOLDER      add FOLDER as a source (if new) and
 python -m photo_assistant sources            list sources
 python -m photo_assistant create-user NAME [--role admin|member|guest]
                                              create an account (prompts for the PIN)
-python -m photo_assistant set-pin NAME       give an account a new PIN (a forgotten one)
+python -m photo_assistant set-pin NAME       give an account a new PIN (forgotten, or locked)
 python -m photo_assistant doctor             check this machine is ready
 python -m photo_assistant export-library DEST / verify-library [ROOT]
 python -m photo_assistant backup list|add|run|check|restore-test …
@@ -184,7 +184,10 @@ def _set_pin(username: str) -> int:
         return 2
     finally:
         services.close()
-    print(f"New PIN set for '{user.username}'. Their other logins and phone tokens are ended.")
+    print(
+        f"New PIN set for '{user.username}'. Their other logins and phone tokens are ended, "
+        "and the account is unlocked."
+    )
     return 0
 
 
@@ -213,7 +216,9 @@ def main(argv: list[str] | None = None) -> int:
     user.add_argument("username")
     user.add_argument("--role", type=Role, choices=list(Role), default=Role.MEMBER)
     user.add_argument("--display-name")
-    pin = sub.add_parser("set-pin", help="give an account a new PIN (asks for it)")
+    pin = sub.add_parser(
+        "set-pin", help="give an account a new PIN (asks for it); this also unlocks it"
+    )
     pin.add_argument("username")
     sub.add_parser("ml-backfill", help="queue ML analysis of every photo not analysed yet")
     cli_ops.register(sub)

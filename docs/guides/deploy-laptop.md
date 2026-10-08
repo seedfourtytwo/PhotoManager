@@ -73,6 +73,28 @@ from `backend/`.
 Signing in: pick your name, type your 4-digit PIN. Forgot it? An admin sets a new one in
 **Admin → People → Reset PIN**; if the admin forgot theirs, run `just set-pin NAME` on the laptop.
 
+### Wrong PINs: waiting, and a locked account
+
+Wrong PINs are counted per account, whichever phone or computer they come from.
+
+- **Ten wrong PINs within 15 minutes:** the sign-in screen says *"Too many wrong PINs; wait N
+  minutes and try again, or ask an admin to unlock this account."* Until then even the right
+  PIN is refused. Waiting is enough.
+- **Thirty wrong PINs since you last signed in:** the account is **locked**. The sign-in screen
+  says *"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a
+  new PIN on the server with 'just set-pin'."* Waiting does not help, restarting Photo
+  Assistant does not help, and the right PIN is refused. A phone or browser that is still
+  signed in keeps working.
+
+Two ways to unlock:
+
+1. **An admin, in the app:** **Admin → People**. The account shows **Locked**; click **Unlock**
+   (the PIN stays as it was), or **Reset PIN** to give it a new one, which unlocks it too.
+2. **On the laptop:** `just set-pin NAME`. It asks for a new PIN and unlocks the account. This
+   is the way back in when the only admin is the one locked out.
+
+Signing in with the right PIN starts both counts again.
+
 ## 4c. Optional: AI search and faces
 
 ```bash
