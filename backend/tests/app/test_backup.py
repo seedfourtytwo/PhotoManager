@@ -893,3 +893,40 @@ def test_protection_counts_the_disk_and_its_copy(world: World) -> None:
     world.service.confirm_key_saved(target_id)
     world.service.run_now(target_id)
     assert world.service.protection().protected
+
+
+def test_a_new_place_that_was_away_on_its_first_run_is_backed_up_when_it_arrives(
+    world: World,
+) -> None:
+    world.engine.fail["ensure"] = RepositoryNotFoundError("/media/disk/photos does not exist")
+    target_id = world.target()
+    assert world.service.run_now(target_id).status is BackupRunStatus.SKIPPED
+    world.clock.current = at(1, 2, 31)
+    for minutes in (0, 5, 20, 40):
+        world.clock.current = at(1, 2, 31) + timedelta(minutes=minutes)
+        assert world.service.run_due() == []
+    assert len(world.service.runs(target_id)) == 1, "still away: no further rows"
+    del world.engine.fail["ensure"]
+    world.clock.current = at(1, 4, 0)
+    (run,) = world.service.run_due()
+    assert run.status is BackupRunStatus.SUCCEEDED
+    backups = [r.status for r in world.service.runs(target_id) if r.kind is RunKind.BACKUP]
+    assert backups == [BackupRunStatus.SUCCEEDED, BackupRunStatus.SKIPPED]
+
+
+def test_the_round_is_logged_only_for_places_looked_at(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    target_id = world.target()
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.clock.current = at(1, 2, 31)
+    world.service.run_due()
+    caplog.clear()
+    with caplog.at_level("INFO", logger="photo_assistant.app.backup"):
+        world.clock.current = at(1, 2, 36)
+        world.service.run_due()  # probed: still away
+        world.clock.current = at(1, 2, 41)
+        world.service.run_due()  # inside the 15 minutes: not looked at, nothing logged
+    rounds = [r for r in caplog.records if r.getMessage() == "backup round"]
+    assert [r.results for r in rounds] == [[{"target": "External disk", "result": "waiting"}]]  # type: ignore[attr-defined]

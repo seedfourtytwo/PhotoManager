@@ -427,19 +427,30 @@ class BackupService:
             target.parsed_schedule, self._last_attempt(target), now, window, catching_up=catching_up
         ):
             return None
-        if waiting and not self._still_here(target, clock_now):
-            return "waiting"
+        if waiting:
+            back = self._back(target, clock_now)
+            if back is None:
+                return None  # looked for it a moment ago: nothing to do, nothing to log
+            if not back:
+                return "waiting"
         return self.run_now(target.id)
 
-    def _still_here(self, target: BackupTarget, clock_now: datetime) -> bool:
-        """After a skip: has the place come back? A fault that waiting will not fix counts as
-        here, so the run that follows records it."""
+    def _back(self, target: BackupTarget, clock_now: datetime) -> bool | None:
+        """After a skip: has the place come back? None: not looked at, it was a moment ago.
+        A fault that waiting will not fix counts as back, so the run that follows records it."""
         key = ("backup", target.id)
         if not probe_allowed(self._probed.get(key), clock_now):
-            return False
+            return None
         self._probed[key] = clock_now
+        repo = self._repo(target)
         try:
-            return self._engine.probe(self._repo(target)) is None
+            if self._established(target):
+                return self._engine.probe(repo) is None
+            # a first backup that never happened has no repository to probe yet
+            self._engine.ensure_repository(repo)
+            return True
+        except RepositoryNotFoundError:
+            return False
         except (BackupError, OSError):
             return True
 
@@ -524,7 +535,7 @@ class BackupService:
     def _backup(self, target: BackupTarget) -> RunOutcome:
         repo = self._repo(target)
         root = self._config.data_root
-        if self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True) is not None:
+        if self._established(target):
             # a repository that was there before is never created again: a disk that is not
             # connected must not get a fresh, empty one in its place
             reason = self._engine.probe(repo)
@@ -546,6 +557,11 @@ class BackupService:
             files_changed=summary.files_changed,
             repo_bytes=self._engine.repository_size(repo),
         )
+
+    def _established(self, target: BackupTarget) -> bool:
+        """Has this target ever been backed up? Only then is its repository expected to exist,
+        and only a target that never was may have one created."""
+        return self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True) is not None
 
     def _skipped(self, target: BackupTarget, reason: str) -> RunOutcome:
         if target.kind is TargetKind.LOCAL:

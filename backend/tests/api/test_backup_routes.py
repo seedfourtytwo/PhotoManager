@@ -112,6 +112,17 @@ def test_failures_show_up_in_status(env: Env) -> None:
     assert patched.json()["enabled"] is False and not patched.json()["needs_attention"]
 
 
+def test_a_first_backup_that_fails_for_real_raises_the_banner(env: Env) -> None:
+    env.password.write_text("pw\n")
+    target = _add(env)
+    env.password.unlink()
+    env.client.post(f"/api/backups/{target['id']}/run")
+    env.work()
+    (listed,) = env.client.get("/api/backups").json()
+    assert listed["needs_attention"] and listed["last_run"]["status"] == "failed"
+    assert listed["last_run"]["error"]
+
+
 def test_a_disk_that_is_not_there_shows_as_skipped_not_as_trouble(env: Env) -> None:
     target = _add(env, repository="/media/nobody/NoDisk/photos")
     env.client.post(f"/api/backups/{target['id']}/run")
