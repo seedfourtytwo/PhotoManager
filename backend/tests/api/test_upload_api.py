@@ -6,7 +6,6 @@ admin). Device tokens go through the same single auth dependency (api/deps.py).
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -20,16 +19,12 @@ from photo_assistant.api.main import create_app
 from photo_assistant.api.settings import IntegrationSettings
 from tests.api.conftest import BASE, PIN, make_settings, refusal, services_of
 from tests.factories import NOW, new_asset
+from tests.fakes import FakeClock
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "photos"
 JPEG = (FIXTURES / "IMG_1002.JPG").read_bytes()
 PNG = (FIXTURES / "grey-1x1.png").read_bytes()
 MONTH = "2026-09"
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @dataclass
@@ -56,7 +51,7 @@ def world(tmp_path: Path) -> Iterator[World]:
             assert other.post("/api/auth/login", json={"username": f"u{n}", "pin": PIN})
             sessions[n] = other.cookies[SESSION_COOKIE]
         services = services_of(admin)
-        services.integrations.upload._clock = FixedClock()  # type: ignore[attr-defined]
+        services.integrations.upload._clock = FakeClock()
         yield World(
             TestClient(app, base_url=BASE),
             services.repo,
@@ -102,7 +97,7 @@ def test_upload_stores_photos_in_the_inbox_and_queues_an_import(world: World) ->
     assert _inbox_files(world, 1) == {f"{MONTH}/IMG_1002.JPG", f"{MONTH}/beach day 🌊.png"}
     (job,) = world.repo.list_jobs()
     assert job["id"] == body["import_job_id"]
-    inbox = world.repo.get_source(job["payload"]["source_id"])  # type: ignore[index, call-overload]
+    inbox = world.repo.get_source(job["payload"]["source_id"])  # type: ignore[index]
     assert inbox is not None
     assert (inbox.kind, inbox.root) == ("inbox", str(world.data / "inbox" / "1"))
     assert list((world.data / "tmp").iterdir()) == []
@@ -345,8 +340,8 @@ def test_check_and_device_refusals_say_why(world: World) -> None:
         422,
         {"detail": "not a content hash (64 lowercase hex characters): 'zz'"},
     )
-    world.integrations.upload._settings = replace(  # type: ignore[attr-defined]
-        world.integrations.upload._settings,  # type: ignore[attr-defined]
+    world.integrations.upload._settings = replace(
+        world.integrations.upload._settings,
         max_check_hashes=1,
     )
     many = world.client.post("/api/upload/check", json={"hashes": ["a", "b"]}, headers=_as(1))

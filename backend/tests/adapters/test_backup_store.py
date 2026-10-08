@@ -1,6 +1,5 @@
 """BackupStore contract (fake and SQLite) and the database snapshotter."""
 
-import sqlite3
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -8,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter, open_read_only
 from photo_assistant.domain.backup import (
     BackupRunStatus,
@@ -27,12 +26,12 @@ OLD, NEW = T0 - timedelta(days=2), T0 + timedelta(days=2)
 
 
 def _sqlite() -> BackupStore:
-    conn = open_database(":memory:")
-    repo = SqliteRepository(conn)
+    db = Database.open(":memory:")
+    repo = SqliteRepository(db)
     repo.add_asset(new_asset(1), OLD)
     repo.add_asset(new_asset(2), OLD)
     repo.add_asset(new_asset(3), NEW)
-    return SqliteBackupStore(conn)
+    return SqliteBackupStore(db)
 
 
 def _fake() -> BackupStore:
@@ -168,19 +167,19 @@ def test_sample_only_has_assets_older_than_the_snapshot(store: BackupStore) -> N
 
 
 @pytest.fixture
-def live_db(tmp_path: Path) -> Iterator[tuple[Path, sqlite3.Connection]]:
+def live_db(tmp_path: Path) -> Iterator[tuple[Path, Database]]:
     path = tmp_path / "data" / "library.db"
     path.parent.mkdir()
-    conn = open_database(path)
-    yield path, conn
-    conn.close()
+    db = Database.open(path)
+    yield path, db
+    db.close()
 
 
 def test_snapshot_of_a_live_database_is_consistent_and_self_contained(
-    live_db: tuple[Path, sqlite3.Connection], tmp_path: Path
+    live_db: tuple[Path, Database], tmp_path: Path
 ) -> None:
-    path, conn = live_db
-    repo = SqliteRepository(conn)
+    path, db = live_db
+    repo = SqliteRepository(db)
     for n in range(50):
         repo.add_asset(new_asset(n), T0)
     assert Path(f"{path}-wal").exists(), "writes are still in the WAL"

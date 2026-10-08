@@ -49,7 +49,7 @@ def download(state: dict[str, object], wanted: list[dict[str, object]], dest: Pa
     done = failed = size = 0
     failures = []
     for item in wanted:
-        if item["uid"] in state.get("fail", []):
+        if item["uid"] in state.get("fail", []):  # type: ignore[operator]
             failed += 1
             failures.append({"path": item["name"], "error": "download failed"})
             continue

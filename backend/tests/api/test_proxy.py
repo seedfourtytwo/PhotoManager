@@ -52,8 +52,16 @@ def test_https_from_the_browser_is_believed_only_from_a_trusted_proxy(
     tmp_path: Path, trusted: str, works: bool
 ) -> None:
     settings = make_settings(tmp_path / "data", allowed_hosts=[NAME], trusted_proxies=trusted)
-    served = ProxyHeadersMiddleware(create_app(settings), trusted_hosts=settings.trusted_proxies)
-    with TestClient(served, base_url=f"http://{NAME}", client=(DOCKER_GATEWAY, 40000)) as c:
+    # uvicorn and Starlette each spell the ASGI callable their own way; they do fit
+    served = ProxyHeadersMiddleware(
+        create_app(settings),  # type: ignore[arg-type]
+        trusted_hosts=settings.trusted_proxies,
+    )
+    with TestClient(
+        served,  # type: ignore[arg-type]
+        base_url=f"http://{NAME}",
+        client=(DOCKER_GATEWAY, 40000),
+    ) as c:
         created = c.post("/api/setup", json=SETUP, headers=FROM_BROWSER)
         if not works:
             assert created.status_code == 403, "an https Origin on what looks like plain http"

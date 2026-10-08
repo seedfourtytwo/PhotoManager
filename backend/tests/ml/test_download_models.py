@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import BinaryIO
 
@@ -30,7 +31,7 @@ def tree_entry(path: str, data: bytes, lfs: bool = True) -> dict[str, object]:
     return entry
 
 
-def hf_net(name: str, files: dict[str, bytes], extra: list[dict[str, object]] = ()) -> FakeNet:
+def hf_net(name: str, files: dict[str, bytes], extra: Sequence[dict[str, object]] = ()) -> FakeNet:
     tree = [tree_entry(p, d, lfs=p.endswith(".onnx")) for p, d in files.items()]
     tree += [{"type": "directory", "path": "visual"}, *extra]
     urls = {f"{dm.HF}/immich-app/{name}/resolve/main/{p}": d for p, d in files.items()}

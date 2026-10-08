@@ -4,19 +4,9 @@ import sqlite3
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.domain.access import AlbumRole, Level, Role, SourceAccess, Viewer
 from tests.factories import NOW, new_asset
-
-
-@pytest.fixture
-def conn() -> sqlite3.Connection:
-    return open_database(":memory:")
-
-
-@pytest.fixture
-def repo(conn: sqlite3.Connection) -> SqliteRepository:
-    return SqliteRepository(conn)
 
 
 class Library:

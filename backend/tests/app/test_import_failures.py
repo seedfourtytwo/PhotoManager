@@ -1,19 +1,13 @@
 """Failure paths of ImportSource, driven with small fakes (no external tools)."""
 
-from datetime import datetime
 from pathlib import Path
 
 from photo_assistant.adapters.filesystem import Blake3Hasher, DiskLibraryStore, FolderSourceReader
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.import_source import ImportSettings, ImportSource
 from photo_assistant.domain.capture_time import MetadataDates
 from photo_assistant.domain.model import Outcome, PhotoMetadata
-from tests.factories import NOW
-
-
-class Clock:
-    def now(self) -> datetime:
-        return NOW
+from tests.fakes import FakeClock
 
 
 class GoodMetadata:
@@ -51,7 +45,7 @@ class BrokenDiskStore(DiskLibraryStore):
 def build(tmp_path: Path, **overrides: object) -> tuple[SqliteRepository, ImportSource, Path]:
     folder = tmp_path / "src"
     folder.mkdir()
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     parts: dict[str, object] = {
         "repo": repo,
         "reader": FolderSourceReader(),
@@ -59,7 +53,7 @@ def build(tmp_path: Path, **overrides: object) -> tuple[SqliteRepository, Import
         "metadata": GoodMetadata(),
         "renderer": FakeRenderer(),
         "store": DiskLibraryStore(tmp_path / "data"),
-        "clock": Clock(),
+        "clock": FakeClock(),
         "settings": ImportSettings(min_free_bytes=0),
     }
     parts.update(overrides)

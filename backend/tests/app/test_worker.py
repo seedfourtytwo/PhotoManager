@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.filesystem import Blake3Hasher, DiskLibraryStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.worker import Lanes, StaleJobSweep, Worker, new_owner_id
@@ -16,34 +16,14 @@ from photo_assistant.domain.job_queue import (
     STALE_SWEEP_INTERVAL,
 )
 from tests.factories import NOW, new_asset
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
-
-
-class MovableClock:
-    def __init__(self) -> None:
-        self.current = NOW
-
-    def now(self) -> datetime:
-        return self.current
-
-    def advance(self, by: timedelta) -> None:
-        self.current += by
-
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+from tests.fakes import FakeClock
 
 
 def test_worker_runs_jobs_until_idle(repo: SqliteRepository) -> None:
     done: list[object] = []
     repo.enqueue("echo", {"n": 1})
     repo.enqueue("echo", {"n": 2})
-    worker = Worker(repo, {"echo": lambda payload: done.append(payload["n"])}, FixedClock())
+    worker = Worker(repo, {"echo": lambda payload: done.append(payload["n"])}, FakeClock())
     assert worker.run_until_idle() == 2
     assert done == [1, 2]
     assert len(repo.list_jobs("done")) == 2
@@ -54,7 +34,7 @@ def test_failing_job_is_retried_then_marked_failed_with_reason(repo: SqliteRepos
         raise ValueError("decoder exploded")
 
     repo.enqueue("boom", {})
-    clock = MovableClock()
+    clock = FakeClock()
     worker = Worker(repo, {"boom": boom}, clock, max_attempts=3)
     for _ in range(3):
         worker.run_until_idle()
@@ -66,7 +46,7 @@ def test_failing_job_is_retried_then_marked_failed_with_reason(repo: SqliteRepos
 
 def test_unknown_job_kind_fails_immediately(repo: SqliteRepository) -> None:
     repo.enqueue("mystery", {})
-    Worker(repo, {}, FixedClock()).run_until_idle()
+    Worker(repo, {}, FakeClock()).run_until_idle()
     (failed,) = repo.list_jobs("failed")
     assert failed["attempts"] == 1 and "no handler" in str(failed["error"])
 
@@ -74,7 +54,7 @@ def test_unknown_job_kind_fails_immediately(repo: SqliteRepository) -> None:
 def test_background_thread_starts_and_stops_cleanly(repo: SqliteRepository) -> None:
     ran = threading.Event()
     repo.enqueue("ping", {})
-    worker = Worker(repo, {"ping": lambda _: ran.set()}, FixedClock(), poll_seconds=0.01)
+    worker = Worker(repo, {"ping": lambda _: ran.set()}, FakeClock(), poll_seconds=0.01)
     worker.start()
     assert ran.wait(timeout=5)
     worker.stop()
@@ -134,7 +114,7 @@ def test_a_preview_job_for_a_photo_purged_meanwhile_finishes_quietly(
 ) -> None:
     job = GeneratePreview(repo, DiskLibraryStore(tmp_path), VipsRenderer())
     repo.enqueue("preview", {"asset_id": 42})
-    Worker(repo, {"preview": job}, FixedClock()).run_until_idle()
+    Worker(repo, {"preview": job}, FakeClock()).run_until_idle()
     assert repo.list_jobs("failed") == [] and len(repo.list_jobs("done")) == 1
 
 
@@ -149,7 +129,7 @@ def test_busy_library_requeues_without_using_up_attempts(repo: SqliteRepository)
             raise ImportBusyError("an import into this library is already running")
 
     repo.enqueue("scan", {})
-    worker = Worker(repo, {"scan": busy}, FixedClock(), max_attempts=3)
+    worker = Worker(repo, {"scan": busy}, FakeClock(), max_attempts=3)
     for _ in range(5):
         worker.run_once()
     assert repo.list_jobs("done"), "succeeded on the 5th try although max_attempts is 3"
@@ -162,7 +142,7 @@ def test_a_job_that_keeps_killing_the_process_is_given_up_on(repo: SqliteReposit
     for _ in range(3):  # three starts: claimed, the process dies, its stale claim is requeued
         assert repo.claim_next_job(NOW) is not None
         assert repo.requeue_stale_jobs(stale_before=NOW + CLAIM_STALE_AFTER) == 1
-    worker = Worker(repo, {"crashy": ran.append}, FixedClock(), max_attempts=3)
+    worker = Worker(repo, {"crashy": ran.append}, FakeClock(), max_attempts=3)
     assert worker.run_once() is True
     assert ran == [], "not run a fourth time"
     (failed,) = repo.list_jobs("failed")
@@ -176,7 +156,7 @@ def test_a_job_interrupted_fewer_times_than_allowed_still_runs(repo: SqliteRepos
     for _ in range(2):
         repo.claim_next_job(NOW)
         repo.requeue_stale_jobs(stale_before=NOW + CLAIM_STALE_AFTER)
-    Worker(repo, {"flaky": ran.append}, FixedClock(), max_attempts=3).run_until_idle()
+    Worker(repo, {"flaky": ran.append}, FakeClock(), max_attempts=3).run_until_idle()
     assert ran == [{}] and len(repo.list_jobs("done")) == 1
 
 
@@ -188,7 +168,7 @@ def test_a_failed_job_retried_by_hand_runs_again(repo: SqliteRepository) -> None
         raise ValueError("decoder exploded")
 
     job_id = repo.enqueue("boom", {})
-    clock = MovableClock()
+    clock = FakeClock()
     worker = Worker(repo, {"boom": boom}, clock, max_attempts=3)
     for _ in range(3):
         worker.run_until_idle()
@@ -209,7 +189,7 @@ def test_enqueue_once_skips_a_waiting_duplicate(repo: SqliteRepository) -> None:
 
 def test_a_long_job_does_not_starve_quick_ones(tmp_path: Path) -> None:
     """A backup (minutes to hours) must not hold up previews and uploads behind it."""
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     backup_started, finish_backup = threading.Event(), threading.Event()
     previews: list[object] = []
 
@@ -222,7 +202,7 @@ def test_a_long_job_does_not_starve_quick_ones(tmp_path: Path) -> None:
     lanes = Lanes(
         repo,
         {"backup_run": long_backup, "preview": lambda p: previews.append(p["asset_id"])},
-        FixedClock(),
+        FakeClock(),
         long_kinds={"backup_run"},
         poll_seconds=0.01,
     )
@@ -249,7 +229,7 @@ def test_run_until_idle_drains_every_lane(repo: SqliteRepository) -> None:
     lanes = Lanes(
         repo,
         {"backup_run": lambda p: done.append("backup"), "preview": lambda p: done.append("p")},
-        FixedClock(),
+        FakeClock(),
         long_kinds={"backup_run"},
     )
     assert lanes.run_until_idle() == 2
@@ -262,8 +242,8 @@ def test_run_until_idle_can_be_limited_to_some_job_kinds(repo: SqliteRepository)
         repo.enqueue(kind, {})
     lanes = Lanes(
         repo,
-        {k: (lambda p, k=k: done.append(k)) for k in ("backup_run", "preview", "geocode")},
-        FixedClock(),
+        {k: (lambda p, k=k: done.append(k)) for k in ("backup_run", "preview", "geocode")},  # type: ignore[misc]
+        FakeClock(),
         long_kinds={"backup_run"},
         pooled={"preview": 2},
     )
@@ -274,7 +254,7 @@ def test_run_until_idle_can_be_limited_to_some_job_kinds(repo: SqliteRepository)
 
 def test_previews_run_on_a_pool_of_threads(tmp_path: Path) -> None:
     """C28: previews in parallel (max(1, cores - 2) threads); two meet at a barrier."""
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     together = threading.Barrier(2, timeout=5)
     met: list[int] = []
 
@@ -287,7 +267,7 @@ def test_previews_run_on_a_pool_of_threads(tmp_path: Path) -> None:
     lanes = Lanes(
         repo,
         {"preview": preview},
-        FixedClock(),
+        FakeClock(),
         long_kinds=set(),
         pooled={"preview": 2},
         poll_seconds=0.01,
@@ -316,7 +296,7 @@ def test_a_failed_job_waits_a_minute_then_five_before_its_next_attempts(
 ) -> None:
     """A network blip or an unplugged disk gets time to pass before the attempts are used up."""
     calls: list[datetime] = []
-    clock = MovableClock()
+    clock = FakeClock()
 
     def offline(payload: dict[str, object]) -> None:
         calls.append(clock.now())
@@ -342,7 +322,7 @@ def test_a_failed_job_waits_a_minute_then_five_before_its_next_attempts(
 def test_with_more_attempts_allowed_the_third_retry_waits_25_minutes(
     repo: SqliteRepository,
 ) -> None:
-    clock = MovableClock()
+    clock = FakeClock()
 
     def offline(payload: dict[str, object]) -> None:
         raise ConnectionError("offline")
@@ -367,14 +347,14 @@ def test_an_error_retrying_cannot_fix_fails_at_once_without_waiting(
         raise DomainError("that folder no longer exists")
 
     repo.enqueue("scan", {})
-    assert Worker(repo, {"scan": gone}, MovableClock()).run_until_idle() == 1
+    assert Worker(repo, {"scan": gone}, FakeClock()).run_until_idle() == 1
     (failed,) = repo.list_jobs("failed")
     assert failed["attempts"] == 1 and failed["run_after"] is None
 
 
 def test_a_job_retried_by_hand_runs_at_once(repo: SqliteRepository) -> None:
     calls: list[int] = []
-    clock = MovableClock()
+    clock = FakeClock()
 
     def offline(payload: dict[str, object]) -> None:
         calls.append(1)
@@ -398,9 +378,7 @@ def test_run_until_idle_returns_when_only_waiting_retries_are_left(
 
     repo.enqueue("pull", {})
     repo.enqueue("preview", {"asset_id": 1})
-    lanes = Lanes(
-        repo, {"pull": offline, "preview": done.append}, MovableClock(), long_kinds={"pull"}
-    )
+    lanes = Lanes(repo, {"pull": offline, "preview": done.append}, FakeClock(), long_kinds={"pull"})
     assert lanes.run_until_idle() == 2, "each ran once; the retry is left for later"
     assert done == [{"asset_id": 1}]
     assert [(j["kind"], j["attempts"]) for j in repo.list_jobs("queued")] == [("pull", 1)]
@@ -425,7 +403,7 @@ def test_owner_ids_name_the_process_and_differ_every_time() -> None:
 def test_a_worker_claims_jobs_under_its_owner_id(repo: SqliteRepository) -> None:
     seen: list[list[tuple[object, ...]]] = []
     repo.enqueue("echo", {})
-    worker = Worker(repo, {"echo": lambda _: seen.append(_claims(repo))}, FixedClock(), owner="a")
+    worker = Worker(repo, {"echo": lambda _: seen.append(_claims(repo))}, FakeClock(), owner="a")
     worker.run_until_idle()
     assert seen == [[("running", "a", NOW.isoformat())]]
 
@@ -441,7 +419,7 @@ def test_every_lane_of_a_process_shares_its_owner_id(repo: SqliteRepository) -> 
     lanes = Lanes(
         repo,
         {"backup_run": note, "preview": note, "geocode": note},
-        FixedClock(),
+        FakeClock(),
         long_kinds={"backup_run"},
         pooled={"preview": 2},
         owner="server-1",
@@ -454,8 +432,8 @@ def test_a_long_job_stays_fresh_while_its_process_is_alive(tmp_path: Path) -> No
     """A backup of several hours: the heartbeat renews the claim, so another process that
     looks for stale jobs meanwhile leaves it alone."""
     db = tmp_path / "library.db"
-    repo, other = SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
-    clock = MovableClock()
+    repo, other = SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
+    clock = FakeClock()
     sweep = StaleJobSweep(other, clock)
     requeued: list[int] = []
 
@@ -480,14 +458,14 @@ def test_a_long_job_stays_fresh_while_its_process_is_alive(tmp_path: Path) -> No
 def test_the_heartbeat_stops_with_the_job(repo: SqliteRepository) -> None:
     before = threading.active_count()
     repo.enqueue("echo", {})
-    Worker(repo, {"echo": lambda _: None}, FixedClock(), heartbeat_seconds=0.005).run_until_idle()
+    Worker(repo, {"echo": lambda _: None}, FakeClock(), heartbeat_seconds=0.005).run_until_idle()
     assert threading.active_count() == before
 
 
 def test_a_killed_process_s_job_is_taken_over_once_its_claim_is_stale(tmp_path: Path) -> None:
     db = tmp_path / "library.db"
-    cli, server = SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
-    clock = MovableClock()
+    cli, server = SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
+    clock = FakeClock()
     ran: list[object] = []
     cli.enqueue("preview", {"asset_id": 1})
     assert cli.claim_next_job(clock.now(), owner="cli-1") is not None  # … and it is killed
@@ -509,8 +487,8 @@ def test_a_killed_process_s_job_is_taken_over_once_its_claim_is_stale(tmp_path: 
 def test_a_job_that_kills_every_process_running_it_fails_for_good(tmp_path: Path) -> None:
     """The crash-loop guard with leases: each run that died counts as an attempt."""
     db = tmp_path / "library.db"
-    repo, server = SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
-    clock = MovableClock()
+    repo, server = SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
+    clock = FakeClock()
     ran: list[object] = []
     repo.enqueue("crashy", {})
     sweep = StaleJobSweep(server, clock)
@@ -530,7 +508,7 @@ def test_after_the_machine_slept_live_processes_get_time_to_renew_their_claims(
 ) -> None:
     """A laptop that slept for hours: every claim looks old, also a running backup's of this
     very process. The first look after waking changes nothing; heartbeats come first."""
-    clock = MovableClock()
+    clock = FakeClock()
     sweep = StaleJobSweep(repo, clock)
     job_id = repo.enqueue("backup_run", {})
     repo.claim_next_job(clock.now(), owner="server-1")
@@ -547,7 +525,7 @@ def test_after_the_machine_slept_live_processes_get_time_to_renew_their_claims(
 def test_after_a_sleep_a_job_whose_process_is_really_gone_is_still_requeued(
     repo: SqliteRepository,
 ) -> None:
-    clock = MovableClock()
+    clock = FakeClock()
     sweep = StaleJobSweep(repo, clock)
     repo.enqueue("preview", {})
     repo.claim_next_job(clock.now(), owner="cli-dead")

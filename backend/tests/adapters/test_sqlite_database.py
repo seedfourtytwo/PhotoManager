@@ -3,6 +3,7 @@ ONE lock; reads use a read-only connection per thread (WAL), so they never wait 
 
 import sqlite3
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -20,9 +21,9 @@ from photo_assistant.ports.ai import AICall
 
 
 @pytest.fixture
-def db(tmp_path: Path) -> Database:
+def db(tmp_path: Path) -> Iterator[Database]:
     database = Database.open(tmp_path / "library.db")
-    yield database  # type: ignore[misc]
+    yield database
     database.close()
 
 
@@ -74,7 +75,7 @@ def test_reads_do_not_wait_for_a_write_in_progress(db: Database) -> None:
     writer = threading.Thread(target=slow_write)
     writer.start()
     assert in_transaction.wait(5)
-    seen: list[str] = []
+    seen: list[object] = []
     reader = threading.Thread(target=lambda: seen.extend(j["kind"] for j in repo.list_jobs()))
     reader.start()
     reader.join(2)
@@ -138,7 +139,7 @@ def test_reads_work_in_a_data_folder_with_url_characters_in_its_name(
     db = Database.open(root / "library.db")
     repo = SqliteRepository(db)
     repo.enqueue("x", {})
-    seen: list[str] = []
+    seen: list[object] = []
     reader = threading.Thread(target=lambda: seen.extend(j["kind"] for j in repo.list_jobs()))
     reader.start()
     reader.join()

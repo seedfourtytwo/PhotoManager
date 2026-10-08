@@ -31,6 +31,7 @@ from photo_assistant.ports.backup import (
     MirrorSignInError,
     WrongPasswordError,
 )
+from tests.fakes import FakeClock
 from tests.fakes_backup import (
     FakeEngine,
     FakeMirror,
@@ -39,7 +40,6 @@ from tests.fakes_backup import (
     FakeSnapshotter,
     FakeVault,
     InMemoryBackupStore,
-    SteppingClock,
 )
 
 T0 = datetime(2026, 9, 29, 1, 0, tzinfo=UTC)
@@ -56,7 +56,7 @@ class World:
         self.store = InMemoryBackupStore([(a, T0 - timedelta(days=1)) for a in self.assets])
         self.engine = FakeEngine()
         self.snapshotter = FakeSnapshotter()
-        self.clock = SteppingClock(T0)
+        self.clock = FakeClock(T0)
         self.queue = FakeQueue()
         self.places = FakePlaces()
         self.vault = FakeVault(tmp_path / "keys")

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 
 from photo_assistant.api.main import _domain_error, create_app
 from photo_assistant.api.services import Services
@@ -106,4 +106,5 @@ def refusal(response: Response) -> tuple[int, object]:
 
 def user_id_of(admin: TestClient, username: str) -> int:
     users = admin.get("/api/users").json()
-    return next(u["id"] for u in users if u["username"] == username)
+    found: int = next(u["id"] for u in users if u["username"] == username)
+    return found

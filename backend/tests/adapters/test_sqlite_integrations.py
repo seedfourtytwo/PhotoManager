@@ -3,6 +3,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,7 +13,7 @@ from photo_assistant.adapters.sqlite_integrations import (
     SqliteInboxes,
     SqliteRemoteSources,
 )
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.domain.access import Level
 from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
 from photo_assistant.ports.ai import AICall
@@ -21,8 +22,9 @@ NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
-def conn() -> Iterator[sqlite3.Connection]:
-    connection = open_database(":memory:")
+def db() -> Iterator[Database]:
+    database = Database.open(":memory:")
+    connection = database.writer
     # Inboxes and devices belong to accounts (core's user table, foreign keys on).
     for user_id in (1, 2, 3, 7, 8):
         connection.execute(
@@ -30,12 +32,12 @@ def conn() -> Iterator[sqlite3.Connection]:
             "VALUES (?, ?, ?, 'x', 'member')",
             (user_id, f"user{user_id}", f"User {user_id}"),
         )
-    yield connection
-    connection.close()
+    yield database
+    database.close()
 
 
-def test_ai_calls_are_logged_as_json_summaries(conn: sqlite3.Connection) -> None:
-    log = SqliteAILog(conn)
+def test_ai_calls_are_logged_as_json_summaries(db: Database, conn: sqlite3.Connection) -> None:
+    log = SqliteAILog(db)
     log.record(
         AICall("caption", "m", {"images": [{"bytes": 10}]}, {"status": 200}, True, 12, None, 1)
     )
@@ -47,11 +49,11 @@ def test_ai_calls_are_logged_as_json_summaries(conn: sqlite3.Connection) -> None
 
 
 def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
-    conn: sqlite3.Connection, tmp_path: Path
+    db: Database, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(db)
     source_id = store.add_remote_source("MEGA", RemoteConfig("mega", "Photos"), tmp_path, 1)
-    source = SqliteRepository(conn).get_source(source_id)
+    source = SqliteRepository(db).get_source(source_id)
     assert source is not None
     assert (source.kind, source.label, source.root) == ("rclone", "MEGA", str(tmp_path / "1"))
     assert store.remote_config(source_id) == RemoteConfig("mega", "Photos")
@@ -59,15 +61,17 @@ def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
     assert json.loads(row[0]) == {"remote": "mega", "path": "Photos"}
 
 
-def test_remote_config_is_none_for_other_sources(conn: sqlite3.Connection) -> None:
-    folder = SqliteRepository(conn).add_source("Pictures", "/pictures")
-    store = SqliteRemoteSources(conn)
+def test_remote_config_is_none_for_other_sources(db: Database) -> None:
+    folder = SqliteRepository(db).add_source("Pictures", "/pictures")
+    store = SqliteRemoteSources(db)
     assert store.remote_config(folder.id) is None
     assert store.remote_config(404) is None
 
 
-def test_a_tampered_remote_config_is_refused(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    store = SqliteRemoteSources(conn)
+def test_a_tampered_remote_config_is_refused(
+    db: Database, conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    store = SqliteRemoteSources(db)
     source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     conn.execute("UPDATE source SET config_json = ? WHERE id = ?", ('{"remote": "-x"}', source_id))
     with pytest.raises(RemoteConfigError):
@@ -77,16 +81,16 @@ def test_a_tampered_remote_config_is_refused(conn: sqlite3.Connection, tmp_path:
         store.remote_config(source_id)
 
 
-def test_set_root_moves_a_source(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    store = SqliteRemoteSources(conn)
+def test_set_root_moves_a_source(db: Database, tmp_path: Path) -> None:
+    store = SqliteRemoteSources(db)
     source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     store.set_root(source_id, "/new/staging/1")
-    source = SqliteRepository(conn).get_source(source_id)
+    source = SqliteRepository(db).get_source(source_id)
     assert source is not None and source.root == "/new/staging/1"
 
 
-def test_each_user_has_one_inbox_source(conn: sqlite3.Connection) -> None:
-    inboxes = SqliteInboxes(conn)
+def test_each_user_has_one_inbox_source(db: Database) -> None:
+    inboxes = SqliteInboxes(db)
     first = inboxes.ensure_inbox_source(7, "/data/inbox/7")
     again = inboxes.ensure_inbox_source(7, "/data/inbox/7")
     other = inboxes.ensure_inbox_source(8, "/data/inbox/8")
@@ -95,30 +99,30 @@ def test_each_user_has_one_inbox_source(conn: sqlite3.Connection) -> None:
     assert other.id != first.id
 
 
-def test_a_new_inbox_is_owned_by_and_private_to_its_user(conn: sqlite3.Connection) -> None:
-    inbox = SqliteInboxes(conn).ensure_inbox_source(7, "/data/inbox/7")
-    repo = SqliteRepository(conn)
+def test_a_new_inbox_is_owned_by_and_private_to_its_user(db: Database) -> None:
+    inbox = SqliteInboxes(db).ensure_inbox_source(7, "/data/inbox/7")
+    repo = SqliteRepository(db)
     assert inbox.owner_id == 7
     assert inbox.label == "Uploads (User 7)"
     assert repo.get_access(inbox.id) == (None, [(7, Level.EDIT)])
 
 
 def test_remote_sources_are_open_to_everyone_like_any_new_source(
-    conn: sqlite3.Connection, tmp_path: Path
+    db: Database, tmp_path: Path
 ) -> None:
-    source_id = SqliteRemoteSources(conn).add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
-    assert SqliteRepository(conn).get_access(source_id) == (Level.DOWNLOAD, [])
+    source_id = SqliteRemoteSources(db).add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
+    assert SqliteRepository(db).get_access(source_id) == (Level.DOWNLOAD, [])
 
 
-def test_an_inbox_follows_a_moved_data_root(conn: sqlite3.Connection) -> None:
-    inboxes = SqliteInboxes(conn)
+def test_an_inbox_follows_a_moved_data_root(db: Database) -> None:
+    inboxes = SqliteInboxes(db)
     first = inboxes.ensure_inbox_source(7, "/old/inbox/7")
     moved = inboxes.ensure_inbox_source(7, "/new/inbox/7")
     assert (moved.id, moved.root) == (first.id, "/new/inbox/7")
 
 
-def test_devices_are_listed_per_user_and_found_by_token_hash(conn: sqlite3.Connection) -> None:
-    devices = SqliteDevices(conn)
+def test_devices_are_listed_per_user_and_found_by_token_hash(db: Database) -> None:
+    devices = SqliteDevices(db)
     phone = devices.add_device(1, "C's iPhone", "ios", "h1", NOW)
     devices.add_device(2, "Tablet", "android", "h2", NOW)
     assert [d.name for d in devices.list_devices(1)] == ["C's iPhone"]
@@ -129,8 +133,8 @@ def test_devices_are_listed_per_user_and_found_by_token_hash(conn: sqlite3.Conne
     assert devices.user_for_token_hash("nope", later) is None
 
 
-def test_revoked_devices_no_longer_authenticate(conn: sqlite3.Connection) -> None:
-    devices = SqliteDevices(conn)
+def test_revoked_devices_no_longer_authenticate(db: Database) -> None:
+    devices = SqliteDevices(db)
     phone = devices.add_device(1, "iPhone", "ios", "h1", NOW)
     assert not devices.revoke_device(2, phone.id, NOW)  # not yours
     assert devices.revoke_device(1, phone.id, NOW)
@@ -143,23 +147,23 @@ def test_revoked_devices_no_longer_authenticate(conn: sqlite3.Connection) -> Non
 
 
 def test_every_kind_of_source_is_created_by_the_one_repository_method(
-    conn: sqlite3.Connection, tmp_path: Path
+    db: Database, tmp_path: Path
 ) -> None:
     """Folder, remote and inbox sources all go through ``add_source`` (one access rule)."""
-    repo = SqliteRepository(conn)
+    repo = SqliteRepository(db)
     kinds: list[str] = []
     real = repo.add_source
 
-    def spy(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def spy(*args: Any, **kwargs: Any) -> Any:
         kinds.append(kwargs.get("kind", "folder"))
         return real(*args, **kwargs)
 
     repo.add_source = spy  # type: ignore[method-assign]
     folder = repo.add_source("Pictures", "/pictures", 1)
-    remote = SqliteRemoteSources(conn, repo).add_remote_source(
+    remote = SqliteRemoteSources(db, repo).add_remote_source(
         "Mega", RemoteConfig("mega", "Camera"), tmp_path / "staging", 1
     )
-    inbox = SqliteInboxes(conn, repo).ensure_inbox_source(7, str(tmp_path / "inbox" / "7"))
+    inbox = SqliteInboxes(db, repo).ensure_inbox_source(7, str(tmp_path / "inbox" / "7"))
     assert kinds == ["folder", "rclone", "inbox"]
     assert repo.get_access(folder.id) == (Level.DOWNLOAD, [])
     assert repo.get_access(remote) == (Level.DOWNLOAD, [])
@@ -168,9 +172,9 @@ def test_every_kind_of_source_is_created_by_the_one_repository_method(
 
 
 def test_a_proton_source_is_its_own_kind_and_stores_only_the_place(
-    conn: sqlite3.Connection, tmp_path: Path
+    db: Database, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(db)
     source_id = store.add_remote_source("Proton", RemoteConfig.proton("/photos"), tmp_path, 1)
     row = conn.execute("SELECT kind, config_json FROM source WHERE id = ?", (source_id,)).fetchone()
     assert (row[0], json.loads(row[1])) == ("proton", {"provider": "proton", "path": "/photos"})

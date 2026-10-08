@@ -1,4 +1,6 @@
-"""Contract v1.1: what the web app needs beyond v1 (docs/wiring/web.md, "Asks for the backend")."""
+"""What the web app needs beyond the first contract: a ZIP download posted as a form, the
+unedited preview for the editor, a user directory for sharing, wall-clock dates
+(docs/contracts/api-v1.md, "Contract gaps closed for the web app")."""
 
 import io
 import json

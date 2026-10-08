@@ -6,7 +6,6 @@ fixture fails any test that changes a single byte or timestamp in a source folde
 
 import os
 import shutil
-import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,21 +15,16 @@ import pytest
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader
 from photo_assistant.adapters.filesystem import Blake3Hasher, DiskLibraryStore, FolderSourceReader
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.app.import_source import ImportSettings, ImportSource, SourceUnavailableError
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.model import Outcome, RunStatus
 from photo_assistant.ports import ImportBusyError
-from tests.factories import NOW
+from tests.fakes import FakeClock
 from tests.fixtures.expected import DUPLICATE, FAILED, IGNORED, IMPORTED, SKIPPED, TOTAL_FILES
 
 pytestmark = pytest.mark.integration
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @dataclass
@@ -49,7 +43,7 @@ def exiftool() -> Iterator[ExifToolReader]:
 
 
 def make_world(data: Path, exiftool: ExifToolReader, **settings: int) -> World:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     store = DiskLibraryStore(data)
     importer = ImportSource(
         repo=repo,
@@ -58,7 +52,7 @@ def make_world(data: Path, exiftool: ExifToolReader, **settings: int) -> World:
         metadata=exiftool,
         renderer=VipsRenderer(),
         store=store,
-        clock=FixedClock(),
+        clock=FakeClock(),
         settings=ImportSettings(**settings),
     )
     return World(repo, store, importer, data)
@@ -369,7 +363,7 @@ def test_rerun_repairs_a_photo_left_without_thumbnail_by_a_crash(
     asset = world.repo.get_asset(asset_id)
     assert asset is not None and asset.thumb_path is not None
     assert world.store.absolute(asset.thumb_path).is_file()
-    assert {j["payload"]["asset_id"] for j in world.repo.list_jobs("queued")} == {asset_id}
+    assert {j["payload"]["asset_id"] for j in world.repo.list_jobs("queued")} == {asset_id}  # type: ignore[index]
 
 
 def test_only_one_import_runs_at_a_time_per_library(world: World, source_guard: Path) -> None:
@@ -508,9 +502,10 @@ def test_replaced_file_with_same_size_and_restored_mtime_is_noticed(
     world.importer._renderer = _FakeRenderer()  # type: ignore[assignment]
     world.importer.run(source.id)
     stat = photo.stat()
-    time.sleep(0.01)
     photo.write_bytes(b"B" * 1000)
     os.utime(photo, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    while photo.stat().st_ctime_ns == stat.st_ctime_ns:  # until the file system's clock ticks
+        os.utime(photo, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     _, report = world.importer.run(source.id)
     assert report.items[0].outcome is Outcome.IMPORTED
 

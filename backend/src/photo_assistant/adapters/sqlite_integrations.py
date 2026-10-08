@@ -62,9 +62,7 @@ class SqliteAILog(SqliteBase):
 class _SourceCreator(SqliteBase):
     """A store that registers sources through the one ``SourceRegistry`` (B17)."""
 
-    def __init__(
-        self, db: Database | sqlite3.Connection, sources: SourceRegistry | None = None
-    ) -> None:
+    def __init__(self, db: Database, sources: SourceRegistry | None = None) -> None:
         super().__init__(db)
         # default: the repository on the same Database (one writer, one lock)
         from photo_assistant.adapters.sqlite_repository import SqliteRepository

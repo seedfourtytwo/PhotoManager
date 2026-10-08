@@ -93,7 +93,7 @@ def test_one_pdf_page_per_album_page_sized_trim_plus_bleed(
     assert len(boxes) == job.page_count
     width, height = (210 + 2 * BLEED_MM) * PT_PER_MM, (297 + 2 * BLEED_MM) * PT_PER_MM
     for w, h in boxes:
-        assert (w, h) == (pytest.approx(width, abs=0.01), pytest.approx(height, abs=0.01))
+        assert (w, h) == (pytest.approx(width, abs=0.01), pytest.approx(height, abs=0.01))  # type: ignore[comparison-overlap]
 
 
 def test_images_are_embedded_at_full_resolution_and_fonts_embedded(

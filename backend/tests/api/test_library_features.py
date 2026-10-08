@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -71,7 +72,7 @@ def shared_lib(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Lib]:
         yield _build_lib(admin, root / "photos")
 
 
-def listed(client: TestClient, **params: object) -> list[int]:
+def listed(client: TestClient, **params: Any) -> list[int]:
     response = client.get("/api/assets", params={"limit": 500, **params})
     assert response.status_code == 200, response.text
     return [a["id"] for a in response.json()["items"]]
@@ -116,7 +117,7 @@ def test_search_finds_album_titles(lib: Lib) -> None:
 def test_cursor_pagination_works_with_filters(shared_lib: Lib) -> None:
     c, seen, cursor = shared_lib.admin, [], None
     while True:
-        params: dict[str, object] = {"limit": 1, "has_location": "true"}
+        params: dict[str, str | int] = {"limit": 1, "has_location": "true"}
         if cursor:
             params["cursor"] = cursor
         page = c.get("/api/assets", params=params).json()
