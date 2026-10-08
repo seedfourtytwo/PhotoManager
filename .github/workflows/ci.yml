@@ -34,7 +34,7 @@ jobs:
         run: uv run pytest --cov
         env:
           PA_REQUIRE_TOOLS: "1"
-      - name: Import smoke test (fixtures, twice: second run must import nothing)
+      - name: "Import smoke test (fixtures, twice: second run must import nothing)"
         run: |
           export PA_DATA_ROOT="$RUNNER_TEMP/pa-import" PA_MIN_FREE_GB=0
           uv run python -m photo_assistant import tests/fixtures/photos | tee first.txt
@@ -55,6 +55,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22
