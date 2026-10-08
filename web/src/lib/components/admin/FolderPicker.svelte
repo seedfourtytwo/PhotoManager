@@ -3,6 +3,7 @@
 	import type { FolderListing } from '$lib/api';
 	import { ApiError } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import FolderList from './FolderList.svelte';
 
 	/** What the picker shows right now. */
 	export type Picked = {
@@ -95,27 +96,21 @@
 			spellcheck="false"
 		/>
 	</label>
-	{#if error}<p role="alert">{error}</p>{/if}
-	{#if missing}
-		<p><button type="button" onclick={() => open(missing, true)}>Create this folder</button></p>
-	{/if}
-	{#if listing}
-		<ul aria-label="Folders inside">
-			{#if listing.parent && !error}
-				<li>
-					<button type="button" onclick={() => open(listing?.parent ?? undefined)}>↑ Up</button>
-				</li>
+	<FolderList
+		entries={listing && listing.folders}
+		onopen={open}
+		onup={listing?.parent && !error ? () => open(listing?.parent ?? undefined) : undefined}
+		looking={!listing && !error}
+		{error}
+		unread={!!error}
+		truncated={listing?.truncated}
+	>
+		{#snippet remedy()}
+			{#if missing}
+				<p><button type="button" onclick={() => open(missing, true)}>Create this folder</button></p>
 			{/if}
-			{#each listing.folders as folder (folder.path)}
-				<li><button type="button" onclick={() => open(folder.path)}>{folder.name}</button></li>
-			{:else}
-				{#if !error}<li class="quiet small">No folders inside.</li>{/if}
-			{/each}
-			{#if listing.truncated}<li class="quiet small">Only the first 1,000 are shown.</li>{/if}
-		</ul>
-	{:else if !error}
-		<p class="quiet" role="status">Looking…</p>
-	{/if}
+		{/snippet}
+	</FolderList>
 </div>
 
 <style>
@@ -134,27 +129,5 @@
 	.field input {
 		font-family: var(--font-mono);
 		font-stretch: 80%;
-	}
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		max-height: 14rem;
-		overflow-y: auto;
-		border-top: 1px solid var(--hairline);
-		border-bottom: 1px solid var(--hairline);
-	}
-	li button {
-		width: 100%;
-		text-align: left;
-		overflow-wrap: anywhere;
-	}
-	li.small {
-		padding: var(--s-2) 0;
-	}
-	p[role='alert'] {
-		margin: 0 0 var(--s-2);
-		border-left: 2px solid var(--ink);
-		padding-left: var(--s-2);
 	}
 </style>

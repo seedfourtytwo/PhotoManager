@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Source } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { suggester } from '$lib/suggest';
 	import Dialog from '../Dialog.svelte';
 	import FolderPicker, { type Picked } from './FolderPicker.svelte';
 
@@ -13,12 +14,11 @@
 	let error = $state('');
 	/** One add at a time: a second press while it runs is ignored. */
 	let saving = $state(false);
-	let suggested = ''; // the name we filled in: replaced as the folder changes, unless edited
+	const suggest = suggester(); // the name follows the folder, unless edited
 
 	$effect(() => {
 		const name = path.split('/').filter(Boolean).pop() ?? '';
-		if (label === suggested) label = name;
-		suggested = name;
+		label = suggest(label, name);
 	});
 
 	async function add() {

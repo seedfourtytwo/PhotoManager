@@ -12,6 +12,7 @@
 <script lang="ts">
 	import { api } from '$lib/app.svelte';
 	import { PROTON_FILES, protonPlaceName } from '$lib/proton';
+	import FolderList from './FolderList.svelte';
 
 	/** Browse "My files" on Proton Drive; the folder shown is the one picked. With
 	 *  `creatable`, a new folder can be made inside it. */
@@ -21,6 +22,7 @@
 
 	let path = $state(PROTON_FILES);
 	let folders = $state<string[] | null>(null);
+	const entries = $derived(folders && folders.map((name) => ({ name, path: `${path}/${name}` })));
 	let error = $state('');
 	let loading = $state(false);
 	let wanted = PROTON_FILES; // the folder asked for last, for "Try again"
@@ -68,33 +70,25 @@
 
 <div class="picker">
 	<p class="where">{protonPlaceName(path)}</p>
-	{#if error}
-		<p role="alert">{error}</p>
-		<button type="button" disabled={loading} onclick={() => open(wanted)}>Try again</button>
-	{/if}
-	{#if folders}
-		<ul aria-label="Folders inside">
-			{#if path !== PROTON_FILES}
-				<li>
-					<button type="button" onclick={() => open(path.slice(0, path.lastIndexOf('/')))}
-						>↑ Up</button
-					>
-				</li>
+	<FolderList
+		{entries}
+		onopen={open}
+		onup={path !== PROTON_FILES ? () => open(path.slice(0, path.lastIndexOf('/'))) : undefined}
+		looking={loading}
+		{error}
+	>
+		{#snippet remedy()}
+			{#if error}
+				<button type="button" disabled={loading} onclick={() => open(wanted)}>Try again</button>
 			{/if}
-			{#each folders as name (name)}
-				<li><button type="button" onclick={() => open(`${path}/${name}`)}>{name}</button></li>
-			{:else}
-				<li class="quiet small">No folders inside.</li>
-			{/each}
-		</ul>
-	{/if}
-	{#if loading}<p class="quiet" role="status">Looking…</p>{/if}
-	{#if creatable && folders}
-		<div class="new">
-			<label class="field">New folder <input bind:value={fresh} autocomplete="off" /></label>
-			<button type="button" disabled={!fresh.trim()} onclick={create}>Create</button>
-		</div>
-	{/if}
+		{/snippet}
+		{#if creatable && folders}
+			<div class="new">
+				<label class="field">New folder <input bind:value={fresh} autocomplete="off" /></label>
+				<button type="button" disabled={!fresh.trim()} onclick={create}>Create</button>
+			</div>
+		{/if}
+	</FolderList>
 </div>
 
 <style>
@@ -115,27 +109,5 @@
 		margin: 0 0 var(--s-2);
 		font-weight: 600;
 		overflow-wrap: anywhere;
-	}
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		max-height: 14rem;
-		overflow-y: auto;
-		border-top: 1px solid var(--hairline);
-		border-bottom: 1px solid var(--hairline);
-	}
-	li button {
-		width: 100%;
-		text-align: left;
-		overflow-wrap: anywhere;
-	}
-	li.small {
-		padding: var(--s-2) 0;
-	}
-	p[role='alert'] {
-		margin: 0 0 var(--s-2);
-		border-left: 2px solid var(--ink);
-		padding-left: var(--s-2);
 	}
 </style>
