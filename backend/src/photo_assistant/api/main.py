@@ -102,6 +102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         services = build_services(settings)
         _install_services(app, services)
         services.repo.recover_interrupted_jobs()  # only the server owns the job queue
+        services.store.sweep_tmp()  # never from a CLI command: it would cut a running upload
         if settings.worker_enabled:
             services.start_background()
         try:
