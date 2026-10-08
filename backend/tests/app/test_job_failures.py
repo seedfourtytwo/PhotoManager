@@ -65,6 +65,8 @@ def _run_once(repo: SqliteRepository, error: Exception) -> None:
     [
         UnknownTargetError("no backup target 7"),
         SyncToolMissingError("rclone is not installed on this machine"),
+        SyncAuthError("the login was refused"),
+        SyncNotFoundError("folder 'x' not found on 'mega'"),
         BackupToolMissingError("'restic' is not installed: sudo apt install restic"),
         ModelUnavailableError("model file clip.onnx is missing: run `just models`"),
         ModelFormatError("clip.onnx: expected 512 dimensions"),
@@ -82,8 +84,6 @@ def test_what_waiting_cannot_fix_fails_at_once(repo: SqliteRepository, error: Ex
     "error",
     [
         SyncError("pulling from 'mega' failed: connection reset"),
-        SyncAuthError("the login was refused"),
-        SyncNotFoundError("folder 'x' not found on 'mega'"),
         SyncRateLimitedError("the provider is throttling"),
         BackupError("restic did not answer within 5 min"),
         RepositoryLockedError("the repository is locked by another restic"),

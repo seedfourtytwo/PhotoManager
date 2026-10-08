@@ -41,7 +41,8 @@ from photo_assistant.api.routes import (
 from photo_assistant.api.security import CrossSiteGuard, RequestLimits, SessionCookieRenewal
 from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import Settings, get_settings, warn_about_unknown_settings
-from photo_assistant.domain.errors import DomainError
+from photo_assistant.domain.errors import DomainError, UnavailableError
+from photo_assistant.ports.sync import SyncError
 
 IMMUTABLE_BUILD = "public, max-age=31536000, immutable"
 # Compressed: JSON and the web build. Never: what is compressed already, or streamed files
@@ -78,6 +79,14 @@ async def _domain_error(request: Request, exc: Exception) -> JSONResponse:
     """THE error handler: every DomainError becomes its status and ``{"detail": message}``."""
     assert isinstance(exc, DomainError)
     return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
+
+async def _sync_error(request: Request, exc: Exception) -> JSONResponse:
+    """A pull-side failure met while answering a request (listing a provider's folders,
+    naming a remote). One that waiting cannot fix is a DomainError and keeps its status; the
+    rest may pass (the network, a slow provider): 503, try again."""
+    code = exc.status if isinstance(exc, DomainError) else UnavailableError.status
+    return JSONResponse({"detail": str(exc)}, status_code=code)
 
 
 def _check_test_mode(settings: Settings) -> None:
@@ -120,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.add_exception_handler(DomainError, _domain_error)
+    app.add_exception_handler(SyncError, _sync_error)
     for module in (
         system,
         auth,

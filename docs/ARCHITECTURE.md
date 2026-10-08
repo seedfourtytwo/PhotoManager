@@ -254,6 +254,10 @@ retries: they say "the same job would fail the same way" (a folder that is gone,
 model that is not installed, a backup target deleted meanwhile). So an error that may pass by
 waiting must never be a `DomainError`: `SyncError`, `BackupError` and `AIUnavailableError`
 stay outside the hierarchy for that reason (`tests/app/test_job_failures.py` pins both lists).
+A pull fails for both kinds, so `SyncError` is split: by itself (network, a throttling or slow
+provider, out of time) it is retried; its subclasses for what waiting cannot fix are a
+`DomainError` too and fail the job at once (`SyncAuthError`, `SyncNotFoundError`,
+`SyncToolMissingError`, `SyncUnsupportedError`, `SyncDiskFullError`: `ports/sync.py`).
 Anything else gets 4 attempts (`domain/job_queue.MAX_ATTEMPTS`: one more than the schedule
 has waits), and a failed attempt sets the job's `run_after`: 1 minute after the first failure,
 5 after the second, 25 after the third (`RETRY_DELAYS`). A claim skips jobs whose time has
@@ -372,16 +376,16 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   (409), `InvalidError` (422), `UnavailableError` (503); the three sign-in errors set their own
   (401, 423, 429). A use case or adapter raises a named subclass with the sentence the user
   reads (`PersonNotFoundError`, `InvalidBackupTargetError`, `SourceExistsError`), and the route
-  does nothing. Of the 80 exception classes, 50 are in the hierarchy (2026-10-08). Classes that
+  does nothing. Of the 83 exception classes, 55 are in the hierarchy (2026-10-08). Classes that
   were plain `ValueError`s before keep `ValueError` as a second base, so the command line and
   older `except ValueError` code still catch them.
-  - **Outside on purpose (30 classes, each listed with its reason in
+  - **Outside on purpose (28 classes, each listed with its reason in
     `tests/unit/test_error_hierarchy.py`, which fails for a new class that is neither):**
     what may pass by waiting (`SyncError`, `BackupError`, `AIUnavailableError`: see "Retries
-    wait"), signals caught where they are raised (`DuplicateAssetError`, `ToolMissingError`,
+    wait"; a `SyncError` met while answering a request is a 503 from a second, two-line
+    handler in `api/main.py`), signals caught where they are raised (`DuplicateAssetError`, `ToolMissingError`,
     `UploadTooLargeError`), and errors only the command line reports.
-  - **Routes that still translate by hand (12 blocks):** `SyncError` in the Proton and rclone
-    routes (404 for a missing folder, else 503: it is outside the hierarchy); a blocked print
+  - **Routes that still translate by hand (7 blocks):** a blocked print
     (its body also lists the photos); three whose sentence is the route's, not the error's
     (wrong current PIN, unknown backup target, photo not analysed yet); a too-long name on a
     people split (a bare `ValueError`, because the rename route lets the same error through
