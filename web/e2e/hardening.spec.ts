@@ -167,3 +167,25 @@ test('search: “like this photo” never names the previous photo as its source
 	await expect(page).toHaveURL(new RegExp(`like=${ids[1]}$`));
 	await expect(page.locator(`a[href="/?photo=${ids[0]}"]`)).toHaveCount(0);
 });
+
+test('trash: “Empty trash” deletes what the page showed, not what arrived since', async ({
+	page
+}) => {
+	await signIn(page);
+	const [first, later] = await page
+		.locator('.tile')
+		.evaluateAll((tiles) => tiles.slice(0, 2).map((t) => Number(t.getAttribute('data-id'))));
+	await page.request.delete('/api/assets', { data: { ids: [first] } });
+	await page.goto('/trash');
+	await expect(page.locator('.tile')).toHaveCount(1);
+	// Meanwhile another device moves a photo to the trash.
+	await page.request.delete('/api/assets', { data: { ids: [later] } });
+	await page.getByRole('button', { name: 'Empty trash' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Delete for good?' });
+	await expect(dialog).toContainText('1 library copy');
+	const sent = page.waitForRequest('**/api/trash/empty');
+	await dialog.getByRole('button', { name: 'Delete for good' }).click();
+	expect((await sent).postDataJSON()).toEqual({ ids: [first] });
+	await expect(page.getByRole('status')).toContainText('Deleted 1 library copy for good');
+	await expect(page.locator(`.tile[data-id="${later}"]`)).toBeVisible();
+});

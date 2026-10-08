@@ -59,8 +59,9 @@
 
 	async function empty() {
 		try {
-			const ids = selection.ids.size ? [...selection.ids] : undefined;
-			const { purged } = await api.emptyTrash(ids);
+			// Always the photos on screen (the dialog counted those), never "everything": the
+			// trash may have grown from another device since this page loaded.
+			const { purged } = await api.emptyTrash(selection.ids.size ? [...selection.ids] : order);
 			notice.show(`Deleted ${purged} library cop${purged === 1 ? 'y' : 'ies'} for good.`);
 			confirmEmpty = false;
 			selection = EMPTY;
