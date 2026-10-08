@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { FolderListing } from '$lib/api';
+	import { ApiError } from '$lib/api';
 	import { api } from '$lib/app.svelte';
 
 	/** What the picker shows right now. */
@@ -20,6 +21,7 @@
 	let typed = $state('');
 	let error = $state('');
 	let loading = $state(false);
+	let missing = $state(''); // a folder that was asked for and is not there: it can be created
 	let asked = 0; // only the latest answer counts when clicks outrun the server
 
 	$effect(() => {
@@ -30,15 +32,16 @@
 		});
 	});
 
-	async function open(folder?: string) {
+	async function open(folder?: string, create = false) {
 		const mine = ++asked;
 		// The field follows at once: a click right after typing must not be undone by the
 		// field's own change event opening what was typed.
 		if (folder !== undefined) typed = folder;
 		loading = true;
 		try {
-			const found = await api.folders(folder);
+			const found = create && folder ? await api.createFolder(folder) : await api.folders(folder);
 			if (mine !== asked) return;
+			missing = '';
 			// An old error stays up until the answer is in: taking it away at once would move
 			// the dialog under the pointer and swallow the click that asked for this.
 			error = '';
@@ -49,6 +52,7 @@
 			listing = listing && { ...listing, folders: [] };
 			shown = '';
 			error = e instanceof Error ? e.message : 'Could not read that folder.';
+			missing = !create && folder && e instanceof ApiError && e.status === 404 ? folder : '';
 		} finally {
 			if (mine === asked) loading = false;
 		}
@@ -75,13 +79,19 @@
 		<input
 			bind:value={typed}
 			onkeydown={go}
-			oninput={() => (error = '')}
+			oninput={() => {
+				error = '';
+				missing = '';
+			}}
 			onchange={() => typed.trim() !== shown && open(typed.trim())}
 			autocomplete="off"
 			spellcheck="false"
 		/>
 	</label>
 	{#if error}<p role="alert">{error}</p>{/if}
+	{#if missing}
+		<p><button type="button" onclick={() => open(missing, true)}>Create this folder</button></p>
+	{/if}
 	{#if listing}
 		<ul aria-label="Folders inside">
 			{#if listing.parent && !error}

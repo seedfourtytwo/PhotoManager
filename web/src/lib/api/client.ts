@@ -215,6 +215,7 @@ export function createApi(options: ApiOptions = {}) {
 		addSource: (body: SourceIn) => request<Source>('POST', '/api/sources', body),
 		/** Admin: the sub-folders of `path` on the server (the home folder when omitted). */
 		folders: (path?: string) => get<FolderListing>(query('/api/folders', { path })),
+		createFolder: (path: string) => request<FolderListing>('POST', '/api/folders', { path }),
 		updateSource: (id: Id, body: SourcePatch) =>
 			request<Source>('PATCH', `/api/sources/${id}`, body),
 		scanSource: (id: Id) => request<Queued>('POST', `/api/sources/${id}/scan`),

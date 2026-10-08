@@ -267,3 +267,20 @@ test('Proton Drive: when the computer is not signed in, it says what to do', asy
 	await expect(dialog.getByRole('radio', { name: /My Proton photos/ })).toBeChecked();
 	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
 });
+
+test('folder picker: a folder that is not there yet can be created on the spot', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, "uses the mock machine's folders");
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+	const field = dialog.getByLabel('Folder', { exact: true });
+	await field.fill('/home/c/missing drop box');
+	await field.press('Enter');
+	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);
+	await dialog.getByRole('button', { name: 'Create this folder' }).click();
+	await expect(dialog.getByRole('alert')).toHaveCount(0);
+	await expect(field).toHaveValue('/home/c/missing drop box');
+	await expect(dialog.getByText('No folders inside.')).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Create this folder' })).toHaveCount(0);
+});

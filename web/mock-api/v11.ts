@@ -205,8 +205,8 @@ export function v11Routes(h: Helpers): Route[] {
 		const path = (asked ?? HOME).replace(/(?<=.)\/+$/, '');
 		if (!path.startsWith('/'))
 			throw new HttpError(422, 'give the full path of the folder, starting with /');
-		if (path.includes('missing'))
-			throw new HttpError(422, `folder not found on this machine: ${path}`);
+		if (path.includes('missing') && !h.state().createdFolders.has(path))
+			throw new HttpError(404, `folder not found on this machine: ${path}`);
 		const added = h.state().sources.find((s) => s.kind === 'folder' && s.path === path);
 		return {
 			path,
@@ -601,6 +601,20 @@ export function v11Routes(h: Helpers): Route[] {
 			'GET',
 			/^\/api\/folders$/,
 			(ctx) => (admin(ctx), ok(listFolders(ctx.url.searchParams.get('path') ?? undefined)))
+		],
+		[
+			'POST',
+			/^\/api\/folders$/,
+			(ctx) => {
+				admin(ctx);
+				const { path } = requireFields<{ path: string }>(ctx.body, ['path']);
+				if (!path.startsWith('/'))
+					throw new HttpError(422, 'give the full path of the folder, starting with /');
+				if (!path.includes('missing') || h.state().createdFolders.has(path))
+					throw new HttpError(422, `${path} already exists`);
+				h.state().createdFolders.add(path);
+				return ok(listFolders(path), 201);
+			}
 		],
 		[
 			'GET',
