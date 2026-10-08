@@ -1,4 +1,4 @@
-import { expect, isPhone, resetMock, signIn, test } from './helpers.ts';
+import { expect, openAccountMenu, resetMock, signIn, test } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	// one look-alike, two screenshots and a receipt wait for review
@@ -44,7 +44,10 @@ test('review: decide a whole group at once, until nothing is left', async ({ pag
 
 test('review: the menu says how many photos wait', async ({ page }) => {
 	await page.goto('/');
-	if (isPhone(page)) await page.getByRole('button', { name: 'More' }).click();
+	await expect(
+		page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /^Account/ })
+	).toContainText('4');
+	await openAccountMenu(page);
 	const link = page
 		.getByRole('navigation', { name: 'Main' })
 		.getByRole('link', { name: /To review/ });

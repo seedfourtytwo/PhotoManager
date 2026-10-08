@@ -10,13 +10,16 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.filesystem import SystemClock
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.deps import admin_user
 from photo_assistant.api.integrations import build_integrations
 from photo_assistant.api.routes import remote_sources
 from photo_assistant.api.settings import IntegrationSettings
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.model import ImportReport, RunStatus
+from tests.api.conftest import answer_domain_errors
 
 pytestmark = pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone not installed")
 ADMIN = {"X-Test-User": "1"}
@@ -46,22 +49,24 @@ def _admin_from_header(request: Request) -> User:
 def world(tmp_path: Path) -> Iterator[World]:
     config = tmp_path / "rclone.conf"
     config.write_text("[mega]\ntype = local\n")
-    conn = open_database(":memory:")
-    repo = SqliteRepository(conn)
+    db = Database.open(":memory:")
+    repo = SqliteRepository(db)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
+    answer_domain_errors(app)
     app.include_router(remote_sources.router)
     integrations = build_integrations(
         data_root=tmp_path / "data",
         settings=IntegrationSettings(rclone_config=config),
-        conn=conn,
+        db=db,
         repo=repo,
+        clock=SystemClock(),
         importer=StubImporter(),
     )
     app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     yield World(TestClient(app, base_url="http://127.0.0.1"), repo, tmp_path / "data")
-    conn.close()
+    db.close()
 
 
 def test_the_configured_rclone_remotes_are_listed(world: World) -> None:
@@ -116,6 +121,33 @@ def test_rclone_missing_is_a_clear_503(world: World, tmp_path: Path) -> None:
     assert "rclone is not installed" in response.json()["detail"]
 
 
+def test_remote_source_refusals_say_why(world: World, tmp_path: Path) -> None:
+    def add(remote: str) -> tuple[int, object]:
+        body = {"label": "x", "remote": remote}
+        response = world.client.post("/api/remote-sources", json=body, headers=ADMIN)
+        return response.status_code, response.json()
+
+    assert add("megaa") == (
+        422,
+        {
+            "detail": "no remote called 'megaa' on this machine: create it first with "
+            "'rclone config' (see the cloud sources guide)"
+        },
+    )
+    assert add(":local:") == (
+        422,
+        {
+            "detail": "remote must be the name of a remote set up with 'rclone config' "
+            "(letters, digits, spaces, . _ - + @)"
+        },
+    )
+    world.client.app.state.services.integrations.rclone._binary = str(tmp_path / "none")  # type: ignore[attr-defined]
+    no_tool = {"detail": "rclone is not installed on this machine (sudo apt install rclone)"}
+    assert add("mega") == (503, no_tool)
+    listed = world.client.get("/api/remote-sources/remotes", headers=ADMIN)
+    assert (listed.status_code, listed.json()) == (503, no_tool)
+
+
 def test_remote_sources_need_a_session(world: World) -> None:
     assert world.client.get("/api/remote-sources/remotes").status_code == 401
 
@@ -124,8 +156,13 @@ def test_ai_stays_off_unless_ollama_is_chosen(tmp_path: Path) -> None:
     from photo_assistant.adapters.null_ai import NullAIProvider
     from photo_assistant.adapters.ollama_ai import OllamaProvider
 
-    conn = open_database(":memory:")
-    common = {"data_root": tmp_path, "conn": conn, "repo": SqliteRepository(conn)}
+    db = Database.open(":memory:")
+    common = {
+        "data_root": tmp_path,
+        "db": db,
+        "repo": SqliteRepository(db),
+        "clock": SystemClock(),
+    }
     off = build_integrations(settings=IntegrationSettings(), importer=StubImporter(), **common)  # type: ignore[arg-type]
     on = build_integrations(
         settings=IntegrationSettings(ai_provider="ollama", ollama_plan_model="p"),
@@ -134,7 +171,7 @@ def test_ai_stays_off_unless_ollama_is_chosen(tmp_path: Path) -> None:
     )
     assert isinstance(off.ai, NullAIProvider)
     assert isinstance(on.ai, OllamaProvider)
-    conn.close()
+    db.close()
 
 
 def test_the_importer_store_accepts_staging_and_inbox_folders(tmp_path: Path) -> None:

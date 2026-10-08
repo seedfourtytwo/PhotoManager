@@ -1,5 +1,6 @@
 """Headless bootstrap: create the first admin from the command line."""
 
+import dataclasses
 from datetime import timedelta
 from pathlib import Path
 
@@ -225,3 +226,82 @@ def test_ml_backfill_reports_missing_models(
     assert cli.main(["ml-backfill"]) == 0
     out = capsys.readouterr().out
     assert "Queued" in out and "missing" in out
+
+
+# --- one command line: every sub-command is listed and reached -------------------------------
+
+SUB_COMMANDS = (
+    "import",
+    "sources",
+    "create-user",
+    "set-pin",
+    "ml-backfill",
+    "export-library",
+    "verify-library",
+    "doctor",
+    "backup",
+)
+
+
+def test_help_lists_every_sub_command(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--help"])
+    assert stopped.value.code == 0
+    out = capsys.readouterr().out
+    listed = out.split("{", 1)[1].split("}", 1)[0].split(",")
+    assert tuple(listed) == SUB_COMMANDS
+    for name in SUB_COMMANDS:
+        assert f"\n    {name}" in out, f"{name} has no line of help"
+
+
+def test_sources_lists_the_folders_the_library_imports_from(
+    data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tests.synthetic import write_photo
+
+    assert cli.main(["sources"]) == 0
+    assert capsys.readouterr().out == ""
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics"), "--label", "Holiday"]) == 0
+    capsys.readouterr()
+    assert cli.main(["sources"]) == 0
+    assert capsys.readouterr().out == f"  1  enabled   {'Holiday':<24} {tmp_path / 'pics'}\n"
+
+
+def test_an_unknown_sub_command_is_refused(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["no-such-command"])
+    assert stopped.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+MINIMAL_ARGV = {
+    "import": ["import", "folder"],
+    "sources": ["sources"],
+    "create-user": ["create-user", "name"],
+    "set-pin": ["set-pin", "name"],
+    "ml-backfill": ["ml-backfill"],
+    "export-library": ["export-library", "destination"],
+    "verify-library": ["verify-library"],
+    "doctor": ["doctor"],
+    "backup": ["backup", "list"],
+}
+
+
+def test_the_command_table_is_exactly_the_documented_sub_commands() -> None:
+    assert tuple(command.name for command in cli.COMMANDS) == SUB_COMMANDS
+    assert set(MINIMAL_ARGV) == set(SUB_COMMANDS)
+
+
+@pytest.mark.parametrize("name", SUB_COMMANDS)
+def test_the_dispatcher_reaches_each_sub_command(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reached: list[str] = []
+
+    def stub(command: cli.Command) -> cli.Command:
+        return dataclasses.replace(command, run=lambda args: reached.append(command.name) or 7)
+
+    monkeypatch.setattr(cli, "COMMANDS", tuple(stub(command) for command in cli.COMMANDS))
+    assert cli.main(MINIMAL_ARGV[name]) == 7
+    assert reached == [name]

@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.filesystem import DiskLibraryStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.ml_services import build_ml_services
 from photo_assistant.api.settings import MlSettings, Settings
 from photo_assistant.app.ml_jobs import AUTO_TAG, DETECT_FACES, EMBED_CLIP, TaskStatus
@@ -39,9 +40,10 @@ def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def setup(root: Path, ml: MlSettings) -> tuple:
-    repo = SqliteRepository(open_database(root / "library.db"))
+    db = Database.open(root / "library.db")  # one Database for both stores, as in the app
+    repo = SqliteRepository(db)
     library = DiskLibraryStore(root)
-    services = build_ml_services(root, ml, repo, library)
+    services = build_ml_services(root, ml, repo, library, db)
     asset = repo.add_asset(new_asset(1), NOW)
     target = root / new_asset(1).library_path
     target.parent.mkdir(parents=True)

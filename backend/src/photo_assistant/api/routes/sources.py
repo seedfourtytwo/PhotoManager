@@ -81,10 +81,7 @@ def add_source(services: ServicesDep, admin: AdminUser, body: SourceIn) -> Sourc
         raise HTTPException(422, "that folder contains, or is inside, the photo library itself")
     if services.ops.backup.repository_overlaps(folder):
         raise HTTPException(422, "that folder contains, or is inside, a backup repository")
-    try:
-        source = services.repo.add_source(body.label, str(folder.resolve()), owner_id=admin.id)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    source = services.repo.add_source(body.label, str(folder.resolve()), owner_id=admin.id)
     return SourceOut.of(source, 0, show_path=True)
 
 

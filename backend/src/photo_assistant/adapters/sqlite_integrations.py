@@ -6,12 +6,10 @@ same ``Database`` (one writer, one lock) as every other store.
 
 import json
 import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from photo_assistant.adapters.sqlite_base import source_from_row
+from photo_assistant.adapters.sqlite_base import SqliteBase, source_from_row
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.access import INBOX_KIND
 from photo_assistant.domain.model import Source
@@ -30,43 +28,11 @@ REMOTE_KINDS = (RCLONE, PROTON)  # a remote source's kind is its provider
 # repository's add_source: remote sources like any folder, an inbox private to its owner
 
 
-class _Store:
-    """On the process's one ``Database``: its writer and lock, per-thread readers."""
-
-    def __init__(self, db: Database | sqlite3.Connection) -> None:
-        self._db = db if isinstance(db, Database) else Database.of(db)
-        self._conn = self._db.writer
-        self._lock = self._db.lock
-
-    def _one(self, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row | None:
-        with self._db.reading() as conn:
-            cur = conn.execute(sql, params)
-            cur.row_factory = sqlite3.Row
-            row: sqlite3.Row | None = cur.fetchone()
-            return row
-
-    def _all(self, sql: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with self._db.reading() as conn:
-            cur = conn.execute(sql, params)
-            cur.row_factory = sqlite3.Row
-            return cur.fetchall()
-
-    def _write(self, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Cursor:
-        with self._lock:
-            return self._conn.execute(sql, params)
-
-    @contextmanager
-    def _transaction(self) -> Iterator[None]:
-        """Several writes as one; inside another transaction it joins that one."""
-        with self._db.transaction():
-            yield
-
-
 def _time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
-class SqliteAILog(_Store):
+class SqliteAILog(SqliteBase):
     def record(self, call: AICall) -> None:
         self._write(
             """INSERT INTO ai_log (capability, model, attempt, ok, duration_ms, error,
@@ -86,14 +52,14 @@ class SqliteAILog(_Store):
 
     def prune(self, before: datetime) -> int:
         """Delete the calls logged before then; returns how many."""
-        return self._write(
+        return self._count(
             # created_at is written by SQLite: compare in its own format
             "DELETE FROM ai_log WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', ?)",
             (before.astimezone(UTC).isoformat(),),
-        ).rowcount
+        )
 
 
-class _SourceCreator(_Store):
+class _SourceCreator(SqliteBase):
     """A store that registers sources through the one ``SourceRegistry`` (B17)."""
 
     def __init__(
@@ -162,7 +128,7 @@ class SqliteInboxes(_SourceCreator):
         return source_from_row(row)
 
 
-class SqliteDevices(_Store):
+class SqliteDevices(SqliteBase):
     @staticmethod
     def _device(row: sqlite3.Row) -> Device:
         created = _time(row["created_at"])
@@ -180,12 +146,12 @@ class SqliteDevices(_Store):
     def add_device(
         self, user_id: int, name: str, platform: str, token_hash: str, now: datetime
     ) -> Device:
-        cur = self._write(
+        device_id = self._write(
             """INSERT INTO device (user_id, name, platform, token_hash, created_at)
                VALUES (?, ?, ?, ?, ?)""",
             (user_id, name, platform, token_hash, now.isoformat()),
         )
-        row = self._one("SELECT * FROM device WHERE id = ?", (cur.lastrowid,))
+        row = self._one("SELECT * FROM device WHERE id = ?", (device_id,))
         assert row is not None
         return self._device(row)
 
@@ -194,12 +160,12 @@ class SqliteDevices(_Store):
         return [self._device(r) for r in rows]
 
     def revoke_device(self, user_id: int, device_id: int, now: datetime) -> bool:
-        cur = self._write(
+        revoked = self._count(
             """UPDATE device SET revoked_at = ?
                WHERE id = ? AND user_id = ? AND revoked_at IS NULL""",
             (now.isoformat(), device_id, user_id),
         )
-        return cur.rowcount == 1
+        return revoked == 1
 
     def user_for_token_hash(self, token_hash: str, now: datetime) -> int | None:
         with self._lock:

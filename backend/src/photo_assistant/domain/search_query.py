@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass, replace
 from datetime import date
 
+from photo_assistant.domain.errors import DomainError
 from photo_assistant.domain.library_filter import AssetFilter
 
 FACETS: tuple[str, ...] = ("date", "person", "place", "tag", "camera")
@@ -49,7 +50,7 @@ def parse_query(q: str) -> ParsedQuery:
     return ParsedQuery(" ".join(words), tuple(facets))
 
 
-class InvalidFacetError(ValueError):
+class InvalidFacetError(DomainError):
     """A facet that looks right but names an impossible value (``date:2021-13``)."""
 
 

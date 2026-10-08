@@ -22,25 +22,12 @@ from photo_assistant.app.album_printer import (
     ManualPage,
     PrintRequest,
 )
-from photo_assistant.app.print_job import EmptyAlbumError, InvalidPagesError
 from photo_assistant.domain.access import Level, Viewer
-from photo_assistant.domain.print_layout import (
-    LAYOUTS,
-    TRIM_SIZES,
-    UnknownLayoutError,
-    UnknownTrimSizeError,
-)
-from photo_assistant.domain.print_theme import THEMES, UnknownThemeError
+from photo_assistant.domain.errors import ForbiddenError
+from photo_assistant.domain.print_layout import LAYOUTS, TRIM_SIZES
+from photo_assistant.domain.print_theme import THEMES
 
 router = APIRouter(prefix="/api", tags=["print"], dependencies=LOGGED_IN)
-
-_BAD_REQUEST = (
-    InvalidPagesError,
-    EmptyAlbumError,
-    UnknownLayoutError,
-    UnknownTrimSizeError,
-    UnknownThemeError,
-)
 
 
 class TrimOut(BaseModel):
@@ -132,16 +119,9 @@ def _album(services: Services, viewer: Viewer, album_id: int) -> AlbumToPrint:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "album not found")
     items = services.repo.album_views(viewer, album_id)
     if any(v.level < Level.DOWNLOAD for v in items):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "printing needs 'download' access to every photo"
-        )
+        raise ForbiddenError("printing needs 'download' access to every photo")
     cover = next((v for v in items if v.id == info.cover_asset_id), None)
     return AlbumToPrint(info.title, info.description, info.updated_at, items, cover)
-
-
-def _unprocessable(exc: Exception) -> HTTPException:
-    message = exc.args[0] if exc.args else str(exc)
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(message))
 
 
 def _file_name(title: str) -> str:
@@ -168,10 +148,7 @@ def print_options() -> PrintOptionsOut:
 @router.post("/albums/{album_id}/print/plan")
 def plan(services: ServicesDep, viewer: ViewerDep, album_id: int, body: PrintRequestIn) -> PlanOut:
     album = _album(services, viewer, album_id)
-    try:
-        planned = services.printer.plan(album, body.to_request())
-    except _BAD_REQUEST as exc:
-        raise _unprocessable(exc) from exc
+    planned = services.printer.plan(album, body.to_request())
     return PlanOut(
         pages=[
             PageOut(layout_id=lay, photos=list(ids), text=text) for lay, ids, text in planned.pages
@@ -188,11 +165,9 @@ def print_pdf(
     album = _album(services, viewer, album_id)
     try:
         result, issues = services.printer.pdf(album, body.to_request())
-    except AlbumPrintBlockedError as exc:
+    except AlbumPrintBlockedError as exc:  # its body also lists the photos: not the handler's
         content = {"detail": str(exc), "issues": [i.model_dump() for i in _issues(exc.issues)]}
-        return JSONResponse(content, status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
-    except _BAD_REQUEST as exc:
-        raise _unprocessable(exc) from exc
+        return JSONResponse(content, status_code=exc.status)
     return Response(
         result.pdf,
         media_type="application/pdf",
@@ -216,8 +191,5 @@ def print_preview(
 ) -> Response:
     album = _album(services, viewer, album_id)
     req = PrintRequest(trim=trim, theme=theme, cover=cover)
-    try:
-        png = services.printer.preview(album, req, page, ppi)
-    except _BAD_REQUEST as exc:
-        raise _unprocessable(exc) from exc
+    png = services.printer.preview(album, req, page, ppi)
     return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})

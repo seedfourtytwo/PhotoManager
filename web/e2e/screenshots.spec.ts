@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 import {
 	expect,
 	isPhone,
+	openAccountMenu,
 	resetMock,
 	selectionAction,
 	selectTiles,
@@ -44,12 +45,16 @@ test.beforeEach(async ({ page }) => {
 	await page.addInitScript((theme) => localStorage.setItem('pa.theme', theme), THEME);
 });
 
+/** `fullPage` is for a laptop only: on a phone the floating dock would land mid-page over text. */
 async function shot(page: Page, name: string, project: string, fullPage = false) {
 	if (THEME === 'light' && !LIGHT.has(name)) return;
 	if (!isPhone(page)) await page.mouse.move(0, 0);
 	await page.waitForLoadState('networkidle');
 	await page.waitForTimeout(500);
-	await page.screenshot({ path: `${DIR}/${project}-${name}.png`, fullPage });
+	await page.screenshot({
+		path: `${DIR}/${project}-${name}.png`,
+		fullPage: fullPage && !isPhone(page)
+	});
 }
 
 test('every screen', async ({ page }, info) => {
@@ -117,6 +122,9 @@ test('every screen', async ({ page }, info) => {
 	await expect(page.locator('.chosen .tile').first()).toBeVisible();
 	await shot(page, '09-map', p);
 
+	await page.goto('/collections');
+	await shot(page, '10a-collections', p);
+
 	await page.goto('/albums');
 	await shot(page, '10-albums', p);
 	await page.getByRole('link', { name: /Summers/ }).click();
@@ -162,12 +170,10 @@ test('every screen', async ({ page }, info) => {
 	await expect(page.getByLabel('Device token')).toHaveValue(/^pa_dev_/);
 	await shot(page, '16b-device-token', p);
 
-	if (isPhone(page)) {
-		await page.getByRole('button', { name: 'Done' }).click();
-		const nav = page.getByRole('navigation', { name: 'Main' });
-		await nav.getByRole('button', { name: 'More' }).click();
-		await shot(page, '21-nav-more', p);
-	}
+	await page.getByRole('button', { name: 'Done' }).click();
+	await openAccountMenu(page);
+	await shot(page, '21-account-menu', p);
+	await page.keyboard.press('Escape');
 
 	await resetMock('seed', { models: true });
 	await signIn(page, '/search?q=beach%20at%20sunset');

@@ -90,11 +90,12 @@
 <style>
 	.app {
 		display: grid;
-		grid-template-columns: var(--rail) minmax(0, 1fr);
-		min-height: 100vh;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto 1fr;
+		min-height: 100dvh;
 	}
 	.app.filters {
-		grid-template-columns: var(--rail) minmax(0, 1fr) var(--margin);
+		grid-template-columns: minmax(0, 1fr) var(--margin);
 	}
 	main {
 		min-width: 0;
@@ -157,6 +158,7 @@
 		.app,
 		.app.filters {
 			grid-template-columns: minmax(0, 1fr);
+			grid-template-rows: 1fr;
 		}
 		main {
 			padding-bottom: calc(var(--bar) + env(safe-area-inset-bottom));

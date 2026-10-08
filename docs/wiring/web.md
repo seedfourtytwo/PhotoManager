@@ -111,9 +111,10 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 - **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename,
   merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
   faces**, **Settings → Phones and devices**.
-- **Navigation**: Library · Map · People · Albums · Search everywhere; Trash, Settings, Admin in
-  the rail's foot on a laptop and under “More” on a phone. The phone selection bar keeps three
-  actions and puts the rest under “More”.
+- **Navigation**: Library · Collections (People, Places, Albums) · Search everywhere, in a top
+  bar on a laptop and a floating dock on a phone. The account menu holds To review, Trash,
+  Settings, Admin (admins) and Sign out. The phone selection bar keeps three actions and puts
+  the rest under “More”.
 - **Downloads**: the dialog pre-flights with the estimate (an expired session goes to sign-in,
   a refusal is a sentence), then posts into a fresh hidden frame; if the frame loads the
   server's JSON error instead of a file, the status line says so.

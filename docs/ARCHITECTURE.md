@@ -250,7 +250,11 @@ and a `scan_source` for each source whose automatic re-check is due: `app/rechec
 ML jobs are planned only when their model files are installed.
 
 **Retries wait (0022).** Domain errors (`domain/errors.py`) fail a job at once, without
-retries. Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
+retries: they say "the same job would fail the same way" (a folder that is gone, a tool or a
+model that is not installed, a backup target deleted meanwhile). So an error that may pass by
+waiting must never be a `DomainError`: `SyncError`, `BackupError` and `AIUnavailableError`
+stay outside the hierarchy for that reason (`tests/app/test_job_failures.py` pins both lists).
+Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
 minute after the first failure, 5 after the second (`domain/job_queue.RETRY_DELAYS`; a third
 entry, 25 minutes, applies if `max_attempts` is ever raised). A claim skips jobs whose time has
 not come, so a network blip, a locked backup repository or an unplugged disk has ~6 minutes to
@@ -357,9 +361,26 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
   of them and revokes the user's device tokens. First-run setup and the last-admin rule are
   atomic (one `BEGIN IMMEDIATE` transaction each).
-- Errors, the target: one `DomainError` hierarchy (`domain/errors.py`) and one handler in
-  `api/main.py`. Current state (2026-10-08): the hierarchy and the handler exist, but most
-  exception classes (44 of 62) do not derive from `DomainError` yet, and the routes turn those
-  into HTTP errors by hand (`except … raise HTTPException`). What does hold: every error
-  body, the cross-site guard's included, is `{"detail": sentence}`.
+- Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`
+  that turns any of them into its status and `{"detail": sentence}`. Six families carry the
+  status: `DomainError` (400), `ForbiddenError` (403), `NotFoundError` (404), `ConflictError`
+  (409), `InvalidError` (422), `UnavailableError` (503); the three sign-in errors set their own
+  (401, 423, 429). A use case or adapter raises a named subclass with the sentence the user
+  reads (`PersonNotFoundError`, `InvalidBackupTargetError`, `SourceExistsError`), and the route
+  does nothing. Of the 80 exception classes, 50 are in the hierarchy (2026-10-08). Classes that
+  were plain `ValueError`s before keep `ValueError` as a second base, so the command line and
+  older `except ValueError` code still catch them.
+  - **Outside on purpose (30 classes, each listed with its reason in
+    `tests/unit/test_error_hierarchy.py`, which fails for a new class that is neither):**
+    what may pass by waiting (`SyncError`, `BackupError`, `AIUnavailableError`: see "Retries
+    wait"), signals caught where they are raised (`DuplicateAssetError`, `ToolMissingError`,
+    `UploadTooLargeError`), and errors only the command line reports.
+  - **Routes that still translate by hand (12 blocks):** `SyncError` in the Proton and rclone
+    routes (404 for a missing folder, else 503: it is outside the hierarchy); a blocked print
+    (its body also lists the photos); three whose sentence is the route's, not the error's
+    (wrong current PIN, unknown backup target, photo not analysed yet); a too-long name on a
+    people split (a bare `ValueError`, because the rename route lets the same error through
+    as a 500); and two errors from libraries (pydantic in downloads, python-multipart in
+    uploads).
+  - Every error body, the cross-site guard's included, is `{"detail": sentence}`.
 - Download and edit endpoints check the access *level*, not just visibility.

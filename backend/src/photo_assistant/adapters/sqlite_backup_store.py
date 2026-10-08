@@ -8,8 +8,7 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 
-from photo_assistant.adapters.sqlite_base import iso_text
-from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_base import SqliteBase, iso_text
 from photo_assistant.domain.backup import (
     BackupRun,
     BackupRunStatus,
@@ -20,7 +19,7 @@ from photo_assistant.domain.backup import (
     RunOutcome,
     TargetSettings,
 )
-from photo_assistant.ports.backup import AssetFile
+from photo_assistant.ports.backup import AssetFile, BackupTargetExistsError
 
 
 def _when(value: str | None) -> datetime | None:
@@ -61,29 +60,8 @@ def _run(row: sqlite3.Row) -> BackupRun:
     )
 
 
-class SqliteBackupStore:
+class SqliteBackupStore(SqliteBase):
     """On the process's one ``Database`` (sqlite_database.py)."""
-
-    def __init__(self, db: Database | sqlite3.Connection) -> None:
-        self._db = db if isinstance(db, Database) else Database.of(db)
-        self._conn = self._db.writer
-        self._lock = self._db.lock
-
-    def close(self) -> None:
-        self._db.close()
-
-    def _one(self, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row | None:
-        with self._db.reading() as conn:
-            row: sqlite3.Row | None = conn.execute(sql, params).fetchone()
-            return row
-
-    def _all(self, sql: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with self._db.reading() as conn:
-            return conn.execute(sql, params).fetchall()
-
-    def _write(self, sql: str, params: tuple[object, ...] = ()) -> int:
-        with self._lock:
-            return int(self._conn.execute(sql, params).lastrowid or 0)
 
     # --- targets ---------------------------------------------------------------------------
 
@@ -106,7 +84,9 @@ class SqliteBackupStore:
                 ),
             )
         except sqlite3.IntegrityError as exc:
-            raise ValueError(f"a backup target named {target.label!r} already exists") from exc
+            raise BackupTargetExistsError(
+                f"a backup target named {target.label!r} already exists"
+            ) from exc
         found = self.get_target(target_id)
         assert found is not None
         return found
@@ -199,14 +179,12 @@ class SqliteBackupStore:
 
     def recover_interrupted_runs(self, now: datetime) -> int:
         """Runs still 'running' at startup were cut off (crash, power loss): mark them failed."""
-        with self._lock:
-            cur = self._conn.execute(
-                """UPDATE backup_run SET status = ?, finished_at = ?,
-                       error = 'interrupted (the app stopped during the run)'
-                   WHERE status = ?""",
-                (BackupRunStatus.FAILED.value, iso_text(now), BackupRunStatus.RUNNING.value),
-            )
-            return cur.rowcount
+        return self._count(
+            """UPDATE backup_run SET status = ?, finished_at = ?,
+                   error = 'interrupted (the app stopped during the run)'
+               WHERE status = ?""",
+            (BackupRunStatus.FAILED.value, iso_text(now), BackupRunStatus.RUNNING.value),
+        )
 
     # --- assets (read-only) ----------------------------------------------------------------
 

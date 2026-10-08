@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.library_paths import DATABASE_FILE, LIBRARY_FOLDERS
 from photo_assistant.domain.schedule import (
     Every,
@@ -28,6 +29,11 @@ HEADROOM = 1.2  # a new backup place should hold the library and 20 % more
 PROOF_EVERY = timedelta(days=7)  # how often a restore test proves each backup
 PROOF_RETRY = timedelta(days=1)  # after a failed restore test
 SKIP_RETRY = timedelta(minutes=15)  # how soon to look again for a place that was not connected
+
+
+class InvalidBackupTargetError(InvalidError, ValueError):
+    """A backup target, place or setting that will not do; the message says what to change.
+    (Still a ValueError, as it was before it joined the hierarchy.)"""
 
 
 class TargetKind(StrEnum):
@@ -64,7 +70,9 @@ class Retention:
     def __post_init__(self) -> None:
         values = (self.daily, self.weekly, self.monthly)
         if any(v < 0 for v in values) or not any(values):
-            raise ValueError("retention must keep at least one snapshot and no negative counts")
+            raise InvalidBackupTargetError(
+                "retention must keep at least one snapshot and no negative counts"
+            )
 
     def as_dict(self) -> dict[str, int]:
         return {"daily": self.daily, "weekly": self.weekly, "monthly": self.monthly}
@@ -83,9 +91,9 @@ class NewBackupTarget:
 
     def __post_init__(self) -> None:
         if not self.label.strip():
-            raise ValueError("a backup target needs a name")
+            raise InvalidBackupTargetError("a backup target needs a name")
         if not self.repository.strip():
-            raise ValueError("a backup target needs a repository location")
+            raise InvalidBackupTargetError("a backup target needs a repository location")
         parse_schedule(self.schedule)  # raise InvalidScheduleError early
         parse_window(self.quiet_window)
 

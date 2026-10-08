@@ -20,8 +20,7 @@ from photo_assistant.domain.access import (
     session_expired,
     username_problem,
 )
-from photo_assistant.domain.errors import ConflictError, InvalidError
-from photo_assistant.domain.errors import NotFoundError as DomainNotFound
+from photo_assistant.domain.errors import ConflictError, InvalidError, NotFoundError
 from photo_assistant.ports import Clock
 from photo_assistant.ports.accounts import (
     AccountStore,
@@ -71,29 +70,24 @@ class AccountLockedError(AccountError):
         )
 
 
-class AlreadySetUpError(AccountError):
-    status = ConflictError.status
-
+class AlreadySetUpError(ConflictError, AccountError):
     def __init__(self) -> None:
         super().__init__("this library already has accounts; log in instead")
 
 
-class LastAdminError(AccountError):
-    status = ConflictError.status
-
+class LastAdminError(ConflictError, AccountError):
     def __init__(self) -> None:
         super().__init__("the library needs at least one active admin")
 
 
-class NameTakenError(AccountError):
-    status = ConflictError.status
-
+class NameTakenError(ConflictError, AccountError):
     def __init__(self, username: str) -> None:
         super().__init__(f"the user name '{username}' is taken")
 
 
-class NotFoundError(AccountError):
-    status = DomainNotFound.status
+class UserNotFoundError(NotFoundError, AccountError):
+    """A NotFoundError (404) like any other; an AccountError too, because the command line
+    catches those to print the sentence (``just set-pin nobody``)."""
 
     def __init__(self) -> None:
         super().__init__("no such user")
@@ -177,7 +171,7 @@ class Accounts:
         """A new PIN without the old one, for the command line (a forgotten PIN)."""
         found = self._store.find_user_by_username(username)
         if found is None:
-            raise NotFoundError()
+            raise UserNotFoundError()
         return self.update_user(found[0].id, UserPatch(pin=pin))
 
     def get_user(self, user_id: int) -> User | None:
@@ -186,7 +180,7 @@ class Accounts:
     def update_user(self, user_id: int, patch: UserPatch) -> User:
         user = self._store.get_user(user_id)
         if user is None:
-            raise NotFoundError()
+            raise UserNotFoundError()
         self._guard_last_admin(user, patch)
         if patch.pin is not None:
             _check_pin(patch.pin)
@@ -216,7 +210,7 @@ class Accounts:
         PINs again: for the person who mistyped their PIN too often."""
         user = self._store.get_user(user_id)
         if user is None:
-            raise NotFoundError()
+            raise UserNotFoundError()
         self._store.forgive_wrong_pins(user.username)
 
     def _guard_last_admin(self, user: User, patch: UserPatch) -> None:

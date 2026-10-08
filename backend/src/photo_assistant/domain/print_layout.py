@@ -14,6 +14,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from photo_assistant.domain.errors import InvalidError
+
 MM_PER_INCH = 25.4
 BLEED_MM = 3.0
 SAFE_MARGIN_MM = 5.0
@@ -21,11 +23,11 @@ WARN_BELOW_PPI = 200.0
 BLOCK_BELOW_PPI = 150.0
 
 
-class UnknownTrimSizeError(KeyError):
+class UnknownTrimSizeError(InvalidError):
     """A trim size id that is not one of the presets."""
 
 
-class UnknownLayoutError(KeyError):
+class UnknownLayoutError(InvalidError):
     """A layout id that is not one of the templates."""
 
 

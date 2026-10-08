@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 import pyvips  # type: ignore[import-untyped]
 
-from photo_assistant.api.ops_services import build_ops_services
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.backup import BackupRunStatus, NewBackupTarget
 from tests.conftest import snapshot_tree
@@ -45,6 +47,13 @@ def _ops(tmp_path: Path, library: Path) -> OpsSettings:
     )
 
 
+def _build(library: Path, settings: OpsSettings) -> OpsServices:
+    db = Database.open(library / "library.db")
+    return build_ops_services(
+        library, settings, db=db, rclone=RcloneTool(), queue=SqliteRepository(db)
+    )
+
+
 def _library_files(root: Path) -> dict[str, tuple[str, int, int]]:
     """Everything a backup must never change (the database is allowed to record runs)."""
     return {
@@ -57,7 +66,7 @@ def _library_files(root: Path) -> dict[str, tuple[str, int, int]]:
 def test_backup_then_restore_test_against_the_database_hashes(
     library: Path, password: Path, tmp_path: Path
 ) -> None:
-    ops = build_ops_services(library, _ops(tmp_path, library))
+    ops = _build(library, _ops(tmp_path, library))
     try:
         disk = tmp_path / "backup-disk"
         disk.mkdir()
@@ -92,7 +101,7 @@ def test_failed_backups_leave_the_library_untouched(
     library: Path, password: Path, tmp_path: Path
 ) -> None:
     before = _library_files(library)
-    ops = build_ops_services(library, _ops(tmp_path, library))
+    ops = _build(library, _ops(tmp_path, library))
     try:
         disk = tmp_path / "disk"
         disk.mkdir()
@@ -110,7 +119,7 @@ def test_a_backup_to_a_disk_that_is_not_there_is_skipped_and_creates_nothing(
     library: Path, password: Path, tmp_path: Path
 ) -> None:
     before = _library_files(library)
-    ops = build_ops_services(library, _ops(tmp_path, library))
+    ops = _build(library, _ops(tmp_path, library))
     try:
         gone = tmp_path / "unplugged"
         target = ops.backup.add_target(
@@ -125,10 +134,10 @@ def test_a_backup_to_a_disk_that_is_not_there_is_skipped_and_creates_nothing(
 
 
 def test_ops_services_start_and_stop(library: Path, tmp_path: Path) -> None:
-    ops = build_ops_services(library, _ops(tmp_path, library))
+    ops = _build(library, _ops(tmp_path, library))
     ops.start()
     assert ops.periodic.is_running
     ops.close()
-    idle = build_ops_services(library, OpsSettings(backup_enabled=False))
+    idle = _build(library, OpsSettings(backup_enabled=False))
     assert idle.periodic.tick() == []
     idle.close()

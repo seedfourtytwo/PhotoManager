@@ -17,6 +17,7 @@ from photo_assistant.api.schemas import (
 )
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import AlbumRole, Viewer, can_edit_album
+from photo_assistant.domain.errors import ForbiddenError
 from photo_assistant.ports.library import AlbumInfo
 
 router = APIRouter(prefix="/api/albums", tags=["albums"], dependencies=LOGGED_IN)
@@ -32,14 +33,14 @@ def _album(services: Services, viewer: Viewer, album_id: int) -> AlbumInfo:
 def _editable(services: Services, viewer: Viewer, album_id: int) -> AlbumInfo:
     album = _album(services, viewer, album_id)
     if not can_edit_album(album.role, viewer.role):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "you can look at this album, not change it")
+        raise ForbiddenError("you can look at this album, not change it")
     return album
 
 
 def _owned(services: Services, viewer: Viewer, album_id: int) -> AlbumInfo:
     album = _album(services, viewer, album_id)
     if album.role is not AlbumRole.OWNER and not viewer.is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "only the album's owner can do this")
+        raise ForbiddenError("only the album's owner can do this")
     return album
 
 
@@ -132,10 +133,7 @@ def reorder(services: ServicesDep, viewer: ViewerDep, album_id: int, body: Album
     _editable(services, viewer, album_id)
     if set(_visible_ids(services, viewer, body.asset_ids)) != set(body.asset_ids):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown photos in the order")
-    try:
-        services.repo.reorder_album(album_id, body.asset_ids, services.clock.now())
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    services.repo.reorder_album(album_id, body.asset_ids, services.clock.now())
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

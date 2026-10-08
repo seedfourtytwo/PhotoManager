@@ -23,7 +23,7 @@ from photo_assistant.domain.backup import (
     TargetStatus,
 )
 from photo_assistant.domain.schedule import InvalidScheduleError
-from photo_assistant.ports.backup import BackupError, Disk
+from photo_assistant.ports.backup import Disk
 
 
 def get_backup_service(services: ServicesDep) -> BackupService:
@@ -311,13 +311,9 @@ def plan_backup(service: BackupDep, body: PlaceIn) -> PlanOut:
 def set_up_backup(service: BackupDep, body: SetupIn) -> SetupOut:
     """Guided setup: makes the key, creates the target, queues the first backup (which is
     followed by a restore test). The key comes back for the owner to keep a copy."""
-    try:
-        target, key = service.set_up(
-            body.label, body.place, body.schedule, Retention(**body.retention.model_dump())
-        )
-    except (ValueError, InvalidScheduleError) as exc:
-        code = status.HTTP_409_CONFLICT if "already exists" in str(exc) else 422
-        raise HTTPException(code, str(exc)) from exc
+    target, key = service.set_up(
+        body.label, body.place, body.schedule, Retention(**body.retention.model_dump())
+    )
     sheet = RecoverySheet(target.label, target.repository, key)
     return SetupOut(target=_status_of(service, target.id), recovery=RecoveryOut.of(sheet))
 
@@ -325,10 +321,7 @@ def set_up_backup(service: BackupDep, body: SetupIn) -> SetupOut:
 @router.get("/{target_id}/recovery")
 def recovery(service: BackupDep, target_id: int) -> RecoveryOut:
     _known(service, target_id)
-    try:
-        return RecoveryOut.of(service.recovery(target_id))
-    except BackupError as exc:  # the key file is gone or unreadable
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return RecoveryOut.of(service.recovery(target_id))
 
 
 @router.post("/{target_id}/key-saved")
@@ -349,39 +342,29 @@ def proton_copy(service: BackupDep, target_id: int, body: ProtonCopyIn) -> Targe
     backup (issue 14). The copy is the encrypted repository; null switches it off (what is
     already on Proton stays there)."""
     _known(service, target_id)
-    try:
-        service.set_mirror(target_id, body.path)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    service.set_mirror(target_id, body.path)
     return _status_of(service, target_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def add_backup(service: BackupDep, body: TargetIn) -> TargetOut:
-    try:
-        retention = Retention(**body.retention.model_dump())
-        new = NewBackupTarget(
-            body.label,
-            body.repository,
-            body.password_file,
-            body.schedule,
-            body.quiet_window,
-            retention,
-        )
-        target = service.add_target(new, own_key_only=True)
-    except (ValueError, InvalidScheduleError) as exc:
-        code = status.HTTP_409_CONFLICT if "already exists" in str(exc) else 422
-        raise HTTPException(code, str(exc)) from exc
+    retention = Retention(**body.retention.model_dump())
+    new = NewBackupTarget(
+        body.label,
+        body.repository,
+        body.password_file,
+        body.schedule,
+        body.quiet_window,
+        retention,
+    )
+    target = service.add_target(new, own_key_only=True)
     return _status_of(service, target.id)
 
 
 @router.patch("/{target_id}")
 def patch_backup(service: BackupDep, target_id: int, body: TargetPatch) -> TargetOut:
     _known(service, target_id)
-    try:
-        settings = body.settings(service.target(target_id).settings)
-    except (ValueError, InvalidScheduleError) as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    settings = body.settings(service.target(target_id).settings)
     if settings is not None:
         service.change_settings(target_id, settings)
     if body.enabled is not None:

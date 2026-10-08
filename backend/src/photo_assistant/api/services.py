@@ -1,4 +1,13 @@
-"""Composition root: the one place that picks real adapters and wires them together."""
+"""Composition root: the one place that picks real adapters and wires them together.
+
+For both the server (``api/main.py``) and the command line (``__main__.py``): each calls
+``build_services`` and gets the same objects on the one library ``Database``. What only the
+server does (the job worker, the periodic tasks, the start-up sweeps) is not started here: the
+server's lifespan starts it. The builders of the areas live beside this module
+(``integrations.py``, ``ml_services.py``, ``ops_services.py``); the ops commands
+(``api/cli_ops.py``), which must also work without a library, call those of
+``ops_services.py`` directly.
+"""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -12,11 +21,10 @@ from photo_assistant.adapters.filesystem import (
     SystemClock,
 )
 from photo_assistant.adapters.geocoder import OfflineGeocoder
-from photo_assistant.adapters.ollama_ai import OllamaProvider
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
-from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_database import Database, open_library_database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
@@ -85,8 +93,7 @@ class Services:
         self.worker.stop()
         self.ops.close()
         self.ml.close()
-        if isinstance(self.integrations.ai, OllamaProvider):
-            self.integrations.ai.close()
+        self.integrations.ai.close()
         self.exiftool.close()
         self.db.close()
 
@@ -96,7 +103,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
     passes "server"; every command line run is "cli")."""
     root = settings.data_root.expanduser()
     root.mkdir(parents=True, exist_ok=True)
-    db = Database.open(root / "library.db", backup_dir=root / "db-backups")
+    db = open_library_database(root)
     repo = SqliteRepository(db)
     store = DiskLibraryStore(root)
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)
@@ -119,7 +126,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
     integrations = build_integrations(
         data_root=root,
         settings=settings.integrations,
-        conn=db,
+        db=db,
         repo=repo,
         importer=importer,
         clock=clock,
@@ -173,11 +180,11 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
     ops = build_ops_services(
         root,
         settings.ops,
+        db=db,
+        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         queue=repo,
         housekeeping=housekeeping,
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
-        db=db,
-        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         mirror=ProtonMirror(integrations.proton),
     )
     editor = Editor(

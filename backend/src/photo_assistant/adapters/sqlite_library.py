@@ -274,7 +274,7 @@ class LibraryMixin(SqliteBase):
     def list_views(
         self, viewer: Viewer, f: AssetFilter, limit: int, cursor: str | None = None
     ) -> ViewPage:
-        """Newest first; the cursor works with any filter. Raises ValueError for a bad cursor."""
+        """Newest first; the cursor works with any filter. InvalidCursorError for a bad one."""
         tail = f"{ORDER} LIMIT :limit"
         extra: Bindings = {"limit": limit + 1}
         if cursor is not None:
