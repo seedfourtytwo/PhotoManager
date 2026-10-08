@@ -13,6 +13,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -115,10 +116,17 @@ class ResticBackup:
         binary: str = "restic",
         extra_env: Mapping[str, str] | None = None,
         cache_dir: Path | None = None,
+        rclone_binary: str | None = None,
+        rclone_config: Path | None = None,
     ) -> None:
+        """``rclone_binary`` / ``rclone_config``: the rclone this app uses for its cloud
+        sources; None leaves restic's own choice (``rclone`` on PATH, rclone's default file)."""
         self._binary = binary
         self._extra_env = dict(extra_env or {})
         self._cache_dir = cache_dir
+        self._rclone_binary = rclone_binary
+        if rclone_config is not None:
+            self._extra_env.setdefault("RCLONE_CONFIG", str(rclone_config))
 
     # --- plumbing --------------------------------------------------------------------------
 
@@ -131,6 +139,9 @@ class ResticBackup:
         cmd = [self._binary, "--repo", repo.location, "--password-file", str(repo.password_file)]
         if self._cache_dir is not None:
             cmd += ["--cache-dir", str(self._cache_dir)]
+        if self._rclone_binary and target_kind(repo.location) is TargetKind.RCLONE:
+            # restic splits this value like a shell would: quote a path with spaces
+            cmd += ["-o", f"rclone.program={shlex.quote(self._rclone_binary)}"]
         return [*cmd, *args]
 
     def _run(
