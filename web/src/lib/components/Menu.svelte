@@ -10,8 +10,14 @@
 </script>
 
 <script lang="ts">
-	type Props = { label: string; text: string; badge?: number; items: MenuItem[] };
-	let { label, text, badge = 0, items }: Props = $props();
+	type Props = {
+		label: string;
+		text: string;
+		badge?: number;
+		badgeLabel?: string;
+		items: MenuItem[];
+	};
+	let { label, text, badge = 0, badgeLabel, items }: Props = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -36,19 +42,29 @@
 	}}
 />
 
-<div class="menu" bind:this={root}>
+<div
+	class="menu"
+	bind:this={root}
+	onfocusout={(event) => {
+		const next = event.relatedTarget;
+		if (open && next instanceof Node && !root.contains(next)) close();
+	}}
+>
 	<button
 		bind:this={button}
 		type="button"
 		class="trigger"
-		aria-label={badge > 0 ? `${label} (${badge})` : label}
+		aria-label={label}
 		aria-expanded={open}
-		aria-controls={id}
+		aria-controls={open ? id : undefined}
+		aria-describedby={badge > 0 && badgeLabel ? `${id}-badge` : undefined}
 		onclick={() => (open = !open)}
 	>
 		<span aria-hidden="true">{text}</span>
 		{#if badge > 0}<span class="badge data" aria-hidden="true">{badge}</span>{/if}
 	</button>
+	{#if badge > 0 && badgeLabel}<span id={`${id}-badge`} class="visually-hidden">{badgeLabel}</span
+		>{/if}
 	{#if open}
 		<ul {id} class="panel">
 			{#each items as item (item.label)}
@@ -66,7 +82,7 @@
 						<button
 							type="button"
 							onclick={() => {
-								close();
+								close(true);
 								item.run?.();
 							}}>{item.label}</button
 						>
@@ -144,7 +160,8 @@
 		color: var(--ink-2);
 	}
 	@media (hover: hover) {
-		.panel a:hover {
+		.panel a:hover,
+		.panel button:hover {
 			background: var(--tint);
 		}
 	}

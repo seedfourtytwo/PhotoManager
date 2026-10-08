@@ -16,10 +16,12 @@ it('opens from its button and closes on Escape, returning focus', async () => {
 	await expect.element(page.getByRole('link', { name: 'Trash' })).not.toBeInTheDocument();
 	await button.click();
 	await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+	await expect.element(button).toHaveAttribute('aria-controls');
 	await expect.element(page.getByRole('link', { name: 'Trash' })).toBeVisible();
 	await userEvent.keyboard('{Escape}');
 	await expect.element(button).toHaveAttribute('aria-expanded', 'false');
 	await expect.element(button).toHaveFocus();
+	await expect.element(button).not.toHaveAttribute('aria-controls');
 });
 
 it('closes on a press outside', async () => {
@@ -32,9 +34,16 @@ it('closes on a press outside', async () => {
 });
 
 it('marks the current page and shows counts', async () => {
-	render(Menu, { label: 'Account', text: 'C', badge: 4, items: items() });
-	const button = page.getByRole('button', { name: 'Account' });
+	render(Menu, {
+		label: 'Account',
+		text: 'C',
+		badge: 4,
+		badgeLabel: '4 photos to review',
+		items: items()
+	});
+	const button = page.getByRole('button', { name: 'Account', exact: true });
 	await expect.element(button).toHaveTextContent('4');
+	await expect.element(button).toHaveAccessibleDescription('4 photos to review');
 	await button.click();
 	await expect
 		.element(page.getByRole('link', { name: 'Trash' }))
@@ -48,7 +57,19 @@ it('runs an action and closes', async () => {
 	await page.getByRole('button', { name: 'Account' }).click();
 	await page.getByRole('button', { name: 'Sign out' }).click();
 	expect(run).toHaveBeenCalledOnce();
-	await expect
-		.element(page.getByRole('button', { name: 'Account' }))
-		.toHaveAttribute('aria-expanded', 'false');
+	const trigger = page.getByRole('button', { name: 'Account' });
+	await expect.element(trigger).toHaveAttribute('aria-expanded', 'false');
+	await expect.element(trigger).toHaveFocus();
+});
+
+it('closes when keyboard focus leaves the menu', async () => {
+	render(Menu, { label: 'Account', text: 'C', items: items() });
+	const button = page.getByRole('button', { name: 'Account' });
+	await button.click();
+	await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+	const outside = document.body.appendChild(document.createElement('button'));
+	await userEvent.keyboard('{Tab}{Tab}{Tab}{Tab}');
+	expect(document.activeElement).toBe(outside);
+	await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+	outside.remove();
 });
