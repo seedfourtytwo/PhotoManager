@@ -149,7 +149,10 @@ def _serve_webp(services: Services, view: AssetView, kind: str) -> Response:
     path = services.editor.image_for(view, kind)
     if path is None or not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not generated yet")
-    return FileResponse(path, media_type="image/webp", headers={"Cache-Control": IMMUTABLE})
+    # until its preview is made, a photo's thumbnail stands in for it: never cache that one
+    stand_in = kind == "preview" and view.recipe is None and view.asset.preview_path is None
+    cache = "no-store" if stand_in else IMMUTABLE
+    return FileResponse(path, media_type="image/webp", headers={"Cache-Control": cache})
 
 
 def _image_view(services: Services, viewer: Viewer, asset_id: int) -> AssetView:

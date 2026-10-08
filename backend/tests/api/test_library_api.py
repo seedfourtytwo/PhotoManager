@@ -109,6 +109,22 @@ def test_timeline_pages_through_everything_newest_first(
     assert client.get("/api/assets", params={"cursor": "junk"}).status_code == 400
 
 
+def test_a_thumbnail_standing_in_for_a_missing_preview_is_never_cached(
+    client: TestClient, source_guard: Path
+) -> None:
+    add_and_scan(client, source_guard)
+    asset_id = client.get("/api/assets", params={"limit": 1}).json()["items"][0]["id"]
+    real = client.get(f"/api/assets/{asset_id}/preview")
+    assert "immutable" in real.headers["cache-control"]
+    # as it is between the import and the preview job
+    services(client).repo._write("UPDATE asset SET preview_path = NULL WHERE id = ?", (asset_id,))
+    thumb = client.get(f"/api/assets/{asset_id}/thumb")
+    stand_in = client.get(f"/api/assets/{asset_id}/preview")
+    assert stand_in.status_code == 200 and stand_in.content == thumb.content
+    assert stand_in.headers["cache-control"] == "no-store", "or it is the preview for a year"
+    assert "immutable" in thumb.headers["cache-control"], "the thumbnail was asked for: cache it"
+
+
 def test_asset_detail_images_and_original_download(client: TestClient, source_guard: Path) -> None:
     add_and_scan(client, source_guard)
     asset = client.get("/api/assets", params={"limit": 100}).json()["items"][0]
