@@ -40,6 +40,15 @@ class FakeLibrary:
         self.jobs.append((kind, payload))
         return len(self.jobs)
 
+    def get_job(self, job_id: int) -> dict[str, object] | None:
+        if not 0 < job_id <= len(self.jobs):
+            return None
+        kind, payload = self.jobs[job_id - 1]
+        return {"kind": kind, "payload": payload, "status": "queued", "run_after": None}
+
+    def get_source(self, source_id: int) -> Source | None:
+        return None
+
 
 @dataclass
 class FakeInboxes:

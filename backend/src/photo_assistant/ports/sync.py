@@ -9,33 +9,44 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from photo_assistant.domain.errors import UnavailableError
+from photo_assistant.domain.errors import NotFoundError, UnavailableError
 from photo_assistant.domain.remote_source import RemoteConfig
 
 
 class SyncError(RuntimeError):
     """The pull failed; the message says what happened and what to do.
 
-    Not a DomainError: most of what makes a pull fail may pass (the network, a slow provider),
-    and the worker retries a job that fails for one. The routes that talk to a remote give
-    these their status themselves."""
+    By itself not a DomainError: what makes a pull fail may pass (the network, a slow or
+    throttling provider, an answer that took too long), and the worker retries a job that
+    fails for it. Met while answering a request it is a 503 (``api/main.py``).
 
-
-class SyncAuthError(SyncError):
-    """The remote refused the login (or the remote isn't set up in rclone)."""
-
-
-class SyncNotFoundError(SyncError):
-    """The folder doesn't exist on the remote."""
+    A cause that waiting does not fix is one of the subclasses below that are a DomainError
+    as well: the family gives the HTTP status, and the worker fails the job at once."""
 
 
 class SyncRateLimitedError(SyncError):
-    """The provider is throttling us (MEGA does this under heavy use)."""
+    """The provider is throttling us (MEGA does this under heavy use). It may pass."""
+
+
+class SyncAuthError(SyncError, UnavailableError):
+    """The remote refused the login (or the remote isn't set up in rclone): until someone
+    signs in or sets it up, every pull fails the same way."""
+
+
+class SyncNotFoundError(SyncError, NotFoundError):
+    """The folder doesn't exist on the remote."""
 
 
 class SyncToolMissingError(SyncError, UnavailableError):
-    """The tool that pulls (rclone, proton-drive) is not installed. Waiting does not install
-    it, so this one is a DomainError as well: the worker fails the job at once."""
+    """The tool that pulls (rclone, proton-drive) is not installed. Waiting does not install it."""
+
+
+class SyncUnsupportedError(SyncError, UnavailableError):
+    """A source of a provider this version has no tool for."""
+
+
+class SyncDiskFullError(SyncError, UnavailableError):
+    """This machine's disk is full: nothing more can be pulled until space is freed."""
 
 
 @dataclass(frozen=True, slots=True)

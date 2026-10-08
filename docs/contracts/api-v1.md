@@ -8,7 +8,10 @@ Conventions
 - JSON everywhere; errors are `{"detail": "human sentence"}` with 4xx/5xx.
 - Dates: `taken_at` is local wall-clock time, ISO without zone (`2019-07-04T18:30:00`);
   `tz_offset_minutes` may be null. Day filters use `YYYY-MM-DD`.
-- Auth: session cookie `pa_session` (HttpOnly, SameSite=Strict, Secure when served over HTTPS).
+- Auth: session cookie `pa_session` (HttpOnly, SameSite=Strict, Secure when served over HTTPS),
+  kept 30 days. Any authenticated response may set it again with the same value (the server
+  does so every 15 days of use, together with its marker cookie `pa_session_fresh`), so a
+  session that is used does not end; clients have nothing to do.
   Every `/api/*` route needs a session **except** `/api/health`, `/api/setup` (GET/POST),
   `/api/auth/accounts`, `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
 - Roles: `admin` (everything, manages users/sources/access), `member`, `guest`
@@ -88,7 +91,8 @@ such a source fails visibly: its import run is `failed` with that message, and t
 is `failed` without retries.
 A job that failed and will be tried again stays `queued` with `run_after` (UTC ISO time, else
 `null`) and its last `error`; `GET /api/stats` counts such jobs under `jobs.waiting`, not
-under `jobs.queued`.
+under `jobs.queued`. `GET /api/jobs` with `status=waiting` lists just those jobs (the admin screen
+shows them with the time of the next attempt); `status=queued` still lists every queued job.
 
 `PATCH /api/sources/{id}` (admin) takes `{enabled?, label?, owner_id?}` and answers the
 `SourceOut`; only the fields sent change. `label` (1–100 characters) renames the source
@@ -96,6 +100,15 @@ under `jobs.queued`.
 
 `GET /api/imports` (admin; `?source_id=` for one source) lists the newest 200 runs, newest
 first (v1.4): older runs are not returned.
+
+`GET /api/imports/{id}` (admin) answers one page of the run's files:
+`{id, source_id, status, message, summary, items: [{relative_path, outcome, reason, asset_id}],
+total, limit, offset, next_offset}`. Query: `outcome` (only that outcome), `limit` (default 500,
+1–2000, else `422`), `offset` (default 0). `items` list what needs a look first — `failed`,
+`skipped`, `duplicate`, then `already_known` and `imported` — and within an outcome the order
+the run handled them. `total` counts the files of the asked outcome (all, without `outcome`);
+`next_offset` is the `offset` of the next page, `null` on the last. `summary` is always the whole
+run's counts. A run of up to 500 files answers as before, plus the four paging fields.
 
 **Automatic re-checks.** `SourceOut.recheck` is `off` (default), `hourly`, `daily` or `weekly`;
 `PATCH /api/sources/{id}` takes `{recheck}` (admin; any other value `422`). Every few minutes
@@ -248,6 +261,7 @@ access `{everyone: null, users: [{owner, edit}]}`: **private to the uploader** u
 |---|---|---|---|---|
 | POST | `/api/upload` | session or device | multipart, any field name, many files | `{files: [{name, outcome: "stored"\|"duplicate"\|"rejected", stored_as, content_hash, asset_id, reason}], import_job_id\|null}`; `400` broken multipart, `415` not multipart. `duplicate` = you already have it (or it was purged); `asset_id` is only ever the id of a photo you can see, else `null` (v1.2) |
 | POST | `/api/upload/check` | session or device | `{hashes: [blake3 hex]}` (≤ 5000) | `{missing: [...]}` — missing **for you** (v1.2): purged photos count as present; a photo that exists but is hidden from you is missing (uploading it links the existing photo to your inbox: one library copy, and you gain access through your inbox) |
+| GET | `/api/upload/jobs/{import_job_id}` | session or device | – | `{id, status: "queued"\|"running"\|"done"\|"failed", run_after}`: the import your own upload queued (`import_job_id` of `POST /api/upload`). `run_after` (UTC time, else `null`) is set while a failed import waits for its next attempt. Any other job, anyone else's upload and an unknown id are all `404` (admins too: they have `GET /api/jobs`); guests `403`. The web app waits for this job after an upload, not for the whole queue. |
 | GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, revoked}]` |
 | POST | `/api/devices` | session | `{name, platform: "ios"\|"android"\|"desktop"\|"other"}` | `201 {device, token}` (the token is shown once) |
 | DELETE | `/api/devices/{id}` | session | – | `204`; `404` if not yours |

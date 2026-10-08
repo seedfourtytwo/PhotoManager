@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from photo_assistant.api.deps import ADMIN_ONLY, AdminUser, IntegrationsDep
 from photo_assistant.app.sync_source import SCAN_JOB_KIND, add_remote_source
-from photo_assistant.ports.sync import SyncError
 
 router = APIRouter(prefix="/api/remote-sources", tags=["sources"], dependencies=ADMIN_ONLY)
 
@@ -36,33 +35,21 @@ class PullQueued(BaseModel):
     source_id: int
 
 
-def _no_rclone(exc: SyncError) -> HTTPException:
-    """Sync errors stay outside the DomainError hierarchy (the worker retries a pull that
-    fails for one), so the route gives them their status."""
-    return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))
-
-
 @router.get("/remotes")
 def list_remotes(integrations: IntegrationsDep) -> RemotesOut:
-    try:
-        return RemotesOut(remotes=integrations.rclone.list_remotes())
-    except SyncError as exc:
-        raise _no_rclone(exc) from exc
+    return RemotesOut(remotes=integrations.rclone.list_remotes())
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def add(body: RemoteSourceIn, integrations: IntegrationsDep, admin: AdminUser) -> RemoteSourceOut:
-    try:
-        source_id = add_remote_source(
-            integrations.remote_sources,
-            integrations.rclone,
-            integrations.staging_root,
-            body.label,
-            {"remote": body.remote, "path": body.path},
-            admin.id,
-        )
-    except SyncError as exc:
-        raise _no_rclone(exc) from exc
+    source_id = add_remote_source(
+        integrations.remote_sources,
+        integrations.rclone,
+        integrations.staging_root,
+        body.label,
+        {"remote": body.remote, "path": body.path},
+        admin.id,
+    )
     return RemoteSourceOut(id=source_id, label=body.label, remote=body.remote, path=body.path)
 
 

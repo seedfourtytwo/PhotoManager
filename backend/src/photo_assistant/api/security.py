@@ -11,8 +11,16 @@ from urllib.parse import urlsplit
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from photo_assistant.domain.access import SESSION_COOKIE_RENEW_AFTER, SESSION_IDLE_LIMIT
+
+SESSION_COOKIE = "pa_session"
+# Set with the session cookie, but for half as long: a browser that no longer sends it holds
+# a session cookie past half its life (the server cannot see a cookie's age).
+SESSION_FRESH_COOKIE = "pa_session_fresh"
+_RENEW = "renew_session"  # in the request's state: the token whose cookie is sent again
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _ALLOWED_FETCH_SITES = {"same-origin", "none"}
@@ -98,3 +106,59 @@ class CrossSiteGuard:
         if (parts.hostname or "").lower() not in self.allowed_hosts:
             return False
         return parts.scheme == scheme and parts.netloc.lower() == host.lower()
+
+
+def set_session_cookies(response: Response, token: str, *, secure: bool) -> None:
+    """The session cookie for as long as an unused session lives, and its marker."""
+    for name, value, life in (
+        (SESSION_COOKIE, token, SESSION_IDLE_LIMIT),
+        (SESSION_FRESH_COOKIE, "1", SESSION_COOKIE_RENEW_AFTER),
+    ):
+        response.set_cookie(
+            name,
+            value,
+            max_age=int(life.total_seconds()),
+            httponly=True,
+            samesite="strict",
+            secure=secure,
+            path="/",
+        )
+
+
+def clear_session_cookies(response: Response) -> None:
+    for name in (SESSION_COOKIE, SESSION_FRESH_COOKIE):
+        response.delete_cookie(name, path="/")
+
+
+def renew_session_cookie(scope: Scope, token: str) -> None:
+    """Ask for this request's response to carry the session cookie again."""
+    scope.setdefault("state", {})[_RENEW] = token
+
+
+class SessionCookieRenewal:
+    """Sends the session cookie again with the response of a request that asked for it
+    (``renew_session_cookie``): whatever the route answers with, also a file or an error.
+
+    The browser counts the cookie's 30 days from when it was set, the server counts a
+    session's 30 days from its last use: without this, daily use still ends after 30 days."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        state = scope.setdefault("state", {})  # the same dict the route's request.state uses
+
+        async def send_renewed(message: Message) -> None:
+            token = state.get(_RENEW)
+            if message["type"] == "http.response.start" and token:
+                cookies = Response()
+                set_session_cookies(cookies, token, secure=scope["scheme"] == "https")
+                headers = MutableHeaders(scope=message)
+                for line in cookies.headers.getlist("set-cookie"):
+                    headers.append("set-cookie", line)
+            await send(message)
+
+        await self.app(scope, receive, send_renewed)

@@ -20,11 +20,9 @@ COMMAND_LINE = "raised and reported by a command-line operation only (export, ve
 
 NOT_DOMAIN_ERRORS = {
     # --- retried by the worker ---------------------------------------------------------------
-    "ports.sync.SyncError": MAY_PASS + " (network, a slow provider); routes answer it 503",
-    "ports.sync.SyncAuthError": "a SyncError; a pull records it and ends, the user signs in",
-    "ports.sync.SyncNotFoundError": "a SyncError; a pull records it and ends; routes answer 404",
-    "ports.sync.SyncRateLimitedError": "a SyncError; a pull records it and ends (no hammering)",
-    "adapters.proton_drive._PullStoppedError": "a SyncError: disk full or out of time, " + MAY_PASS,
+    "ports.sync.SyncError": MAY_PASS + " (network, a slow provider); the app answers it 503",
+    "ports.sync.SyncRateLimitedError": "a SyncError: the provider throttles, " + MAY_PASS,
+    "adapters.proton_drive._PullStoppedError": "a SyncError: out of time, " + MAY_PASS,
     "ports.backup.BackupError": MAY_PASS + "; BackupService records it on the backup run",
     "ports.backup.RepositoryLockedError": "a BackupError: another restic holds the lock",
     "ports.backup.RepositoryNotFoundError": "a BackupError: the disk may only be unplugged",

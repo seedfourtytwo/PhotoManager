@@ -252,6 +252,15 @@ class Repository(SourceRegistry, Protocol):
     ) -> str | None: ...
     def asset_id_for_source_path(self, source_id: int, relative_path: str) -> int | None: ...
 
+    def trash_superseded(self, asset_id: int, now: datetime) -> bool:
+        """Move a photo no source file holds any more to the trash, as the import's own act
+        (not a person's). False, and nothing changes, when a file still holds it."""
+        ...
+
+    def restore_superseded(self, asset_id: int) -> bool:
+        """Undo ``trash_superseded``; a photo a person trashed stays in the trash."""
+        ...
+
     # import runs
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
@@ -286,11 +295,21 @@ class Repository(SourceRegistry, Protocol):
         ``excluding`` (job lanes, B24)."""
         ...
 
-    def complete_job(self, job_id: int) -> None: ...
+    def complete_job(self, job_id: int, now: datetime | None = None) -> None:
+        """Done at ``now``: the history of finished jobs is pruned by that time."""
+        ...
+
     def fail_job(
-        self, job_id: int, error: str, retry: bool, run_after: datetime | None = None
+        self,
+        job_id: int,
+        error: str,
+        retry: bool,
+        run_after: datetime | None = None,
+        *,
+        now: datetime | None = None,
     ) -> None:
-        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once)."""
+        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once).
+        ``now``: when the attempt ended."""
         ...
 
     def renew_claim(self, job_id: int, owner: str, now: datetime) -> None:
@@ -303,6 +322,7 @@ class Repository(SourceRegistry, Protocol):
         ...
 
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]: ...
+    def get_job(self, job_id: int) -> dict[str, object] | None: ...
     def retry_job(self, job_id: int) -> bool: ...
     def release_job(self, job_id: int) -> None:
         """Put a claimed job back in the queue without counting the attempt."""

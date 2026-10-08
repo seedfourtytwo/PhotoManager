@@ -121,6 +121,11 @@ def _summary(stdout: str) -> SnapshotSummary:
     raise BackupError("restic finished without a summary; the backup may be incomplete")
 
 
+# What a crash left half-written anywhere in the library (a copy, a database snapshot):
+# never a whole file, so never worth a place in a snapshot.
+_CRASH_LEFTOVERS = "*.partial"
+
+
 class ResticBackup:
     def __init__(
         self,
@@ -207,6 +212,7 @@ class ResticBackup:
         if not present:
             raise BackupError(f"nothing to back up in {root}")
         args = ["backup", "--json", "--quiet", "--host", SNAPSHOT_HOST, "--tag", SNAPSHOT_TAG]
+        args += ["--exclude", _CRASH_LEFTOVERS]
         latest = self.latest_snapshot(repo)
         if latest is not None:
             args += ["--parent", latest.snapshot_id]  # fast: unchanged files are not re-read
