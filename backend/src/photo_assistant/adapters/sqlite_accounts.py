@@ -138,6 +138,13 @@ class AccountsMixin(SqliteBase):
             "DELETE FROM session WHERE user_id = ? AND token_hash IS NOT ?", (user_id, keep)
         )
 
+    def prune_sessions(self, last_seen_before: datetime) -> int:
+        """Delete sessions idle since before then: expired ones whose cookie never came back
+        (a session is otherwise only deleted when it is presented again)."""
+        return self._count(
+            "DELETE FROM session WHERE last_seen_at < ?", (utc_text(last_seen_before),)
+        )
+
     def revoke_devices_of(self, user_id: int, now: datetime) -> None:
         self._write(
             "UPDATE device SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
@@ -164,3 +171,8 @@ class AccountsMixin(SqliteBase):
     def clear_all_login_failures(self, username: str) -> None:
         # the column is COLLATE NOCASE: "Lea" and "lea" are the same account
         self._write("DELETE FROM login_failure WHERE username = ?", (username,))
+
+    def prune_login_failures(self, before: datetime) -> int:
+        """Forget failures older than the lockout looks back: those of names that never log
+        in successfully are otherwise kept forever."""
+        return self._count("DELETE FROM login_failure WHERE at < ?", (utc_text(before),))

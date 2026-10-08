@@ -33,7 +33,14 @@ from photo_assistant.domain.model import (
     RunStatus,
     Source,
 )
-from photo_assistant.ports import DuplicateAssetError, Fingerprint, Job, Page, RenderedImage
+from photo_assistant.ports import (
+    IMPORT_RUNS_LISTED,
+    DuplicateAssetError,
+    Fingerprint,
+    Job,
+    Page,
+    RenderedImage,
+)
 
 __all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
 
@@ -339,13 +346,33 @@ class SqliteRepository(
             message=run["message"],
         )
 
-    def list_import_runs(self, source_id: int | None = None) -> list[dict[str, object]]:
+    def import_run_summary(self, run_id: int) -> dict[str, int] | None:
+        """The counts saved with the run: they outlive its per-file rows (prune_import_items)."""
+        row = self._one("SELECT summary_json FROM import_run WHERE id = ?", (run_id,))
+        return json.loads(row["summary_json"]) if row else None
+
+    def prune_import_items(self, keep_runs: int) -> int:
+        """Delete the per-file rows of all but each source's ``keep_runs`` newest runs (one row
+        per file seen on every rescan adds up). The runs and their summaries stay."""
+        return self._count(
+            """DELETE FROM import_item WHERE run_id IN (
+                   SELECT id FROM (
+                       SELECT id, ROW_NUMBER() OVER (PARTITION BY source_id ORDER BY id DESC) AS n
+                       FROM import_run)
+                   WHERE n > ?)""",
+            (keep_runs,),
+        )
+
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED
+    ) -> list[dict[str, object]]:
+        """Newest first, at most ``limit``."""
         sql = "SELECT * FROM import_run"
         params: tuple[object, ...] = ()
         if source_id is not None:
             sql += " WHERE source_id = ?"
             params = (source_id,)
-        rows = self._all(sql + " ORDER BY id DESC", params)
+        rows = self._all(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
         return [
             {
                 "id": r["id"],

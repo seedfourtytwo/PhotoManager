@@ -163,6 +163,9 @@ class Job:
     attempts: int
 
 
+IMPORT_RUNS_LISTED = 200  # the import history shows the newest runs, not every rescan ever
+
+
 class SourceRegistry(Protocol):
     def add_source(
         self,
@@ -240,7 +243,11 @@ class Repository(SourceRegistry, Protocol):
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int: ...
     def get_import_report(self, run_id: int) -> ImportReport | None: ...
-    def list_import_runs(self, source_id: int | None = None) -> list[dict[str, object]]: ...
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED
+    ) -> list[dict[str, object]]:
+        """Newest first, at most ``limit``."""
+        ...
 
     # job queue
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...

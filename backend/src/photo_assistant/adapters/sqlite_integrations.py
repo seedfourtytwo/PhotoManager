@@ -8,7 +8,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from photo_assistant.adapters.sqlite_database import Database
@@ -88,6 +88,14 @@ class SqliteAILog(_Store):
                 json.dumps(call.response),
             ),
         )
+
+    def prune(self, before: datetime) -> int:
+        """Delete the calls logged before then; returns how many."""
+        return self._write(
+            # created_at is written by SQLite: compare in its own format
+            "DELETE FROM ai_log WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', ?)",
+            (before.astimezone(UTC).isoformat(),),
+        ).rowcount
 
     def recent(self, limit: int) -> list[dict[str, object]]:
         """The latest AI calls, for inspection (tests; an admin view later, FEATURES 7)."""

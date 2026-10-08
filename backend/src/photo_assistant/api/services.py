@@ -36,6 +36,12 @@ from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.worker import Lanes
+from photo_assistant.domain.access import SESSION_IDLE_LIMIT
+
+# What the daily "prune old records" task keeps (these tables otherwise only grow):
+LOGIN_FAILURES_KEPT = timedelta(days=1)  # the lockout itself looks back 15 minutes
+AI_LOG_KEPT = timedelta(days=90)  # requests and answers of AI calls, for looking into problems
+IMPORT_RUNS_KEPT_IN_DETAIL = 10  # per source: older runs keep their counts, not every file
 
 
 @dataclass
@@ -117,6 +123,13 @@ def build_services(settings: Settings) -> Services:
         repo.enqueue_once(GROUP_JOB)
         return outcome
 
+    def prune_old_records() -> None:
+        now = clock.now()
+        repo.prune_login_failures(now - LOGIN_FAILURES_KEPT)
+        repo.prune_sessions(now - SESSION_IDLE_LIMIT)  # exactly the expired ones
+        integrations.ai_log.prune(now - AI_LOG_KEPT)
+        repo.prune_import_items(IMPORT_RUNS_KEPT_IN_DETAIL)
+
     housekeeping = [
         PeriodicTask(
             "trash purge",
@@ -134,6 +147,7 @@ def build_services(settings: Settings) -> Services:
             24 * 3600,
             lambda: repo.prune_done_jobs(clock.now() - timedelta(days=7)),
         ),
+        PeriodicTask("prune old records", 24 * 3600, prune_old_records),
     ]
     ops = build_ops_services(
         root,

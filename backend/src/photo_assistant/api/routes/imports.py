@@ -24,7 +24,8 @@ def get_import(
         "source_id": report.source_id,
         "status": report.status.value,
         "message": report.message,
-        "summary": report.summary(),
+        # the saved counts: an old run's file list is pruned, its summary is not
+        "summary": services.repo.import_run_summary(run_id) or report.summary(),
         "items": [
             {
                 "relative_path": i.relative_path,

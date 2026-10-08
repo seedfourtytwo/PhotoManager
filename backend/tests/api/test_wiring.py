@@ -5,13 +5,22 @@ check the wiring itself rather than the features (the branches test those on the
 """
 
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
+from photo_assistant.api.services import (
+    AI_LOG_KEPT,
+    IMPORT_RUNS_KEPT_IN_DETAIL,
+    LOGIN_FAILURES_KEPT,
+)
 from photo_assistant.api.settings import IntegrationSettings
+from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, SESSION_IDLE_LIMIT
+from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
+from photo_assistant.ports.ai import AICall
 from tests.api.conftest import (
     BASE,
     PIN,
@@ -58,6 +67,7 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
         "cluster faces",
         "optimize database",
         "prune finished jobs",
+        "prune old records",
     ]
 
 
@@ -67,6 +77,43 @@ def test_housekeeping_queues_the_purge_and_a_global_face_clustering(admin: TestC
     queued = {(j["kind"], str(j["payload"])) for j in services.repo.list_jobs()}
     assert ("purge_trash", "{}") in queued
     assert ("cluster_faces", "{}") in queued
+
+
+def test_housekeeping_prunes_the_tables_that_only_ever_grew(
+    admin: TestClient, tmp_path: Path
+) -> None:
+    services = services_of(admin)
+    repo, now = services.repo, services.clock.now()
+    count = lambda table: services.db.writer.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: E731
+    repo.add_login_failure("nobody", "10.0.0.9", now - LOGIN_FAILURES_KEPT - timedelta(hours=1))
+    repo.add_login_failure("nobody", "10.0.0.9", now - FAILED_LOGIN_WINDOW)
+    stale = now - SESSION_IDLE_LIMIT - timedelta(days=1)
+    repo.add_session("stale", user_id_of(admin, "admin"), stale)
+    for _ in range(2):
+        services.integrations.ai_log.record(AICall("caption", "m", {}, {}, True, 1, None, 1))
+    old_call = (now - AI_LOG_KEPT - timedelta(days=1)).isoformat()
+    services.db.writer.execute(
+        "UPDATE ai_log SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', ?) WHERE id = 1",
+        (old_call,),
+    )
+    source = repo.add_source("s", str(tmp_path / "s"))
+    report = ImportReport(source.id, RunStatus.DONE, [ItemResult("a.jpg", Outcome.SKIPPED)])
+    runs = [
+        repo.save_import_report(report, now, now) for _ in range(IMPORT_RUNS_KEPT_IN_DETAIL + 1)
+    ]
+
+    services.ops.periodic.tick()
+
+    assert count("login_failure") == 1, "the lockout still sees the recent one"
+    assert count("session") == 1, "the admin's own live session"
+    assert count("ai_log") == 1
+    assert count("import_item") == IMPORT_RUNS_KEPT_IN_DETAIL
+    assert admin.get("/api/auth/me").status_code == 200
+    oldest = admin.get(f"/api/imports/{runs[0]}").json()
+    assert oldest["items"] == []
+    assert oldest["summary"]["skipped"] == 1, "the counts outlive the file list"
+    newest = admin.get(f"/api/imports/{runs[-1]}").json()
+    assert len(newest["items"]) == 1 and newest["summary"] == oldest["summary"]
 
 
 def test_an_m1_library_boots_and_its_sources_go_to_the_first_admin(tmp_path: Path) -> None:
