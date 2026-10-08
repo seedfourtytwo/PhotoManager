@@ -14,20 +14,9 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
-
-
-def _open(db: Path) -> SqliteRepository:
-    try:  # this branch: the shared Database (per-thread readers)
-        from photo_assistant.adapters.sqlite_repository import (
-            Database,  # type: ignore[attr-defined]
-        )
-
-        return SqliteRepository(Database.open(db))
-    except ImportError:  # older code, for "before" numbers
-        return SqliteRepository(open_database(db))
 
 
 def main() -> None:
@@ -36,7 +25,7 @@ def main() -> None:
     db = tmp / "library.db"
     shutil.copy(src, db)
     started = time.perf_counter()
-    repo = _open(db)
+    repo = SqliteRepository(Database.open(db))
     print(f"open+migrate {1000 * (time.perf_counter() - started):.0f} ms")
 
     def median(fn: Callable[[], object]) -> float:

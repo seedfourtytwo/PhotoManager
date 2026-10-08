@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.people import FaceNotFoundError, People, PersonNotFoundError
 from photo_assistant.app.search import (
     NotIndexedError,
@@ -21,18 +21,23 @@ from tests.ml.fakes import FakeClip
 
 
 @pytest.fixture
-def conn() -> sqlite3.Connection:
-    return open_database(":memory:")
+def db() -> Database:
+    return Database.open(":memory:")
 
 
 @pytest.fixture
-def repo(conn: sqlite3.Connection) -> SqliteRepository:
-    return SqliteRepository(conn)
+def conn(db: Database) -> sqlite3.Connection:
+    return db.writer
 
 
 @pytest.fixture
-def store(conn: sqlite3.Connection) -> SqliteMlStore:
-    return SqliteMlStore(conn)
+def repo(db: Database) -> SqliteRepository:
+    return SqliteRepository(db)
+
+
+@pytest.fixture
+def store(db: Database) -> SqliteMlStore:
+    return SqliteMlStore(db)
 
 
 def angle(deg: float) -> Vector:

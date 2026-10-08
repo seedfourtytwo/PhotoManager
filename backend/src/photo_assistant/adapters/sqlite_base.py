@@ -82,8 +82,8 @@ class SqliteBase:
     """Shared helpers over the process's one ``Database``: writes and transactions on its
     writer under its lock, reads on this thread's reader (see sqlite_database.py)."""
 
-    def __init__(self, db: Database | sqlite3.Connection) -> None:
-        self._db = db if isinstance(db, Database) else Database.of(db)
+    def __init__(self, db: Database) -> None:
+        self._db = db
         self._conn = self._db.writer
         self._lock = self._db.lock
 

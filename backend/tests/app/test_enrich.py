@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.enrich import GeocodeAssets, GroupSimilar
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
@@ -33,7 +33,7 @@ class FakeHasher:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+    return SqliteRepository(Database.open(":memory:"))
 
 
 def test_geocoding_fills_places_in_batches(repo: SqliteRepository) -> None:

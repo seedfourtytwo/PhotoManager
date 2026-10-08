@@ -18,7 +18,6 @@ import logging
 import re
 import sqlite3
 import threading
-import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -135,9 +134,6 @@ class WriteLock:
         return bool(getattr(self._local, "depth", 0))
 
 
-_WRAPPED: "weakref.WeakValueDictionary[int, Database]" = weakref.WeakValueDictionary()
-
-
 class Database:
     def __init__(self, writer: sqlite3.Connection, path: Path | None) -> None:
         writer.row_factory = sqlite3.Row
@@ -154,24 +150,6 @@ class Database:
         """Open and migrate the library database (see ``open_database``)."""
         conn = open_database(path, backup_dir)
         return cls(conn, None if str(path) == ":memory:" else Path(path))
-
-    @classmethod
-    def of(cls, conn: sqlite3.Connection) -> "Database":
-        """The Database around a bare connection: one per connection, so stores handed the
-        same connection still share one lock.
-
-        The app never needs this: it opens the Database and hands that to every store. It is
-        here for the many tests (and scripts/perf/bench_repo.py) that build a store straight
-        on ``open_database(...)``; once they open a Database instead, this and ``_WRAPPED``
-        can go, and the stores can take a Database only."""
-        found = _WRAPPED.get(id(conn))
-        if found is not None and found.writer is conn:
-            return found
-        row = conn.execute("PRAGMA database_list").fetchone()
-        file = row[2] if row is not None else ""
-        database = cls(conn, Path(file) if file else None)
-        _WRAPPED[id(conn)] = database
-        return database
 
     @property
     def path(self) -> Path | None:

@@ -13,7 +13,7 @@ import pytest
 
 from photo_assistant.adapters.proton_drive import ProtonDrive
 from photo_assistant.adapters.rclone_sync import RcloneSync
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.tool_runner import ToolTimeoutError
 from photo_assistant.app.backup import BACKUP_JOB, UnknownTargetError
 from photo_assistant.app.worker import Worker
@@ -49,7 +49,7 @@ class FixedClock:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+    return SqliteRepository(Database.open(":memory:"))
 
 
 def _run_once(repo: SqliteRepository, error: Exception) -> None:

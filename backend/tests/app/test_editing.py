@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.filesystem import DiskLibraryStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.editing import Editor
 from photo_assistant.domain.access import Role
 from photo_assistant.domain.edit_recipe import Recipe
@@ -32,7 +32,7 @@ class WritingRenderer:
 
 @pytest.fixture
 def world(tmp_path: Path) -> tuple[SqliteRepository, DiskLibraryStore, Editor, int]:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     repo.add_user("c", "C", "hash", Role.ADMIN)
     store = DiskLibraryStore(tmp_path / "data")
     asset_id = repo.add_asset(new_asset(1), NOW)

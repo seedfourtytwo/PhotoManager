@@ -49,8 +49,8 @@ class SqliteMlStore:
     """On the process's one ``Database``. Every query runs on the writer under the one lock:
     the KNN candidates live in a temp table, which belongs to a single connection."""
 
-    def __init__(self, db: Database | sqlite3.Connection) -> None:
-        self._db = db if isinstance(db, Database) else Database.of(db)
+    def __init__(self, db: Database) -> None:
+        self._db = db
         self._conn = self._db.writer
         self._lock = self._db.lock
         with self._lock:

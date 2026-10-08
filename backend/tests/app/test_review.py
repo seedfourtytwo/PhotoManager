@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.enrich import GroupSimilar
 from photo_assistant.app.review import Review
 from photo_assistant.domain.access import Role, Viewer
@@ -32,7 +32,7 @@ class NamedHasher:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     repo.add_user("c", "C", "hash", Role.ADMIN)
     return repo
 

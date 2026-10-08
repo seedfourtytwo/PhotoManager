@@ -6,6 +6,7 @@ import pytest
 
 from photo_assistant.adapters.sqlite_access import UnknownUserError
 from photo_assistant.adapters.sqlite_repository import (
+    Database,
     DuplicateAssetError,
     SqliteRepository,
     open_database,
@@ -19,7 +20,7 @@ from tests.factories import NOW, new_asset
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+    return SqliteRepository(Database.open(":memory:"))
 
 
 # --- migrations ----------------------------------------------------------------------------
@@ -281,10 +282,10 @@ def test_jobs_left_running_by_a_crash_are_requeued_once_their_claim_is_stale(
     tmp_path: Path,
 ) -> None:
     db = tmp_path / "library.db"
-    repo = SqliteRepository(open_database(db))
+    repo = SqliteRepository(Database.open(db))
     repo.enqueue("derive", {"asset_id": 1})
     assert repo.claim_next_job(NOW) is not None  # now "running"; process "crashes" here
-    reopened = SqliteRepository(open_database(db))
+    reopened = SqliteRepository(Database.open(db))
     assert reopened.requeue_stale_jobs(stale_before=NOW) == 0, "it may still be running"
     assert reopened.requeue_stale_jobs(stale_before=NOW + timedelta(minutes=5)) == 1
     assert reopened.claim_next_job(NOW) is not None
@@ -338,8 +339,8 @@ def test_import_writes_join_a_transaction_that_is_already_open(repo: SqliteRepos
 
 def test_two_processes_never_claim_the_same_job(tmp_path: Path) -> None:
     db = tmp_path / "library.db"
-    a = SqliteRepository(open_database(db))
-    b = SqliteRepository(open_database(db))
+    a = SqliteRepository(Database.open(db))
+    b = SqliteRepository(Database.open(db))
     for n in range(4):
         a.enqueue("x", {"n": n})
     claimed = [r.claim_next_job(NOW) for r in (a, b, a, b, a)]
@@ -360,7 +361,7 @@ def test_upgrading_a_v1_library_keeps_its_data_and_snapshots_first(tmp_path: Pat
     conn.commit()
     conn.close()
 
-    repo = SqliteRepository(open_database(db, backup_dir=tmp_path / "backups"))
+    repo = SqliteRepository(Database.open(db, backup_dir=tmp_path / "backups"))
 
     assert [s.label for s in repo.list_sources()] == ["old"]
     assert len(list((tmp_path / "backups").glob("library-v1-*.db"))) == 1

@@ -16,7 +16,7 @@ import pytest
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader
 from photo_assistant.adapters.filesystem import Blake3Hasher, DiskLibraryStore, FolderSourceReader
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.app.import_source import ImportSettings, ImportSource, SourceUnavailableError
 from photo_assistant.domain.capture_time import DateSource
@@ -49,7 +49,7 @@ def exiftool() -> Iterator[ExifToolReader]:
 
 
 def make_world(data: Path, exiftool: ExifToolReader, **settings: int) -> World:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     store = DiskLibraryStore(data)
     importer = ImportSource(
         repo=repo,

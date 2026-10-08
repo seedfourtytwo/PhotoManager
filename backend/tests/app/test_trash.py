@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.filesystem import DiskLibraryStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.trash import TRASH_DAYS, Trash
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
@@ -27,7 +27,7 @@ class MovableClock:
 
 @pytest.fixture
 def world(tmp_path: Path) -> tuple[SqliteRepository, DiskLibraryStore, MovableClock, Trash]:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     repo.add_user("c", "C", "hash", Role.ADMIN)
     store = DiskLibraryStore(tmp_path / "data")
     clock = MovableClock()

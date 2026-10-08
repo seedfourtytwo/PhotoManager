@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from tests.factories import NOW, new_asset
 
 MINUTE = timedelta(minutes=1)
@@ -16,7 +16,7 @@ MINUTE = timedelta(minutes=1)
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+    return SqliteRepository(Database.open(":memory:"))
 
 
 def _row(repo: SqliteRepository, job_id: int) -> sqlite3.Row:
@@ -118,7 +118,7 @@ def test_a_job_put_back_because_the_library_was_busy_is_free_again(
 def two_processes(tmp_path: Path) -> tuple[SqliteRepository, SqliteRepository]:
     """Two connections to one database file: the server and a CLI command."""
     db = tmp_path / "library.db"
-    return SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
+    return SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
 
 
 def test_a_claim_records_who_took_the_job_and_when(repo: SqliteRepository) -> None:

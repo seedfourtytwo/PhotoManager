@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.accounts import (
     AccountError,
     AccountLockedError,
@@ -47,7 +47,7 @@ def clock() -> MovableClock:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+    return SqliteRepository(Database.open(":memory:"))
 
 
 @pytest.fixture
@@ -257,7 +257,7 @@ def _race(*calls: object) -> list[BaseException | None]:
 
 
 def test_concurrent_first_run_setups_create_exactly_one_admin(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     accounts = Accounts(RacingStore(repo, 3), FakeHasher(), MovableClock())  # type: ignore[arg-type]
     outcomes = _race(*(lambda n=n: accounts.setup(f"admin{n}", "A", GOOD) for n in range(3)))
     assert repo.count_users() == 1
@@ -266,7 +266,7 @@ def test_concurrent_first_run_setups_create_exactly_one_admin(tmp_path) -> None:
 
 
 def test_two_admins_demoting_each_other_at_once_leave_one_admin(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     plain = Accounts(repo, FakeHasher(), MovableClock())
     a, _ = plain.setup("a", "A", GOOD)
     b = plain.create_user("b", "B", GOOD, Role.ADMIN)
@@ -335,7 +335,7 @@ class SlowCountingHasher(FakeHasher):
 
 
 def test_parallel_wrong_pins_cannot_get_more_guesses_than_the_limit(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     hasher = SlowCountingHasher()
     accounts = Accounts(repo, hasher, MovableClock())
     accounts.setup("c", "C", GOOD)
@@ -416,14 +416,14 @@ def test_a_locked_account_refuses_wrong_pins_without_checking_them(
 
 
 def test_the_lock_outlives_a_restart_and_the_daily_pruning(tmp_path, clock: MovableClock) -> None:  # type: ignore[no-untyped-def]
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     accounts = Accounts(repo, FakeHasher(), clock)
     accounts.setup("c", "C", GOOD)
     _guess_wrong(accounts, clock, "c", 20)
     repo.prune_login_failures(clock.at + timedelta(days=2))  # the failure rows are all gone
     _guess_wrong(accounts, clock, "c", 10)  # … and the running count still reached thirty
     repo.prune_login_failures(clock.at + timedelta(days=2))
-    reopened = SqliteRepository(open_database(tmp_path / "library.db"))
+    reopened = SqliteRepository(Database.open(tmp_path / "library.db"))
     restarted = Accounts(reopened, FakeHasher(), clock)
     assert _locked(restarted, "c")
     with pytest.raises(AccountLockedError):
@@ -482,7 +482,7 @@ def test_wrong_current_pins_count_towards_the_lock_too(
 
 
 def test_parallel_wrong_pins_cannot_get_past_the_lock(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     hasher, clock = SlowCountingHasher(), MovableClock()
     accounts = Accounts(repo, hasher, clock)
     accounts.setup("c", "C", GOOD)

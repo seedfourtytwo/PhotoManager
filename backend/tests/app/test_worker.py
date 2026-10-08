@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from photo_assistant.adapters.filesystem import Blake3Hasher, DiskLibraryStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.worker import Lanes, StaleJobSweep, Worker, new_owner_id
@@ -36,7 +36,7 @@ class MovableClock:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+    return SqliteRepository(Database.open(":memory:"))
 
 
 def test_worker_runs_jobs_until_idle(repo: SqliteRepository) -> None:
@@ -209,7 +209,7 @@ def test_enqueue_once_skips_a_waiting_duplicate(repo: SqliteRepository) -> None:
 
 def test_a_long_job_does_not_starve_quick_ones(tmp_path: Path) -> None:
     """A backup (minutes to hours) must not hold up previews and uploads behind it."""
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     backup_started, finish_backup = threading.Event(), threading.Event()
     previews: list[object] = []
 
@@ -274,7 +274,7 @@ def test_run_until_idle_can_be_limited_to_some_job_kinds(repo: SqliteRepository)
 
 def test_previews_run_on_a_pool_of_threads(tmp_path: Path) -> None:
     """C28: previews in parallel (max(1, cores - 2) threads); two meet at a barrier."""
-    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    repo = SqliteRepository(Database.open(tmp_path / "library.db"))
     together = threading.Barrier(2, timeout=5)
     met: list[int] = []
 
@@ -454,7 +454,7 @@ def test_a_long_job_stays_fresh_while_its_process_is_alive(tmp_path: Path) -> No
     """A backup of several hours: the heartbeat renews the claim, so another process that
     looks for stale jobs meanwhile leaves it alone."""
     db = tmp_path / "library.db"
-    repo, other = SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
+    repo, other = SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
     clock = MovableClock()
     sweep = StaleJobSweep(other, clock)
     requeued: list[int] = []
@@ -486,7 +486,7 @@ def test_the_heartbeat_stops_with_the_job(repo: SqliteRepository) -> None:
 
 def test_a_killed_process_s_job_is_taken_over_once_its_claim_is_stale(tmp_path: Path) -> None:
     db = tmp_path / "library.db"
-    cli, server = SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
+    cli, server = SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
     clock = MovableClock()
     ran: list[object] = []
     cli.enqueue("preview", {"asset_id": 1})
@@ -509,7 +509,7 @@ def test_a_killed_process_s_job_is_taken_over_once_its_claim_is_stale(tmp_path: 
 def test_a_job_that_kills_every_process_running_it_fails_for_good(tmp_path: Path) -> None:
     """The crash-loop guard with leases: each run that died counts as an attempt."""
     db = tmp_path / "library.db"
-    repo, server = SqliteRepository(open_database(db)), SqliteRepository(open_database(db))
+    repo, server = SqliteRepository(Database.open(db)), SqliteRepository(Database.open(db))
     clock = MovableClock()
     ran: list[object] = []
     repo.enqueue("crashy", {})

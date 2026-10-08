@@ -12,7 +12,7 @@ from photo_assistant.adapters.filesystem import Blake3Hasher, DiskLibraryStore, 
 from photo_assistant.adapters.rclone_sync import RcloneSync
 from photo_assistant.adapters.source_area_store import SourceAreaStore
 from photo_assistant.adapters.sqlite_integrations import SqliteRemoteSources
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.app.import_source import ImportSettings, ImportSource
 from photo_assistant.app.sync_source import SyncSource, add_remote_source
@@ -45,8 +45,8 @@ def test_pull_then_import_leaves_the_remote_untouched(
     data = tmp_path / "data"
     config = tmp_path / "rclone.conf"
     config.write_text("[cloud]\ntype = local\n")
-    conn = open_database(":memory:")
-    repo = SqliteRepository(conn)
+    db = Database.open(":memory:")
+    repo = SqliteRepository(db)
     store = SourceAreaStore(DiskLibraryStore(data), [data / "staging", data / "inbox"])
     importer = ImportSource(
         repo=repo,
@@ -58,7 +58,7 @@ def test_pull_then_import_leaves_the_remote_untouched(
         clock=FixedClock(),
         settings=ImportSettings(min_free_bytes=0),
     )
-    remotes, sync = SqliteRemoteSources(conn), RcloneSync(config_path=config)
+    remotes, sync = SqliteRemoteSources(db), RcloneSync(config_path=config)
     use_case = SyncSource(
         sources=repo,
         remotes=remotes,
