@@ -277,6 +277,98 @@ def test_search_similar_and_people_never_show_hidden_photos(world: World, user: 
             assert len(faces.json()) == 1
 
 
+@pytest.mark.parametrize("user", list(EXPECTED))
+def test_people_and_similar_answer_from_the_viewer_as_from_the_list_of_their_photos(
+    world: World, user: str
+) -> None:
+    """The routes hand the ML store the viewer, not every id they may see. The answers are
+    what the routes built from that list (the oracle below), also with a photo the viewer
+    has hidden, and the list is no longer copied into the candidate table."""
+    from photo_assistant.api.routes.ml import PersonOut
+    from photo_assistant.domain.access import Viewer
+
+    _fake_ml_index(world)
+    services, client = services_of(world.clients["admin"]), world.clients[user]
+    ml = services.ml
+    (first_face,) = ml.store.faces_of_asset(world.ids["p3"])  # p3: only the admin sees it
+    tom = ml.store.create_empty_person("Tom")
+    ml.store.move_faces([first_face.id], tom)
+    assert client.patch(f"/api/assets/{world.ids['p1']}/state", json={"hidden": True}).is_success
+    account = services.repo.get_user(client.get("/api/auth/me").json()["id"])
+    assert account is not None
+    ids = services.repo.visible_asset_ids(Viewer.of(account))
+    assert world.ids["p1"] not in ids and ids
+
+    statements: list[str] = []
+    ml.store._conn.set_trace_callback(statements.append)
+    try:
+        people = client.get("/api/people").json()
+        pages: dict[int, list[int]] = {}
+        for person in people:
+            assert client.get(f"/api/people/{person['id']}").json() == person
+            cursor, pages[person["id"]] = None, []
+            while True:
+                params = {"limit": 2} | ({"cursor": cursor} if cursor else {})
+                page = client.get(f"/api/people/{person['id']}/assets", params=params).json()
+                pages[person["id"]] += [a["id"] for a in page["items"]]
+                cursor = page["next_cursor"]
+                if cursor is None:
+                    break
+        similar = {
+            i: [(a["id"], a["score"]) for a in client.get(f"/api/assets/{i}/similar").json()]
+            for i in ids
+        }
+    finally:
+        ml.store._conn.set_trace_callback(None)
+    assert [s for s in statements if "ml_candidates" in s] == []
+
+    expected = [PersonOut.of(p).model_dump() for p in ml.people.list_all(ids)]
+    assert people == expected and people
+    assert (tom in pages) == (world.ids["p3"] in ids)
+    for person_id, page_ids in pages.items():
+        theirs = set(ml.people.assets(person_id, ids))
+        assert page_ids == [i for i in ids if i in theirs]  # timeline order, as before
+    for asset_id in ids:
+        hits = ml.similar(asset_id, ids, 50)
+        assert similar[asset_id] == [(h.asset_id, pytest.approx(h.score)) for h in hits]
+
+
+@pytest.mark.parametrize("user", ["admin", "lea", "tom"])
+def test_people_changes_reach_only_people_and_faces_on_photos_you_see(
+    world: World, user: str
+) -> None:
+    _fake_ml_index(world)
+    client = world.clients[user]
+    store = services_of(world.clients["admin"]).ml.store
+    (hidden_face,) = store.faces_of_asset(world.ids["p3"])  # p3: only the admin sees it
+    tom = store.create_empty_person("Tom")
+    store.move_faces([hidden_face.id], tom)
+    (lea,) = (p["id"] for p in client.get("/api/people").json() if p["name"] == "Lea")
+    sees_tom = EXPECTED[user]["p3"] is not None
+    there = 200 if sees_tom else 404
+
+    assert client.get(f"/api/people/{tom}").status_code == there
+    assert client.get(f"/api/people/{tom}/assets").status_code == there
+    assert client.patch(f"/api/people/{tom}", json={"name": "Tomas"}).status_code == there
+    split = client.post("/api/people/split", json={"face_ids": [hidden_face.id], "name": "X"})
+    assert split.status_code == there
+    if sees_tom:
+        moved_to = split.json()["id"]
+        merged = client.post(f"/api/people/{lea}/merge", json={"source_ids": [moved_to]})
+        assert merged.status_code == 200
+    else:
+        assert (hidden := store.get_face(hidden_face.id)) is not None
+        assert hidden.person_id == tom, "untouched"
+        assert (
+            client.post(f"/api/people/{lea}/merge", json={"source_ids": [tom]}).status_code == 404
+        )
+        (own_face,) = store.faces_of_asset(world.ids["p1"])
+        moved = client.post("/api/people/split", json={"face_ids": [own_face.id], "name": "Me"})
+        assert moved.status_code == 200 and moved.json()["face_count"] == 1
+    renamed = client.patch(f"/api/people/{lea}", json={"name": "Léa"})
+    assert renamed.status_code == 200 and renamed.json()["name"] == "Léa"
+
+
 def test_the_visible_id_set_is_the_timeline(world: World) -> None:
     from photo_assistant.domain.access import Viewer
     from photo_assistant.domain.library_filter import AssetFilter

@@ -1,14 +1,21 @@
 """Natural-language search and "more like this" (FEATURES 3.5, 3.6).
 
-Both take ``candidates``: the asset ids the viewer may see *after* the facet filters (computed
-by the visibility function and SQL filters elsewhere). They only rank within that set.
+Search takes ``candidates``: the asset ids the viewer may see *after* the facet filters
+(computed by the visibility function and SQL filters elsewhere). "More like this" takes the
+viewer, or such a set. Both only rank within that.
 """
 
 from collections.abc import Collection
 
 from photo_assistant.domain.errors import ConflictError, UnavailableError
 from photo_assistant.domain.search_query import ParsedQuery, parse_query
-from photo_assistant.ports.ml import MlStore, ModelUnavailableError, ScoredAsset, TextEmbedder
+from photo_assistant.ports.ml import (
+    MlStore,
+    ModelUnavailableError,
+    ScoredAsset,
+    TextEmbedder,
+    Visible,
+)
 
 __all__ = [
     "NotIndexedError",
@@ -49,11 +56,12 @@ class SimilarPhotos:
     def __init__(self, store: MlStore, model: str) -> None:
         self._store, self._model = store, model
 
-    def __call__(self, asset_id: int, candidates: Collection[int], limit: int) -> list[ScoredAsset]:
-        if asset_id not in candidates:
+    def __call__(self, asset_id: int, candidates: Visible, limit: int) -> list[ScoredAsset]:
+        if not self._store.seen([asset_id], candidates):
             raise LookupError(f"no asset {asset_id}")  # hidden from this viewer → 404
         vector = self._store.clip_vector(asset_id, self._model)
         if vector is None:
             raise NotIndexedError(f"asset {asset_id} has not been analysed yet")
-        others = set(candidates) - {asset_id}
-        return self._store.nearest_assets(vector, self._model, others, limit)
+        return self._store.nearest_assets(
+            vector, self._model, candidates, limit, leave_out=asset_id
+        )

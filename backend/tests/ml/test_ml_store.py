@@ -2,7 +2,9 @@
 
 import math
 import random
+import re
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -10,10 +12,12 @@ import pytest
 from photo_assistant.adapters.ml_store import SqliteMlStore, from_blob, to_blob
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector, cosine_distance
 from photo_assistant.ports.ml import FaceMatches
+from tests.adapters.test_visibility_rule import ROLES, _random_library
 from tests.factories import NOW, new_asset
 
 M = "test-model"
@@ -480,6 +484,108 @@ def test_assets_with_a_tag_within_the_visible_set(
     assert store.asset_ids_with_tag("beach", visible={a, c}) == [a, c]
     assert store.asset_ids_with_tag("snow", visible={a, b, c}) == []
     assert store.screen_or_document_ids(visible={a, b, c}) == [c]
+
+
+# --- the viewer instead of the list of every photo they may see ------------------------------
+
+
+def indexed_random_library(seed: int) -> tuple[SqliteRepository, SqliteMlStore, list[int]]:
+    """60 photos with owners, access lists, albums, private marks and trash (the library of
+    the visibility rule's own test), plus hidden marks, photos held for review, and on every
+    photo: an embedding, faces of four people, tags."""
+    rng = random.Random(seed)
+    repo = _random_library(seed)
+    conn = repo._conn
+    store = SqliteMlStore(conn)
+    photos = list(range(1, 61))
+    for user in range(1, len(ROLES) + 1):
+        for asset in rng.sample(photos, 6):
+            conn.execute("INSERT INTO user_asset VALUES (?, ?, 0, 1)", (user, asset))
+    for asset in rng.sample(photos, 5):
+        conn.execute("UPDATE asset SET held_reason = 'lookalike' WHERE id = ?", (asset,))
+    people = [store.create_empty_person(name) for name in ("Lea", None, "Tom", None)]
+    for asset in photos:
+        store.save_clip(asset, M, tuple(rng.gauss(0, 1) for _ in range(4)))
+        vectors = [tuple(rng.gauss(0, 1) for _ in range(4)) for _ in range(rng.randint(0, 2))]
+        for face_id in store.replace_faces(asset, M, [face(v, rng.random()) for v in vectors]):
+            if rng.random() < 0.8:
+                store.assign_face(face_id, rng.choice(people))
+        tags = [TagScore(name, 0.2) for name in ("beach", "snow") if rng.random() < 0.4]
+        store.replace_model_tags(asset, M, tags, screen_or_document=rng.random() < 0.3)
+    return repo, store, people
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_a_viewer_gets_what_the_list_of_every_photo_they_may_see_gave(seed: int) -> None:
+    repo, store, people = indexed_random_library(seed)
+    rng = random.Random(seed)
+    seen_by_someone = 0
+    for user, role in enumerate(ROLES, start=1):
+        viewer = Viewer(user, role)
+        ids = repo.visible_asset_ids(viewer)  # what the routes handed over before
+        seen_by_someone += len(ids)
+        assert store.seen(range(1, 70), viewer) == set(ids)
+        assert store.list_persons(viewer) == store.list_persons(ids)
+        for person in people:
+            assert store.get_person(person, viewer) == store.get_person(person, ids)
+            theirs = set(store.person_asset_ids(person, ids))
+            assert store.person_asset_ids(person, viewer) == [i for i in ids if i in theirs]
+        query = tuple(rng.gauss(0, 1) for _ in range(4))
+        assert store.nearest_assets(query, M, viewer, 10) == store.nearest_assets(query, M, ids, 10)
+        for asset in ids[:5]:
+            others = set(ids) - {asset}
+            expected = store.nearest_assets(query, M, others, 10) if others else []
+            assert store.nearest_assets(query, M, viewer, 10, leave_out=asset) == expected
+        assert store.asset_ids_with_tag("Beach", viewer) == store.asset_ids_with_tag("Beach", ids)
+        assert store.screen_or_document_ids(viewer) == store.screen_or_document_ids(ids)
+    assert seen_by_someone > 60, "the viewers do see photos, and not all the same ones"
+
+
+def test_seen_with_a_list_of_photos_is_what_is_on_the_list(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    a, b, c = assets(repo, 3)
+    assert store.seen([a, b, 99], [b, c]) == {b}
+    assert store.seen([], [a]) == set()
+
+
+def test_a_persons_photos_come_newest_first_like_the_timeline(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    days = (3, 9, 9, 1)
+    ids = [repo.add_asset(new_asset(n, datetime(2020, 1, d)), NOW) for n, d in enumerate(days, 1)]
+    person = store.create_empty_person("Lea")
+    for asset in ids:
+        (face_id,) = store.replace_faces(asset, M, [face(angle(0))])
+        store.assign_face(face_id, person)
+    a, b, c, d = ids
+    assert store.person_asset_ids(person, ids) == [c, b, a, d]
+
+
+def test_one_persons_page_for_a_viewer_reads_that_persons_faces_not_the_library() -> None:
+    """It was: list every photo the viewer may see, copy the ids into a temp table, join."""
+    repo, store, people = indexed_random_library(1)
+    conn = repo._conn
+    statements: list[str] = []
+    viewers = (Viewer(1, Role.ADMIN), Viewer(2, Role.MEMBER), Viewer(5, Role.GUEST))
+    conn.set_trace_callback(statements.append)
+    try:
+        for viewer in viewers:
+            store.get_person(people[0], viewer)
+            store.person_asset_ids(people[0], viewer)
+        one_person = [s for s in statements if s.startswith(("SELECT", "WITH"))]
+        for viewer in viewers:
+            store.list_persons(viewer)
+    finally:
+        conn.set_trace_callback(None)
+    assert [s for s in statements if "ml_candidates" in s] == []
+    assert len(one_person) >= 6
+    for sql in one_person:
+        plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + sql))
+        by_person = "USING INDEX face_by_person (person_id=?)" in plan
+        assert by_person or plan == "SEARCH f USING INTEGER PRIMARY KEY (rowid=?)", plan
+        # no walk over a whole table, nor over every photo that is not in the trash
+        assert not re.search(r"SCAN (?!\(subquery)", plan) and "(trashed_at=?)" not in plan, plan
 
 
 def test_task_counts_summarise_the_status_of_every_task(

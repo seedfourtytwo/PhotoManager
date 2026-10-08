@@ -1,8 +1,9 @@
 """MlStore on SQLite + sqlite-vec: embeddings, faces, people, tags (migration 0015).
 
 KNN is brute force with sqlite-vec's ``vec_distance_cosine`` over float32 BLOBs, restricted to
-a candidate set held in a temp table — the visible asset ids passed in by the caller. It shares
-the process's one ``Database`` (writer and lock) with every other store.
+what the caller may see: a viewer (the library's access rule, in the same statement) or a
+candidate set of asset ids held in a temp table. It shares the process's one ``Database``
+(writer and lock) with every other store.
 """
 
 import json
@@ -16,10 +17,19 @@ from typing import Any
 import sqlite_vec  # type: ignore[import-untyped]
 
 from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_library import ASSET_FROM, ORDER, filter_sql, visibility
+from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.faces import BoundingBox, Face
+from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
-from photo_assistant.ports.ml import FaceMatches, PersonSummary, ScoredAsset, StoredFace
+from photo_assistant.ports.ml import (
+    FaceMatches,
+    PersonSummary,
+    ScoredAsset,
+    StoredFace,
+    Visible,
+)
 
 _FACE_COLUMNS = "f.id, f.asset_id, f.box_x, f.box_y, f.box_w, f.box_h, f.score, f.person_id"
 
@@ -71,14 +81,16 @@ class SqliteMlStore:
 
     # --- helpers ---------------------------------------------------------------------------
 
-    def _all(self, sql: str, params: Sequence[object] = ()) -> list[sqlite3.Row]:
+    def _all(
+        self, sql: str, params: Sequence[object] | dict[str, object] = ()
+    ) -> list[sqlite3.Row]:
         with self._lock:
-            return self._conn.execute(sql, tuple(params)).fetchall()
+            return self._conn.execute(sql, params).fetchall()
 
-    def _scalar(self, sql: str, params: Sequence[object] = ()) -> Any:
+    def _scalar(self, sql: str, params: Sequence[object] | dict[str, object] = ()) -> Any:
         # Any: SQLite values are dynamically typed; callers convert to the type they expect.
         with self._lock:
-            row = self._conn.execute(sql, tuple(params)).fetchone()
+            row = self._conn.execute(sql, params).fetchone()
             return None if row is None else row[0]
 
     def _write(self, sql: str, params: Sequence[object] = ()) -> int:
@@ -89,6 +101,39 @@ class SqliteMlStore:
     def _transaction(self) -> Iterator[sqlite3.Connection]:
         with self._db.transaction() as conn:
             yield conn
+
+    @contextmanager
+    def _shown(self, visible: Visible) -> Iterator[tuple[str, dict[str, object]]]:
+        """For queries run inside (held under the lock): ``SELECT a.id … WHERE …``, the photos
+        ``visible`` covers, open for more conditions on ``a``; and its bindings.
+
+        A viewer: THE access rule and the default filter (their hidden photos are left out),
+        the two things ``visible_asset_ids`` puts in its query. Ids: the temp table.
+
+        A query over much of the library asks ``x IN (that select)``: the rule runs once per
+        photo. A query about a few photos (one person's) adds ``AND a.id = x`` or
+        ``AND a.id IN (…)``, so only those photos are looked up, not the library listed."""
+        if isinstance(visible, Viewer):
+            rule, _, bindings = visibility(visible)
+            where, filtered = filter_sql(AssetFilter())
+            with self._lock:
+                yield f"SELECT a.id {ASSET_FROM} {where} AND {rule}", bindings | filtered
+        else:
+            with self._candidates(visible):
+                yield (
+                    (
+                        "SELECT a.id FROM asset a JOIN temp.ml_candidates c ON c.asset_id = a.id "
+                        "WHERE 1"
+                    ),
+                    {},
+                )
+
+    def seen(self, asset_ids: Collection[int], visible: Visible) -> set[int]:
+        if not isinstance(visible, Viewer):
+            return set(asset_ids).intersection(visible)
+        with self._shown(visible) as (shown, bindings):
+            sql = f"{shown} AND a.id IN (SELECT value FROM json_each(:ids))"
+            return {r[0] for r in self._all(sql, bindings | {"ids": json.dumps(list(asset_ids))})}
 
     def _candidates(self, ids: Collection[int]) -> AbstractContextManager[None]:
         """Fill the temp candidate table for one query (held under the lock)."""
@@ -176,21 +221,29 @@ class SqliteMlStore:
         return None if blob is None else from_blob(bytes(blob))
 
     def nearest_assets(
-        self, query: Vector, model: str, candidates: Collection[int], limit: int
+        self,
+        query: Vector,
+        model: str,
+        candidates: Visible,
+        limit: int,
+        *,
+        leave_out: int | None = None,
     ) -> list[ScoredAsset]:
-        if not candidates:
+        if not isinstance(candidates, Viewer) and not candidates:
             return []
         # A zero vector has no angle to anything: its distance is NULL and it is left out.
         # MATERIALIZED: the distance is computed once per photo, not again for the filter.
-        sql = (
-            "WITH scored AS MATERIALIZED ("
-            "SELECT e.asset_id AS asset_id, vec_distance_cosine(e.embedding, ?) AS d "
-            "FROM clip_embedding e JOIN temp.ml_candidates c ON c.asset_id = e.asset_id "
-            "WHERE e.model = ? AND e.dim = ?) "
-            "SELECT asset_id, d FROM scored WHERE d IS NOT NULL ORDER BY d, asset_id LIMIT ?"
-        )
-        with self._candidates(candidates):
-            rows = self._all(sql, (to_blob(query), model, len(query), limit))
+        with self._shown(candidates) as (shown, bindings):
+            sql = (
+                "WITH scored AS MATERIALIZED ("
+                "SELECT e.asset_id AS asset_id, vec_distance_cosine(e.embedding, :query) AS d "
+                "FROM clip_embedding e WHERE e.model = :model AND e.dim = :dim "
+                f"AND e.asset_id IS NOT :leave_out AND e.asset_id IN ({shown})) "
+                "SELECT asset_id, d FROM scored WHERE d IS NOT NULL ORDER BY d, asset_id "
+                "LIMIT :limit"
+            )
+            asked = {"query": to_blob(query), "model": model, "dim": len(query)}
+            rows = self._all(sql, bindings | asked | {"leave_out": leave_out, "limit": limit})
         return [ScoredAsset(r[0], 1.0 - r[1]) for r in rows]
 
     # --- faces -----------------------------------------------------------------------------
@@ -307,36 +360,34 @@ class SqliteMlStore:
 
     # --- people ----------------------------------------------------------------------------
 
-    _PERSONS = (
-        "SELECT p.id, p.name, p.cover_face_id, count(f.id) AS faces, "
-        "count(DISTINCT f.asset_id) AS assets "
-        "FROM person p JOIN face f ON f.person_id = p.id "
-        "JOIN temp.ml_candidates c ON c.asset_id = f.asset_id "
-    )
+    def _persons(self, person_id: int | None, visible: Visible) -> list[PersonSummary]:
+        """Counted over the faces on photos ``visible`` covers; the cover is the chosen face
+        if it is one of them, else the best of them. One pass over those faces."""
+        with self._shown(visible) as (shown, bindings):
+            if person_id is None:
+                on_shown_photos = f"f.asset_id IN ({shown})"
+            else:
+                on_shown_photos = f"pe.id = :person AND EXISTS ({shown} AND a.id = f.asset_id)"
+            sql = (
+                "SELECT id, name, cover, count(*) AS faces, count(DISTINCT asset_id) AS assets "
+                "FROM (SELECT pe.id AS id, pe.name AS name, f.asset_id AS asset_id, "
+                "first_value(f.id) OVER (PARTITION BY pe.id "
+                "ORDER BY f.id = pe.cover_face_id DESC, f.score DESC, f.id) AS cover "
+                f"FROM person pe JOIN face f ON f.person_id = pe.id WHERE {on_shown_photos}"
+                ") GROUP BY id ORDER BY name IS NULL, assets DESC, id"
+            )
+            asked = {} if person_id is None else {"person": person_id}
+            rows = self._all(sql, bindings | asked)
+        return [
+            PersonSummary(r["id"], r["name"], self.get_face(r["cover"]), r["faces"], r["assets"])
+            for r in rows
+        ]
 
-    def _persons(
-        self, where: str, params: Sequence[object], visible: Collection[int]
-    ) -> list[PersonSummary]:
-        sql = self._PERSONS + where + " GROUP BY p.id ORDER BY p.name IS NULL, assets DESC, p.id"
-        with self._candidates(visible):
-            rows = self._all(sql, params)
-            return [self._summary(r) for r in rows]
+    def list_persons(self, visible: Visible) -> list[PersonSummary]:
+        return self._persons(None, visible)
 
-    def _summary(self, row: sqlite3.Row) -> PersonSummary:
-        """Runs inside _candidates: the cover is the chosen face if visible, else the best."""
-        cover_id = self._scalar(
-            "SELECT f.id FROM face f JOIN temp.ml_candidates c ON c.asset_id = f.asset_id "
-            "WHERE f.person_id = ? ORDER BY f.id = ? DESC, f.score DESC, f.id LIMIT 1",
-            (row["id"], row["cover_face_id"]),
-        )
-        cover = self.get_face(int(cover_id))
-        return PersonSummary(row["id"], row["name"], cover, row["faces"], row["assets"])
-
-    def list_persons(self, visible: Collection[int]) -> list[PersonSummary]:
-        return self._persons("", (), visible)
-
-    def get_person(self, person_id: int, visible: Collection[int]) -> PersonSummary | None:
-        found = self._persons("WHERE p.id = ?", (person_id,), visible)
+    def get_person(self, person_id: int, visible: Visible) -> PersonSummary | None:
+        found = self._persons(person_id, visible)
         return found[0] if found else None
 
     def rename_person(self, person_id: int, name: str | None) -> None:
@@ -369,14 +420,13 @@ class SqliteMlStore:
     def create_empty_person(self, name: str | None) -> int:
         return self._write("INSERT INTO person (name) VALUES (?)", (name,))
 
-    def person_asset_ids(self, person_id: int, visible: Collection[int]) -> list[int]:
-        sql = (
-            "SELECT DISTINCT f.asset_id FROM face f "
-            "JOIN temp.ml_candidates c ON c.asset_id = f.asset_id "
-            "WHERE f.person_id = ? ORDER BY f.asset_id"
-        )
-        with self._candidates(visible):
-            return [r[0] for r in self._all(sql, (person_id,))]
+    def person_asset_ids(self, person_id: int, visible: Visible) -> list[int]:
+        with self._shown(visible) as (shown, bindings):
+            sql = (
+                f"{shown} AND a.id IN "
+                f"(SELECT f.asset_id FROM face f WHERE f.person_id = :person) {ORDER}"
+            )
+            return [r[0] for r in self._all(sql, bindings | {"person": person_id})]
 
     def delete_empty_persons(self) -> int:
         with self._lock:
@@ -420,22 +470,22 @@ class SqliteMlStore:
         )
         return None if value is None else bool(value)
 
-    def asset_ids_with_tag(self, name: str, visible: Collection[int]) -> list[int]:
+    def asset_ids_with_tag(self, name: str, visible: Visible) -> list[int]:
         """For the ``tag:`` search facet; tag names match case-insensitively."""
-        sql = (
-            "SELECT a.asset_id FROM asset_tag a JOIN tag t ON t.id = a.tag_id "
-            "JOIN temp.ml_candidates c ON c.asset_id = a.asset_id "
-            "WHERE t.name = ? COLLATE NOCASE ORDER BY a.asset_id"
-        )
-        with self._candidates(visible):
-            return [r[0] for r in self._all(sql, (name,))]
+        with self._shown(visible) as (shown, bindings):
+            sql = (
+                "SELECT t.asset_id FROM asset_tag t JOIN tag n ON n.id = t.tag_id "
+                f"WHERE n.name = :name COLLATE NOCASE AND t.asset_id IN ({shown}) "
+                "ORDER BY t.asset_id"
+            )
+            return [r[0] for r in self._all(sql, bindings | {"name": name})]
 
-    def screen_or_document_ids(self, visible: Collection[int]) -> list[int]:
+    def screen_or_document_ids(self, visible: Visible) -> list[int]:
         """Screenshots, documents, receipts, memes: left out of "memories" by default."""
-        sql = (
-            "SELECT f.asset_id FROM asset_ml_flag f "
-            "JOIN temp.ml_candidates c ON c.asset_id = f.asset_id "
-            "WHERE f.screen_or_document = 1 ORDER BY f.asset_id"
-        )
-        with self._candidates(visible):
-            return [r[0] for r in self._all(sql)]
+        with self._shown(visible) as (shown, bindings):
+            sql = (
+                "SELECT m.asset_id FROM asset_ml_flag m "
+                f"WHERE m.screen_or_document = 1 AND m.asset_id IN ({shown}) "
+                "ORDER BY m.asset_id"
+            )
+            return [r[0] for r in self._all(sql, bindings)]
