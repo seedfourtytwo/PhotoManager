@@ -89,6 +89,17 @@ does not have. Pull Proton Drive from the laptop, or run the server with Option 
 Set `PA_DATA_ROOT=/srv/photo-assistant/data` in `.env`, then `just install-service` and
 `sudo loginctl enable-linger $USER`.
 
+### If the service is killed for using too much memory
+
+The memory limits (systemd: `MemoryHigh=1536M`, `MemoryMax=2G` in
+`deploy/photo-assistant.service`; Docker: `mem_limit: 4g` in `deploy/compose.yml`) have not
+been measured with the ML models loaded. If the app dies during `just ml-backfill` and
+`systemctl --user status photo-assistant` shows `oom-kill` (Docker: `docker inspect` shows
+`OOMKilled`), raise the limit: `systemctl --user edit photo-assistant` and set `MemoryHigh=`
+and `MemoryMax=` under `[Service]`, or change `mem_limit` in compose. To use less memory
+instead, lower `PA_PREVIEW_WORKERS`, `PA_VIPS_CONCURRENCY` or `PA_ML_CLIP_BATCH_SIZE`
+([settings.md](settings.md)). The backfill continues where it stopped after a restart.
+
 ## 5. Switch over
 
 1. Set up remote access on the server: [remote-access.md](remote-access.md).
