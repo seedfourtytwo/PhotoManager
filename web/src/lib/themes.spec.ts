@@ -32,9 +32,11 @@ const COLOURS = [
 	'--check'
 ];
 const blocks = readBlocks(css);
-const HUES = Array.from({ length: 24 }, (_, i) => i * 15);
+const everything = readBlocks(css, true);
+/** A sweep every 15 degrees, plus the hues the themes themselves use. */
+const HUES = [...Array.from({ length: 24 }, (_, i) => i * 15), 72, 281, 275];
 
-describe.each(Object.entries(VARIANTS))('%s', (_name, selectors) => {
+describe.each(Object.entries(VARIANTS))('%s', (name, selectors) => {
 	const tokens = blocks.get(selectors[0]) ?? {};
 
 	it('defines every colour token', () => {
@@ -42,6 +44,12 @@ describe.each(Object.entries(VARIANTS))('%s', (_name, selectors) => {
 	});
 	it('has identical values under every selector that can apply it', () => {
 		for (const selector of selectors) expect(blocks.get(selector)).toEqual(tokens);
+	});
+	it('declares its colour-scheme under every selector', () => {
+		const expected = name.endsWith('light') ? 'light' : 'dark';
+		for (const selector of selectors) {
+			expect(everything.get(selector)?.['color-scheme']).toBe(expected);
+		}
 	});
 	it('keeps text readable on the page', () => {
 		const bg = hexLuminance(tokens['--bg']);

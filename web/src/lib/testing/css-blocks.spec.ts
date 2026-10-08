@@ -34,6 +34,13 @@ describe('readBlocks', () => {
 		);
 		expect(imported.get(':root')).toEqual({ '--a': '1' });
 	});
+	it('can include every declaration, not just custom properties', () => {
+		expect(readBlocks(css, true).get(':root')).toEqual({
+			'--bg': '#000',
+			'--ink': '#fff',
+			'color-scheme': 'dark'
+		});
+	});
 	it('returns no entry for an empty stylesheet', () => {
 		expect(readBlocks('').size).toBe(0);
 	});

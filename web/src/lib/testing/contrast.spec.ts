@@ -18,7 +18,7 @@ describe('contrast maths', () => {
 		expect(oklchLuminance(0, 0, 0)).toBeCloseTo(0, 6);
 	});
 	it('matches a known grey: oklch(0.6 0 0) is about #808080', () => {
-		expect(oklchLuminance(0.6, 0, 0)).toBeCloseTo(hexLuminance('#808080'), 1);
+		expect(oklchLuminance(0.6, 0, 0)).toBeCloseTo(hexLuminance('#808080'), 3);
 	});
 	it('clips colours outside sRGB instead of returning NaN', () => {
 		expect(Number.isFinite(oklchLuminance(0.82, 0.4, 265))).toBe(true);
