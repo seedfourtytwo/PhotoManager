@@ -5,6 +5,7 @@
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { eachPage } from '$lib/paging';
 	import {
 		clusterPoints,
 		clusterRadius,
@@ -57,27 +58,29 @@
 				loaded = true;
 			})
 			.catch((e: unknown) => notice.error(e));
-		void loadLocated(f, () => stale);
+		loadLocated(f, () => stale).catch((e: unknown) => !stale && notice.error(e));
 		return () => (stale = true);
 	});
 
-	/** List items (with place names) for every located photo, for cluster names and grids. */
-	async function loadLocated(f: typeof filters, isStale: () => boolean) {
-		// Built here, then swapped in whole as $state.raw: no need for a reactive map.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const next = new Map<Id, AssetOut>();
-		let cursor: string | null = null;
-		do {
-			const res: Awaited<ReturnType<typeof api.assets>> = await api.assets(
-				{ ...f, has_location: true },
-				cursor,
-				500
-			);
-			if (isStale()) return;
-			for (const a of res.items) next.set(a.id, a);
-			cursor = res.next_cursor;
-		} while (cursor);
-		located = next;
+	/**
+	 * List items (with place names) for every located photo, for cluster names and grids.
+	 * Swapped in after every page, so a chosen dot shows its photos while the rest still loads.
+	 */
+	function loadLocated(f: typeof filters, isStale: () => boolean) {
+		let first = true;
+		return eachPage(
+			(cursor) => api.assets({ ...f, has_location: true }, cursor, 500),
+			(items) => {
+				// Grown from what is shown (it may hold an edit made in the loupe meanwhile) and
+				// replaced whole as $state.raw: no need for a reactive map.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const next = new Map(first ? [] : located);
+				first = false;
+				for (const a of items) next.set(a.id, a);
+				located = next;
+			},
+			isStale
+		);
 	}
 
 	function copyWith(map: Map<Id, AssetOut>, asset: AssetOut) {

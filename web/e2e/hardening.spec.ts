@@ -36,3 +36,11 @@ test('map: a drag that starts on a dot pans the map, it does not choose the dot'
 	await dots.first().press('Enter');
 	await expect(page.locator('section.chosen')).toBeVisible();
 });
+
+test('map: a failed page of located photos is reported, not swallowed', async ({ page }) => {
+	await page.route(/\/api\/assets\?.*has_location=true/, (route) =>
+		route.fulfill({ status: 500, json: { detail: 'the library is busy, try again' } })
+	);
+	await signIn(page, '/map');
+	await expect(page.getByRole('status')).toContainText('The library is busy, try again');
+});
