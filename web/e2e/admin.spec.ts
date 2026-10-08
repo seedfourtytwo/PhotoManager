@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { expect, expectAccessible, REAL_BACKEND, resetMock, signIn, test } from './helpers.ts';
 
 /** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
@@ -266,4 +267,103 @@ test('Proton Drive: when the computer is not signed in, it says what to do', asy
 	await dialog.getByRole('button', { name: 'Check again' }).click();
 	await expect(dialog.getByRole('radio', { name: /My Proton photos/ })).toBeChecked();
 	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
+});
+
+test.describe('adding a folder when the second step fails or the button is pressed twice', () => {
+	test.beforeEach(() => test.skip(REAL_BACKEND, 'failures and delays are staged on the mock'));
+
+	async function pickScans(page: Page) {
+		await page.getByRole('button', { name: 'Add folder' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+		await dialog.getByRole('button', { name: /^scans$/i }).click();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Scans');
+		return dialog;
+	}
+
+	test('folder added but the import could not start: it is listed, and the reason is said', async ({
+		page
+	}) => {
+		await page.route(/\/api\/sources\/\d+\/scan$/, (route) =>
+			route.fulfill({ status: 503, json: { detail: 'The import queue is full; try again.' } })
+		);
+		const dialog = await pickScans(page);
+		await dialog.getByRole('button', { name: 'Add and import' }).click();
+		await expect(dialog).toBeHidden();
+		await expect(
+			page.getByRole('status').filter({ hasText: 'The import queue is full; try again.' })
+		).toBeVisible();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toBeVisible();
+	});
+
+	test('a double click on “Add and import” adds the folder once', async ({ page }) => {
+		let posts = 0;
+		await page.route('**/api/sources', async (route) => {
+			if (route.request().method() !== 'POST') return route.fallback();
+			posts++;
+			await new Promise((r) => setTimeout(r, 300));
+			await route.fallback();
+		});
+		const dialog = await pickScans(page);
+		await dialog.getByRole('button', { name: 'Add and import' }).dblclick();
+		await expect(dialog).toBeHidden();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toHaveCount(1);
+		expect(posts).toBe(1);
+	});
+
+	test('the dialog opens fresh: no old error, no name typed last time', async ({ page }) => {
+		await page.route('**/api/sources', (route) =>
+			route.request().method() === 'POST'
+				? route.fulfill({ status: 409, json: { detail: 'That folder is already a source.' } })
+				: route.fallback()
+		);
+		const dialog = await pickScans(page);
+		await dialog.getByLabel('Name').fill('My own name');
+		await dialog.getByRole('button', { name: 'Add and import' }).click();
+		await expect(dialog.getByText('That folder is already a source.')).toBeVisible();
+		await dialog.getByRole('button', { name: 'Cancel' }).click();
+		await page.getByRole('button', { name: 'Add folder' }).click();
+		await expect(dialog.getByRole('button', { name: /^scans$/i })).toBeVisible();
+		await expect(dialog.getByText('That folder is already a source.')).toHaveCount(0);
+		await expect(dialog.getByLabel('Name')).not.toHaveValue('My own name');
+	});
+
+	async function fillCloud(page: Page) {
+		await page.getByRole('button', { name: 'Add cloud folder' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add a cloud folder' });
+		await dialog.getByLabel('Name').fill('Drive photos');
+		await dialog.getByRole('combobox', { name: 'Remote' }).selectOption('gdrive');
+		await dialog.getByLabel('Folder on the remote').fill('Photos/2024');
+		return dialog;
+	}
+
+	test('cloud folder added but the pull could not start: listed once, reason said', async ({
+		page
+	}) => {
+		await page.route(/\/api\/remote-sources\/\d+\/pull$/, (route) =>
+			route.fulfill({ status: 503, json: { detail: 'rclone is busy; try again.' } })
+		);
+		const dialog = await fillCloud(page);
+		await dialog.getByRole('button', { name: 'Add and pull' }).click();
+		// Staying open with the error would invite a second press, and a second copy of the folder.
+		await expect(dialog).toBeHidden();
+		await expect(
+			page.getByRole('status').filter({ hasText: 'Rclone is busy; try again.' })
+		).toBeVisible();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
+	});
+
+	test('a double click on “Add and pull” adds the cloud folder once', async ({ page }) => {
+		let posts = 0;
+		await page.route('**/api/remote-sources', async (route) => {
+			if (route.request().method() !== 'POST') return route.fallback();
+			posts++;
+			await new Promise((r) => setTimeout(r, 300));
+			await route.fallback();
+		});
+		const dialog = await fillCloud(page);
+		await dialog.getByRole('button', { name: 'Add and pull' }).dblclick();
+		await expect(dialog).toBeHidden();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
+		expect(posts).toBe(1);
+	});
 });
