@@ -6,6 +6,7 @@ the process's one ``Database`` (writer and lock) with every other store.
 """
 
 import json
+import math
 import sqlite3
 import struct
 from collections.abc import Collection, Iterator, Sequence
@@ -157,6 +158,8 @@ class SqliteMlStore:
     # --- CLIP ------------------------------------------------------------------------------
 
     def save_clip(self, asset_id: int, model: str, vector: Vector) -> None:
+        if not any(vector) or not all(math.isfinite(x) for x in vector):
+            raise ValueError("an embedding needs a direction: not all zeros, no NaN or infinity")
         self._write(
             "INSERT OR REPLACE INTO clip_embedding (model, asset_id, dim, embedding) "
             "VALUES (?, ?, ?, ?)",
@@ -175,10 +178,14 @@ class SqliteMlStore:
     ) -> list[ScoredAsset]:
         if not candidates:
             return []
+        # A zero vector has no angle to anything: its distance is NULL and it is left out.
+        # MATERIALIZED: the distance is computed once per photo, not again for the filter.
         sql = (
-            "SELECT e.asset_id, vec_distance_cosine(e.embedding, ?) AS d "
+            "WITH scored AS MATERIALIZED ("
+            "SELECT e.asset_id AS asset_id, vec_distance_cosine(e.embedding, ?) AS d "
             "FROM clip_embedding e JOIN temp.ml_candidates c ON c.asset_id = e.asset_id "
-            "WHERE e.model = ? AND e.dim = ? ORDER BY d, e.asset_id LIMIT ?"
+            "WHERE e.model = ? AND e.dim = ?) "
+            "SELECT asset_id, d FROM scored WHERE d IS NOT NULL ORDER BY d, asset_id LIMIT ?"
         )
         with self._candidates(candidates):
             rows = self._all(sql, (to_blob(query), model, len(query), limit))

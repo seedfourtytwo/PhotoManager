@@ -100,6 +100,43 @@ def test_nearest_assets_ranks_within_candidates_only(
     assert store.nearest_assets(angle(0), "other", candidates=set(ids), limit=5) == []
 
 
+def test_a_stored_embedding_without_a_direction_does_not_break_search(
+    conn: sqlite3.Connection, repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    """A zero vector has no angle to anything (the distance is NULL): it is left out."""
+    (good, zero) = assets(repo, 2)
+    store.save_clip(good, M, angle(0))
+    conn.execute(  # as an older version may have stored it
+        "INSERT INTO clip_embedding (model, asset_id, dim, embedding) VALUES (?, ?, 3, ?)",
+        (M, zero, to_blob((0.0, 0.0, 0.0))),
+    )
+    hits = store.nearest_assets(angle(10), M, candidates=[good, zero], limit=5)
+    assert [h.asset_id for h in hits] == [good]
+    assert store.nearest_assets((0.0, 0.0, 0.0), M, candidates=[good, zero], limit=5) == []
+
+
+@pytest.mark.parametrize(
+    "vector", [(0.0, 0.0, 0.0), (1.0, math.nan, 0.0), (math.inf, 0.0, 0.0), ()]
+)
+def test_an_embedding_without_a_direction_is_not_stored(
+    repo: SqliteRepository, store: SqliteMlStore, vector: Vector
+) -> None:
+    (a,) = assets(repo, 1)
+    with pytest.raises(ValueError, match="embedding"):
+        store.save_clip(a, M, vector)
+    assert store.clip_vector(a, M) is None
+
+
+def test_a_face_without_a_direction_matches_nobody_and_breaks_nothing(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    (a,) = assets(repo, 1)
+    good, zero = store.replace_faces(a, M, [face(angle(0)), face((0.0, 0.0, 0.0))])
+    assert store.count_face_matches(good, 2.0, limit=10) == 0
+    assert store.count_face_matches(zero, 2.0, limit=10) == 0
+    assert store.nearest_person(zero, 2.0) is None
+
+
 def test_the_candidate_set_is_filled_in_one_transaction(
     conn: sqlite3.Connection, repo: SqliteRepository, store: SqliteMlStore
 ) -> None:
