@@ -275,7 +275,8 @@ Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop mar
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/backups` | – | `[Target]` with `last_run`, `next_run_at`, `overdue`, `last_proven_at` (last restore test that matched every hash), `restore_failing`, `key_saved`, `needs_attention` (drives the banner: overdue, a failed backup or restore test, or an unconfirmed recovery key) |
+| GET | `/api/backups` | – | `[Target]` with `last_run`, `next_run_at`, `overdue`, `last_proven_at` (last restore test that matched every hash), `restore_failing`, `key_saved`, `needs_attention` (drives the banner: overdue, a failed backup or restore test, or an unconfirmed recovery key), `skipped_since` (the latest run was skipped because the disk was not connected: when it started; else null), `mirror_overdue` (the Proton copy has no fresh success) |
+| GET | `/api/backups/health` | – | `{protected, places_ok, places_total, problems: [{severity: "alert"\|"warning", message, target_id?}]}`. Read-only, admin only. `protected` = at least two healthy backup places (a repository, or its Proton copy, each count); `target_id` null = about the library as a whole |
 | GET | `/api/backups/places` | – | `{library_bytes, disks: [{path, label, free_bytes}], remotes: [name]}`: plugged-in disks and rclone remotes |
 | POST | `/api/backups/plan` | `{place}` (a folder path, or `rclone:<remote>:<folder>`) | `{repository, library_bytes, free_bytes?, ok, problem?, warnings}`. Creates nothing. Refused (`ok: false`): not enough room, not writable, inside the library or a source folder, another backup already there |
 | POST | `/api/backups/setup` | `{label, place, schedule?, retention?}` | `201 {target: Target, recovery: {label, repository, key}}`. Makes the key, queues the first backup (followed by a restore test). `422` with the plan's problem, `409` for a taken name |

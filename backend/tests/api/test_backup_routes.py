@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
-from photo_assistant.api.deps import admin_user
+from photo_assistant.api.deps import admin_user, current_user
 from photo_assistant.api.ops_services import OpsServices, build_ops_services
 from photo_assistant.api.routes import backup
 from photo_assistant.api.settings import OpsSettings
@@ -131,6 +131,49 @@ def test_a_disk_that_is_not_there_shows_as_skipped_not_as_trouble(env: Env) -> N
     assert listed["last_run"]["status"] == "skipped"
     assert "plug it in" in listed["last_run"]["error"]
     assert not listed["needs_attention"]
+
+
+def test_a_target_reports_since_when_it_is_skipped(env: Env) -> None:
+    target = _add(env, repository="/media/nobody/NoDisk/photos")
+    assert target["skipped_since"] is None and target["mirror_overdue"] is False
+    env.client.post(f"/api/backups/{target['id']}/run")
+    env.work()
+    (listed,) = env.client.get("/api/backups").json()
+    assert listed["skipped_since"] is not None and listed["mirror_overdue"] is False
+
+
+# --- health: are at least two places safe? -------------------------------------------------------
+
+
+def test_health_with_no_backup_warns_that_none_is_set_up(env: Env) -> None:
+    response = env.client.get("/api/backups/health")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["protected"] is False and body["places_ok"] == 0 and body["places_total"] == 0
+    assert body["problems"], "someone must be told"
+    assert set(body["problems"][0]) == {"severity", "message", "target_id"}
+    assert body["problems"][0]["severity"] in ("alert", "warning")
+    assert body["problems"][0]["target_id"] is None
+
+
+def test_health_is_protected_with_two_fresh_places(env: Env) -> None:
+    for name in ("one", "two"):
+        place = env.disk / name
+        place.mkdir()
+        target = _add(env, label=name, repository=str(place / "photos"))
+        env.client.post(f"/api/backups/{target['id']}/run")
+        env.client.post(f"/api/backups/{target['id']}/restore-test")
+    env.work()
+    body = env.client.get("/api/backups/health").json()
+    assert body["protected"] is True
+    assert body["places_ok"] == 2 and body["places_total"] == 2
+
+
+def test_health_is_admin_only(env: Env) -> None:
+    app = env.client.app
+    app.dependency_overrides.pop(admin_user)  # type: ignore[attr-defined]
+    app.dependency_overrides[current_user] = lambda: User(2, "m", "M", Role.MEMBER)  # type: ignore[attr-defined]
+    assert env.client.get("/api/backups/health").status_code == 403
 
 
 def test_validation_and_unknown_targets(env: Env) -> None:
