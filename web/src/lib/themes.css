@@ -1,0 +1,128 @@
+/*
+ * Themes: the colour of each theme in each mode, and nothing else (docs/DESIGN_PRINCIPLES.md §2).
+ * The theme is chosen by data-look on the root element (absent = Safelight), the mode by
+ * data-theme (absent = follow the device). A light variant appears under two selectors that
+ * must stay identical; themes.spec.ts checks that, and the contrast of every variant.
+ * The accent is oklch(--acc-l --acc-c --acc-h): lightness and chroma belong to the theme,
+ * so any hue stays readable.
+ */
+
+/* Safelight, dark: a darkroom; the amber of the safelight marks selection and focus. */
+:root {
+	--bg: #0d0f12;
+	--raised: #171a1f;
+	--ink: #f1f2f4;
+	--ink-2: #a3a9b3;
+	--ink-3: #6b717c;
+	--hairline: #262a31;
+	--tint: rgb(241 242 244 / 0.07);
+	--acc-l: 0.82;
+	--acc-c: 0.14;
+	--acc-h: 72;
+	--on-accent: #17110a;
+	--scrim: rgb(4 5 7 / 0.66);
+	--ok: #7bd3a0;
+	--fail: #ff7a6b;
+	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%230d0f12' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	color-scheme: dark;
+}
+
+/* Safelight, light. */
+@media (prefers-color-scheme: light) {
+	:root:not([data-theme='dark']) {
+		--bg: #f2f3f5;
+		--raised: #ffffff;
+		--ink: #14161a;
+		--ink-2: #565d68;
+		--ink-3: #8a909a;
+		--hairline: #dcdfe4;
+		--tint: rgb(20 22 26 / 0.06);
+		--acc-l: 0.5;
+		--acc-c: 0.15;
+		--acc-h: 72;
+		--on-accent: #ffffff;
+		--scrim: rgb(30 34 40 / 0.38);
+		--ok: #1f7a4a;
+		--fail: #b3261e;
+		--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f2f3f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+		color-scheme: light;
+	}
+}
+:root[data-theme='light'] {
+	--bg: #f2f3f5;
+	--raised: #ffffff;
+	--ink: #14161a;
+	--ink-2: #565d68;
+	--ink-3: #8a909a;
+	--hairline: #dcdfe4;
+	--tint: rgb(20 22 26 / 0.06);
+	--acc-l: 0.5;
+	--acc-c: 0.15;
+	--acc-h: 72;
+	--on-accent: #ffffff;
+	--scrim: rgb(30 34 40 / 0.38);
+	--ok: #1f7a4a;
+	--fail: #b3261e;
+	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f2f3f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	color-scheme: light;
+}
+
+/* Album, dark: the earlier look — a graphite page and indigo ink. */
+:root[data-look='album'] {
+	--bg: #181817;
+	--raised: #222120;
+	--ink: #eceae4;
+	--ink-2: #a6a39c;
+	--ink-3: #7a7772;
+	--hairline: #302f2c;
+	--tint: rgb(236 234 228 / 0.07);
+	--acc-l: 0.79;
+	--acc-c: 0.12;
+	--acc-h: 281;
+	--on-accent: #181817;
+	--scrim: rgb(10 10 9 / 0.66);
+	--ok: #7bd3a0;
+	--fail: #ff7a6b;
+	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23181817' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	color-scheme: dark;
+}
+
+/* Album, light: a quiet paper page. */
+@media (prefers-color-scheme: light) {
+	:root[data-look='album']:not([data-theme='dark']) {
+		--bg: #f5f4f0;
+		--raised: #fcfbf8;
+		--ink: #1f1e1b;
+		--ink-2: #625f58;
+		--ink-3: #8c8981;
+		--hairline: #dcd9d1;
+		--tint: rgb(31 30 27 / 0.06);
+		--acc-l: 0.42;
+		--acc-c: 0.17;
+		--acc-h: 275;
+		--on-accent: #ffffff;
+		--scrim: rgb(40 38 34 / 0.38);
+		--ok: #1f7a4a;
+		--fail: #b3261e;
+		--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f4f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+		color-scheme: light;
+	}
+}
+:root[data-look='album'][data-theme='light'] {
+	--bg: #f5f4f0;
+	--raised: #fcfbf8;
+	--ink: #1f1e1b;
+	--ink-2: #625f58;
+	--ink-3: #8c8981;
+	--hairline: #dcd9d1;
+	--tint: rgb(31 30 27 / 0.06);
+	--acc-l: 0.42;
+	--acc-c: 0.17;
+	--acc-h: 275;
+	--on-accent: #ffffff;
+	--scrim: rgb(40 38 34 / 0.38);
+	--ok: #1f7a4a;
+	--fail: #b3261e;
+	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f4f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	color-scheme: light;
+}

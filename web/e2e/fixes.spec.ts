@@ -70,6 +70,6 @@ test('dark is the default theme, even on a light system', async ({ browser }) =>
 	await signIn(page);
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 	const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-	expect(bg).toBe('rgb(24, 24, 23)'); // --bg, dark (tokens.css)
+	expect(bg).toBe('rgb(13, 15, 18)'); // --bg, dark (tokens.css)
 	await context.close();
 });
