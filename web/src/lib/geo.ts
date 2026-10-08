@@ -62,29 +62,48 @@ export function clusterPoints(
 	cell: number,
 	radius?: (count: number) => number
 ): Cluster[] {
-	const buckets = new Map<string, { sx: number; sy: number; points: MapPoint[] }>();
+	const buckets = new Map<string, { sx: number; sy: number; cluster: Cluster }>();
 	for (const p of points) {
 		const [x, y] = project(p.lat, p.lon, view);
 		const key = `${Math.floor(x / cell)}:${Math.floor(y / cell)}`;
-		const bucket = buckets.get(key) ?? { sx: 0, sy: 0, points: [] };
+		let bucket = buckets.get(key);
+		if (!bucket) {
+			const bounds = { south: p.lat, north: p.lat, west: p.lon, east: p.lon };
+			bucket = { sx: 0, sy: 0, cluster: { x: 0, y: 0, ids: [], bounds } };
+			buckets.set(key, bucket);
+		}
 		bucket.sx += x;
 		bucket.sy += y;
-		bucket.points.push(p);
-		buckets.set(key, bucket);
+		// Bounds are tracked here, not with Math.min(...all): a big bucket overflows the stack.
+		const { ids, bounds } = bucket.cluster;
+		ids.push(p.id);
+		if (p.lat < bounds.south) bounds.south = p.lat;
+		if (p.lat > bounds.north) bounds.north = p.lat;
+		if (p.lon < bounds.west) bounds.west = p.lon;
+		if (p.lon > bounds.east) bounds.east = p.lon;
 	}
-	const clusters = [...buckets.values()].map(({ sx, sy, points: ps }) => ({
-		x: sx / ps.length,
-		y: sy / ps.length,
-		ids: ps.map((p) => p.id),
-		bounds: {
-			south: Math.min(...ps.map((p) => p.lat)),
-			north: Math.max(...ps.map((p) => p.lat)),
-			west: Math.min(...ps.map((p) => p.lon)),
-			east: Math.max(...ps.map((p) => p.lon))
-		}
+	const clusters = [...buckets.values()].map(({ sx, sy, cluster }) => ({
+		...cluster,
+		x: sx / cluster.ids.length,
+		y: sy / cluster.ids.length
 	}));
 	return (radius ? separate(clusters, radius) : clusters).sort(
 		(a, b) => b.ids.length - a.ids.length
+	);
+}
+
+/** The clusters inside a window onto the map (`margin` keeps dots that straddle its edge). */
+export function clustersInView(
+	clusters: readonly Cluster[],
+	view: { x: number; y: number; w: number; h: number },
+	margin = 0
+): Cluster[] {
+	return clusters.filter(
+		(c) =>
+			c.x >= view.x - margin &&
+			c.x <= view.x + view.w + margin &&
+			c.y >= view.y - margin &&
+			c.y <= view.y + view.h + margin
 	);
 }
 

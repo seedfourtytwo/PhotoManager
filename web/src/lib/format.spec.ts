@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatWhen } from './format';
+import { errorMessage, formatBytes, formatWhen } from './format';
 
 describe('formatBytes', () => {
 	it.each([
@@ -24,5 +24,17 @@ describe('formatWhen', () => {
 		expect(formatWhen('2026-09-25T02:31:12')).toMatch(/25 Sept? 2026, 02:31/);
 		expect(formatWhen(null)).toBe('');
 		expect(formatWhen('nonsense')).toBe('');
+	});
+});
+
+describe('errorMessage', () => {
+	it("is the error's own sentence, or the fallback for anything that has none", () => {
+		expect(errorMessage(new Error('The current PIN is wrong'), 'Could not change the PIN.')).toBe(
+			'The current PIN is wrong'
+		);
+		expect(errorMessage('boom', 'Could not change the PIN.')).toBe('Could not change the PIN.');
+		expect(errorMessage(new Error(''), 'Could not change the PIN.')).toBe(
+			'Could not change the PIN.'
+		);
 	});
 });

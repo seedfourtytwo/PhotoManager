@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { clusterPoints, clusterRadius, dominantPlace, placeLabel, project } from './geo';
+import {
+	clusterPoints,
+	clusterRadius,
+	clustersInView,
+	dominantPlace,
+	placeLabel,
+	project
+} from './geo';
 
 const view = { width: 360, height: 180 };
 
@@ -55,8 +62,36 @@ describe('clusterPoints', () => {
 		expect(merged[0].x).toBeCloseTo((40 * 181 + 30 * 184.5) / 70);
 	});
 
+	// Spreading a bucket into Math.min throws RangeError above an engine limit: 65,536 in
+	// Safari, about 125,000 in the Node this suite runs on — hence 200,000 here.
+	it('handles a bucket of 200,000 points (a whole library taken in one place)', () => {
+		const many = Array.from({ length: 200_000 }, (_, i) => ({
+			id: i,
+			lat: 48 + (i % 100) / 1000,
+			lon: 2 + (i % 50) / 1000
+		}));
+		const [only, ...rest] = clusterPoints(many, view, 20, (n) => 2 * Math.sqrt(n));
+		expect(rest).toEqual([]);
+		expect(only.ids).toHaveLength(200_000);
+		expect(only.bounds).toEqual({ south: 48, north: 48.099, west: 2, east: 2.049 });
+	});
+
 	it('returns nothing for no points', () => {
 		expect(clusterPoints([], view, 10)).toEqual([]);
+	});
+});
+
+describe('clustersInView', () => {
+	it('keeps the clusters inside the window, plus a margin around it', () => {
+		const at = (x: number, y: number) => ({
+			x,
+			y,
+			ids: [x],
+			bounds: { south: 0, north: 0, west: 0, east: 0 }
+		});
+		const all = [at(10, 10), at(104, 10), at(106, 10), at(50, 56), at(50, -6)];
+		const seen = clustersInView(all, { x: 0, y: 0, w: 100, h: 50 }, 5);
+		expect(seen.map((c) => c.ids[0])).toEqual([10, 104]);
 	});
 });
 
