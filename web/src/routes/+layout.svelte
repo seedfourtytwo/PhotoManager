@@ -5,11 +5,18 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
-	import { applyTheme, isFilterable, notice, session, settings } from '$lib/app.svelte';
+	import {
+		applyTheme,
+		isFilterable,
+		isPublicRoute,
+		notice,
+		session,
+		settings
+	} from '$lib/app.svelte';
 
 	let { children } = $props();
 
-	const bare = $derived(['/login', '/setup'].some((p) => page.url.pathname.startsWith(p)));
+	const bare = $derived(isPublicRoute(page.url.pathname));
 	const filterable = $derived(isFilterable(page.url.pathname));
 
 	onMount(() => {

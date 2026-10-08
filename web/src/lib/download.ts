@@ -20,7 +20,7 @@ export const DEFAULT_OPTIONS: DownloadOptions = {
 };
 
 /** Quality only matters for lossy formats; keep it within the contract's 1..100. */
-export function normaliseOptions(options: DownloadOptions): DownloadOptions {
+function normaliseOptions(options: DownloadOptions): DownloadOptions {
 	const quality = Math.round(Math.min(Math.max(options.quality, 1), 100));
 	return {
 		...options,

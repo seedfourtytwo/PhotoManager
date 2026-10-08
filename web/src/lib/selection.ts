@@ -17,7 +17,7 @@ export function toggle(selection: Selection, id: Id): Selection {
 }
 
 /** Add every id between the anchor and `id` (inclusive) in display order. */
-export function selectRange(selection: Selection, order: readonly Id[], id: Id): Selection {
+function selectRange(selection: Selection, order: readonly Id[], id: Id): Selection {
 	const from = selection.anchor === null ? -1 : order.indexOf(selection.anchor);
 	const to = order.indexOf(id);
 	if (from < 0 || to < 0) return toggle(selection, id);

@@ -7,6 +7,11 @@ import { ApiError, createApi, type MlStatus, type Source, type User } from '$lib
 
 const PUBLIC_ROUTES = ['/login', '/setup'];
 
+/** Pages shown without a session and without the app frame: sign-in and first setup. */
+export function isPublicRoute(pathname: string): boolean {
+	return PUBLIC_ROUTES.some((p) => pathname.startsWith(p));
+}
+
 function currentPath(): string {
 	return `${location.pathname}${location.search}`;
 }
@@ -43,7 +48,7 @@ class Session {
 	lost() {
 		this.user = null;
 		library.forget();
-		if (PUBLIC_ROUTES.some((p) => location.pathname.startsWith(p))) return;
+		if (isPublicRoute(location.pathname)) return;
 		void goto(`/login?next=${encodeURIComponent(currentPath())}`, { replaceState: true });
 	}
 
