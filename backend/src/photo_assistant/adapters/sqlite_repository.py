@@ -66,6 +66,18 @@ def _run_row(r: sqlite3.Row) -> dict[str, object]:
     }
 
 
+def _job_row(r: sqlite3.Row) -> dict[str, object]:
+    return {
+        "id": r["id"],
+        "kind": r["kind"],
+        "payload": json.loads(r["payload_json"]),
+        "status": r["status"],
+        "attempts": r["attempts"],
+        "error": r["error"],
+        "run_after": r["run_after"],
+    }
+
+
 class SqliteRepository(
     AccountsMixin,
     AccessMixin,
@@ -556,18 +568,12 @@ class SqliteRepository(
         if status is not None:
             sql += " WHERE status = ?"
             params = (status,)
-        return [
-            {
-                "id": r["id"],
-                "kind": r["kind"],
-                "payload": json.loads(r["payload_json"]),
-                "status": r["status"],
-                "attempts": r["attempts"],
-                "error": r["error"],
-                "run_after": r["run_after"],
-            }
-            for r in self._all(sql + " ORDER BY id", params)
-        ]
+        return [_job_row(r) for r in self._all(sql + " ORDER BY id", params)]
+
+    def get_job(self, job_id: int) -> dict[str, object] | None:
+        """One job as ``list_jobs`` gives it."""
+        row = self._one("SELECT * FROM job WHERE id = ?", (job_id,))
+        return _job_row(row) if row else None
 
     def retry_job(self, job_id: int) -> bool:
         """By hand, from the admin screen: a fresh set of attempts, starting now."""

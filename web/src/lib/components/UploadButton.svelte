@@ -26,13 +26,17 @@
 	/** Refused files named in the notice; the rest are counted. */
 	const NAMED = 3;
 
-	/** Waits for the import; if the server can't be asked, the photos are stored all the same. */
-	async function importDone() {
+	/**
+	 * Waits for the import this upload queued, not for the whole queue (a big import of someone
+	 * else's would use up the patience every time). Done, failed, or put off to a later attempt:
+	 * the wait is over. If the server can't be asked, the photos are stored all the same.
+	 */
+	async function importDone(jobId: number) {
 		const until = Date.now() + patience * 1000;
 		try {
 			while (Date.now() < until) {
-				const { jobs } = await api.stats();
-				if (jobs.queued + jobs.running === 0) return;
+				const job = await api.uploadJob(jobId);
+				if (job.status === 'done' || job.status === 'failed' || job.run_after) return;
 				await sleep(pollMs);
 			}
 		} catch {
@@ -83,7 +87,7 @@
 			}
 			if (result.import_job_id !== null) {
 				notice.show(`${summary}. Adding them to the library…`, { ms: 600_000 });
-				await importDone();
+				await importDone(result.import_job_id);
 			}
 			notice.show(summary, { ms: 8000 });
 			onuploaded?.();

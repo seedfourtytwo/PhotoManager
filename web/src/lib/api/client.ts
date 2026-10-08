@@ -38,6 +38,7 @@ import type {
 	Id,
 	ImportReport,
 	ImportReportPage,
+	UploadImportJob,
 	FolderListing,
 	ImportRun,
 	Job,
@@ -231,6 +232,7 @@ export function createApi(options: ApiOptions = {}) {
 		/** v1.1: names to share albums with, for any member (not only admins). */
 		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
 		uploadUrl: `${base}/api/upload`,
+		uploadJob: (id: Id) => get<UploadImportJob>(`/api/upload/jobs/${id}`),
 
 		// sources, imports, jobs
 		sources: () => get<Source[]>('/api/sources'),

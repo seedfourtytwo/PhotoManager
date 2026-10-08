@@ -55,14 +55,8 @@ describe('UploadButton', () => {
 		let polls = 0;
 		vi.stubGlobal('fetch', async () => {
 			polls++;
-			const busy = polls < 2 ? 1 : 0;
 			return new Response(
-				JSON.stringify({
-					assets: 1,
-					sources: 1,
-					free_bytes: 1,
-					jobs: { queued: busy, running: 0, done: 1, failed: 0 }
-				}),
+				JSON.stringify({ id: 3, status: polls < 2 ? 'queued' : 'done', run_after: null }),
 				{ headers: { 'content-type': 'application/json' } }
 			);
 		});
@@ -122,7 +116,7 @@ class ChunkXhr {
 }
 
 describe('UploadButton: many photos at once', () => {
-	const idle = { assets: 1, sources: 1, free_bytes: 1, jobs: { queued: 0, running: 0, done: 1, failed: 0 } }; // prettier-ignore
+	const idle = { id: 1, status: 'done', run_after: null };
 	const photos = (n: number) =>
 		Array.from({ length: n }, (_, i) => new File([new Uint8Array([1])], `p${i}.jpg`));
 

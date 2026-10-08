@@ -276,6 +276,11 @@ export type UploadedFile = {
 };
 /** POST /api/upload (multipart, any field name, many files). */
 export type UploadResult = { files: UploadedFile[]; import_job_id: Id | null };
+/**
+ * GET /api/upload/jobs/{import_job_id}: the import your own upload queued (any other job is a
+ * 404). `run_after` is set while a failed import waits for its next attempt.
+ */
+export type UploadImportJob = { id: Id; status: JobStatus; run_after: string | null };
 
 // --- local ML: search, similar, people (v1.1) ----------------------------------------------
 

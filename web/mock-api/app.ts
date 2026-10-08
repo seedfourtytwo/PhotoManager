@@ -827,6 +827,22 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				return ok({ files, import_job_id: job.id });
 			}
 		],
+		// the import an upload of the caller queued; any other job is "not found"
+		[
+			'GET',
+			/^\/api\/upload\/jobs\/(\d+)$/,
+			(ctx) => {
+				const user = me(ctx);
+				if (user.role === 'guest')
+					throw new HttpError(403, 'Guests can view and download, not upload.');
+				const job = state.jobs.find((j) => j.id === idParam(ctx));
+				const source = state.sources.find((s) => s.id === Number(job?.payload.source_id));
+				const mine = source?.kind === 'inbox' && source.owner_id === user.id;
+				if (!job || job.kind !== 'import' || !mine)
+					throw new HttpError(404, 'No import of an upload of yours with that id.');
+				return ok({ id: job.id, status: job.status, run_after: job.run_after });
+			}
+		],
 		[
 			'POST',
 			/^\/api\/users$/,
