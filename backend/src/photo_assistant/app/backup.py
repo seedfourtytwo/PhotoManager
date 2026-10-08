@@ -122,7 +122,8 @@ def _files(count: int, word: str) -> str:
 
 def _mirror_summary(report: MirrorReport) -> str:
     sent = f"{_files(report.uploaded, 'new')} sent ({size_text(report.bytes_sent)})"
-    return f"{sent}, {_files(report.removed, 'old')} removed"
+    kept = f" ({report.left_in_trash} left in Proton's trash)" if report.left_in_trash else ""
+    return f"{sent}, {_files(report.removed, 'old')} removed{kept}"
 
 
 def _message(exc: BaseException) -> str:

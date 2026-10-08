@@ -272,9 +272,10 @@ class FakeMirror:
     def __init__(self) -> None:
         self.fail: BackupError | None = None
         self.calls: list[tuple[Path, str, Path]] = []
+        self.report = MirrorReport(uploaded=2, removed=1, bytes_sent=5_000_000)
 
     def mirror(self, repository: Path, remote_folder: str, state_file: Path) -> MirrorReport:
         self.calls.append((repository, remote_folder, state_file))
         if self.fail:
             raise self.fail
-        return MirrorReport(uploaded=2, removed=1, bytes_sent=5_000_000)
+        return self.report
