@@ -171,3 +171,24 @@ def test_human_bytes() -> None:
     assert human_bytes(512) == "512 B"
     assert human_bytes(1_500_000) == "1.5 MB"
     assert human_bytes(3 * 1000**5) == "3000.0 TB"
+
+
+def test_backup_from_the_command_line_uses_the_configured_rclone(
+    capsys: pytest.CaptureFixture[str], settings: Settings, tmp_path: Path
+) -> None:
+    """The server passes PA_RCLONE_BINARY / PA_RCLONE_CONFIG to its backup service; a backup
+    run from the command line must reach an rclone remote the same way."""
+    settings.integrations.rclone_binary = "/opt/rclone/rclone"
+    settings.integrations.rclone_config = tmp_path / "rclone.conf"
+    seen: list[cli_ops.RcloneTool] = []
+    real = cli_ops.build_backup_service
+
+    def spy(*args: object, **kwargs: object) -> object:
+        seen.append(kwargs["rclone"])  # type: ignore[arg-type]
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(cli_ops, "build_backup_service", spy)
+        code, _ = run(capsys, settings, "backup", "list")
+    assert code == 0
+    assert seen == [cli_ops.RcloneTool("/opt/rclone/rclone", tmp_path / "rclone.conf")]

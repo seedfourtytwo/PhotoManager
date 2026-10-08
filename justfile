@@ -27,9 +27,10 @@ dev:
 import folder *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    folder="$(cd "{{invocation_directory()}}" && realpath -- "$1")"
-    shift
-    cd backend && uv run python -m photo_assistant import "$folder" "$@"
+    if [ "${1#-}" = "$1" ]; then  # a folder, not an option such as --help
+        folder="$(cd "{{invocation_directory()}}" && realpath -- "$1")"; shift; set -- "$folder" "$@"
+    fi
+    cd backend && uv run python -m photo_assistant import "$@"
 
 # Give an account a new 4-digit PIN (asks for it). For a forgotten PIN: just set-pin ck
 set-pin username:
@@ -123,9 +124,10 @@ doctor:
 export-library dest *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    dest="$(cd "{{invocation_directory()}}" && realpath -m -- "$1")"
-    shift
-    cd backend && uv run python -m photo_assistant export-library "$dest" "$@"
+    if [ "${1#-}" = "$1" ]; then  # a folder, not an option such as --help
+        dest="$(cd "{{invocation_directory()}}" && realpath -m -- "$1")"; shift; set -- "$dest" "$@"
+    fi
+    cd backend && uv run python -m photo_assistant export-library "$@"
 
 # Check every photo's file and hash (default: the configured library).
 [positional-arguments]

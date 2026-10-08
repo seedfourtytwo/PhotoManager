@@ -222,7 +222,7 @@ def _backup(args: argparse.Namespace, settings: Settings) -> int:
         root,
         settings.ops,
         db=db,
-        rclone=RcloneTool(),
+        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
     )
     try:
