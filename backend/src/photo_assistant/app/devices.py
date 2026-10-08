@@ -8,6 +8,7 @@ import hashlib
 import re
 import secrets
 
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.ports import Clock
 from photo_assistant.ports.upload import Device, DeviceStore
 
@@ -15,6 +16,11 @@ TOKEN_PREFIX = "pa_dev_"  # recognisable in logs and secret scanners
 PLATFORMS = frozenset({"ios", "android", "desktop", "other"})
 MAX_NAME_CHARS = 60
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+class InvalidDeviceError(InvalidError, ValueError):
+    """A device name or platform that will not do. (Still a ValueError, as it was before it
+    joined the hierarchy.)"""
 
 
 def hash_token(token: str) -> str:
@@ -30,9 +36,9 @@ class DeviceTokens:
         """The new device and its token (the only time the token is ever available)."""
         clean = _CONTROL.sub("", name).strip()
         if not clean or len(clean) > MAX_NAME_CHARS:
-            raise ValueError(f"give the device a name of 1 to {MAX_NAME_CHARS} characters")
+            raise InvalidDeviceError(f"give the device a name of 1 to {MAX_NAME_CHARS} characters")
         if platform not in PLATFORMS:
-            raise ValueError(f"platform must be one of: {', '.join(sorted(PLATFORMS))}")
+            raise InvalidDeviceError(f"platform must be one of: {', '.join(sorted(PLATFORMS))}")
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
         device = self._store.add_device(
             user_id, clean, platform, hash_token(token), self._clock.now()

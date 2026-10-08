@@ -6,12 +6,13 @@ anything and the same album renders identically on the laptop and on the home se
 
 from dataclasses import dataclass
 
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.print_layout import PageGeometry, TrimSize
 
 BUNDLED_FONTS = frozenset({"Libertinus Serif", "New Computer Modern", "DejaVu Sans Mono"})
 
 
-class UnknownThemeError(KeyError):
+class UnknownThemeError(InvalidError):
     """A theme id that is not one of the curated themes."""
 
 

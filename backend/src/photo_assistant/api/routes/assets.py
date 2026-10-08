@@ -53,10 +53,7 @@ def list_assets(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     cursor: str | None = None,
 ) -> AssetPage:
-    try:
-        page = services.repo.list_views(viewer, f, limit, cursor)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    page = services.repo.list_views(viewer, f, limit, cursor)
     return AssetPage(items=[asset_out(v) for v in page.items], next_cursor=page.next_cursor)
 
 

@@ -11,11 +11,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.filesystem import SystemClock
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.deps import admin_user
 from photo_assistant.api.integrations import Integrations, build_integrations
 from photo_assistant.api.routes import proton, remote_sources
 from photo_assistant.api.settings import IntegrationSettings
+from tests.api.conftest import answer_domain_errors
 from tests.api.test_remote_sources_api import ADMIN, StubImporter, _admin_from_header
 from tests.proton_cloud import Cloud
 
@@ -39,24 +42,26 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         {"type": "folder", "uid": "a", "name": "archive"},
     )
     cloud.folder("/my-files/Trips", cloud.image("f1", "peak.jpg"))
-    conn = open_database(":memory:")
-    repo = SqliteRepository(conn)
+    db = Database.open(":memory:")
+    repo = SqliteRepository(db)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
+    answer_domain_errors(app)
     app.include_router(proton.router)
     app.include_router(remote_sources.router)
     integrations = build_integrations(
         data_root=tmp_path / "data",
         settings=IntegrationSettings(proton_drive_binary=str(cloud.binary)),
-        conn=conn,
+        db=db,
         repo=repo,
+        clock=SystemClock(),
         importer=StubImporter(),
     )
     app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     client = TestClient(app, base_url="http://127.0.0.1")
     yield World(client, repo, tmp_path / "data", cloud, integrations)
-    conn.close()
+    db.close()
 
 
 def test_status_says_ready_when_signed_in(world: World) -> None:
@@ -188,3 +193,37 @@ def test_a_folder_is_not_made_with_a_bad_name_or_in_a_bad_place(
     )
     assert refused.status_code == code, refused.text
     assert not any(call[:2] == ["filesystem", "create-folder"] for call in world.cloud.calls())
+
+
+BAD_PLACE = "choose the Photos section (/photos) or a folder in My files (/my-files/...)"
+
+
+def test_proton_refusals_say_why(world: World) -> None:
+    def folders(path: str) -> tuple[int, object]:
+        listed = world.client.get("/api/proton/folders", params={"path": path}, headers=ADMIN)
+        return listed.status_code, listed.json()
+
+    def new_folder(parent: str, name: str) -> tuple[int, object]:
+        body = {"parent": parent, "name": name}
+        made = world.client.post("/api/proton/folders", json=body, headers=ADMIN)
+        return made.status_code, made.json()
+
+    def source(path: str) -> tuple[int, object]:
+        body = {"label": "x", "path": path}
+        added = world.client.post("/api/proton/sources", json=body, headers=ADMIN)
+        return added.status_code, added.json()
+
+    missing = (404, {"detail": "folder '/my-files/Nope' not found on Proton Drive"})
+    assert folders("/photos") == (
+        422,
+        {"detail": "the Photos section has no folders to choose from"},
+    )
+    assert folders("/trash") == (422, {"detail": BAD_PLACE})
+    assert folders("/my-files/Nope") == missing
+    assert new_folder("/photos", "x") == (422, {"detail": "folders can only be made in My files"})
+    assert new_folder("/trash", "x") == (422, {"detail": BAD_PLACE})
+    assert new_folder("/my-files", " ") == (422, {"detail": "give the new folder a name"})
+    assert new_folder("/my-files", "Trips") == (422, {"detail": "'Trips' already exists there"})
+    assert new_folder("/my-files/Nope", "x") == missing
+    assert source("/trash") == (422, {"detail": BAD_PLACE})
+    assert source("/my-files/Nope") == missing

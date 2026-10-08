@@ -138,10 +138,7 @@ async def upload(request: Request, user: UploaderUser, services: ServicesDep) ->
 def check(body: CheckIn, user: UploaderUser, services: ServicesDep) -> CheckOut:
     """The hashes *this user* lacks: purged photos count as present; photos that exist but
     are hidden from them are missing (uploading links them to their inbox)."""
-    try:
-        return CheckOut(missing=services.integrations.upload.missing(Viewer.of(user), body.hashes))
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return CheckOut(missing=services.integrations.upload.missing(Viewer.of(user), body.hashes))
 
 
 @router.get("/devices")
@@ -151,10 +148,7 @@ def list_devices(user: SessionOnlyUser, services: ServicesDep) -> list[DeviceOut
 
 @router.post("/devices", status_code=status.HTTP_201_CREATED)
 def create_device(body: DeviceIn, user: SessionOnlyUser, services: ServicesDep) -> NewDeviceOut:
-    try:
-        device, token = services.integrations.devices.create(user.id, body.name, body.platform)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    device, token = services.integrations.devices.create(user.id, body.name, body.platform)
     return NewDeviceOut(device=DeviceOut.of(device), token=token)
 
 

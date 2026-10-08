@@ -8,7 +8,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.domain.print_layout import BLEED_MM, MM_PER_INCH
-from tests.api.conftest import add_user, asset_id_of, import_folder, services_of, user_id_of
+from tests.api.conftest import (
+    add_user,
+    asset_id_of,
+    import_folder,
+    refusal,
+    services_of,
+    user_id_of,
+)
 from tests.synthetic import write_photo
 
 pytestmark = pytest.mark.integration
@@ -153,6 +160,46 @@ def test_manual_pages_and_bad_layouts(admin: TestClient, album: dict[str, int]) 
         ).status_code
         == 422
     )
+
+
+def test_print_refusals_say_why(admin: TestClient, album: dict[str, int]) -> None:
+    base = f"/api/albums/{album['album']}/print"
+
+    def planned(**changes: object) -> tuple[int, object]:
+        return refusal(admin.post(f"{base}/plan", json={**REQUEST, **changes}))
+
+    wrong = [{"layout_id": "two-side", "asset_ids": [album["p0"]]}]
+    assert planned(pages=wrong) == (422, {"detail": "layout 'two-side' holds 2 photo(s), got 1"})
+    unknown = [{"layout_id": "nope", "asset_ids": [album["p0"]]}]
+    assert planned(pages=unknown) == (422, {"detail": "unknown layout: 'nope'"})
+    stranger = [{"layout_id": "single", "asset_ids": [album["tiny"]]}]
+    assert planned(pages=stranger) == (
+        422,
+        {"detail": f"photo {album['tiny']} is not in this album"},
+    )
+    assert planned(trim="a0") == (422, {"detail": "unknown trim size: 'a0'"})
+    assert planned(theme="neon") == (422, {"detail": "unknown theme: 'neon'"})
+    assert refusal(admin.post(base, json={**REQUEST, "theme": "neon"})) == (
+        422,
+        {"detail": "unknown theme: 'neon'"},
+    )
+    outside = admin.get(f"{base}/preview", params={"page": 99})
+    assert refusal(outside) == (422, {"detail": "page 99 is outside 1..2"})
+
+    empty = admin.post("/api/albums", json={"title": "Empty", "asset_ids": []}).json()["id"]
+    nothing = admin.post(f"/api/albums/{empty}/print/plan", json={**REQUEST, "cover": False})
+    assert refusal(nothing) == (422, {"detail": "the album has no photos and no cover"})
+
+
+def test_a_blocked_print_names_the_photos_that_are_too_small(
+    admin: TestClient, album: dict[str, int]
+) -> None:
+    admin.post(f"/api/albums/{album['album']}/items", json={"asset_ids": [album["tiny"]]})
+    blocked = admin.post(f"/api/albums/{album['album']}/print", json=REQUEST)
+    assert blocked.status_code == 422
+    body = blocked.json()
+    assert body["detail"] == "1 photo(s) are too small to print at this size"
+    assert [i["asset_id"] for i in body["issues"]] == [album["tiny"]]
 
 
 def test_low_resolution_blocks_unless_allowed(admin: TestClient, album: dict[str, int]) -> None:

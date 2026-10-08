@@ -23,6 +23,7 @@ from photo_assistant.app.print_job import (
     print_album,
 )
 from photo_assistant.domain.edit_recipe import Recipe, edited_size
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.library_paths import print_relpath
 from photo_assistant.domain.print_layout import Page
 from photo_assistant.ports import ImageRenderer, LibraryStore, RenderSpec
@@ -68,7 +69,7 @@ class AlbumPlan:
     issues: tuple[Issue, ...]
 
 
-class AlbumPrintBlockedError(ValueError):
+class AlbumPrintBlockedError(InvalidError):
     """Photos too small to print at this size, by asset id."""
 
     def __init__(self, issues: tuple[Issue, ...]) -> None:

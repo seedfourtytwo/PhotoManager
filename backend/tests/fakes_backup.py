@@ -20,6 +20,7 @@ from photo_assistant.domain.backup import (
 from photo_assistant.ports.backup import (
     AssetFile,
     BackupError,
+    BackupTargetExistsError,
     Disk,
     MirrorReport,
     PasswordFileError,
@@ -39,7 +40,7 @@ class InMemoryBackupStore:
 
     def add_target(self, target: NewBackupTarget, created_at: datetime) -> BackupTarget:
         if any(t.label == target.label for t in self.targets.values()):
-            raise ValueError(f"a backup target named {target.label!r} already exists")
+            raise BackupTargetExistsError(f"a backup target named {target.label!r} already exists")
         new = BackupTarget(
             id=next(self._ids),
             label=target.label,

@@ -11,5 +11,11 @@ def test_null_provider_offers_nothing_and_says_so() -> None:
         provider.caption(b"jpeg bytes", lang="en")
 
 
+def test_null_provider_has_nothing_to_close() -> None:
+    provider: AIProvider = NullAIProvider()
+    provider.close()
+    assert provider.capabilities() == frozenset()
+
+
 def test_capabilities_cover_the_planned_features() -> None:
     assert {c.value for c in Capability} == {"caption", "plan_album"}

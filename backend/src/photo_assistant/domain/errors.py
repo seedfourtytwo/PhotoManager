@@ -3,6 +3,10 @@
 Use cases raise these with a sentence the user can act on; ``api/main.py`` turns each kind
 into its HTTP status with ONE handler (``{"detail": message}``), and the job worker never
 retries them (they are not transient: the same job would fail the same way).
+
+So an error that may pass by waiting (the network, a locked repository) must NOT derive from
+these. Every exception class of the package is either in this hierarchy or listed, with the
+reason, in ``tests/unit/test_error_hierarchy.py``.
 """
 
 

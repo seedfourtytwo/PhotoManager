@@ -1,6 +1,7 @@
 """Ops commands: export-library, verify-library, doctor, backup.
 
-Subcommands of ``python -m photo_assistant`` (the justfile calls them that way).
+Subcommands of ``python -m photo_assistant`` (the justfile calls them that way): ``COMMANDS``
+at the end of this module is their part of the one table in ``photo_assistant/__main__.py``.
 """
 
 import argparse
@@ -8,10 +9,12 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_database import open_library_database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.system_probe import LocalSystemProbe
+from photo_assistant.api.cli_command import Command
 from photo_assistant.api.ops_services import (
+    RcloneTool,
     build_backup_service,
     build_doctor_config,
     build_library_transfer,
@@ -21,12 +24,9 @@ from photo_assistant.app.backup import BackupService, UnknownTargetError
 from photo_assistant.app.doctor import exit_code, render, run_doctor
 from photo_assistant.app.library_transfer import ExportSummary, LibraryTransferError
 from photo_assistant.domain.backup import BackupRun, NewBackupTarget, Retention, TargetStatus
+from photo_assistant.domain.library_paths import DATABASE_FILE
 from photo_assistant.domain.schedule import InvalidScheduleError
 from photo_assistant.ports.library_files import CopyVerificationError, LibraryUnreadableError
-
-COMMANDS = ("export-library", "verify-library", "doctor", "backup")
-# argparse has no public name for the object add_subparsers() returns
-type SubParsers = argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def human_bytes(size: int | None) -> str:
@@ -43,16 +43,14 @@ def human_bytes(size: int | None) -> str:
 # --- parser ---------------------------------------------------------------------------------
 
 
-def register(sub: SubParsers) -> None:
-    """Add the ops subcommands to an existing ``add_subparsers()`` object."""
-    export = sub.add_parser("export-library", help="copy the whole library to DEST, verified")
-    export.add_argument("destination", type=Path)
-    export.add_argument("--skip-derived", action="store_true", help="leave thumbnails out")
-    verify = sub.add_parser("verify-library", help="check every photo's file and hash")
-    verify.add_argument("root", type=Path, nargs="?", help="data root (default: PA_DATA_ROOT)")
-    verify.add_argument("--skip-derived", action="store_true", help="don't check thumbnails")
-    sub.add_parser("doctor", help="check this machine is ready to run the library")
-    _register_backup(sub.add_parser("backup", help="backups: list, add, run, check, test"))
+def _export_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("destination", type=Path)
+    parser.add_argument("--skip-derived", action="store_true", help="leave thumbnails out")
+
+
+def _verify_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("root", type=Path, nargs="?", help="data root (default: PA_DATA_ROOT)")
+    parser.add_argument("--skip-derived", action="store_true", help="don't check thumbnails")
 
 
 def _register_backup(parser: argparse.ArgumentParser) -> None:
@@ -215,13 +213,17 @@ _BACKUP: dict[str, Callable[[BackupService, argparse.Namespace], int]] = {
 
 def _backup(args: argparse.Namespace, settings: Settings) -> int:
     root = settings.data_root.expanduser()
-    if not (root / "library.db").is_file():
+    if not (root / DATABASE_FILE).is_file():
         print(f"No library at {root} yet: import some photos first.", file=sys.stderr)
         return 2
-    db = Database.open(root / "library.db", backup_dir=root / "db-backups")
+    db = open_library_database(root)
     repo = SqliteRepository(db)  # the same pieces as the server: one Database, every store
     service, _ = build_backup_service(
-        root, settings.ops, source_roots=lambda: [Path(s.root) for s in repo.list_sources()], db=db
+        root,
+        settings.ops,
+        db=db,
+        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
+        source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
     )
     try:
         return _BACKUP[args.backup_command](service, args)
@@ -229,12 +231,6 @@ def _backup(args: argparse.Namespace, settings: Settings) -> int:
         db.close()
 
 
-_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
-    "export-library": _export,
-    "verify-library": _verify,
-    "doctor": _doctor,
-    "backup": _backup,
-}
 _EXPECTED_ERRORS = (
     LibraryTransferError,
     LibraryUnreadableError,
@@ -246,25 +242,34 @@ _EXPECTED_ERRORS = (
 )
 
 
-def dispatch(args: argparse.Namespace, settings: Settings | None = None) -> int | None:
-    """Run an ops command; ``None`` if ``args.command`` is not one of ours."""
-    handler = _HANDLERS.get(getattr(args, "command", None) or "")
-    if handler is None:
-        return None
-    try:
-        return handler(args, settings or get_settings())
-    except _EXPECTED_ERRORS as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+def _guarded(
+    handler: Callable[[argparse.Namespace, Settings], int],
+) -> Callable[[argparse.Namespace], int]:
+    """An ops command, with the errors a person can cause said in one line (exit code 2)."""
+
+    def run(args: argparse.Namespace) -> int:
+        try:
+            return handler(args, get_settings())
+        except _EXPECTED_ERRORS as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+
+    return run
 
 
-def main(argv: list[str] | None = None, settings: Settings | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="photo_assistant")
-    register(parser.add_subparsers(dest="command", required=True))
-    result = dispatch(parser.parse_args(argv), settings)
-    assert result is not None  # every registered command has a handler
-    return result
-
-
-if __name__ == "__main__":  # pragma: no cover - thin process entry point
-    sys.exit(main())
+COMMANDS = (
+    Command(
+        "export-library",
+        "copy the whole library to DEST, verified",
+        _guarded(_export),
+        _export_arguments,
+    ),
+    Command(
+        "verify-library",
+        "check every photo's file and hash",
+        _guarded(_verify),
+        _verify_arguments,
+    ),
+    Command("doctor", "check this machine is ready to run the library", _guarded(_doctor)),
+    Command("backup", "backups: list, add, run, check, test", _guarded(_backup), _register_backup),
+)

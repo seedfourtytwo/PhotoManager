@@ -1,6 +1,5 @@
 """The ops command line: export/verify, doctor and backups, on a real library."""
 
-import argparse
 import shutil
 import sqlite3
 from datetime import UTC, datetime, timedelta
@@ -8,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.api.cli_ops import dispatch, human_bytes, main, register
+from photo_assistant import __main__ as cli
+from photo_assistant.api import cli_ops
+from photo_assistant.api.cli_ops import human_bytes
 from photo_assistant.api.settings import Settings
 from tests.library_builder import build_library, settings_for
 
@@ -32,7 +33,9 @@ def settings(built: Path, tmp_path: Path) -> Settings:
 
 
 def run(capsys: pytest.CaptureFixture[str], settings: Settings, *argv: str) -> tuple[int, str]:
-    code = main(list(argv), settings)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(cli_ops, "get_settings", lambda: settings)
+        code = cli.main(list(argv))
     out = capsys.readouterr()
     return code, out.out + out.err
 
@@ -156,12 +159,10 @@ def test_backup_run_due_prints_each_run(
     assert code == 1 and "backup failed" in out and "plug in" in out
 
 
-def test_register_into_the_main_parser_and_dispatch() -> None:
-    parser = argparse.ArgumentParser()
-    sub = parser.add_subparsers(dest="command")
-    sub.add_parser("import")
-    register(sub)
-    assert dispatch(parser.parse_args(["import"])) is None
+def test_the_ops_commands_are_part_of_the_one_command_table() -> None:
+    parser = cli.build_parser()
+    assert "import" not in {command.name for command in cli_ops.COMMANDS}
+    assert set(cli_ops.COMMANDS) < set(cli.COMMANDS)
     assert parser.parse_args(["backup", "run", "3"]).target_id == 3
 
 
@@ -170,3 +171,24 @@ def test_human_bytes() -> None:
     assert human_bytes(512) == "512 B"
     assert human_bytes(1_500_000) == "1.5 MB"
     assert human_bytes(3 * 1000**5) == "3000.0 TB"
+
+
+def test_backup_from_the_command_line_uses_the_configured_rclone(
+    capsys: pytest.CaptureFixture[str], settings: Settings, tmp_path: Path
+) -> None:
+    """The server passes PA_RCLONE_BINARY / PA_RCLONE_CONFIG to its backup service; a backup
+    run from the command line must reach an rclone remote the same way."""
+    settings.integrations.rclone_binary = "/opt/rclone/rclone"
+    settings.integrations.rclone_config = tmp_path / "rclone.conf"
+    seen: list[cli_ops.RcloneTool] = []
+    real = cli_ops.build_backup_service
+
+    def spy(*args: object, **kwargs: object) -> object:
+        seen.append(kwargs["rclone"])  # type: ignore[arg-type]
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(cli_ops, "build_backup_service", spy)
+        code, _ = run(capsys, settings, "backup", "list")
+    assert code == 0
+    assert seen == [cli_ops.RcloneTool("/opt/rclone/rclone", tmp_path / "rclone.conf")]

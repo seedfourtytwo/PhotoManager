@@ -7,10 +7,12 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
-from photo_assistant.api.main import create_app
+from photo_assistant.api.main import _domain_error, create_app
 from photo_assistant.api.services import Services
 from photo_assistant.api.settings import Settings
+from photo_assistant.domain.errors import DomainError
 
 BASE = "http://127.0.0.1"
 PIN = "1234"
@@ -28,6 +30,12 @@ def make_settings(data_root: Path, **overrides: Any) -> Settings:
     values["ops"] = {"backup_key_dir": data_root.parent / "backup-keys"}
     values.update(overrides)
     return Settings(**values)
+
+
+def answer_domain_errors(app: FastAPI) -> None:
+    """For a test that builds its own small app around one router: the routes leave domain
+    errors to the app's one handler, so that app needs it as the real one does."""
+    app.add_exception_handler(DomainError, _domain_error)
 
 
 def services_of(client: TestClient) -> Services:
@@ -88,6 +96,12 @@ def asset_id_of(client: TestClient, source_id: int, relative_path: str) -> int:
     found = services_of(client).repo.asset_id_for_source_path(source_id, relative_path)
     assert found is not None, relative_path
     return found
+
+
+def refusal(response: Response) -> tuple[int, object]:
+    """Status and body of a refused request: both are the contract (the web app shows the
+    sentence), so tests compare them whole."""
+    return response.status_code, response.json()
 
 
 def user_id_of(admin: TestClient, username: str) -> int:

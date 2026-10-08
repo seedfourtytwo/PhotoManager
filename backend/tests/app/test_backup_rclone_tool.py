@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.ops_services import RcloneTool, build_ops_services
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.domain.backup import BackupRunStatus, NewBackupTarget
@@ -37,7 +39,14 @@ def test_restic_is_given_the_apps_own_rclone_binary_and_config(tmp_path: Path) -
         backup_scratch_dir=tmp_path / "scratch",
         backup_key_dir=tmp_path / "keys",
     )
-    ops = build_ops_services(library, settings, rclone=RcloneTool(str(binary), config))
+    db = Database.open(library / "library.db")
+    ops = build_ops_services(
+        library,
+        settings,
+        db=db,
+        rclone=RcloneTool(str(binary), config),
+        queue=SqliteRepository(db),
+    )
     try:
         target = ops.backup.add_target(
             NewBackupTarget("Server", f"rclone:patest:{tmp_path / 'remote-repo'}", str(password))
