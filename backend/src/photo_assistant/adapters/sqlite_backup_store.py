@@ -41,6 +41,7 @@ def _target(row: sqlite3.Row) -> BackupTarget:
         retention=Retention(**json.loads(row["retention_json"])),
         enabled=bool(row["enabled"]),
         created_at=datetime.fromisoformat(row["created_at"]),
+        key_saved_at=_when(row["key_saved_at"]),
     )
 
 
@@ -92,8 +93,8 @@ class SqliteBackupStore:
         try:
             target_id = self._write(
                 """INSERT INTO backup_target (label, kind, repository, password_file, schedule,
-                       quiet_window, retention_json, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       quiet_window, retention_json, created_at, key_saved_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     target.label,
                     target.kind.value,
@@ -103,6 +104,7 @@ class SqliteBackupStore:
                     target.quiet_window,
                     json.dumps(target.retention.as_dict()),
                     _iso(created_at),
+                    _iso(created_at) if target.key_saved else None,
                 ),
             )
         except sqlite3.IntegrityError as exc:
@@ -120,6 +122,13 @@ class SqliteBackupStore:
 
     def set_target_enabled(self, target_id: int, enabled: bool) -> None:
         self._write("UPDATE backup_target SET enabled = ? WHERE id = ?", (int(enabled), target_id))
+
+    def mark_key_saved(self, target_id: int, at: datetime) -> None:
+        self._write("UPDATE backup_target SET key_saved_at = ? WHERE id = ?", (_iso(at), target_id))
+
+    def library_bytes(self) -> int:
+        row = self._one("SELECT COALESCE(SUM(byte_size), 0) FROM asset")
+        return int(row[0]) if row else 0
 
     def set_target_settings(self, target_id: int, settings: TargetSettings) -> None:
         self._write(

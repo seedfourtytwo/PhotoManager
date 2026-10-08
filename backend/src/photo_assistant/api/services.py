@@ -21,7 +21,7 @@ from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.api.integrations import Integrations, build_integrations, with_source_areas
 from photo_assistant.api.ml_services import MlServices, build_ml_services
-from photo_assistant.api.ops_services import OpsServices, build_ops_services
+from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.settings import Settings
 from photo_assistant.app.accounts import Accounts
 from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
@@ -142,6 +142,7 @@ def build_services(settings: Settings) -> Services:
         housekeeping=housekeeping,
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
         db=db,
+        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
     )
     editor = Editor(
         repo,

@@ -17,15 +17,19 @@ from photo_assistant.domain.backup import (
     BACKUP_FOLDERS,
     BackupRunStatus,
     NewBackupTarget,
+    PlaceFacts,
     Retention,
     RunKind,
     TargetSettings,
 )
-from photo_assistant.ports.backup import AssetFile, BackupError, WrongPasswordError
+from photo_assistant.domain.schedule import InvalidScheduleError
+from photo_assistant.ports.backup import AssetFile, BackupError, Disk, WrongPasswordError
 from tests.fakes_backup import (
     FakeEngine,
+    FakePlaces,
     FakeQueue,
     FakeSnapshotter,
+    FakeVault,
     InMemoryBackupStore,
     SteppingClock,
 )
@@ -46,6 +50,10 @@ class World:
         self.snapshotter = FakeSnapshotter()
         self.clock = SteppingClock(T0)
         self.queue = FakeQueue()
+        self.places = FakePlaces()
+        self.vault = FakeVault(tmp_path / "keys")
+        self.disk = tmp_path / "usb"
+        self.disk.mkdir()
         self.service = BackupService(
             self.store,
             self.engine,
@@ -54,6 +62,8 @@ class World:
             self.clock,
             BackupConfig(**{"data_root": self.root, "local_tz": UTC, **config}),  # type: ignore[arg-type]
             queue=self.queue,
+            places=self.places,
+            vault=self.vault,
         )
 
     def _make_assets(self) -> list[AssetFile]:
@@ -327,7 +337,8 @@ def test_manual_runs_go_through_the_job_queue(world: World) -> None:
     handlers[BACKUP_JOB]({"target_id": target_id})
     handlers[RESTORE_TEST_JOB]({"target_id": target_id})
     kinds = [r.kind for r in world.service.runs(target_id)]
-    assert kinds == [RunKind.RESTORE_TEST, RunKind.BACKUP]
+    # the first successful backup is proven by a restore test of its own (issue 3)
+    assert kinds == [RunKind.RESTORE_TEST, RunKind.RESTORE_TEST, RunKind.BACKUP]
     with pytest.raises(UnknownTargetError):
         world.service.queue_run(999)
 
@@ -353,3 +364,184 @@ def test_interrupted_runs_are_marked_failed_at_startup(world: World) -> None:
     assert world.service.recover_interrupted() == 1
     (run,) = world.service.runs(target_id)
     assert run.status is BackupRunStatus.FAILED
+
+
+# --- guided setup (issue 3): where, does it fit, the key, the first run ------------------------
+
+GB = 1000**3
+
+
+def test_setup_puts_the_backup_in_its_own_folder_makes_a_key_and_queues_the_first_run(
+    world: World,
+) -> None:
+    target, key = world.service.set_up("USB disk", str(world.disk))
+    assert target.repository == str(world.disk / "photo-assistant-backup")
+    assert (target.schedule, target.retention) == ("daily 02:30", Retention(7, 4, 12))
+    assert Path(target.password_file).read_text().strip() == key == "secret-1"
+    assert target.key_saved_at is None, "nobody confirmed a copy of the key yet"
+    assert world.queue.jobs == [(BACKUP_JOB, {"target_id": target.id})]
+
+
+@pytest.mark.parametrize(
+    ("place", "repository"),
+    [
+        ("rclone:proton:", "rclone:proton:photo-assistant-backup"),
+        ("rclone:nas:family/", "rclone:nas:family/photo-assistant-backup"),
+        ("rclone:nas:family", "rclone:nas:family/photo-assistant-backup"),
+    ],
+)
+def test_setup_on_a_cloud_remote_uses_a_folder_of_that_remote(
+    world: World, place: str, repository: str
+) -> None:
+    target, _ = world.service.set_up("Cloud", place)
+    assert target.repository == repository
+    assert world.places.asked == [repository]
+
+
+def test_the_plan_reports_library_size_free_space_and_refuses_what_does_not_fit(
+    world: World,
+) -> None:
+    world.store.asset_bytes = 40 * GB
+    repository = str(world.disk / "photo-assistant-backup")
+    world.places.by_repository[repository] = PlaceFacts(free_bytes=25 * GB)
+    found, plan = world.service.plan(str(world.disk))
+    assert found == repository and not plan.ok
+    assert (plan.library_bytes, plan.free_bytes) == (40 * GB, 25 * GB)
+    with pytest.raises(ValueError, match=r"15\.0 GB missing"):
+        world.service.set_up("USB disk", str(world.disk))
+    assert world.store.list_targets() == [] and world.queue.jobs == []
+    assert list(world.vault.folder.glob("*")) == [], "no key is made for a refused setup"
+
+
+@pytest.mark.parametrize("place", ["relative/folder", "", "  ", "rclone:", "rclone:no-colon"])
+def test_a_place_that_is_not_a_full_path_or_a_remote_is_refused(world: World, place: str) -> None:
+    _, plan = world.service.plan(place)
+    assert not plan.ok
+    assert world.places.asked == [], "the machine is not even asked"
+
+
+def test_a_backup_inside_the_library_or_a_source_folder_is_refused(tmp_path: Path) -> None:
+    pictures = tmp_path / "Pictures"
+    pictures.mkdir()
+    world = World(tmp_path, source_roots=lambda: [pictures])
+    for place in (world.root, world.root / "originals", pictures, pictures / "2019"):
+        _, plan = world.service.plan(str(place))
+        assert plan.problem is not None and "cannot live inside" in plan.problem, place
+
+
+def test_a_second_setup_with_the_same_name_is_refused_and_leaves_no_key_behind(
+    world: World,
+) -> None:
+    world.service.set_up("USB disk", str(world.disk))
+    with pytest.raises(ValueError, match="already exists"):
+        world.service.set_up("usb DISK ", str(world.disk / "other"))
+    assert len(list(world.vault.folder.glob("*"))) == 1
+
+
+def test_setup_validates_the_schedule_before_making_a_key(world: World) -> None:
+    with pytest.raises(InvalidScheduleError):
+        world.service.set_up("USB disk", str(world.disk), schedule="often")
+    assert not world.vault.folder.exists()
+
+
+def test_the_recovery_sheet_gives_the_key_until_and_after_it_is_confirmed_saved(
+    world: World,
+) -> None:
+    target, key = world.service.set_up("USB disk", str(world.disk))
+    sheet = world.service.recovery(target.id)
+    assert (sheet.label, sheet.repository, sheet.key) == ("USB disk", target.repository, key)
+    assert world.service.status()[0].needs_attention, "an unsaved key is flagged"
+    world.clock.current += timedelta(minutes=5)
+    world.service.confirm_key_saved(target.id)
+    assert world.service.target(target.id).key_saved_at == world.clock.current
+    world.service.confirm_key_saved(target.id)
+    assert world.service.target(target.id).key_saved_at == world.clock.current
+    assert world.service.recovery(target.id).key == key
+    with pytest.raises(UnknownTargetError):
+        world.service.recovery(999)
+    with pytest.raises(UnknownTargetError):
+        world.service.confirm_key_saved(999)
+
+
+def test_a_missing_key_file_is_reported_not_crashed_on(world: World) -> None:
+    target, _ = world.service.set_up("USB disk", str(world.disk))
+    Path(target.password_file).unlink()
+    with pytest.raises(BackupError, match="key file is gone"):
+        world.service.recovery(target.id)
+
+
+def test_places_lists_plugged_in_disks_and_cloud_remotes(world: World) -> None:
+    world.places.found_disks = [Disk("/media/c/USB", "USB", 64 * GB)]
+    world.places.found_remotes = ["proton", "nas"]
+    assert world.service.places() == ([Disk("/media/c/USB", "USB", 64 * GB)], ["proton", "nas"])
+
+
+# --- the recovery guarantee: restore tests run by themselves -----------------------------------
+
+
+def _work(world: World) -> None:
+    """What the worker does with the queued jobs."""
+    handlers = world.service.job_handlers()
+    jobs, world.queue.jobs = world.queue.jobs, []
+    for kind, payload in jobs:
+        handlers[kind](payload)
+
+
+def test_the_first_backup_is_proven_by_a_restore_test_straight_away(world: World) -> None:
+    target, _ = world.service.set_up("USB disk", str(world.disk))
+    _work(world)
+    kinds = [(r.kind, r.status) for r in world.service.runs(target.id)]
+    assert kinds == [
+        (RunKind.RESTORE_TEST, BackupRunStatus.SUCCEEDED),
+        (RunKind.BACKUP, BackupRunStatus.SUCCEEDED),
+    ]
+    status = world.service.status()[0]
+    assert status.last_proven_at == world.clock.current and not status.restore_failing
+
+
+def test_a_failed_first_backup_is_not_followed_by_a_restore_test(world: World) -> None:
+    world.engine.fail["backup"] = BackupError("disk unplugged")
+    target, _ = world.service.set_up("USB disk", str(world.disk))
+    _work(world)
+    assert [r.kind for r in world.service.runs(target.id)] == [RunKind.BACKUP]
+
+
+def test_due_checks_prove_each_backup_again_every_week(world: World) -> None:
+    target, _ = world.service.set_up("USB disk", str(world.disk), schedule="manual")
+    _work(world)
+    world.clock.current += timedelta(days=6)
+    world.service.run_due()
+    assert len(world.service.runs(target.id)) == 2, "not yet"
+    world.clock.current += timedelta(days=1)
+    world.service.run_due()
+    world.service.run_due()
+    tests = [r for r in world.service.runs(target.id) if r.kind is RunKind.RESTORE_TEST]
+    assert len(tests) == 2, "once, not on every check"
+
+
+def test_a_failing_restore_test_raises_the_banner_and_is_retried_the_next_day(
+    world: World,
+) -> None:
+    target, _ = world.service.set_up("USB disk", str(world.disk), schedule="manual")
+    world.service.confirm_key_saved(target.id)
+    world.engine.corrupt.add(world.assets[0].library_path)
+    _work(world)
+    status = world.service.status()[0]
+    assert status.restore_failing and status.needs_attention and status.last_proven_at is None
+    world.engine.corrupt.clear()
+    world.service.run_due()
+    assert world.service.status()[0].restore_failing, "not retried within the day"
+    world.clock.current += timedelta(days=1)
+    world.service.run_due()
+    status = world.service.status()[0]
+    assert not status.restore_failing and not status.needs_attention
+    assert status.last_proven_at == world.clock.current
+
+
+def test_a_disabled_target_is_not_restore_tested(world: World) -> None:
+    target, _ = world.service.set_up("USB disk", str(world.disk), schedule="manual")
+    _work(world)
+    world.service.set_enabled(target.id, False)
+    world.clock.current += timedelta(days=30)
+    world.service.run_due()
+    assert len(world.service.runs(target.id)) == 2

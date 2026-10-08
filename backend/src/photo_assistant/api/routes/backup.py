@@ -12,8 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from photo_assistant.api.deps import ADMIN_ONLY
 from photo_assistant.api.ops_services import OpsServices
-from photo_assistant.app.backup import BackupService, UnknownTargetError
+from photo_assistant.app.backup import BackupService, RecoverySheet, UnknownTargetError
 from photo_assistant.domain.backup import (
+    BackupPlan,
     BackupRun,
     NewBackupTarget,
     Retention,
@@ -21,6 +22,7 @@ from photo_assistant.domain.backup import (
     TargetStatus,
 )
 from photo_assistant.domain.schedule import InvalidScheduleError
+from photo_assistant.ports.backup import BackupError, Disk
 
 
 def get_backup_service(request: Request) -> BackupService:
@@ -126,6 +128,9 @@ class TargetOut(BaseModel):
     repo_bytes: int | None
     next_run_at: datetime | None
     overdue: bool
+    last_proven_at: datetime | None  # the last restore test that matched every hash
+    restore_failing: bool
+    key_saved: bool  # someone confirmed a copy of the recovery key exists
     needs_attention: bool  # drives the warning banner
 
     @classmethod
@@ -145,8 +150,74 @@ class TargetOut(BaseModel):
             repo_bytes=s.repo_bytes,
             next_run_at=s.next_run_at,
             overdue=s.overdue,
+            last_proven_at=s.last_proven_at,
+            restore_failing=s.restore_failing,
+            key_saved=not s.key_unsaved,
             needs_attention=s.needs_attention,
         )
+
+
+class DiskOut(BaseModel):
+    path: str
+    label: str
+    free_bytes: int
+
+    @classmethod
+    def of(cls, disk: Disk) -> "DiskOut":
+        return cls(path=disk.path, label=disk.label, free_bytes=disk.free_bytes)
+
+
+class PlacesOut(BaseModel):
+    library_bytes: int
+    disks: list[DiskOut]
+    remotes: list[str]
+
+
+class PlaceIn(BaseModel):
+    place: str = Field(max_length=4096)  # a folder path, or rclone:<remote>:<folder>
+
+
+class PlanOut(BaseModel):
+    repository: str
+    library_bytes: int
+    free_bytes: int | None
+    ok: bool
+    problem: str | None
+    warnings: list[str]
+
+    @classmethod
+    def of(cls, repository: str, plan: BackupPlan) -> "PlanOut":
+        return cls(
+            repository=repository,
+            library_bytes=plan.library_bytes,
+            free_bytes=plan.free_bytes,
+            ok=plan.ok,
+            problem=plan.problem,
+            warnings=list(plan.warnings),
+        )
+
+
+class SetupIn(PlaceIn):
+    label: str = Field(max_length=100)
+    schedule: str = "daily 02:30"
+    retention: RetentionIn = Field(default_factory=RetentionIn)
+
+
+class RecoveryOut(BaseModel):
+    """Shown to an admin so a copy can be kept elsewhere: this opens the backup."""
+
+    label: str
+    repository: str
+    key: str
+
+    @classmethod
+    def of(cls, sheet: RecoverySheet) -> "RecoveryOut":
+        return cls(label=sheet.label, repository=sheet.repository, key=sheet.key)
+
+
+class SetupOut(BaseModel):
+    target: TargetOut
+    recovery: RecoveryOut
 
 
 class QueuedRun(BaseModel):
@@ -171,6 +242,55 @@ def _known(service: BackupService, target_id: int) -> None:
 @router.get("")
 def list_backups(service: BackupDep) -> list[TargetOut]:
     return [TargetOut.of(s) for s in service.status()]
+
+
+@router.get("/places")
+def places(service: BackupDep) -> PlacesOut:
+    """Where a backup could go: plugged-in disks and cloud remotes, and the library's size."""
+    disks, remotes = service.places()
+    return PlacesOut(
+        library_bytes=service.library_bytes(),
+        disks=[DiskOut.of(d) for d in disks],
+        remotes=remotes,
+    )
+
+
+@router.post("/plan")
+def plan_backup(service: BackupDep, body: PlaceIn) -> PlanOut:
+    """Would a backup fit and work there? Creates nothing."""
+    return PlanOut.of(*service.plan(body.place))
+
+
+@router.post("/setup", status_code=status.HTTP_201_CREATED)
+def set_up_backup(service: BackupDep, body: SetupIn) -> SetupOut:
+    """Guided setup: makes the key, creates the target, queues the first backup (which is
+    followed by a restore test). The key comes back for the owner to keep a copy."""
+    try:
+        target, key = service.set_up(
+            body.label, body.place, body.schedule, Retention(**body.retention.model_dump())
+        )
+    except (ValueError, InvalidScheduleError) as exc:
+        code = status.HTTP_409_CONFLICT if "already exists" in str(exc) else 422
+        raise HTTPException(code, str(exc)) from exc
+    sheet = RecoverySheet(target.label, target.repository, key)
+    return SetupOut(target=_status_of(service, target.id), recovery=RecoveryOut.of(sheet))
+
+
+@router.get("/{target_id}/recovery")
+def recovery(service: BackupDep, target_id: int) -> RecoveryOut:
+    _known(service, target_id)
+    try:
+        return RecoveryOut.of(service.recovery(target_id))
+    except BackupError as exc:  # the key file is gone or unreadable
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.post("/{target_id}/key-saved")
+def key_saved(service: BackupDep, target_id: int) -> TargetOut:
+    """The admin confirms a copy of the recovery key exists outside this machine."""
+    _known(service, target_id)
+    service.confirm_key_saved(target_id)
+    return _status_of(service, target_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
