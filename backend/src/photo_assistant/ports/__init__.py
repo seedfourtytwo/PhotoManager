@@ -178,7 +178,8 @@ class SourceRegistry(Protocol):
         config: Mapping[str, object] | None = None,
     ) -> Source:
         """The one way to create a source (any kind); access defaults to the domain rule.
-        Raises ValueError if its folder is already a source."""
+        Raises ValueError if its folder is already a source, and an InvalidError if the owner
+        or someone on the access list is not an account."""
         ...
 
 

@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 
+from photo_assistant.adapters.sqlite_access import UnknownUserError
 from photo_assistant.adapters.sqlite_repository import (
     DuplicateAssetError,
     SqliteRepository,
     open_database,
 )
+from photo_assistant.domain.access import Level, Role, SourceAccess
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
 from photo_assistant.ports import Fingerprint, RenderedImage
 from tests.factories import NOW, new_asset
@@ -64,6 +66,33 @@ def test_the_same_folder_cannot_be_added_twice(repo: SqliteRepository) -> None:
     repo.add_source("one", "/x")
     with pytest.raises(ValueError, match="already"):
         repo.add_source("two", "/x")
+
+
+def test_a_source_for_an_unknown_account_is_not_reported_as_a_duplicate_folder(
+    repo: SqliteRepository,
+) -> None:
+    lea = repo.add_user("lea", "Lea", "h", Role.MEMBER)
+    with pytest.raises(UnknownUserError, match="no user with id 99"):
+        repo.add_source("owner", "/owner", owner_id=99)
+    with pytest.raises(UnknownUserError, match="no user with id 77"):
+        repo.add_source(
+            "grant",
+            "/grant",
+            lea.id,
+            access=SourceAccess(None, ((lea.id, Level.EDIT), (77, Level.VIEW))),
+        )
+    with pytest.raises(UnknownUserError, match="no user with id 99"):
+        repo.add_source("remote", lambda source_id: f"/staging/{source_id}", owner_id=99)
+    assert repo.list_sources() == [], "nothing half-made is left behind"
+
+
+def test_a_folder_clash_names_the_folder_even_when_the_root_depends_on_the_id(
+    repo: SqliteRepository,
+) -> None:
+    repo.add_source("one", "/staging/taken")
+    with pytest.raises(ValueError, match="already a source: /staging/taken"):
+        repo.add_source("two", lambda _source_id: "/staging/taken")
+    assert [s.label for s in repo.list_sources()] == ["one"]
 
 
 # --- assets --------------------------------------------------------------------------------
