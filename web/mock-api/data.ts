@@ -183,6 +183,8 @@ export type MockState = {
 	remotes: string[];
 	/** rclone sources: source id → remote and path. */
 	remoteSources: Map<number, { remote: string; path: string }>;
+	/** Folders made through the folder picker. */
+	createdFolders: Set<string>;
 };
 
 /** Park–Miller PRNG: same seed, same library. */
@@ -538,7 +540,8 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 		],
 		devices: [],
 		remotes: ['gdrive', 'nas'],
-		remoteSources: new Map()
+		remoteSources: new Map(),
+		createdFolders: new Set()
 	};
 	return state;
 }

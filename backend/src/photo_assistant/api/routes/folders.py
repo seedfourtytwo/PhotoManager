@@ -1,16 +1,21 @@
 """Browse the folders of the machine the app runs on, to pick one (issue 7).
 
-Admin only and read-only: names of folders, never files. The library's own folder is never
-listed or opened; ``source_problem`` says why the folder shown can't become a source.
+Admin only. Listing is read-only: names of folders, never files. The library's own folder is
+never listed or opened; ``source_problem`` says why the folder shown can't become a source.
+A new, empty folder can be created inside an existing one (never inside the library).
 """
 
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from photo_assistant.adapters.folder_listing import FolderUnavailableError, LocalFolders
+from photo_assistant.adapters.folder_listing import (
+    FolderMissingError,
+    FolderUnavailableError,
+    LocalFolders,
+)
 from photo_assistant.api.deps import ADMIN_ONLY, ServicesDep
 from photo_assistant.api.services import Services
 from photo_assistant.domain.library_paths import folder_path_problem
@@ -56,20 +61,28 @@ def _inside_library(services: Services, folder: Path) -> bool:
     return folder == root or root in folder.parents
 
 
-@router.get("")
-def list_folders(
-    services: ServicesDep, path: Annotated[str | None, Query(max_length=8192)] = None
-) -> FolderListingOut:
-    home = Path.home()
-    if path is not None and (problem := folder_path_problem(path)):
+class NewFolder(BaseModel):
+    path: str = Field(max_length=8192)
+
+
+def _checked(services: Services, path: str) -> Path:
+    """The resolved folder for a path from a person, or a 422 saying what is wrong with it."""
+    if problem := folder_path_problem(path):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, problem)
-    folder = (Path(path) if path is not None else home).resolve()
+    folder = Path(path).resolve()
     if _inside_library(services, folder):  # before looking: nothing in there is ever listed
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, LIBRARY_ITSELF)
+    return folder
+
+
+def _listing(services: Services, folder: Path) -> FolderListingOut:
     try:
         listing = LocalFolders().list(folder)
+    except FolderMissingError as exc:  # its own status: the app offers to create it
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except FolderUnavailableError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    home = Path.home()
     disks = services.ops.backup.disks()
     return FolderListingOut(
         path=listing.path,
@@ -86,3 +99,24 @@ def list_folders(
         ],
         source_problem=source_problem(services, folder),
     )
+
+
+@router.get("")
+def list_folders(
+    services: ServicesDep, path: Annotated[str | None, Query(max_length=8192)] = None
+) -> FolderListingOut:
+    folder = _checked(services, path) if path is not None else Path.home().resolve()
+    if _inside_library(services, folder):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, LIBRARY_ITSELF)
+    return _listing(services, folder)
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_folder(services: ServicesDep, body: NewFolder) -> FolderListingOut:
+    """Make one new, empty folder inside an existing one, and show it."""
+    folder = _checked(services, body.path)
+    try:
+        created = LocalFolders().create(folder)
+    except FolderUnavailableError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return _listing(services, created)

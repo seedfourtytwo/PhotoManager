@@ -1,7 +1,8 @@
 """Sub-folders of one folder on this machine, for picking a folder in the web app.
 
-Read-only: it lists names, never opens a file and never follows a link it can't resolve.
-Hidden folders (dot names) are left out: nobody keeps their photos in ``.cache``.
+Listing is read-only: names only, never opens a file, never follows a link it can't resolve.
+Hidden folders (dot names) are left out: nobody keeps their photos in ``.cache``. The one
+thing it can write is a new, empty folder inside an existing one (a place for a backup).
 """
 
 from dataclasses import dataclass
@@ -12,6 +13,10 @@ from photo_assistant.domain.library_paths import folder_path_problem
 
 class FolderUnavailableError(Exception):
     """The folder can't be listed; the message says why."""
+
+
+class FolderMissingError(FolderUnavailableError):
+    """There is no such folder (it could be created)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +48,7 @@ class LocalFolders:
         try:
             folder = folder.resolve()
             if not folder.exists():
-                raise FolderUnavailableError(f"folder not found on this machine: {folder}")
+                raise FolderMissingError(f"folder not found on this machine: {folder}")
             if not folder.is_dir():
                 raise FolderUnavailableError(f"{folder} is not a folder")
             names = sorted(
@@ -67,3 +72,22 @@ class LocalFolders:
             folders=tuple(FolderEntry(name, str(folder / name)) for name in shown),
             truncated=len(names) > len(shown),
         )
+
+    def create(self, folder: Path) -> Path:
+        """Make one new, empty folder inside a folder that exists; the resolved path."""
+        folder = folder.resolve()
+        if folder.exists():
+            raise FolderUnavailableError(f"{folder} already exists")
+        if not folder.parent.is_dir():
+            raise FolderUnavailableError(
+                f"the folder it would be in does not exist: {folder.parent}"
+            )
+        try:
+            folder.mkdir()
+        except PermissionError as exc:
+            raise FolderUnavailableError(
+                f"the app may not create folders in {folder.parent}"
+            ) from exc
+        except OSError as exc:
+            raise FolderUnavailableError(f"{folder}: {exc.strerror or exc}") from exc
+        return folder

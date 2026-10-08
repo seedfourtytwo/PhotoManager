@@ -58,7 +58,6 @@ def test_the_library_folder_and_everything_inside_it_cannot_be_opened(
         ("/home/c/bad\nname", "control character"),
         ("/home/c/tab\there", "control character"),
         ("/" + "x" * 5000, "too long"),
-        ("/definitely/not/here", "not found"),
     ],
 )
 def test_bad_paths_are_refused_with_the_reason(
@@ -87,3 +86,49 @@ def test_adding_a_source_refuses_control_characters_in_the_path(
 ) -> None:
     refused = admin.post("/api/sources", json={"label": "x", "path": f"{home}/Pic\ntures"})
     assert refused.status_code == 422 and "control character" in refused.json()["detail"]
+
+
+def test_a_folder_that_is_not_there_is_a_404_so_the_app_can_offer_to_create_it(
+    admin: TestClient, home: Path
+) -> None:
+    missing = admin.get("/api/folders", params={"path": str(home / "Backups")})
+    assert missing.status_code == 404 and "not found" in missing.json()["detail"]
+
+
+def test_a_new_folder_is_created_inside_an_existing_one_and_shown(
+    admin: TestClient, home: Path
+) -> None:
+    created = admin.post("/api/folders", json={"path": str(home / "Pictures" / "Photo backup")})
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["path"] == str(home / "Pictures" / "Photo backup") and body["folders"] == []
+    assert body["parent"] == str(home / "Pictures")
+    assert (home / "Pictures" / "Photo backup").is_dir()
+
+
+def test_a_folder_is_not_created_where_it_should_not_be(
+    admin: TestClient, home: Path, tmp_path: Path
+) -> None:
+    locked = home / "locked"
+    locked.mkdir(mode=0o500)
+    cases = {
+        str(home / "Pictures"): "already exists",
+        str(home / "no" / "such" / "place"): "does not exist",
+        str(tmp_path / "data" / "mine"): "photo library",
+        str(tmp_path / "data"): "photo library",
+        "relative/x": "full path",
+        str(home / "a\nb"): "control character",
+        str(locked / "x"): "may not create",
+        str(home / "Pictures" / ".."): "already exists",
+    }
+    for path, word in cases.items():
+        refused = admin.post("/api/folders", json={"path": path})
+        assert refused.status_code == 422 and word in refused.json()["detail"], path
+    assert not (home / "no").exists() and not (tmp_path / "data" / "mine").exists()
+    assert list(locked.iterdir()) == []
+
+
+def test_only_admins_create_folders(admin: TestClient, home: Path) -> None:
+    lea = add_user(admin, "lea")
+    assert lea.post("/api/folders", json={"path": str(home / "x")}).status_code == 403
+    assert not (home / "x").exists()
