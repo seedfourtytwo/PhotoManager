@@ -200,7 +200,7 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 | Web lint/format/types | eslint, prettier, svelte-check, TypeScript strict |
 | Web tests | Vitest in browser mode (`vitest-browser-svelte` on `@vitest/browser-playwright`), Playwright (E2E, mobile + desktop viewports), axe-core (`@axe-core/playwright`) |
 | Pre-commit | pre-commit (ruff, prettier + eslint, gitleaks, no large files) |
-| CI | GitHub Actions, defined in `ci/github-ci.yml`, not yet switched on (`ci/README.md`): backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step. Until then the checks run locally: `just check` and pre-commit |
+| CI | GitHub Actions (`.github/workflows/ci.yml`), on every pull request and on main: backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step: `just e2e` and `just e2e-mock` run locally |
 | Versioning | Conventional Commits. No release tooling yet |
 
 ## Typefaces (decided 2026-10-08)
