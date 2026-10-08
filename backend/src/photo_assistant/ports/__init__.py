@@ -252,6 +252,15 @@ class Repository(SourceRegistry, Protocol):
     ) -> str | None: ...
     def asset_id_for_source_path(self, source_id: int, relative_path: str) -> int | None: ...
 
+    def trash_superseded(self, asset_id: int, now: datetime) -> bool:
+        """Move a photo no source file holds any more to the trash, as the import's own act
+        (not a person's). False, and nothing changes, when a file still holds it."""
+        ...
+
+    def restore_superseded(self, asset_id: int) -> bool:
+        """Undo ``trash_superseded``; a photo a person trashed stays in the trash."""
+        ...
+
     # import runs
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime

@@ -140,6 +140,15 @@ the domain rule `default_source_access` gives its kind.
 5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun
    ("Jobs and lanes" below: retries wait, running jobs have an owner).
 
+**A file that changed in place** (a cut-off download later replaced by the whole file): the
+path's `asset_source` row goes to the photo the file holds now. The photo it held before is
+kept as long as another file holds it; if none does, the import moves it to the trash
+(`trashed_by` empty: not a person's act) and says so on the report item, because a photo
+without a source is hidden from every member while an admin keeps seeing it. From the trash it
+can be restored for 30 days (it then has no source: only admins see it, or an album shares
+it). If a file shows that content again, the import takes the photo back out; and purging it
+does not put its hash on the never-import-again list, which is for what a person deleted.
+
 ### Multiple sources
 Each `source` row is scanned independently (local path, or an rclone remote pulled read-only
 into `staging/<source_id>/`). Because assets are keyed by content hash, the same photo found in
