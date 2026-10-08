@@ -206,8 +206,12 @@ def _backup_run_due(service: BackupService, args: argparse.Namespace) -> int:
         print("Nothing is due.")
     for run in runs:
         _print_run(run)
-    # a place that is not connected is skipped, not a failure: only a real fault exits 1
-    return int(any(run.status is BackupRunStatus.FAILED for run in runs))
+    # a place that is not connected is skipped, not a failure; it exits 1 only once it is overdue
+    away = {t.target.id for t in service.status() if t.skipped_since and t.overdue}
+    warnings = [p for p in service.protection().problems if p.target_id in away]
+    for problem in warnings:
+        print(problem.message)
+    return int(any(run.status is BackupRunStatus.FAILED for run in runs) or bool(warnings))
 
 
 _BACKUP: dict[str, Callable[[BackupService, argparse.Namespace], int]] = {
