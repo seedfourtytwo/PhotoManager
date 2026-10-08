@@ -209,7 +209,7 @@
 		display: grid;
 		gap: var(--s-2);
 		position: sticky;
-		top: var(--s-4);
+		top: calc(var(--top) + var(--s-4));
 	}
 	.choices > fieldset {
 		margin: var(--s-2) 0;

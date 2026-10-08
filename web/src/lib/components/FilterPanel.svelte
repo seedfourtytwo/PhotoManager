@@ -344,9 +344,9 @@
 <style>
 	.panel {
 		position: sticky;
-		top: 0;
-		height: 100vh;
-		height: 100dvh;
+		top: var(--top);
+		height: calc(100vh - var(--top));
+		height: calc(100dvh - var(--top));
 		overflow-y: auto;
 		box-sizing: border-box;
 		padding: var(--s-5) var(--s-4) var(--s-6);
@@ -460,7 +460,7 @@
 	}
 	.reopen {
 		position: fixed;
-		top: var(--s-4);
+		top: calc(var(--top) + var(--s-4));
 		right: var(--s-4);
 		color: var(--ink-2);
 		z-index: 5;

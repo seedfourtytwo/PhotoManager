@@ -44,6 +44,12 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
+/** Opens the account menu (the button with the person's initial); returns the main nav. */
+export async function openAccountMenu(page: Page): Promise<Locator> {
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	await nav.getByRole('button', { name: /^Account/ }).click();
+	return nav;
+}
 /** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
 export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
 
@@ -114,6 +120,22 @@ export async function selectTiles(page: Page, indexes: number[]) {
 		else await tile.tap();
 	}
 	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
+}
+
+/**
+ * Scroll the library until a photo's tile is on screen. The grid only draws the rows near
+ * the screen, so a photo further down has no tile to scroll to until the page has moved.
+ */
+export async function scrollToTile(page: Page, id: number): Promise<Locator> {
+	const tile = page.locator(`.tile[data-id="${id}"]`);
+	await expect(async () => {
+		if ((await tile.count()) === 0) {
+			await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+		}
+		await expect(tile).toBeAttached({ timeout: 500 });
+	}).toPass();
+	await tile.scrollIntoViewIfNeeded();
+	return tile;
 }
 
 /** A photo the signed-in user may only view (not download), found through the API. */

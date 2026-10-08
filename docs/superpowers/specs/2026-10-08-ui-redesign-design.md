@@ -81,9 +81,9 @@ Also solid under the device's "reduce transparency" setting.
 - **Today** · **Library** · **Collections**, plus a search button. Phone: a floating dock at the
   bottom, search as a round button beside it. Laptop: one top bar (wordmark, the three places,
   the search field, the account initial). No left rail.
-- **Collections** is a hub page with four rows: People, Places (map), Albums, Calendar. Each
-  row shows a strip of its content and opens the existing page. The dock highlights
-  Collections on `/people`, `/map`, `/albums`, `/calendar`.
+- **Collections** is a hub page with three rows: People, Places (map), Albums. Each row opens
+  the existing page. The nav highlights Collections on `/people`, `/map`, `/albums`.
+  Calendar stays a view of Library (the Grid · Calendar switch), one tap from the photos.
 - **Account menu** (the initial): Settings, Trash, System (admins), Sign out.
 - The **Today** tab ships with its own piece (§9). Until then the app opens on Library.
 
@@ -168,7 +168,7 @@ or "N things need you"), storage meter, Sources, Working on, Accounts (each with
 | `thumbSize` | dial | `small`, `medium`, `large` | `medium` |
 | `showToday` | switch | true / false | true |
 | `startPage` | switch | `today`, `library` | `today` |
-| `collectionsRows` | switch | ordered subset of people, places, albums, calendar | all four |
+| `collectionsRows` | switch | ordered subset of people, places, albums | all three |
 | `dockLabels` | switch | true / false | true |
 
 Rules:
@@ -218,7 +218,7 @@ regrouping goes last.
    `TECH_DECISIONS.md` updated. Pure restyle. **Acceptance: every existing end-to-end test
    passes without being edited** (one exception: the page colour hard-coded in `web/e2e/fixes.spec.ts`).
 2. Shell: dock and top bar replace `Nav`, account menu. Old pages stay reachable (People,
-   Map, Albums, Calendar listed under a temporary plain Collections page).
+   Places, Albums listed on a plain Collections page; Calendar stays in Library).
 3. Photo view, selection pill, time ruler.
 4. Look sheet: migration, domain validation, API, mode switch in Settings, per-account form
    in System.
@@ -240,7 +240,7 @@ Each step is one or more PRs under 400 lines, leaves the app working and passes 
 - Primitives: keyboard and focus behaviour of `Sheet`, `Menu`, `Combobox`; axe clean.
 - Gesture recogniser: thresholds for each gesture, diagonal and cancelled drags.
 - Search sheet: chips add/remove filters, `/search?q=` redirect, actions only with a selection.
-- Nav: Collections highlighted on its child routes; System hidden for non-admins; switches
+- Nav: Collections highlighted on its child routes; Library highlighted on `/calendar`; System hidden for non-admins; switches
   hide Today and reorder Collections rows.
 - Photo view: each gesture and its button reach the same state; shortcuts still work.
 - Perf test still meets the scroll budget with glass on.

@@ -220,10 +220,10 @@
 	}
 	.scrubber {
 		position: fixed;
-		top: 0;
+		top: var(--top);
 		right: 0;
 		width: 3.5rem;
-		height: 100vh;
+		height: calc(100vh - var(--top));
 		z-index: 4;
 	}
 	.scrubber.shift {
