@@ -23,6 +23,7 @@ from photo_assistant.app.album_printer import (
     PrintRequest,
 )
 from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.errors import ForbiddenError
 from photo_assistant.domain.print_layout import LAYOUTS, TRIM_SIZES
 from photo_assistant.domain.print_theme import THEMES
 
@@ -118,9 +119,7 @@ def _album(services: Services, viewer: Viewer, album_id: int) -> AlbumToPrint:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "album not found")
     items = services.repo.album_views(viewer, album_id)
     if any(v.level < Level.DOWNLOAD for v in items):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "printing needs 'download' access to every photo"
-        )
+        raise ForbiddenError("printing needs 'download' access to every photo")
     cover = next((v for v in items if v.id == info.cover_asset_id), None)
     return AlbumToPrint(info.title, info.description, info.updated_at, items, cover)
 

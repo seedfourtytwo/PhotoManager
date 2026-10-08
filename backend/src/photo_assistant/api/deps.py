@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Request, status
 from photo_assistant.api.integrations import Integrations
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Role, User, Viewer
+from photo_assistant.domain.errors import ForbiddenError
 from photo_assistant.domain.model import MAX_ID, Source
 from photo_assistant.ports.library import AssetView
 
@@ -103,9 +104,7 @@ SessionOnlyUser = Annotated[User, Depends(session_only_user)]
 def require_not_guest(user: User) -> User:
     """Guests view and download; they never upload, create, rename or edit anything."""
     if user.role is Role.GUEST:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "guests can view and download, not change anything"
-        )
+        raise ForbiddenError("guests can view and download, not change anything")
     return user
 
 
@@ -130,7 +129,7 @@ ViewerDep = Annotated[Viewer, Depends(current_viewer)]
 
 def admin_user(user: CurrentUser) -> User:
     if not Viewer.of(user).is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "only an admin can do this")
+        raise ForbiddenError("only an admin can do this")
     return user
 
 
@@ -160,7 +159,7 @@ def require_view(
     if view is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "photo not found")
     if view.level < level:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, f"you need '{level.label}' access for this")
+        raise ForbiddenError(f"you need '{level.label}' access for this")
     return view
 
 
@@ -179,5 +178,5 @@ def require_views(
     if len(views) != len(set(ids)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "some of these photos were not found")
     if any(v.level < level for v in views):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, f"you need '{level.label}' access for this")
+        raise ForbiddenError(f"you need '{level.label}' access for this")
     return views
