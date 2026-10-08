@@ -102,7 +102,7 @@ def test_set_pin_unlocks_an_account_locked_by_wrong_pins(
         services.close()
 
 
-# --- ops commands are subcommands of the main CLI (docs/wiring/ops.md) -----------------------
+# --- ops commands are subcommands of the main CLI -----------------------------------------------
 
 
 def test_doctor_runs_from_the_main_cli(data_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
