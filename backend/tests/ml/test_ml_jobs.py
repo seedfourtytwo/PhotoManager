@@ -333,6 +333,17 @@ def test_backfill_queues_only_unfinished_work_then_one_global_clustering(
     assert jobs[-1] == (CLUSTER_FACES, {})
 
 
+def test_running_the_backfill_twice_does_not_double_the_jobs(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    add(repo, 1), add(repo, 2)
+    planner = MlJobPlanner(repo, {EMBED_CLIP: "c", DETECT_FACES: "f"})
+    assert planner.backfill(store) == 4
+    first = queued(repo)
+    assert planner.backfill(store) == 0, "everything is already waiting"
+    assert queued(repo) == first and first.count((CLUSTER_FACES, {})) == 1
+
+
 def test_planner_queues_nothing_for_a_model_that_is_not_installed(
     repo: SqliteRepository,
 ) -> None:
