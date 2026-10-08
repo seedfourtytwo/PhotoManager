@@ -1,4 +1,5 @@
-"""Album → print over HTTP (docs/wiring/print.md), with real libvips renditions and Typst."""
+"""Album → print over HTTP (docs/contracts/api-v1.md, "Album → print"), with real libvips
+renditions and Typst."""
 
 import re
 from datetime import datetime

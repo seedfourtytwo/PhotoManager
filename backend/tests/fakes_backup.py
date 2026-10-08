@@ -258,13 +258,10 @@ class FakeQueue:
         self.jobs.append((kind, payload))
         return len(self.jobs)
 
-
-class SteppingClock:
-    def __init__(self, start: datetime) -> None:
-        self.current = start
-
-    def now(self) -> datetime:
-        return self.current
+    def enqueue_once(self, kind: str, payload: dict[str, object] | None = None) -> int | None:
+        if (kind, payload or {}) in self.jobs:
+            return None
+        return self.enqueue(kind, payload or {})
 
 
 class FakeMirror:

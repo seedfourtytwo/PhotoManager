@@ -18,12 +18,7 @@ from photo_assistant.ports.sync import (
     SyncRateLimitedError,
     SyncReport,
 )
-from tests.factories import NOW
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
+from tests.fakes import FakeClock
 
 
 @dataclass
@@ -119,7 +114,7 @@ def world(tmp_path: Path) -> World:
         sync=sync,
         importer=library,
         reports=library,
-        clock=FixedClock(),
+        clock=FakeClock(),
         staging_root=tmp_path / "staging",
         options=SyncOptions(),
     )

@@ -299,7 +299,8 @@ def test_the_visible_id_set_is_the_timeline(world: World) -> None:
 
 
 def _source_id(admin: TestClient, label: str) -> int:
-    return next(s["id"] for s in admin.get("/api/sources").json() if s["label"] == label)
+    found: int = next(s["id"] for s in admin.get("/api/sources").json() if s["label"] == label)
+    return found
 
 
 def test_private_hides_only_from_viewers_who_reach_it_solely_through_the_markers_sources(

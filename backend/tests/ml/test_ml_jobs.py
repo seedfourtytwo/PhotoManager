@@ -2,13 +2,12 @@
 
 import math
 import random
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.ml_jobs import (
     AUTO_TAG,
     CLUSTER_FACES,
@@ -31,21 +30,6 @@ from tests.ml.fakes import FakeClip, FakeFaces, FakeLibrary
 
 
 @pytest.fixture
-def conn() -> sqlite3.Connection:
-    return open_database(":memory:")
-
-
-@pytest.fixture
-def repo(conn: sqlite3.Connection) -> SqliteRepository:
-    return SqliteRepository(conn)
-
-
-@pytest.fixture
-def store(conn: sqlite3.Connection) -> SqliteMlStore:
-    return SqliteMlStore(conn)
-
-
-@pytest.fixture
 def library(tmp_path: Path) -> FakeLibrary:
     return FakeLibrary(tmp_path)
 
@@ -57,7 +41,7 @@ def add(repo: SqliteRepository, n: int, image: str | None = None) -> int:
     return asset_id
 
 
-def queued(repo: SqliteRepository) -> list[tuple[str, object]]:
+def queued(repo: SqliteRepository) -> list[tuple[object, object]]:
     return [(j["kind"], j["payload"]) for j in repo.list_jobs("queued")]
 
 

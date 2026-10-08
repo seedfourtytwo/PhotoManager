@@ -2,10 +2,11 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.enrich import GroupSimilar
 from photo_assistant.app.review import Review
 from photo_assistant.domain.access import Role, Viewer
@@ -13,14 +14,10 @@ from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.ports import RenderedImage
 from tests.factories import NOW, new_asset
+from tests.fakes import FakeClock
 
 ADMIN = Viewer(1, Role.ADMIN)
 SAME = "0000000000000000"
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 class NamedHasher:
@@ -32,17 +29,17 @@ class NamedHasher:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     repo.add_user("c", "C", "hash", Role.ADMIN)
     return repo
 
 
 @pytest.fixture
 def review(repo: SqliteRepository) -> Review:
-    return Review(repo, FixedClock())
+    return Review(repo, FakeClock())
 
 
-def photo(repo: SqliteRepository, n: int, look: str = "own", **kw: object) -> int:
+def photo(repo: SqliteRepository, n: int, look: str = "own", **kw: Any) -> int:
     asset_id = repo.add_asset(new_asset(n, **kw), NOW)
     repo.set_thumbnail(asset_id, RenderedImage(f"derived/thumb/{look}-{n}.webp", 1, 1))
     return asset_id

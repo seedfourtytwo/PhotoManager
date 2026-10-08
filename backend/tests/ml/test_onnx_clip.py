@@ -38,11 +38,13 @@ def save_png(path: Path, array: np.ndarray) -> Path:
 
 
 def normalised_pixel(rgb: tuple[int, int, int]) -> np.ndarray:
-    return (np.array(rgb, dtype=np.float32) / 255 - np.array(MEAN)) / np.array(STD)
+    pixel: np.ndarray = (np.array(rgb, dtype=np.float32) / 255 - np.array(MEAN)) / np.array(STD)
+    return pixel
 
 
 def unit(v: np.ndarray) -> np.ndarray:
-    return v / np.linalg.norm(v)
+    scaled: np.ndarray = v / np.linalg.norm(v)
+    return scaled
 
 
 def make_clip_folder(

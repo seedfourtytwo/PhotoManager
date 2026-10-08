@@ -10,7 +10,7 @@ import random
 import pytest
 
 from photo_assistant.adapters.sqlite_library import visibility
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.domain.access import Role, Viewer
 
 ORACLE = """WITH vis(asset_id, level) AS (
@@ -107,7 +107,7 @@ def _albums(rng: random.Random, sql, users: list[int]) -> None:  # type: ignore[
 
 def _random_library(seed: int) -> SqliteRepository:
     rng = random.Random(seed)
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     users, sources = list(range(1, len(ROLES) + 1)), list(range(1, 6))
     _people_and_sources(rng, repo._conn.execute, users, sources)
     _photos(rng, repo._conn.execute, users, sources)

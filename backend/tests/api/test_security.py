@@ -76,7 +76,7 @@ def test_odd_header_bytes_do_not_crash_the_guard() -> None:
     async def app(scope: object, receive: object, send: object) -> None:
         reached.append(True)
 
-    guard = CrossSiteGuard(app, ["127.0.0.1"])  # type: ignore[arg-type]
+    guard = CrossSiteGuard(app, ["127.0.0.1"])
     scope = {"type": "http", "method": "GET", "headers": [(b"x-name", b"caf\xe9")]}
     asyncio.run(guard(scope, None, None))  # type: ignore[arg-type]
     assert reached == [True]

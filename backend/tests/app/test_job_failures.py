@@ -6,14 +6,13 @@ waiting (the network, a locked repository, an unplugged disk, a slow tool) is ke
 hierarchy on purpose and is retried with a growing wait.
 """
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from photo_assistant.adapters.proton_drive import ProtonDrive
 from photo_assistant.adapters.rclone_sync import RcloneSync
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.tool_runner import ToolTimeoutError
 from photo_assistant.app.backup import BACKUP_JOB, UnknownTargetError
 from photo_assistant.app.worker import Worker
@@ -39,17 +38,7 @@ from photo_assistant.ports.sync import (
     SyncToolMissingError,
 )
 from tests.app.test_backup import World
-from tests.factories import NOW
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
-
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+from tests.fakes import FakeClock
 
 
 def _run_once(repo: SqliteRepository, error: Exception) -> None:
@@ -57,7 +46,7 @@ def _run_once(repo: SqliteRepository, error: Exception) -> None:
         raise error
 
     repo.enqueue("job", {})
-    assert Worker(repo, {"job": fail}, FixedClock()).run_until_idle() == 1
+    assert Worker(repo, {"job": fail}, FakeClock()).run_until_idle() == 1
 
 
 @pytest.mark.parametrize(
@@ -109,7 +98,7 @@ def test_a_backup_job_for_a_target_deleted_meanwhile_fails_at_once(
 ) -> None:
     world = World(tmp_path)
     repo.enqueue(BACKUP_JOB, {"target_id": 99})
-    assert Worker(repo, world.service.job_handlers(), FixedClock()).run_until_idle() == 1
+    assert Worker(repo, world.service.job_handlers(), FakeClock()).run_until_idle() == 1
     (failed,) = repo.list_jobs("failed")
     assert failed["attempts"] == 1 and failed["error"] == "UnknownTargetError: no backup target 99"
 

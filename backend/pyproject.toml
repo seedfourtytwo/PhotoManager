@@ -80,8 +80,11 @@ max-complexity = 8
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = "src"
-packages = ["photo_assistant"]
+# The tests and scripts are checked as strictly as the package: a fake that drifts from its
+# port, or a "type: ignore" nothing needs any more (warn_unused_ignores, part of strict), fails.
+mypy_path = "src:."
+explicit_package_bases = true
+files = ["src/photo_assistant", "tests", "scripts"]
 
 [tool.importlinter]
 root_package = "photo_assistant"

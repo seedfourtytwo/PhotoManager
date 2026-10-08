@@ -1,36 +1,29 @@
 """Trash (FEATURES 11.3): soft delete, restore, purge of the library copy, 30-day expiry."""
 
 import stat
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from photo_assistant.adapters.filesystem import DiskLibraryStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.trash import TRASH_DAYS, Trash
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.ports import RenderedImage
 from tests.factories import NOW, new_asset
+from tests.fakes import FakeClock
 
 ADMIN = Viewer(1, Role.ADMIN)
 
 
-class MovableClock:
-    def __init__(self) -> None:
-        self.at = NOW
-
-    def now(self) -> datetime:
-        return self.at
-
-
 @pytest.fixture
-def world(tmp_path: Path) -> tuple[SqliteRepository, DiskLibraryStore, MovableClock, Trash]:
-    repo = SqliteRepository(open_database(":memory:"))
+def world(tmp_path: Path) -> tuple[SqliteRepository, DiskLibraryStore, FakeClock, Trash]:
+    repo = SqliteRepository(Database.open(":memory:"))
     repo.add_user("c", "C", "hash", Role.ADMIN)
     store = DiskLibraryStore(tmp_path / "data")
-    clock = MovableClock()
+    clock = FakeClock()
     return repo, store, clock, Trash(repo, store, clock)
 
 

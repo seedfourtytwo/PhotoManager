@@ -55,7 +55,7 @@ Never commit real family photos.
 - **Small, named things.** Functions do one thing; ~20 lines is a smell trigger, not a law.
   Names say intent (`pick_capture_time`, not `process_date`).
 - **Pure core, thin shell.** Decisions live in `domain/` as pure functions; I/O at the edges.
-- **Types everywhere.** mypy strict on `domain/` and `app/`; TypeScript strict; no `Any`
+- **Types everywhere.** mypy strict on the whole package, its tests and scripts; TypeScript strict; no `Any`
   without a comment explaining why.
 - **Explicit errors.** Never swallow exceptions; user-facing messages say what happened and
   what to do. An error a person can cause or must read is a named subclass of a family in

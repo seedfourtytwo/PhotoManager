@@ -3,6 +3,7 @@
 import time
 from datetime import datetime
 from pathlib import PurePosixPath
+from typing import Any
 
 import pytest
 from hypothesis import given
@@ -123,10 +124,10 @@ def test_original_untouched_only_without_changes() -> None:
 def test_estimates_start_from_the_real_bytes() -> None:
     size = (4000, 3000)
 
-    def est(fmt: str, out: str | None = None, mime: str = "image/jpeg", **kw: object) -> int:
+    def est(fmt: str, out: str | None = None, mime: str = "image/jpeg", **kw: Any) -> int:
         return estimate_bytes(
             5_000_000, mime, size, size, out or fmt, ExportOptions(format=fmt, **kw)
-        )  # type: ignore[arg-type]
+        )
 
     assert est("original") == 5_000_000, "sent untouched"
     jpeg = est("jpeg")

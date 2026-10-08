@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, _migrations, open_database
+from photo_assistant.adapters.sqlite_repository import (
+    Database,
+    SqliteRepository,
+    _migrations,
+    open_database,
+)
 from photo_assistant.domain.access import Level
 from tests.factories import NOW
 
@@ -101,7 +106,7 @@ def test_a_v3_library_with_photos_upgrades_cleanly_after_a_snapshot(tmp_path: Pa
     assert old.execute("PRAGMA user_version").fetchone()[0] == 3
     assert old.execute("SELECT COUNT(*) FROM asset").fetchone()[0] == 2
     # the photos, their origins and history are all still there
-    repo = SqliteRepository(conn)
+    repo = SqliteRepository(Database(conn, db))
     assert [s.label for s in repo.list_sources()] == ["Pictures"]
     assert repo.count_assets() == 2
     assert repo.asset_id_for_source_path(1, "IMG_2.JPG") == 2
@@ -304,7 +309,7 @@ def test_ownerless_sources_wait_for_the_setup_when_there_is_no_admin(tmp_path: P
     _make_v21_library(db, "")
     conn = open_database(db, backup_dir=tmp_path / "backups")
     assert _owners(conn) == [None, None, None]
-    admin = SqliteRepository(conn).add_first_admin("c", "C", "x")
+    admin = SqliteRepository(Database(conn, db)).add_first_admin("c", "C", "x")
     assert _owners(conn) == [admin.id] * 3
 
 
@@ -336,7 +341,7 @@ def test_a_v21_library_keeps_its_jobs_claimable_after_0022(tmp_path: Path) -> No
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
     assert {"job_queue", "job_waiting", "asset_by_variant_of", "ai_log_recent"} <= indexes
-    repo = SqliteRepository(conn)
+    repo = SqliteRepository(Database(conn, db))
     assert [(j["id"], j["status"], j["attempts"]) for j in repo.list_jobs()] == [
         (1, "done", 1),
         (2, "running", 1),
@@ -375,11 +380,11 @@ def test_accounts_from_before_0023_come_through_unlocked_with_no_wrong_pins(tmp_
     assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     rows = upgraded.execute("SELECT username, failed_pins, locked_at FROM user ORDER BY id")
     assert [tuple(r) for r in rows] == [("c", 0, None), ("lea", 0, None)]
-    users = SqliteRepository(upgraded).list_users()
+    users = SqliteRepository(Database(upgraded, db)).list_users()
     assert [(u.username, u.disabled, u.locked) for u in users] == [
         ("c", False, False),
         ("lea", True, False),
     ]
-    found = SqliteRepository(upgraded).find_user_by_username("LEA")
+    found = SqliteRepository(Database(upgraded, db)).find_user_by_username("LEA")
     assert found is not None and found[1] == "y", "the PIN hash is untouched"
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1

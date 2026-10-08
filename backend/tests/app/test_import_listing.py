@@ -5,6 +5,7 @@ import logging
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -45,8 +46,8 @@ def test_a_file_gone_before_it_is_looked_at_is_left_out(
     (tmp_path / "a.jpg").write_bytes(b"a")
     real = os.walk
 
-    def walk_with_a_ghost(*args: object, **kwargs: object) -> Iterator[object]:
-        for dirpath, dirnames, filenames in real(*args, **kwargs):  # type: ignore[call-overload]
+    def walk_with_a_ghost(*args: Any, **kwargs: Any) -> Iterator[object]:
+        for dirpath, dirnames, filenames in real(*args, **kwargs):
             yield dirpath, dirnames, [*filenames, "ghost.jpg"]
 
     monkeypatch.setattr(os, "walk", walk_with_a_ghost)
@@ -137,5 +138,5 @@ def test_a_listing_that_fails_in_a_folder_that_is_there_is_recorded_with_the_rea
         importer.run(source.id)
     (run,) = repo.list_import_runs(source.id)
     assert run["status"] == RunStatus.FAILED.value
-    assert error.strerror in str(run["message"])
+    assert error.strerror in str(run["message"])  # type: ignore[operator]
     assert "folder not found" not in str(run["message"])

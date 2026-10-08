@@ -13,15 +13,10 @@ from photo_assistant.app.upload import UploadInbox, UploadOutcome, UploadSetting
 from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.model import Source
 from photo_assistant.ports.upload import Device, SpooledUpload
-from tests.factories import NOW
+from tests.fakes import FakeClock
 
 ME = Viewer(7, Role.MEMBER)
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"pixels" * 10
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @dataclass
@@ -73,7 +68,7 @@ def world(tmp_path: Path) -> World:
         inbox=inboxes,
         library=library,
         spool=DiskUploadSpool(tmp_path / "tmp"),
-        clock=FixedClock(),
+        clock=FakeClock(),
         inbox_root=tmp_path / "inbox",
         settings=UploadSettings(max_bytes=1000),
     )
@@ -108,7 +103,7 @@ def test_a_file_is_refused_while_the_disk_is_under_its_free_space_floor(tmp_path
         inbox=FakeInboxes(),
         library=FakeLibrary(),
         spool=spool,
-        clock=FixedClock(),
+        clock=FakeClock(),
         inbox_root=tmp_path / "inbox",
         settings=UploadSettings(min_free_bytes=10 * gb),
     )
@@ -218,7 +213,7 @@ def test_a_rescan_follows_a_moved_data_root(world: World) -> None:
         inbox=inboxes,
         library=world.library,
         spool=DiskUploadSpool(world.tmp),
-        clock=FixedClock(),
+        clock=FakeClock(),
         inbox_root=world.inbox_root,
     )
     stale = Source(107, "Uploads", "/old/place/inbox/7", kind="inbox", owner_id=7)
@@ -296,7 +291,7 @@ class FakeDevices:
 
 def test_a_token_is_shown_once_and_only_its_hash_is_stored() -> None:
     store = FakeDevices()
-    tokens = DeviceTokens(store, FixedClock())
+    tokens = DeviceTokens(store, FakeClock())
     device, token = tokens.create(3, "C's iPhone", "ios")
     assert token.startswith("pa_dev_") and len(token) > 40
     assert store.rows[0][1] == hash_token(token) != token
@@ -311,9 +306,9 @@ def test_a_token_is_shown_once_and_only_its_hash_is_stored() -> None:
 @pytest.mark.parametrize(("name", "platform"), [("", "ios"), ("x" * 61, "ios"), ("ok", "nokia")])
 def test_device_names_and_platforms_are_checked(name: str, platform: str) -> None:
     with pytest.raises(ValueError):
-        DeviceTokens(FakeDevices(), FixedClock()).create(1, name, platform)
+        DeviceTokens(FakeDevices(), FakeClock()).create(1, name, platform)
 
 
 def test_device_names_lose_control_characters() -> None:
-    device, _ = DeviceTokens(FakeDevices(), FixedClock()).create(1, " iPhone\n ", "ios")
+    device, _ = DeviceTokens(FakeDevices(), FakeClock()).create(1, " iPhone\n ", "ios")
     assert device.name == "iPhone"

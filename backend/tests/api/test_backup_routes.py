@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from photo_assistant.adapters.sqlite_database import Database
@@ -155,7 +155,7 @@ def test_validation_and_unknown_targets(env: Env) -> None:
 
 
 def test_status_lookup_for_a_vanished_target(env: Env) -> None:
-    with pytest.raises(backup.HTTPException):
+    with pytest.raises(HTTPException):
         backup._status_of(env.ops.backup, 12345)
 
 
