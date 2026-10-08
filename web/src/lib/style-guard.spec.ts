@@ -4,6 +4,9 @@ import fonts from './fonts.css?raw';
 import themes from './themes.css?raw';
 import layout from '../routes/+layout.svelte?raw';
 import manifest from '../../static/manifest.webmanifest?raw';
+import favicon from './assets/favicon.svg?raw';
+
+const safelightBg = /^:root\s*\{[^}]*--bg:\s*(#[0-9a-f]{6})/im.exec(themes)?.[1].toLowerCase();
 
 const sources = import.meta.glob(['/src/**/*.svelte', '/src/**/*.css'], {
 	query: '?raw',
@@ -58,12 +61,17 @@ describe('style guard', () => {
 	});
 
 	it('the browser chrome colours equal the Safelight dark page colour', () => {
-		const bg = /^:root\s*\{[^}]*--bg:\s*(#[0-9a-f]{6})/im.exec(themes)?.[1].toLowerCase();
-		expect(bg).toBeDefined();
+		expect(safelightBg).toBeDefined();
 		const meta = /<meta name="theme-color" content="(#[0-9a-f]{6})"/i.exec(layout)?.[1];
 		const parsed = JSON.parse(manifest) as { background_color: string; theme_color: string };
-		expect(meta?.toLowerCase()).toBe(bg);
-		expect(parsed.background_color.toLowerCase()).toBe(bg);
-		expect(parsed.theme_color.toLowerCase()).toBe(bg);
+		expect(meta?.toLowerCase()).toBe(safelightBg);
+		expect(parsed.background_color.toLowerCase()).toBe(safelightBg);
+		expect(parsed.theme_color.toLowerCase()).toBe(safelightBg);
+	});
+
+	it('the favicon sits on the page colour', () => {
+		expect(safelightBg).toBeDefined();
+		expect(favicon.toLowerCase()).toContain(`fill="${safelightBg}"`);
+		expect(favicon).not.toContain('#181817');
 	});
 });

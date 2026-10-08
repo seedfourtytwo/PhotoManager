@@ -30,7 +30,7 @@ Every photo the account may see, in date order.
 _Avoid_: Timeline, gallery, all photos
 
 **Collections**:
-The page that gathers the ways of grouping photos: people, places, albums, calendar.
+The page that gathers the ways of grouping photos: people, places and albums.
 _Avoid_: Explore, browse, categories
 
 **System**:

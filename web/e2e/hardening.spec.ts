@@ -122,9 +122,9 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	await expect.poll(() => asked.length).toBeGreaterThanOrEqual(next); // one is in flight now
 	await page
 		.getByRole('navigation', { name: 'Main' })
-		.getByRole('link', { name: 'Albums' })
+		.getByRole('link', { name: 'Collections' })
 		.click();
-	await expect(page.getByRole('heading', { name: 'Albums' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible();
 	await page.waitForTimeout(600); // let the request in flight come back
 	const settled = asked.length;
 	await page.waitForTimeout(3200);

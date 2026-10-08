@@ -61,10 +61,10 @@ test('a search typed just before leaving the page does not follow you there', as
 	const panel = await openFilters(page);
 	await panel.getByRole('searchbox', { name: 'Search' }).pressSequentially('carnac');
 	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
-	await page.getByRole('link', { name: 'Albums', exact: true }).click();
-	await expect(page).toHaveURL(/\/albums$/);
+	await page.getByRole('link', { name: 'Collections', exact: true }).click();
+	await expect(page).toHaveURL(/\/collections$/);
 	await page.waitForTimeout(500);
-	await expect(page).toHaveURL(/\/albums$/);
+	await expect(page).toHaveURL(/\/collections$/);
 });
 
 test('calendar: click a day to open the filtered library', async ({ page }) => {
@@ -94,6 +94,17 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
 	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
+});
+
+test('hiding the filters, a real click on "Filters" brings them back', async ({ page }) => {
+	test.skip(isPhone(page), 'the filter panel is a sheet on phones');
+	const panel = page.getByRole('complementary', { name: 'Filters' });
+	await expect(panel).toBeVisible();
+	await page.getByRole('button', { name: 'Hide filters' }).click();
+	await expect(panel).toBeHidden();
+	// No `force`: the button must not sit under the top bar.
+	await page.getByRole('button', { name: /^Filters/ }).click();
+	await expect(panel).toBeVisible();
 });
 
 test('phone: the filter sheet is modal: focus moves in and stays, Escape closes it', async ({
