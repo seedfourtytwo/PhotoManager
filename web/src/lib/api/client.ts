@@ -240,16 +240,9 @@ export function createApi(options: ApiOptions = {}) {
 		sourceAccess: (id: Id) => get<Access>(`/api/sources/${id}/access`),
 		setSourceAccess: (id: Id, body: Access) =>
 			request<Access>('PUT', `/api/sources/${id}/access`, body),
-		imports: (sourceId?: Id) =>
-			get<ImportRun[]>(
-				withQuery(
-					'/api/imports',
-					new URLSearchParams(sourceId === undefined ? {} : { source_id: String(sourceId) })
-				)
-			),
+		imports: (sourceId?: Id) => get<ImportRun[]>(query('/api/imports', { source_id: sourceId })),
 		importReport: (id: Id) => get<ImportReport>(`/api/imports/${id}`),
-		jobs: (status?: JobStatus) =>
-			get<Job[]>(withQuery('/api/jobs', new URLSearchParams(status ? { status } : {}))),
+		jobs: (status?: JobStatus) => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),
 
@@ -277,7 +270,6 @@ export function createApi(options: ApiOptions = {}) {
 		/** `edit: 'none'` (v1.1) gives the photo without its recipe: the editor's base image. */
 		previewUrl: (id: Id, options: { edit?: 'none' } = {}) =>
 			`${base}/api/assets/${id}/preview${options.edit ? `?edit=${options.edit}` : ''}`,
-		originalUrl: (id: Id) => `${base}/api/assets/${id}/original`,
 
 		// downloads
 		estimateDownload: (body: DownloadRequest) =>
@@ -400,9 +392,7 @@ export function createApi(options: ApiOptions = {}) {
 		// Proton Drive sources (admin); the sign-in lives in Proton's tool on the server
 		proton: () => get<ProtonStatus>('/api/proton'),
 		protonFolders: (path: string) =>
-			get<{ path: string; folders: string[] }>(
-				`/api/proton/folders?path=${encodeURIComponent(path)}`
-			),
+			get<{ path: string; folders: string[] }>(query('/api/proton/folders', { path })),
 		addProtonSource: (body: ProtonSourceIn) =>
 			request<ProtonSource>('POST', '/api/proton/sources', body)
 	};

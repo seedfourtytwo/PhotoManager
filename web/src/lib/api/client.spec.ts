@@ -305,6 +305,23 @@ describe('createApi', () => {
 	});
 });
 
+describe('optional query parameters', () => {
+	it('are left out when not given and encoded when they are', async () => {
+		const { calls, fetcher } = fakeServer([json([]), json([]), json([]), json({})]);
+		const api = createApi({ fetch: fetcher });
+		await api.imports();
+		await api.imports(4);
+		await api.jobs();
+		await api.protonFolders('/my-files/Trips/2019 Alps & more');
+		expect(calls.map((c) => c.url)).toEqual([
+			'/api/imports',
+			'/api/imports?source_id=4',
+			'/api/jobs',
+			'/api/proton/folders?path=%2Fmy-files%2FTrips%2F2019+Alps+%26+more'
+		]);
+	});
+});
+
 describe('contract v1.1', () => {
 	it('reads the user directory for sharing', async () => {
 		const { calls, fetcher } = fakeServer([json([{ id: 2, display_name: 'Lea' }])]);
