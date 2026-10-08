@@ -299,7 +299,7 @@
 	{#if loader.error}
 		<p class="quiet status">
 			{loader.error}
-			<button type="button" onclick={() => loader.reload()}>Try again</button>
+			<button type="button" onclick={() => loader.retry()}>Try again</button>
 		</p>
 	{:else if loader.loading}
 		<p class="quiet status" role="status">Loading…</p>

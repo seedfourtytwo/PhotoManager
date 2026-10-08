@@ -45,6 +45,9 @@ MEANINGS = {
     "PA_LOG_LEVEL": "How much is logged: `DEBUG`, `INFO`, `WARNING` or `ERROR`.",
     "PA_ALLOWED_HOSTS": "Host names the server answers to; any other name is refused. Add the "
     "Tailscale name here (remote-access.md).",
+    "PA_TRUSTED_PROXIES": "Addresses or networks of the https proxy in front of the server, "
+    "comma-separated. Only these may say a request arrived over https and from which device. "
+    "In Docker: the Docker networks (server.env.example).",
     "PA_WEB_DIR": "Folder with the built web app, served at `/`. `just run`, the systemd unit "
     "and the Docker image set it; not set = API only.",
     "PA_TRASH_PURGE_EVERY_HOURS": "How often the server deletes photos that have been in the "

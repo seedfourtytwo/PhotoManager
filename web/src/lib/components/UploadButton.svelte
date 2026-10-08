@@ -64,6 +64,7 @@
 				try {
 					const part = await uploadFiles(chunk, {
 						url: api.uploadUrl,
+						onUnauthorized: () => session.lost(),
 						onprogress: (f) => (progress = (bytes + f * size) / total)
 					});
 					result.files.push(...part.files);

@@ -367,9 +367,7 @@ export function createApi(options: ApiOptions = {}) {
 		setUpBackup: (body: BackupSetupIn) => request<BackupSetup>('POST', '/api/backups/setup', body),
 		backupRecovery: (id: Id) => get<BackupRecovery>(`/api/backups/${id}/recovery`),
 		confirmBackupKey: (id: Id) => request<BackupTarget>('POST', `/api/backups/${id}/key-saved`),
-		setBackupEnabled: (id: Id, enabled: boolean) =>
-			request<BackupTarget>('PATCH', `/api/backups/${id}`, { enabled }),
-		/** v1.3: change schedule, quiet window, retention (and/or enabled). */
+		/** Change schedule, quiet window, retention and/or enabled. */
 		updateBackup: (id: Id, body: BackupPatch) =>
 			request<BackupTarget>('PATCH', `/api/backups/${id}`, body),
 		runBackup: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/run`),

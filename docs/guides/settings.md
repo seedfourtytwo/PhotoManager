@@ -24,6 +24,7 @@ Write lists (`PA_ALLOWED_HOSTS`) comma-separated, without quotes, brackets or sp
 | General | `PA_PREVIEW_WORKERS` | `0` | Previews rendered at the same time; `0` means two fewer than the processor's cores, at least 1. |
 | General | `PA_LOG_LEVEL` | `INFO` | How much is logged: `DEBUG`, `INFO`, `WARNING` or `ERROR`. |
 | General | `PA_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Host names the server answers to; any other name is refused. Add the Tailscale name here (remote-access.md). |
+| General | `PA_TRUSTED_PROXIES` | `127.0.0.1` | Addresses or networks of the https proxy in front of the server, comma-separated. Only these may say a request arrived over https and from which device. In Docker: the Docker networks (server.env.example). |
 | General | `PA_WEB_DIR` | not set | Folder with the built web app, served at `/`. `just run`, the systemd unit and the Docker image set it; not set = API only. |
 | General | `PA_TRASH_PURGE_EVERY_HOURS` | `6` | How often the server deletes photos that have been in the trash for 30 days. |
 | General | `PA_ARGON2_TIME_COST` | `3` | Work factor of the PIN hash. Tests lower it; never lower it in use. |

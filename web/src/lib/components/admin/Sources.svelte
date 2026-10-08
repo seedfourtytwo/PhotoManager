@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ImportRun, ProtonSource as AddedProton, Source } from '$lib/api';
-	import { api, notice } from '$lib/app.svelte';
+	import { api, library, notice } from '$lib/app.svelte';
 	import { formatWhen } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
@@ -67,6 +67,7 @@
 			const source = await api.addSource({ label: label.trim(), path });
 			adding = false;
 			// The folder exists now, whatever happens to its first import: show it, then start.
+			library.forget(); // filter labels come from this list
 			await load();
 			try {
 				await api.scanSource(source.id);
@@ -114,6 +115,7 @@
 			} catch (e) {
 				notice.error(e);
 			}
+			library.forget(); // filter labels come from this list
 			await load();
 		} catch (e) {
 			cloudError = e instanceof Error ? e.message : 'Could not add the cloud folder.';
@@ -131,6 +133,7 @@
 		} catch (e) {
 			notice.error(e);
 		}
+		library.forget(); // filter labels come from this list
 		await load();
 	}
 
