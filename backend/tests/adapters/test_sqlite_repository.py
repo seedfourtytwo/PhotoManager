@@ -225,6 +225,20 @@ def test_record_import_of_known_content_changes_nothing_and_says_which(
     assert len(repo.list_jobs("queued")) == 1, "rolled back: no second job"
 
 
+def test_import_writes_join_a_transaction_that_is_already_open(repo: SqliteRepository) -> None:
+    """They go through the one transaction() like every other write, so they nest."""
+    source = repo.add_source("s", "/s")
+    thumb = RenderedImage("derived/thumb/x.webp", 64, 48)
+    report = ImportReport(source_id=source.id, status=RunStatus.DONE)
+    report.add(ItemResult("a.jpg", Outcome.IMPORTED))
+    with pytest.raises(RuntimeError, match="undo"), repo._transaction():
+        repo.record_import(new_asset(1), NOW, source.id, "a.jpg", thumb, "preview")
+        repo.save_import_report(report, NOW, NOW)
+        raise RuntimeError("undo")
+    assert repo.count_assets() == 0 and repo.list_import_runs() == []
+    assert not repo._conn.in_transaction
+
+
 def test_two_processes_never_claim_the_same_job(tmp_path: Path) -> None:
     db = tmp_path / "library.db"
     a = SqliteRepository(open_database(db))

@@ -88,14 +88,8 @@ class SqliteMlStore:
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            self._conn.execute("BEGIN")
-            try:
-                yield self._conn
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        with self._db.transaction() as conn:
+            yield conn
 
     @contextmanager
     def _candidates(self, ids: Collection[int]) -> Iterator[None]:

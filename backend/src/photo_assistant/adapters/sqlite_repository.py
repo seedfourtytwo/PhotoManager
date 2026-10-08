@@ -155,17 +155,11 @@ class SqliteRepository(
         job_kind: str,
         fingerprint: Fingerprint | None = None,
     ) -> int:
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                asset_id = self.add_asset(asset, imported_at)
-                self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
-                self.set_thumbnail(asset_id, thumb)
-                self.enqueue(job_kind, {"asset_id": asset_id})
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        with self._transaction():
+            asset_id = self.add_asset(asset, imported_at)
+            self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
+            self.set_thumbnail(asset_id, thumb)
+            self.enqueue(job_kind, {"asset_id": asset_id})
             return asset_id
 
     def _insert_asset(self, asset: NewAsset, imported_at: datetime) -> int:
@@ -305,34 +299,28 @@ class SqliteRepository(
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int:
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                run_id = self._write(
-                    """INSERT INTO import_run (source_id, status, started_at, finished_at,
-                           ignored, summary_json, message) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        report.source_id,
-                        report.status.value,
-                        _iso(started_at),
-                        _iso(finished_at),
-                        report.ignored,
-                        json.dumps(report.summary()),
-                        report.message,
-                    ),
-                )
-                self._conn.executemany(
-                    """INSERT INTO import_item (run_id, relative_path, outcome, reason, asset_id)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    [
-                        (run_id, i.relative_path, i.outcome.value, i.reason, i.asset_id)
-                        for i in report.items
-                    ],
-                )
-                self._conn.execute("COMMIT")
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
+        with self._transaction():
+            run_id = self._write(
+                """INSERT INTO import_run (source_id, status, started_at, finished_at,
+                       ignored, summary_json, message) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    report.source_id,
+                    report.status.value,
+                    _iso(started_at),
+                    _iso(finished_at),
+                    report.ignored,
+                    json.dumps(report.summary()),
+                    report.message,
+                ),
+            )
+            self._conn.executemany(
+                """INSERT INTO import_item (run_id, relative_path, outcome, reason, asset_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    (run_id, i.relative_path, i.outcome.value, i.reason, i.asset_id)
+                    for i in report.items
+                ],
+            )
         return run_id
 
     def get_import_report(self, run_id: int) -> ImportReport | None:

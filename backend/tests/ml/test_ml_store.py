@@ -149,6 +149,17 @@ def test_replace_faces_stores_geometry_and_replaces_on_rerun(
     assert store.get_face(9999) is None
 
 
+def test_ml_writes_join_a_transaction_that_is_already_open(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    """They go through the Database's one transaction(), like every other store."""
+    (a,) = assets(repo, 1)
+    with pytest.raises(RuntimeError, match="undo"), repo._transaction():
+        store.replace_faces(a, M, [face(angle(0))])
+        raise RuntimeError("undo")
+    assert store.faces_of_asset(a) == []
+
+
 def test_face_matches_and_nearest_person(repo: SqliteRepository, store: SqliteMlStore) -> None:
     (a, b) = assets(repo, 2)
     f1, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(20))])

@@ -178,10 +178,13 @@ class Database:
             self.writer.execute("BEGIN IMMEDIATE")
             try:
                 yield self.writer
+                self.writer.execute("COMMIT")
             except BaseException:
-                self.writer.execute("ROLLBACK")
+                # a failed COMMIT leaves the transaction open; some errors (disk full, OR
+                # ROLLBACK) have ended it already, and ROLLBACK would then hide the real one
+                if self.writer.in_transaction:
+                    self.writer.execute("ROLLBACK")
                 raise
-            self.writer.execute("COMMIT")
 
     def close(self) -> None:
         """Close every connection. Idempotent: every store sharing it may call it."""
