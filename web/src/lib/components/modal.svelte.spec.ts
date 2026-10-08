@@ -90,4 +90,52 @@ describe.each(cases)('$name as a modal', ({ open, find }) => {
 		expect(onclose).not.toHaveBeenCalled();
 		expect(document.querySelector('dialog')).toBeNull();
 	});
+
+	describe('where the focus goes when it closes', () => {
+		const made: HTMLElement[] = [];
+		const button = (name: string) => {
+			const el = document.createElement('button');
+			el.textContent = name;
+			document.body.append(el);
+			made.push(el);
+			return el;
+		};
+		const settled = () => new Promise((resolve) => setTimeout(resolve, 50));
+		afterEach(() => made.splice(0).forEach((el) => el.remove()));
+
+		it('back to the control that opened it', async () => {
+			const opener = button('Open');
+			opener.focus();
+			const shown = open(() => {});
+			await expect.element(find()).toBeVisible();
+			expect(document.activeElement).not.toBe(opener);
+			shown.unmount();
+			expect(document.activeElement).toBe(opener);
+			await settled();
+			expect(document.activeElement).toBe(opener);
+		});
+
+		it('stays where the page puts it right after closing', async () => {
+			const opener = button('Open');
+			const other = button('Other');
+			opener.focus();
+			const shown = open(() => {});
+			await expect.element(find()).toBeVisible();
+			shown.unmount();
+			other.focus();
+			await settled();
+			expect(document.activeElement).toBe(other);
+		});
+
+		it('nowhere in particular when that control is gone', async () => {
+			const opener = button('Open');
+			opener.focus();
+			const shown = open(() => {});
+			await expect.element(find()).toBeVisible();
+			opener.remove();
+			shown.unmount();
+			await settled();
+			expect(document.activeElement).toBe(document.body);
+		});
+	});
 });
