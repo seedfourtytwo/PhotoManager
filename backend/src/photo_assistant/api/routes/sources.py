@@ -25,7 +25,7 @@ from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.library_paths import folder_path_problem
 from photo_assistant.domain.model import Source
-from photo_assistant.domain.remote_source import PROTON, RCLONE
+from photo_assistant.domain.remote_source import PROTON, RCLONE, RemoteConfigError
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
@@ -38,10 +38,23 @@ def _problem(source: Source) -> str | None:
     return None
 
 
+def _place(services: Services, source: Source) -> str | None:
+    """Where a remote source reads from (None for folders, and for damaged settings)."""
+    if source.kind not in (RCLONE, PROTON):
+        return None
+    try:
+        config = services.integrations.remote_sources.remote_config(source.id)
+    except RemoteConfigError:
+        return None
+    return config.place if config else None
+
+
 def _out(services: Services, viewer: Viewer, source_id: int) -> SourceOut:
     for source, count in services.repo.sources_for(viewer):
         if source.id == source_id:
-            return SourceOut.of(source, count, viewer.is_admin, _problem(source))
+            return SourceOut.of(
+                source, count, viewer.is_admin, _problem(source), _place(services, source)
+            )
     raise HTTPException(status.HTTP_404_NOT_FOUND, "source not found")
 
 
@@ -49,7 +62,7 @@ def _out(services: Services, viewer: Viewer, source_id: int) -> SourceOut:
 def list_sources(services: ServicesDep, viewer: ViewerDep) -> list[SourceOut]:
     """The sources you may see (all of them for an admin)."""
     return [
-        SourceOut.of(s, n, viewer.is_admin, _problem(s))
+        SourceOut.of(s, n, viewer.is_admin, _problem(s), _place(services, s))
         for s, n in services.repo.sources_for(viewer)
     ]
 

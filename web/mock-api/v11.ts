@@ -222,6 +222,27 @@ export function v11Routes(h: Helpers): Route[] {
 		};
 	}
 
+	/** The mock Proton Drive: "My files" with a few folders. */
+	const PROTON_TREE: Record<string, string[]> = {
+		'/my-files': ['Family', 'Scans', 'Trips'],
+		'/my-files/Trips': ['2019 Alps'],
+		'/my-files/Trips/2019 Alps': [],
+		'/my-files/Family': [],
+		'/my-files/Scans': []
+	};
+
+	/** Same answers as the real routes: 422 for a place that may not be read, 404 when gone. */
+	function protonPlace(path: string, photosToo: boolean) {
+		const inFiles = path === '/my-files' || path.startsWith('/my-files/');
+		if (!(inFiles || (photosToo && path === '/photos')) || path.split('/').includes('..'))
+			throw new HttpError(
+				422,
+				'choose the Photos section (/photos) or a folder in My files (/my-files/...)'
+			);
+		if (inFiles && !(path in PROTON_TREE))
+			throw new HttpError(404, `folder '${path}' not found on Proton Drive`);
+	}
+
 	function planFor(place: string): BackupPlan {
 		const refuse = (problem: string, repository = place): BackupPlan => ({
 			repository, library_bytes: LIBRARY_BYTES, free_bytes: null, ok: false, problem, warnings: []
@@ -773,6 +794,42 @@ export function v11Routes(h: Helpers): Route[] {
 				if (!h.state().remoteSources.has(idParam(ctx)))
 					throw new HttpError(404, 'no remote source with that id');
 				return ok(h.queueScan(idParam(ctx)), 202);
+			}
+		],
+
+		// Proton Drive sources, admin (the mock machine is always signed in)
+		['GET', /^\/api\/proton$/, (ctx) => (admin(ctx), ok({ ready: true, problem: null }))],
+		[
+			'GET',
+			/^\/api\/proton\/folders$/,
+			(ctx) => {
+				admin(ctx);
+				const path = ctx.url.searchParams.get('path') ?? '';
+				protonPlace(path, false);
+				return ok({ path, folders: PROTON_TREE[path] ?? [] });
+			}
+		],
+		[
+			'POST',
+			/^\/api\/proton\/sources$/,
+			(ctx) => {
+				const user = admin(ctx);
+				const body = requireFields<{ label: string; path: string }>(ctx.body, ['label', 'path']);
+				protonPlace(body.path, true);
+				const state = h.state();
+				const source = {
+					id: state.nextId.source++,
+					label: body.label,
+					path: body.path,
+					enabled: true,
+					kind: 'proton',
+					owner_id: user.id,
+					asset_count: 0
+				};
+				state.sources.push(source);
+				state.access.set(source.id, { everyone: 'download', users: [] });
+				state.remoteSources.set(source.id, { remote: 'proton', path: body.path });
+				return ok({ id: source.id, label: body.label, path: body.path }, 201);
 			}
 		]
 	];

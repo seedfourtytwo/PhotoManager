@@ -56,6 +56,9 @@ import type {
 	Queued,
 	QueuedRun,
 	Recipe,
+	ProtonSource,
+	ProtonSourceIn,
+	ProtonStatus,
 	RemoteSource,
 	RemoteSourceIn,
 	ScoredAsset,
@@ -373,7 +376,16 @@ export function createApi(options: ApiOptions = {}) {
 		remotes: () => get<{ remotes: string[] }>('/api/remote-sources/remotes'),
 		addRemoteSource: (body: RemoteSourceIn) =>
 			request<RemoteSource>('POST', '/api/remote-sources', body),
-		pullRemoteSource: (id: Id) => request<Queued>('POST', `/api/remote-sources/${id}/pull`)
+		pullRemoteSource: (id: Id) => request<Queued>('POST', `/api/remote-sources/${id}/pull`),
+
+		// Proton Drive sources (admin); the sign-in lives in Proton's tool on the server
+		proton: () => get<ProtonStatus>('/api/proton'),
+		protonFolders: (path: string) =>
+			get<{ path: string; folders: string[] }>(
+				`/api/proton/folders?path=${encodeURIComponent(path)}`
+			),
+		addProtonSource: (body: ProtonSourceIn) =>
+			request<ProtonSource>('POST', '/api/proton/sources', body)
 	};
 }
 

@@ -101,7 +101,7 @@ no network and no model). Added 2026-09-29.
 |---|---|---|
 | Local folder / external disk | direct | Primary path, M1 |
 | MEGA | `rclone` mega backend | Works; rclone docs warn MEGA may block logins under heavy use → throttle (`--tpslimit`), pull once into staging |
-| Proton Drive | `rclone` protondrive backend | **Beta, reverse-engineered API.** Known 2FA/re-auth pain. **Reads only "My files", not the Photos section** that Proton's iPhone auto-backup writes to (rclone issue #7832, open). So Proton works as a source for photos put in a normal folder, not for Proton's automatic phone backup — revisit when rclone or Proton's official SDK exposes Photos. Free plan is 5 GB max. |
+| Proton Drive | Proton's official `proton-drive` CLI (v0.9.0+), not rclone | Signs in through a browser on the machine and keeps its session in the system keyring, so the app never sees or stores the Proton password (rclone's reverse-engineered backend needs it, and cannot read the Photos section). Reads both the Photos section and "My files". We only ever build its list and download commands. It has no incremental copy, so the adapter keeps its own list of fetched items (`adapters/proton_drive.py`). Open: how long a session lasts unattended. |
 | iPhone | `libimobiledevice` + `ifuse` (USB/Wi-Fi) or iCloud "Download originals" folder | Wireless ADB does not apply to iPhone |
 | Android | `adb pull /sdcard/DCIM` over wireless debugging | Could-have |
 

@@ -74,3 +74,8 @@ def test_rclone_settings_are_stored_as_before_and_unknown_providers_refused() ->
     assert plain.provider == "rclone" and plain.to_mapping() == {"remote": "mega", "path": "x"}
     with pytest.raises(RemoteConfigError, match="provider"):
         RemoteConfig.from_mapping({"provider": "dropbox", "remote": "x"})
+
+
+def test_the_place_is_what_the_user_chose() -> None:
+    assert RemoteConfig("mega", "Photos").place == "mega:Photos"
+    assert RemoteConfig.proton("/my-files/Trips").place == "/my-files/Trips"

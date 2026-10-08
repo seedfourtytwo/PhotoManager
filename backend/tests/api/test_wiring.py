@@ -210,3 +210,16 @@ def test_due_backups_are_queued_for_the_long_lane_not_run_inline(admin: TestClie
     assert {"backup_run", "backup_restore_test", "backup_due", "scan_source"} <= (
         services.worker.long_kinds
     )
+
+
+def test_a_remote_source_shows_the_place_it_reads_not_its_working_folder(
+    admin: TestClient,
+) -> None:
+    from photo_assistant.domain.remote_source import RemoteConfig
+
+    integrations = services_of(admin).integrations
+    for label, config in (("P", RemoteConfig.proton("/photos")), ("M", RemoteConfig("mega", "x"))):
+        integrations.remote_sources.add_remote_source(label, config, integrations.staging_root)
+    shown = {s["label"]: (s["kind"], s["path"]) for s in admin.get("/api/sources").json()}
+    assert shown["P"] == ("proton", "/photos")
+    assert shown["M"] == ("rclone", "mega:x")

@@ -404,3 +404,9 @@ export type NewDevice = { device: Device; token: string };
 
 export type RemoteSourceIn = { label: string; remote: string; path: string };
 export type RemoteSource = RemoteSourceIn & { id: Id };
+
+/** Proton Drive on the server: signed in or not (and then what to do). */
+export type ProtonStatus = { ready: boolean; problem: string | null };
+/** `path`: `/photos` (the Photos section) or `/my-files[/folder...]`. */
+export type ProtonSourceIn = { label: string; path: string };
+export type ProtonSource = ProtonSourceIn & { id: Id };

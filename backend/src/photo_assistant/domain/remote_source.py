@@ -38,6 +38,11 @@ class RemoteConfig:
         """What rclone reads from: ``remote:path``."""
         return f"{self.remote}:{self.path}"
 
+    @property
+    def place(self) -> str:
+        """What the user chose, for showing next to the source."""
+        return self.path if self.provider == PROTON else self.target
+
     def to_mapping(self) -> dict[str, str]:
         if self.provider == PROTON:
             return {"provider": PROTON, "path": self.path}

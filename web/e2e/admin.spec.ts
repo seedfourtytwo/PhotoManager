@@ -214,3 +214,56 @@ test('cloud folders: add an rclone remote and pull it now', async ({ page }) => 
 	await row.getByRole('button', { name: 'Pull now' }).click();
 	await pull;
 });
+
+test('Proton Drive: bring in the Photos section, or one folder picked by browsing', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool');
+	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
+	await expect(dialog.getByRole('radio', { name: /My Proton photos/ })).toBeChecked();
+	await expect(dialog.getByLabel('Name')).toHaveValue('Proton photos');
+	await dialog.getByRole('button', { name: 'Add and import' }).click();
+	const photos = page.getByRole('listitem').filter({ hasText: 'Proton photos' });
+	await expect(photos.getByText('Proton Drive · Photos')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	await dialog.getByRole('radio', { name: /One folder/ }).check();
+	const inside = dialog.getByRole('list', { name: 'Folders inside' });
+	await inside.getByRole('button', { name: 'Trips' }).click();
+	await inside.getByRole('button', { name: '2019 Alps' }).click();
+	await expect(dialog.getByText('My files / Trips / 2019 Alps')).toBeVisible();
+	await expect(dialog.getByLabel('Name')).toHaveValue('2019 Alps');
+	await inside.getByRole('button', { name: 'Up' }).click();
+	await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
+	await dialog.getByRole('button', { name: 'Add and import' }).click();
+	const trips = page.getByRole('listitem').filter({ hasText: 'Trips' });
+	await expect(trips.getByText('Proton Drive · My files / Trips')).toBeVisible();
+	const pull = page.waitForRequest((r) => /\/api\/remote-sources\/\d+\/pull$/.test(r.url()));
+	await trips.getByRole('button', { name: 'Check again' }).click();
+	await pull;
+});
+
+test('Proton Drive: when the computer is not signed in, it says what to do', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool');
+	let ready = false;
+	await page.route('**/api/proton', (route) =>
+		ready
+			? route.fallback()
+			: route.fulfill({
+					json: {
+						ready: false,
+						problem:
+							"Proton Drive is not signed in on this machine: run 'proton-drive auth login' and try again"
+					}
+				})
+	);
+	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
+	await expect(dialog.getByRole('alert')).toContainText('proton-drive auth login');
+	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeDisabled();
+	ready = true;
+	await dialog.getByRole('button', { name: 'Check again' }).click();
+	await expect(dialog.getByRole('radio', { name: /My Proton photos/ })).toBeChecked();
+	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
+});
