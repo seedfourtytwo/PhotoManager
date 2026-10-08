@@ -3,7 +3,14 @@
 	import { page } from '$app/state';
 	import { api, library, notice, session, settings, viewport } from '$lib/app.svelte';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
-	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
+	import {
+		EMPTY,
+		TOO_MANY_SELECTED,
+		applyClick,
+		limitSelection,
+		selectAll,
+		type Selection
+	} from '$lib/selection';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -25,6 +32,12 @@
 			3
 		)
 	);
+
+	/** No selection outgrows what one action may carry (the trash itself loads whole). */
+	function select(next: Selection) {
+		selection = limitSelection(next);
+		if (selection !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+	}
 
 	async function load() {
 		try {
@@ -84,7 +97,7 @@
 		</p>
 		{#if list.length}
 			<div class="tools">
-				<button type="button" onclick={() => (selection = selectAll(order))}>Select all</button>
+				<button type="button" onclick={() => select(selectAll(order))}>Select all</button>
 				{#if session.isAdmin}
 					<button type="button" onclick={() => (confirmEmpty = true)}>Empty trash</button>
 				{/if}
@@ -107,7 +120,7 @@
 			selecting={selection.ids.size > 0}
 			onopen={openPhoto}
 			ontoggle={(id, range) =>
-				(selection = applyClick(selection, id, order, { shift: range, toggle: true }))}
+				select(applyClick(selection, id, order, { shift: range, toggle: true }))}
 		/>
 	</div>
 

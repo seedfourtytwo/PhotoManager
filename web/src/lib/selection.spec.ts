@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
 	EMPTY,
+	MAX_SELECTION,
 	applyClick,
 	idsInRect,
+	limitSelection,
 	selectAll,
+	selectAllLabel,
 	selectMany,
 	toggle,
 	type Selection
@@ -71,3 +74,28 @@ describe('idsInRect (lasso)', () => {
 		expect(idsInRect(boxes, { x1: 100.5, y1: 0, x2: 102, y2: 200 })).toEqual([]);
 	});
 });
+
+describe('selecting everything, honestly', () => {
+	it('says “Select all” only when every photo of the view is loaded', () => {
+		expect(selectAllLabel(200, true)).toBe('Select all');
+		expect(selectAllLabel(1200, false)).toBe('Select loaded (1,200)');
+	});
+
+	it('keeps a selection within what one request may carry', () => {
+		const order = Array.from({ length: MAX_SELECTION + 5 }, (_, i) => i + 1);
+		const all = selectAll(order);
+		const limited = limitSelection(all);
+		expect(limited.ids.size).toBe(MAX_SELECTION);
+		expect(limited.ids.has(MAX_SELECTION)).toBe(true);
+		expect(limited.ids.has(MAX_SELECTION + 1)).toBe(false); // the first ones are kept
+		expect(limited.anchor).toBe(1);
+	});
+
+	it('leaves a selection within the limit untouched', () => {
+		const some = selectAll([1, 2, 3]);
+		expect(limitSelection(some)).toBe(some);
+		expect(limitSelection(some, 3)).toBe(some);
+		expect([...limitSelection(some, 2).ids]).toEqual([1, 2]);
+	});
+});
+

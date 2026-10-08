@@ -378,3 +378,17 @@ test.describe('a double click sends one request', () => {
 		expect(posts.count).toBe(1);
 	});
 });
+
+test('library: “select” says how many it takes while more photos are still to load', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'needs a library larger than one page');
+	await resetMock('seed', { count: 450 });
+	await signIn(page);
+	const loaded = await page.getByRole('button', { name: /^Select loaded \(\d+\)$/ }).textContent();
+	const n = Number(loaded!.match(/\d+/)![0]);
+	expect(n).toBeLessThan(450);
+	await page.getByRole('button', { name: /^Select loaded/ }).click();
+	await expect(page.getByText(`${n} selected`)).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
+});

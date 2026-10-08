@@ -1,12 +1,20 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { AssetFilters, AssetOut, Id } from '$lib/api';
-	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
+	import { api, library, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { monthTotals } from '$lib/calendar';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
-	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
+	import {
+		EMPTY,
+		TOO_MANY_SELECTED,
+		applyClick,
+		limitSelection,
+		selectAll,
+		selectAllLabel,
+		type Selection
+	} from '$lib/selection';
 	import DateScrubber from '$lib/components/DateScrubber.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -104,8 +112,14 @@
 		}
 	}
 
+	/** Every way of selecting ends here, so no selection outgrows what one action may carry. */
+	function select(next: Selection) {
+		selection = limitSelection(next);
+		if (selection !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+	}
+
 	function toggle(id: Id, range: boolean) {
-		selection = applyClick(selection, id, order, { shift: range, toggle: true });
+		select(applyClick(selection, id, order, { shift: range, toggle: true }));
 	}
 
 	function onkeydown(event: KeyboardEvent) {
@@ -114,7 +128,7 @@
 		if (event.key === 'Escape' && selection.ids.size) selection = EMPTY;
 		if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
 			event.preventDefault();
-			selection = selectAll(order);
+			select(selectAll(order));
 		}
 	}
 </script>
@@ -131,7 +145,9 @@
 			<button type="button" onclick={() => (downloadAll = true)}>Download all</button>
 		{/if}
 		{#if order.length}
-			<button type="button" onclick={() => (selection = selectAll(order))}>Select all</button>
+			<button type="button" onclick={() => select(selectAll(order))}
+				>{selectAllLabel(order.length, loader.done)}</button
+			>
 		{/if}
 		<UploadButton onuploaded={reloadAll} />
 	</ViewHeader>
@@ -157,7 +173,7 @@
 		{selection}
 		onopen={openPhoto}
 		ontoggle={toggle}
-		onselect={(next) => (selection = next)}
+		onselect={select}
 		onmonth={(key) => (currentMonth = key)}
 	/>
 
