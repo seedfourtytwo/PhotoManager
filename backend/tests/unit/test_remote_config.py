@@ -45,3 +45,32 @@ def test_remote_must_be_text() -> None:
 
 def test_names_with_spaces_dots_and_at_signs_are_fine() -> None:
     assert RemoteConfig.from_mapping({"remote": "my nas.v2@home"}).remote == "my nas.v2@home"
+
+
+# --- Proton Drive through Proton's own CLI (issue 8) --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path", ["/photos", "/my-files", "/my-files/Trips/2019 Alps", "/my-files/été"]
+)
+def test_a_proton_source_is_the_photos_section_or_a_place_in_my_files(path: str) -> None:
+    config = RemoteConfig.proton(path)
+    assert (config.provider, config.path) == ("proton", path)
+    assert RemoteConfig.from_mapping(config.to_mapping()) == config
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["", "photos", "/trash", "/shared-with-me/x", "/photos/album", "/my-files/../trash",
+     "/my-files/a\nb", "/my-files/" + "x" * 2000, "/my-filesystem"],
+)  # fmt: skip
+def test_other_proton_paths_are_refused(path: str) -> None:
+    with pytest.raises(RemoteConfigError):
+        RemoteConfig.proton(path)
+
+
+def test_rclone_settings_are_stored_as_before_and_unknown_providers_refused() -> None:
+    plain = RemoteConfig.from_mapping({"remote": "mega", "path": "x"})
+    assert plain.provider == "rclone" and plain.to_mapping() == {"remote": "mega", "path": "x"}
+    with pytest.raises(RemoteConfigError, match="provider"):
+        RemoteConfig.from_mapping({"provider": "dropbox", "remote": "x"})
