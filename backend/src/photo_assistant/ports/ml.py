@@ -20,6 +20,7 @@ __all__ = [
     "BoundingBox",
     "Face",
     "FaceAnalyzer",
+    "FaceChanges",
     "FaceMatches",
     "ImageEmbedder",
     "MlStore",
@@ -115,6 +116,17 @@ class FaceMatches:
 
 
 @dataclass(frozen=True, slots=True)
+class FaceChanges:
+    """The faces of a model against what the last finished global clustering pass kept
+    (``keep_face_marks``), in the library: it outlives the process."""
+
+    rule: str | None  # the settings that pass ran with; None: no pass has finished
+    # Each face added, detected again, placed with a person or moved on in clustering since,
+    # with its mark of now: a value that is different once any of that happens to the face.
+    marks: Mapping[int, tuple[object, ...]]
+
+
+@dataclass(frozen=True, slots=True)
 class PersonSummary:
     id: int
     name: str | None
@@ -162,9 +174,15 @@ class MlStore(Protocol):
         self, model: str, *, deferred: bool, asset_id: int | None = None
     ) -> list[int]: ...
     def face_matches(self, face_id: int, max_distance: float) -> FaceMatches: ...
-    def face_marks(self, model: str) -> Mapping[int, object]:
-        """Per face of the model, a value that is different once the face was detected again,
-        placed with a person or moved on in clustering: two readings tell what changed."""
+    def face_changes(self, model: str) -> FaceChanges:
+        """What is different from the marks kept, read in one go."""
+        ...
+
+    def keep_face_marks(
+        self, model: str, rule: str, marks: Mapping[int, tuple[object, ...]]
+    ) -> None:
+        """All or nothing: these marks (those of faces that still exist) in place of the
+        ones kept for the same faces, and ``rule`` as the settings of the last pass."""
         ...
 
     def deferred_faces_near(

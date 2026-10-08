@@ -10,7 +10,7 @@ import json
 import math
 import sqlite3
 import struct
-from collections.abc import Collection, Iterable, Iterator, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 
@@ -24,6 +24,7 @@ from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
 from photo_assistant.ports.ml import (
+    FaceChanges,
     FaceMatches,
     PersonSummary,
     ScoredAsset,
@@ -295,15 +296,37 @@ class SqliteMlStore:
         (row,) = self._all(self._MATCHES, (face_id, max_distance))
         return FaceMatches(int(row[0]), row[1])
 
-    def face_marks(self, model: str) -> dict[int, object]:
-        # created_at and the first numbers of the embedding: a face detected again can get
-        # the id of the face it replaced
-        rows = self._all(
-            "SELECT id, person_id, cluster_state, created_at, substr(embedding, 1, 16) "
-            "FROM face WHERE model = ?",
-            (model,),
+    # created_at and the first numbers of the embedding: a face detected again can get the
+    # id of the face it replaced. Only the faces that differ come back, not all of them.
+    _CHANGED = (
+        "SELECT f.id, f.person_id, f.cluster_state, f.created_at, substr(f.embedding, 1, 16) "
+        "FROM face f LEFT JOIN face_cluster_mark m ON m.face_id = f.id "
+        "WHERE f.model = ? AND (m.face_id IS NULL OR m.person_id IS NOT f.person_id "
+        "OR m.cluster_state != f.cluster_state OR m.created_at != f.created_at "
+        "OR m.fingerprint != substr(f.embedding, 1, 16))"
+    )
+
+    def face_changes(self, model: str) -> FaceChanges:
+        with self._transaction() as conn:  # the settings and the marks of the same pass
+            rule = conn.execute(
+                "SELECT rule FROM face_cluster_pass WHERE model = ?", (model,)
+            ).fetchone()
+            rows = conn.execute(self._CHANGED, (model,)).fetchall()
+        return FaceChanges(None if rule is None else rule[0], {r[0]: tuple(r)[1:] for r in rows})
+
+    def keep_face_marks(
+        self, model: str, rule: str, marks: Mapping[int, tuple[object, ...]]
+    ) -> None:
+        # A face deleted since its mark was read gets no row (it would point at nothing). A
+        # face that got its id meanwhile differs from this mark, so it still counts as changed.
+        keep = (
+            "INSERT OR REPLACE INTO face_cluster_mark "
+            "(face_id, person_id, cluster_state, created_at, fingerprint) "
+            "SELECT id, ?, ?, ?, ? FROM face WHERE id = ?"
         )
-        return {r[0]: tuple(r)[1:] for r in rows}
+        with self._transaction() as conn:
+            conn.executemany(keep, ((*mark, face_id) for face_id, mark in marks.items()))
+            conn.execute("INSERT OR REPLACE INTO face_cluster_pass VALUES (?, ?)", (model, rule))
 
     def deferred_faces_near(
         self, model: str, face_ids: Collection[int], max_distance: float

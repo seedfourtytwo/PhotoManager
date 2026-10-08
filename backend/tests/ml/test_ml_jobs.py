@@ -285,6 +285,7 @@ class World:
     def _start(self) -> None:
         self.db = Database.open(self.path or ":memory:")
         self.conn = self.db.writer
+        self.conn.execute("PRAGMA synchronous = OFF")  # a test file: no waiting for the disk
         self.repo = SqliteRepository(self.db)
         self.store = CountingStore(self.db)
         kind = ClusterFaces if self.incremental else EveryDeferredFaceEveryPass
@@ -672,7 +673,9 @@ def test_what_another_process_did_to_the_library_is_seen_by_the_next_pass(
     cli_db.close()
     assert world.unplaced() == []
     world.store.scans = 0
-    assert world.distance_statements(lambda: world.job({})) == 0, "that pass is the last one"
+    # that pass is the last one: this process asks only who waits near the face it placed
+    assert world.distance_statements(lambda: world.job({})) == 1
+    assert world.distance_statements(lambda: world.job({})) == 0
     assert world.store.scans == 0
 
 

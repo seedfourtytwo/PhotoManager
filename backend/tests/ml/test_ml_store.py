@@ -380,7 +380,7 @@ def test_the_marks_kept_are_what_the_pass_saw_not_the_faces_as_they_are_when_it_
 ) -> None:
     """Whatever happens to a face while a pass runs is a change for the next one."""
     (a,) = assets(repo, 1)
-    f1, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(1))])
+    f1, _ = store.replace_faces(a, M, [face(angle(0)), face(angle(1))])
     seen = store.face_changes(M).marks
     store.mark_deferred(f1)  # by the pass itself, or by a person meanwhile
     store.keep_face_marks(M, "reach 0.5", seen)
@@ -392,7 +392,7 @@ def test_the_marks_kept_are_what_the_pass_saw_not_the_faces_as_they_are_when_it_
 
 def test_keeping_marks_is_all_or_nothing(repo: SqliteRepository, store: SqliteMlStore) -> None:
     (a,) = assets(repo, 1)
-    f1, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(1))])
+    _, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(1))])
     seen = dict(store.face_changes(M).marks)
     with pytest.raises(sqlite3.Error):
         store.keep_face_marks(M, "reach 0.5", seen | {f2: (None, None, None, None)})
