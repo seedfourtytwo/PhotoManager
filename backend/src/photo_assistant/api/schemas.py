@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     display_name: str
     role: Role
     disabled: bool
+    locked: bool  # too many wrong PINs; only the account itself and admins are ever sent this
 
     @classmethod
     def of(cls, u: User) -> "UserOut":
@@ -37,6 +38,7 @@ class UserOut(BaseModel):
             display_name=u.display_name,
             role=u.role,
             disabled=u.disabled,
+            locked=u.locked,
         )
 
 

@@ -71,7 +71,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 20
+    assert _latest() == 23
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -201,3 +201,36 @@ def test_backup_targets_from_before_0018_count_as_having_their_key_saved(tmp_pat
     conn = open_database(db, backup_dir=tmp_path / "backups")
     rows = conn.execute("SELECT created_at, key_saved_at FROM backup_target").fetchall()
     assert [tuple(r) for r in rows] == [("2026-09-01", "2026-09-01")]
+
+
+def test_accounts_from_before_0023_come_through_unlocked_with_no_wrong_pins(tmp_path: Path) -> None:
+    """0023: the account lock lives on the user row; existing accounts start clean."""
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 23)
+    for number, sql in _migrations():
+        if number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO user (id, username, display_name, password_hash, role, disabled)
+            VALUES (1, 'c', 'C', 'x', 'admin', 0), (2, 'lea', 'Lea', 'y', 'member', 1);
+        INSERT INTO login_failure (username, ip, at) VALUES ('lea', '10.0.0.1', '2026-09-01');
+        """
+    )
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    rows = upgraded.execute("SELECT username, failed_pins, locked_at FROM user ORDER BY id")
+    assert [tuple(r) for r in rows] == [("c", 0, None), ("lea", 0, None)]
+    users = SqliteRepository(upgraded).list_users()
+    assert [(u.username, u.disabled, u.locked) for u in users] == [
+        ("c", False, False),
+        ("lea", True, False),
+    ]
+    found = SqliteRepository(upgraded).find_user_by_username("LEA")
+    assert found is not None and found[1] == "y", "the PIN hash is untouched"
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
