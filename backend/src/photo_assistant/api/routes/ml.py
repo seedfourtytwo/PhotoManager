@@ -1,8 +1,10 @@
 """Local ML over HTTP (docs/contracts/api-v1.md): search, similar photos, faces, tags, people.
 
-Every route starts from the visibility rule (``repo.visible_asset_ids``) and hands that set to
-the use cases, which only rank or filter inside it; anything outside is a 404. Without model
-files every route still answers: search falls back to the core text search and says why.
+Every route starts from the visibility rule. Search hands the use cases the ids left after
+its filters (``repo.visible_asset_ids``); people and similar photos hand them the viewer, and
+the ML store applies the same rule inside its own queries. The use cases only rank or filter
+inside that; anything outside is a 404. Without model files every route still answers: search
+falls back to the core text search and says why.
 """
 
 from collections.abc import Collection
@@ -151,10 +153,6 @@ class BackfillOut(BaseModel):
 NOT_GUEST = [Depends(member_user)]
 
 
-def _visible(services: Services, viewer: Viewer) -> list[int]:
-    return services.repo.visible_asset_ids(viewer)
-
-
 def _clip_ready(services: Services) -> bool:
     return services.ml.clip.status().ready
 
@@ -238,7 +236,7 @@ def similar(
     if not _clip_ready(services):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, MODELS_MISSING)
     try:
-        hits = services.ml.similar(asset_id, _visible(services, viewer), limit)
+        hits = services.ml.similar(asset_id, viewer, limit)
     except NotIndexedError as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "this photo has not been analysed yet"
@@ -269,19 +267,19 @@ def tags(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> TagsOut:
 
 @router.get("/people")
 def list_people(services: ServicesDep, viewer: ViewerDep) -> list[PersonOut]:
-    return [PersonOut.of(p) for p in services.ml.people.list_all(_visible(services, viewer))]
+    return [PersonOut.of(p) for p in services.ml.people.list_all(viewer)]
 
 
 @router.get("/people/{person_id}")
 def get_person(services: ServicesDep, viewer: ViewerDep, person_id: int) -> PersonOut:
-    return PersonOut.of(services.ml.people.get(person_id, _visible(services, viewer)))
+    return PersonOut.of(services.ml.people.get(person_id, viewer))
 
 
 @router.patch("/people/{person_id}", dependencies=NOT_GUEST)
 def rename_person(
     services: ServicesDep, viewer: ViewerDep, person_id: int, body: PersonPatch
 ) -> PersonOut:
-    person = services.ml.people.rename(person_id, body.name, _visible(services, viewer))
+    person = services.ml.people.rename(person_id, body.name, viewer)
     return PersonOut.of(person)
 
 
@@ -289,14 +287,14 @@ def rename_person(
 def merge_people(
     services: ServicesDep, viewer: ViewerDep, person_id: int, body: MergeIn
 ) -> PersonOut:
-    person = services.ml.people.merge(person_id, body.source_ids, _visible(services, viewer))
+    person = services.ml.people.merge(person_id, body.source_ids, viewer)
     return PersonOut.of(person)
 
 
 @router.post("/people/split", dependencies=NOT_GUEST)
 def split_people(services: ServicesDep, viewer: ViewerDep, body: SplitIn) -> PersonOut:
     person = services.ml.people.split(
-        body.face_ids, _visible(services, viewer), person_id=body.person_id, name=body.name
+        body.face_ids, viewer, person_id=body.person_id, name=body.name
     )
     return PersonOut.of(person)
 
@@ -309,9 +307,7 @@ def person_assets(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     cursor: str | None = None,
 ) -> PersonAssets:
-    visible = _visible(services, viewer)
-    ids = set(services.ml.people.assets(person_id, visible))
-    ordered = [i for i in visible if i in ids]  # timeline order, newest first
+    ordered = services.ml.people.assets(person_id, viewer)  # timeline order, newest first
     start = int(cursor) if cursor and cursor.isdigit() else 0
     page = ordered[start : start + limit]
     more = start + limit < len(ordered)
