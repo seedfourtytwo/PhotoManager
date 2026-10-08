@@ -52,7 +52,7 @@ services:
   # `tailscale serve --bg 8420` there. Use this sidecar only if you want the app to appear
   # as its own machine ("photos") on your tailnet. Then also: remove `ports:` above, add
   # `network_mode: service:tailscale` to photo-assistant, put
-  # PA_ALLOWED_HOSTS=["photos.<tailnet>.ts.net"] in server.env, and create an auth key in the
+  # PA_ALLOWED_HOSTS=photos.<tailnet>.ts.net in server.env, and create an auth key in the
   # Tailscale admin console (Settings → Keys), stored in /srv/photo-assistant/secrets/ts-authkey.
   #
   # tailscale:
