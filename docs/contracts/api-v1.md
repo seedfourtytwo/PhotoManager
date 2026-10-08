@@ -36,21 +36,42 @@ Conventions
 | GET | `/api/setup` | – | `{needs_admin: bool}` |
 | POST | `/api/setup` | `{username, display_name, pin}` | `201 User` + session; `409` if users exist |
 | GET | `/api/auth/accounts` | – | `[{username, display_name}]`: the active accounts, for the login screen to offer (open; names only) |
-| POST | `/api/auth/login` | `{username, pin}` | `200 User` + session; `401`; `429` after 10 fails/15 min per username+IP |
+| POST | `/api/auth/login` | `{username, pin}` | `200 User` + session; `401` wrong PIN or unknown name; `429` wait; `423` account locked (see *Wrong PINs* below) |
 | POST | `/api/auth/logout` | – | `204` |
 | GET | `/api/auth/me` | – | `User` |
-| POST | `/api/auth/pin` | `{current_pin, new_pin}` | `204`; `400` if current wrong. Ends every **other** session of the user; this one stays (v1.2) |
+| POST | `/api/auth/pin` | `{current_pin, new_pin}` | `204`; `400` if current wrong (counted like a wrong PIN at login: then `429`, `423`). Ends every **other** session of the user; this one stays (v1.2) |
 
 `User = {id, username, display_name, role: "admin"|"member"|"guest", disabled: bool}`.
 A PIN is exactly 4 digits (`422` otherwise). Sessions expire after 30 days idle.
 
+**Wrong PINs** (v1.4) are counted per account, whatever address they come from, at login and
+at the PIN change alike. A try is counted before the PIN is checked, so tries sent together
+cannot get past a limit.
+
+- **Wait.** After 10 wrong PINs within 15 minutes, every further try on that account, the
+  right PIN included, is `429` until the oldest of the ten is 15 minutes old. `detail`:
+  `too many wrong PINs; wait N minutes and try again, or ask an admin to unlock this account`.
+- **Lock.** After 30 wrong PINs since the account's last good sign-in (no time limit), the
+  account is locked: every try, the right PIN included, is `423` until an admin unlocks it
+  (`POST /api/users/{id}/unlock`), an admin sets a new PIN (`PATCH /api/users/{id}`), or
+  `just set-pin NAME` is run on the server. `detail`: `this account is locked after too many
+  wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'`.
+  A restart does not lift it. Sessions that are already open keep working.
+- A right PIN starts both counts again. A user name nobody has is `401` at once and is not
+  counted.
+
 ## Users (admin)
 
-| GET | `/api/users` | – | `User[]` |
+| GET | `/api/users` | – | `ManagedUser[]` |
 |---|---|---|---|
-| POST | `/api/users` | `{username, display_name, pin, role}` | `201 User` |
-| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, pin?}` | `User`; cannot remove the last admin (`409`). A `pin` reset ends **all** the user's sessions and revokes their device tokens (v1.2) |
-| POST | `/api/users/{id}/unlock` | – | `204`; clears the failed-login block (`429`) for that username from every address (v1.3); `404` unknown id |
+| POST | `/api/users` | `{username, display_name, pin, role}` | `201 ManagedUser` |
+| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, pin?}` | `ManagedUser`; cannot remove the last admin (`409`). A `pin` reset ends **all** the user's sessions and revokes their device tokens (v1.2), and lifts the wait and the lock (v1.4) |
+| POST | `/api/users/{id}/unlock` | – | `204`; lifts the wait (`429`) and the lock (`423`) on that account and starts its count of wrong PINs again (v1.3, v1.4); also for the admin's own account; `404` unknown id |
+
+`ManagedUser = User + {locked: bool}` (v1.4). `locked` is true while wrong PINs keep the account
+from signing in: locked after 30, or waiting out the 15 minutes after 10. Only these admin
+routes carry it: `User` (login, `/api/auth/me`), `/api/auth/accounts` and
+`/api/users/directory` never say whether an account is locked.
 
 ## Sources (existing, plus access)
 
@@ -319,3 +340,16 @@ Backwards compatible. Each change is also written next to its route above.
 | Downloads | The ZIP is named after its scope: `<album title>.zip`, `photos-<filter words>.zip`, `photos-<n>.zip`; `filename*` (UTF-8) plus a sanitised ASCII `filename`. | Read the name from `Content-Disposition` (`filename*` first) if the app ever saves the blob itself; a form post already gets the right name. |
 | Backups | `PATCH /api/backups/{id}` also takes `schedule`, `quiet_window` (null clears) and partial `retention`; `enabled` is optional. | Edit form for an existing target (`api.updateBackup`). |
 | Users | `POST /api/users/{id}/unlock` (admin) clears the 10-fails/15-min login block for that account; `204`. | "Unlock" action on the users page (`api.unlockUser`). |
+
+---
+
+# v1.4 changes (PIN guessing)
+
+`429` at login no longer depends on the address, and there is a new status, `423`. Each change
+is also written next to its route above.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Auth | Wrong PINs are counted per account, from all addresses together (was: per user name and address). The `429` `detail` says how many minutes to wait. | Show the `detail`. |
+| Auth | New: `423` from `POST /api/auth/login` and `POST /api/auth/pin` once an account has 30 wrong PINs since its last good sign-in. The right PIN is refused too, until an admin unlocks the account or it gets a new PIN. | Show the `detail` on the sign-in screen and in Settings. |
+| Users | `GET/POST/PATCH /api/users` answer `ManagedUser` (`User` plus `locked`). Unlock and a PIN reset lift the wait and the lock. | People shows "Locked" and offers Unlock on locked accounts only (`ManagedUser` in `api/types.ts`). |

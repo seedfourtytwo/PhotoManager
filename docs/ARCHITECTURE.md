@@ -56,9 +56,10 @@ optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries wit
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
-     disabled, created_at)
+     disabled, created_at,
+     failed_pins, locked_at)        -- wrong PINs since the last good sign-in; 30 → locked (0023)
 session(token_hash PK sha256, user_id, created_at, last_seen_at)      -- 30 days idle
-login_failure(username, ip, at)                                       -- 10 per 15 min → 429
+login_failure(username, ip, at)       -- 10 per account in 15 min → 429; pruned after a day
 
 source(id, kind, label, root, enabled, owner_id, created_at)
 source_access(source_id, user_id NULL=everyone, level 1 view|2 download|3 edit)
@@ -259,9 +260,16 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
 - One import at a time per library (OS file lock), each photo recorded in one transaction,
   jobs claimed atomically, so CLI + server can't corrupt each other.
 - Login: pick your account, type its 4-digit PIN (stored as an argon2id hash in
-  `user.password_hash`; the column keeps its old name). Ten wrong tries lock that account from
-  that address for 15 minutes. A PIN is only as strong as that lock, so the app stays on the
-  home network or Tailscale, never public. Sessions: HTTP-only, SameSite=strict cookies.
+  `user.password_hash`; the column keeps its old name). Wrong PINs are counted per account,
+  from all addresses together: ten within 15 minutes make that account wait out the window
+  (`429`), and thirty since its last good sign-in lock it (`423`) until an admin unlocks it or
+  it gets a new PIN (People → Reset PIN, or `just set-pin` on the server, which is the way back
+  for an only admin). The lock is on the user row, so a restart or the daily pruning of
+  `login_failure` does not lift it. A try is counted in one transaction before the PIN is
+  checked, so parallel guesses queue. A PIN is only as strong as these limits, so the app stays
+  on the home network or Tailscale, never public. Anyone who can reach the sign-in screen can
+  lock an account on purpose; that is the price of the limit. Sessions: HTTP-only,
+  SameSite=strict cookies.
 - Source credentials live in rclone's own encrypted config, never in `library.db`.
 - AI calls only go to the configured base URL; each request is logged in `ai_log`.
 - **Visibility is one function in the repository layer:** `visibility(viewer)` in
