@@ -453,3 +453,24 @@ test.describe('Proton Drive: one folder, on a slow or failing listing', () => {
 		await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
 	});
 });
+
+test('backups: “Back” from “It fits” returns to the folder that was chosen', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'the mock simulates the disks');
+	await page.getByRole('region', { name: 'Backups' }).getByRole('button', { name: 'Add backup' }).click(); // prettier-ignore
+	const dialog = page.getByRole('dialog', { name: 'Set up a backup' });
+	await dialog.getByLabel('Another folder').check();
+	await dialog.getByRole('button', { name: 'Documents' }).click();
+	const folder = dialog.getByRole('textbox', { name: 'Folder' });
+	await expect(folder).toHaveValue('/home/c/Documents');
+	await dialog.getByLabel('Name').fill('Documents copy');
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	await expect(dialog.getByText(/It fits\./)).toBeVisible();
+	await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+	await expect(dialog.getByLabel('Another folder')).toBeChecked();
+	await expect(folder).toHaveValue('/home/c/Documents');
+	await expect(dialog.getByLabel('Name')).toHaveValue('Documents copy');
+	// Still the same place: checking again asks about Documents, not the home folder.
+	const plan = page.waitForRequest((r) => r.url().includes('/api/backups/plan'));
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	expect((await plan).postDataJSON()).toEqual({ place: '/home/c/Documents' });
+});
