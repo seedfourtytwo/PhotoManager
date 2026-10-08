@@ -168,7 +168,7 @@ or "N things need you"), storage meter, Sources, Working on, Accounts (each with
 | `thumbSize` | dial | `small`, `medium`, `large` | `medium` |
 | `showToday` | switch | true / false | true |
 | `startPage` | switch | `today`, `library` | `today` |
-| `collectionsRows` | switch | ordered subset of people, places, albums, calendar | all four |
+| `collectionsRows` | switch | ordered subset of people, places, albums | all three |
 | `dockLabels` | switch | true / false | true |
 
 Rules:
@@ -240,7 +240,7 @@ Each step is one or more PRs under 400 lines, leaves the app working and passes 
 - Primitives: keyboard and focus behaviour of `Sheet`, `Menu`, `Combobox`; axe clean.
 - Gesture recogniser: thresholds for each gesture, diagonal and cancelled drags.
 - Search sheet: chips add/remove filters, `/search?q=` redirect, actions only with a selection.
-- Nav: Collections highlighted on its child routes; System hidden for non-admins; switches
+- Nav: Collections highlighted on its child routes; Library highlighted on `/calendar`; System hidden for non-admins; switches
   hide Today and reorder Collections rows.
 - Photo view: each gesture and its button reach the same state; shortcuts still work.
 - Perf test still meets the scroll budget with glass on.

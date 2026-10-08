@@ -45,12 +45,16 @@ test.beforeEach(async ({ page }) => {
 	await page.addInitScript((theme) => localStorage.setItem('pa.theme', theme), THEME);
 });
 
+/** `fullPage` is for a laptop only: on a phone the floating dock would land mid-page over text. */
 async function shot(page: Page, name: string, project: string, fullPage = false) {
 	if (THEME === 'light' && !LIGHT.has(name)) return;
 	if (!isPhone(page)) await page.mouse.move(0, 0);
 	await page.waitForLoadState('networkidle');
 	await page.waitForTimeout(500);
-	await page.screenshot({ path: `${DIR}/${project}-${name}.png`, fullPage });
+	await page.screenshot({
+		path: `${DIR}/${project}-${name}.png`,
+		fullPage: fullPage && !isPhone(page)
+	});
 }
 
 test('every screen', async ({ page }, info) => {

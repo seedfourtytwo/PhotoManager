@@ -39,10 +39,10 @@ over photos are translucent glass. This is the **Safelight** theme; the earlier 
 lives on as the **Album** theme (serif titles, small corners, indigo ink). A theme changes
 colours, corners and the title face, never layout.
 
-**Arriving with the next redesign steps** (issue #11, then #10): mono for counts and dates
-outside the photo view (class `.data`), and status dots on the System page (`--ok` /
-`--fail`). Until then the rules below describe the target; the checklist items about those
-apply once they exist.
+The `.data` class (mono for counts and dates) exists and is used on the account menu's
+counts and badge; other counts and dates outside the photo view take it as their screens are
+reworked. The `--ok` / `--fail` colours exist; the System page's status dots are not built
+yet (issue #10), so the checklist items about them apply once they are.
 
 The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefaces) and
 `tokens.css` (everything else); the tables below mirror them for Safelight.
@@ -103,8 +103,12 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--gutter` | 2 px between photos |
 | `--r-1` / `--r-2` / `--r-pill` | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded |
 | `--check-radius` | 4 px: checkbox corners (`--r-1` would make a 16 px box round) |
-| `--target` | 44 px: minimum control height on touch screens (`pointer: coarse`) |
-| `--top` / `--dock` / `--margin` | 56 px top bar on a laptop (0 on a phone; everything sticky offsets by it) · 56 px phone dock · 256 px right margin |
+| `--target` | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button |
+| `--top` | 56 px top bar on a laptop; 0 on a phone. Everything sticky offsets by it |
+| `--dock` | 56 px: the floating dock on a phone, and the photo view's action bar |
+| `--bar` | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock |
+| `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
+| `--margin` | 256 px right margin for notes and filters on a laptop |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
 
 ### Component rules

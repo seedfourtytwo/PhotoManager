@@ -149,3 +149,19 @@ test('shell: touch targets in the bar are at least 44 px both ways', async ({ pa
 		expect(box.height).toBeGreaterThanOrEqual(44);
 	}
 });
+
+test('shell: on a tablet or a landscape phone the dock is a pill, not a bar', async ({ page }) => {
+	await page.setViewportSize({ width: 900, height: 600 });
+	await signIn(page);
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	const pill = (await nav.getByRole('list').boundingBox())!;
+	const search = (await nav.getByRole('link', { name: 'Search', exact: true }).boundingBox())!;
+	const account = (await nav.getByRole('button', { name: /^Account/ }).boundingBox())!;
+	expect(pill.width).toBeLessThanOrEqual(26 * 14);
+	// The three pieces sit together in the middle of the screen.
+	const left = pill.x;
+	const right = account.x + account.width;
+	expect(Math.abs(left - (900 - right))).toBeLessThanOrEqual(2 * 14);
+	expect(search.x).toBeGreaterThan(pill.x + pill.width);
+	expect(account.x).toBeGreaterThan(search.x);
+});
