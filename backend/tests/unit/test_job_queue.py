@@ -34,4 +34,3 @@ def test_a_claim_survives_many_missed_heartbeats_before_it_counts_as_stale() -> 
     """A busy database or a slow disk may delay a heartbeat; that must not requeue a job."""
     assert CLAIM_STALE_AFTER >= 5 * HEARTBEAT_INTERVAL
     assert STALE_SWEEP_INTERVAL > HEARTBEAT_INTERVAL, "see StaleJobSweep: after a suspend"
-
