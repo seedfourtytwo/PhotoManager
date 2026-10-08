@@ -9,7 +9,7 @@ from typing import Protocol
 
 from photo_assistant.domain.access import SourceAccess, Viewer
 from photo_assistant.domain.edit_recipe import Recipe
-from photo_assistant.domain.errors import ConflictError, InvalidError
+from photo_assistant.domain.errors import ConflictError, DomainError, InvalidError
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -38,6 +38,10 @@ class SourceExistsError(ConflictError, ValueError):
 
 class InvalidAlbumOrderError(InvalidError, ValueError):
     """An album order that lists a photo twice, or one that is not in the album."""
+
+
+class InvalidCursorError(DomainError, ValueError):
+    """A paging cursor this library did not hand out (a plain bad request: 400)."""
 
 
 class Clock(Protocol):
