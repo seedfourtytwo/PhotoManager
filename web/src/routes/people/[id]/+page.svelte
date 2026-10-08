@@ -2,13 +2,14 @@
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
-	import { api, notice, session } from '$lib/app.svelte';
+	import { api, library, notice, session } from '$lib/app.svelte';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
+	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
 
 	const id = $derived(Number(page.params.id));
@@ -36,10 +37,19 @@
 	$effect(() => {
 		void id;
 		untrack(() => {
+			selection = EMPTY;
 			void load();
 			void loader.reset({});
 		});
 	});
+
+	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
+
+	function onkeydown(event: KeyboardEvent) {
+		const target = event.target as HTMLElement;
+		if (loupeId !== undefined || target.closest('input, select, textarea, dialog')) return;
+		if (event.key === 'Escape' && selection.ids.size) selection = EMPTY;
+	}
 
 	async function rename(event: SubmitEvent) {
 		event.preventDefault();
@@ -90,6 +100,7 @@
 	});
 </script>
 
+<svelte:window {onkeydown} />
 <svelte:head><title>{person?.name ?? 'Person'} · Photos</title></svelte:head>
 
 <div class="page">
@@ -133,6 +144,20 @@
 				{ shift: range, toggle: true }
 			))}
 		onselect={(next) => (selection = next)}
+	/>
+
+	<SelectionActions
+		{selected}
+		onclear={() => (selection = EMPTY)}
+		onpatch={(ids, patch) => loader.updateMany(ids, patch)}
+		onremove={(ids) => {
+			loader.remove(ids);
+			library.changed();
+		}}
+		onreload={() => {
+			void loader.reload();
+			library.changed();
+		}}
 	/>
 </div>
 

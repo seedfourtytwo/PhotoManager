@@ -1,6 +1,6 @@
 /** Failure states and edge cases from the architecture review: each one was a real dead end. */
 import type { Page } from '@playwright/test';
-import { expect, isPhone, resetMock, signIn, test } from './helpers.ts';
+import { expect, isPhone, REAL_BACKEND, resetMock, selectTiles, signIn, test } from './helpers.ts';
 
 test.beforeEach(async () => {
 	await resetMock();
@@ -188,4 +188,20 @@ test('trash: “Empty trash” deletes what the page showed, not what arrived si
 	expect((await sent).postDataJSON()).toEqual({ ids: [first] });
 	await expect(page.getByRole('status')).toContainText('Deleted 1 library copy for good');
 	await expect(page.locator(`.tile[data-id="${later}"]`)).toBeVisible();
+});
+
+test('a person’s photos: selecting shows the actions and there is a way out', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
+	await signIn(page, '/people');
+	await page
+		.getByRole('link', { name: /^Someone/ })
+		.first()
+		.click();
+	await expect(page.locator('.tile').first()).toBeVisible();
+	await selectTiles(page, [0]); // a long press on a phone
+	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
+	await expect(bar.getByRole('button', { name: 'Add to album' })).toBeVisible();
+	if (isPhone(page)) await bar.getByRole('button', { name: 'Clear selection' }).click();
+	else await page.keyboard.press('Escape');
+	await expect(bar).toHaveCount(0);
 });
