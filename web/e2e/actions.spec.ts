@@ -1,16 +1,17 @@
 import {
 	expect,
 	expectAccessible,
+	GUEST,
 	isPhone,
+	longPress,
+	REAL_BACKEND,
 	resetMock,
 	selectionAction,
 	selectTiles,
 	signIn,
 	test,
-	GUEST,
-	longPress,
-	viewOnlyPhoto,
-	toast
+	toast,
+	viewOnlyPhoto
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -231,6 +232,8 @@ test('download: a guest with view-only photos is told why nothing can be downloa
 test('trash: “Delete for good” for a selection and “Empty trash” both ask first', async ({
 	page
 }) => {
+	// Purging deletes the files for good, and the real backend's reset restores rows, not files.
+	test.skip(REAL_BACKEND, 'would delete photos the later tests need');
 	await selectTiles(page, [0, 1]);
 	await selectionAction(page, 'Move to trash');
 	await expect(
