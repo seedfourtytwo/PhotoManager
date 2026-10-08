@@ -58,7 +58,7 @@ def test_pull_then_import_leaves_the_remote_untouched(
         clock=FixedClock(),
         settings=ImportSettings(min_free_bytes=0),
     )
-    remotes, sync = SqliteRemoteSources(conn), RcloneSync(config_path=config)
+    remotes, sync = SqliteRemoteSources(conn, repo), RcloneSync(config_path=config)
     use_case = SyncSource(
         sources=repo,
         remotes=remotes,

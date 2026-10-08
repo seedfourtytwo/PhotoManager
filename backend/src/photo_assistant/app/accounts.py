@@ -155,11 +155,21 @@ class Accounts:
     def create_user(self, username: str, display_name: str, pin: str, role: Role) -> User:
         _check_new_account(username, pin)
         try:
-            return self._store.add_user(
+            user = self._store.add_user(
                 username, display_name.strip() or username, self._hasher.hash(pin), role
             )
         except UsernameTakenError as exc:
             raise NameTakenError(username) from exc
+        if role is Role.ADMIN:  # the first admin may have come to be just now
+            self.give_ownerless_sources_to_first_admin()
+        return user
+
+    def give_ownerless_sources_to_first_admin(self) -> int:
+        """A source without an owner makes "private" hide nothing (the rule compares the
+        marker with the owner), so every source gets one: folders imported before any admin
+        existed, or from the command line where nobody is logged in, go to the first admin
+        who can log in, as migration 0023 chose. With no admin yet they wait for one."""
+        return self._store.give_ownerless_sources_to_first_admin()
 
     def list_users(self) -> list[User]:
         """Every account, as an admin manages them: ``locked`` is also set while an account

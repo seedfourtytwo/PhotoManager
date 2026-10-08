@@ -345,8 +345,9 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   comparison needs an owner on the source, so every source has one: a folder or cloud (rclone,
   Proton Drive) source belongs to the admin who adds it, an upload inbox to its user, a folder
   imported from the command line to the first admin; migration `0023` gave the ownerless
-  cloud sources of older libraries to the first admin. Only a library with no account yet
-  has ownerless sources, and the first-run setup hands them to the first admin. Guests
+  cloud sources of older libraries to the first admin. Only a library with no admin yet
+  has ownerless sources; they go to the first admin when one is made, by the first-run setup
+  or by `create-user --role admin` (`Accounts.give_ownerless_sources_to_first_admin`). Guests
   are capped at download. The condition is correlated `EXISTS` per photo (C25), so a timeline
   page stops at its `LIMIT` on the timeline index; admins get a cheaper check (only someone
   else's private photos need a look). Timeline, facets, calendar, map, albums, detail, images,

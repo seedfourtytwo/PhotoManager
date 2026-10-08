@@ -71,6 +71,13 @@ class AccountsMixin(SqliteBase):
         assert user is not None
         return user
 
+    def give_ownerless_sources_to_first_admin(self) -> int:
+        first_admin = "SELECT MIN(id) FROM user WHERE role = 'admin' AND disabled = 0"
+        return self._count(
+            f"""UPDATE source SET owner_id = ({first_admin})
+                WHERE owner_id IS NULL AND ({first_admin}) IS NOT NULL"""
+        )
+
     def get_user(self, user_id: int) -> User | None:
         row = self._one("SELECT * FROM user WHERE id = ?", (user_id,))
         return _user(row) if row else None

@@ -49,7 +49,7 @@ def test_ai_calls_are_logged_as_json_summaries(conn: sqlite3.Connection) -> None
 def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(conn, SqliteRepository(conn))
     source_id = store.add_remote_source("MEGA", RemoteConfig("mega", "Photos"), tmp_path, 1)
     source = SqliteRepository(conn).get_source(source_id)
     assert source is not None
@@ -61,13 +61,13 @@ def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
 
 def test_remote_config_is_none_for_other_sources(conn: sqlite3.Connection) -> None:
     folder = SqliteRepository(conn).add_source("Pictures", "/pictures")
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(conn, SqliteRepository(conn))
     assert store.remote_config(folder.id) is None
     assert store.remote_config(404) is None
 
 
 def test_a_tampered_remote_config_is_refused(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(conn, SqliteRepository(conn))
     source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     conn.execute("UPDATE source SET config_json = ? WHERE id = ?", ('{"remote": "-x"}', source_id))
     with pytest.raises(RemoteConfigError):
@@ -78,7 +78,7 @@ def test_a_tampered_remote_config_is_refused(conn: sqlite3.Connection, tmp_path:
 
 
 def test_set_root_moves_a_source(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(conn, SqliteRepository(conn))
     source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     store.set_root(source_id, "/new/staging/1")
     source = SqliteRepository(conn).get_source(source_id)
@@ -86,7 +86,7 @@ def test_set_root_moves_a_source(conn: sqlite3.Connection, tmp_path: Path) -> No
 
 
 def test_each_user_has_one_inbox_source(conn: sqlite3.Connection) -> None:
-    inboxes = SqliteInboxes(conn)
+    inboxes = SqliteInboxes(conn, SqliteRepository(conn))
     first = inboxes.ensure_inbox_source(7, "/data/inbox/7")
     again = inboxes.ensure_inbox_source(7, "/data/inbox/7")
     other = inboxes.ensure_inbox_source(8, "/data/inbox/8")
@@ -96,7 +96,7 @@ def test_each_user_has_one_inbox_source(conn: sqlite3.Connection) -> None:
 
 
 def test_a_new_inbox_is_owned_by_and_private_to_its_user(conn: sqlite3.Connection) -> None:
-    inbox = SqliteInboxes(conn).ensure_inbox_source(7, "/data/inbox/7")
+    inbox = SqliteInboxes(conn, SqliteRepository(conn)).ensure_inbox_source(7, "/data/inbox/7")
     repo = SqliteRepository(conn)
     assert inbox.owner_id == 7
     assert inbox.label == "Uploads (User 7)"
@@ -106,12 +106,14 @@ def test_a_new_inbox_is_owned_by_and_private_to_its_user(conn: sqlite3.Connectio
 def test_remote_sources_are_open_to_everyone_like_any_new_source(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    source_id = SqliteRemoteSources(conn).add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
+    source_id = SqliteRemoteSources(conn, SqliteRepository(conn)).add_remote_source(
+        "x", RemoteConfig("mega"), tmp_path, 1
+    )
     assert SqliteRepository(conn).get_access(source_id) == (Level.DOWNLOAD, [])
 
 
 def test_an_inbox_follows_a_moved_data_root(conn: sqlite3.Connection) -> None:
-    inboxes = SqliteInboxes(conn)
+    inboxes = SqliteInboxes(conn, SqliteRepository(conn))
     first = inboxes.ensure_inbox_source(7, "/old/inbox/7")
     moved = inboxes.ensure_inbox_source(7, "/new/inbox/7")
     assert (moved.id, moved.root) == (first.id, "/new/inbox/7")
@@ -170,7 +172,7 @@ def test_every_kind_of_source_is_created_by_the_one_repository_method(
 def test_a_proton_source_is_its_own_kind_and_stores_only_the_place(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    store = SqliteRemoteSources(conn)
+    store = SqliteRemoteSources(conn, SqliteRepository(conn))
     source_id = store.add_remote_source("Proton", RemoteConfig.proton("/photos"), tmp_path, 1)
     row = conn.execute("SELECT kind, config_json FROM source WHERE id = ?", (source_id,)).fetchone()
     assert (row[0], json.loads(row[1])) == ("proton", {"provider": "proton", "path": "/photos"})
