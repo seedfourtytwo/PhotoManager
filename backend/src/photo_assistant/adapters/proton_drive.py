@@ -115,7 +115,7 @@ class ProtonDrive:
 
     def check(self) -> None:
         """Raises SyncAuthError when not signed in, SyncError when the tool is missing."""
-        self._call(["filesystem", "list", "/"], _LIST_TIMEOUT)
+        self.run(["filesystem", "list", "/"], _LIST_TIMEOUT)
 
     def folders(self, path: str) -> list[str]:
         """Names of the folders directly inside ``path``, for the folder picker."""
@@ -185,7 +185,7 @@ class ProtonDrive:
         return items
 
     def _list(self, args: list[str], path: str) -> list[dict[str, object]]:
-        out = self._call([*args, "--json"], _LIST_TIMEOUT, path)
+        out = self.run([*args, "--json"], _LIST_TIMEOUT, path)
         try:
             nodes = json.loads(out)
         except json.JSONDecodeError as exc:
@@ -238,7 +238,7 @@ class ProtonDrive:
                 )
             args = [*verb, *(item.remote for item in batch), str(work), "--json"]
             try:
-                summary = json.loads(self._call(args, remaining))
+                summary = json.loads(self.run(args, remaining))
             except SyncAuthError:
                 raise
             except (SyncError, json.JSONDecodeError) as exc:
@@ -257,7 +257,9 @@ class ProtonDrive:
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
-    def _call(self, args: list[str], timeout: float, path: str = "") -> str:
+    def run(self, args: list[str], timeout: float, path: str = "") -> str:
+        """Run one command of the tool and return what it printed. ``path``: the remote place
+        asked about, named in the error when Proton says it is not there."""
         try:
             result = subprocess.run(  # an argument list, never a shell
                 [self._binary, *args],
