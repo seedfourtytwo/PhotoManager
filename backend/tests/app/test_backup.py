@@ -1,6 +1,6 @@
 """BackupService with fakes: FEATURES 9b.1-9b.8 behaviour, independent of restic."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -708,6 +708,38 @@ def test_a_cloud_place_that_cannot_be_reached_says_it_is_backed_up_when_it_can_b
     assert run.error == "Server cannot be reached right now: it is backed up as soon as it can be"
 
 
+def test_a_manual_place_that_is_away_does_not_promise_to_start_by_itself(world: World) -> None:
+    local = world.target(label="Disk", schedule="manual")
+    cloud = world.target(label="Server", repository="rclone:server:photos", schedule="manual")
+    for target_id in (local, cloud):
+        world.service.run_now(target_id)
+        world.engine.absent[repository_of(world, target_id)] = "gone"
+    assert world.service.run_now(local).error == (
+        "Disk is not connected: plug it in and run the backup again"
+    )
+    assert world.service.run_now(cloud).error == (
+        "Server cannot be reached right now: run the backup again when it can be"
+    )
+
+
+def test_two_manual_places_that_were_skipped_are_not_counted_as_protection(
+    world: World,
+) -> None:
+    ids = [
+        world.target(
+            label=f"Disk {n}", repository=str(world.root.parent / f"d{n}"), schedule="manual"
+        )
+        for n in (1, 2)
+    ]
+    for target_id in ids:
+        world.service.run_now(target_id)
+        world.engine.absent[repository_of(world, target_id)] = "gone"
+        world.service.run_now(target_id)
+    result = world.service.protection()
+    assert not result.protected
+    assert any("was not connected at its last backup" in p.message for p in result.problems)
+
+
 def test_a_new_target_still_gets_its_repository_created(world: World) -> None:
     world.service.run_now(world.target())
     assert "ensure" in world.engine.calls and "probe" not in world.engine.calls
@@ -843,6 +875,47 @@ def test_no_restore_test_is_run_against_a_place_that_is_away(world: World) -> No
     assert "restore" not in world.engine.calls and "latest" not in world.engine.calls
     (status,) = world.service.status()
     assert not status.restore_failing
+
+
+def test_a_scheduled_restore_test_is_not_run_against_a_place_that_is_away_though_not_skipped(
+    world: World,
+) -> None:
+    target_id = world.target(schedule="manual")
+    world.service.run_now(target_id)
+    world.service.restore_test(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.engine.calls.clear()
+    world.clock.current = T0 + timedelta(days=8)
+    world.service.run_due()
+    assert "latest" not in world.engine.calls and "restore" not in world.engine.calls
+    assert [r.kind for r in world.service.runs(target_id)].count(RunKind.RESTORE_TEST) == 1
+    assert not world.service.status()[0].restore_failing
+
+
+def test_a_restore_test_started_by_hand_still_runs_and_reports_an_absent_place(
+    world: World,
+) -> None:
+    target_id = world.target(schedule="manual")
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.engine.calls.clear()
+    world.service.restore_test(target_id)
+    assert "latest" in world.engine.calls
+
+
+def test_the_day_shown_for_a_place_that_was_away_is_the_local_day(tmp_path: Path) -> None:
+    plus_two = timezone(timedelta(hours=2))
+    world = World(tmp_path, local_tz=plus_two)
+    target_id = world.target(schedule="hourly")
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.clock.current = datetime(2026, 10, 1, 22, 30, tzinfo=UTC)  # 00:30 on the 2nd, local
+    world.service.run_now(target_id)
+    world.clock.current = datetime(2026, 10, 3, 12, tzinfo=UTC)
+    (status,) = world.service.status()
+    assert status.skipped_since == datetime(2026, 10, 1, 22, 30, tzinfo=UTC)
+    assert status.skipped_since.utcoffset() == timedelta(hours=2)
+    assert any("since 02 Oct 2026" in p.message for p in world.service.protection().problems)
 
 
 def test_the_copy_waits_when_proton_is_out_of_reach_and_catches_up(world: World) -> None:

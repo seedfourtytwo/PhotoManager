@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from photo_assistant.domain.schedule import (
+    Every,
     QuietWindow,
     Schedule,
     is_due,
@@ -352,6 +353,12 @@ class Protection:
         return self.places_ok >= 2
 
 
+def _manual_and_away(status: TargetStatus) -> bool:
+    """A place on a manual schedule is never overdue, so a skipped latest run is the only
+    sign that it has not been backed up."""
+    return status.skipped_since is not None and status.target.parsed_schedule.every is Every.MANUAL
+
+
 def _place_flags(status: TargetStatus) -> tuple[bool, ...]:
     """One flag per backup place the target provides: the repository, then its Proton copy."""
     repository = (
@@ -359,6 +366,7 @@ def _place_flags(status: TargetStatus) -> tuple[bool, ...]:
         and not status.overdue
         and not status.failing
         and not status.restore_failing
+        and not _manual_and_away(status)
     )
     if status.target.mirror_path is None:
         return (repository,)
@@ -386,6 +394,27 @@ def _library_problem(places_ok: int, places_total: int) -> Problem | None:
         return Problem(
             Severity.ALERT, f"Only {places_ok} of {places_total} backup places is up to date."
         )
+    return None
+
+
+def _lateness_problem(status: TargetStatus) -> Problem | None:
+    """Why the backup is not on time, when it is not: away, or just late."""
+    label, tid = status.target.label, status.target.id
+    if status.skipped_since is not None and status.overdue:
+        return Problem(
+            Severity.WARNING,
+            f"{label} has not been connected since {status.skipped_since:%d %b %Y}: "
+            "connect it and the backup starts by itself.",
+            tid,
+        )
+    if _manual_and_away(status):
+        return Problem(
+            Severity.WARNING,
+            f"{label} was not connected at its last backup: connect it and run the backup again.",
+            tid,
+        )
+    if status.overdue and not status.failing:
+        return Problem(Severity.WARNING, f"{label}: the backup is overdue.", tid)
     return None
 
 
@@ -417,17 +446,9 @@ def _target_problems(status: TargetStatus) -> list[Problem]:
                 tid,
             )
         )
-    if status.skipped_since is not None and status.overdue:
-        found.append(
-            Problem(
-                Severity.WARNING,
-                f"{label} has not been connected since {status.skipped_since:%d %b %Y}: "
-                "connect it and the backup starts by itself.",
-                tid,
-            )
-        )
-    elif status.overdue and not status.failing:
-        found.append(Problem(Severity.WARNING, f"{label}: the backup is overdue.", tid))
+    late = _lateness_problem(status)
+    if late is not None:
+        found.append(late)
     if status.mirror_overdue and not status.mirror_failing:
         found.append(
             Problem(

@@ -45,7 +45,7 @@ from photo_assistant.domain.backup import (
 )
 from photo_assistant.domain.library_paths import nested_or_same
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
-from photo_assistant.domain.schedule import is_overdue, next_run, parse_window
+from photo_assistant.domain.schedule import Every, is_overdue, next_run, parse_window
 from photo_assistant.ports import Clock, Hasher
 from photo_assistant.ports.backup import (
     AssetFile,
@@ -484,8 +484,14 @@ class BackupService:
         success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
         last_test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven_from = (success.finished_at or success.started_at) if success else None
-        if restore_proof_due(proven_from, last_test, self._clock.now()):
-            self.restore_test(target.id)
+        if not restore_proof_due(proven_from, last_test, self._clock.now()):
+            return
+        try:
+            if self._engine.probe(self._repo(target)) is not None:
+                return  # away since the last backup: a test now would only raise a false alarm
+        except (BackupError, OSError):
+            pass  # restore_test records what is wrong
+        self.restore_test(target.id)
 
     def _run_and_prove(self, target_id: int) -> BackupRun:
         run = self.run_now(target_id)
@@ -564,13 +570,17 @@ class BackupService:
         return self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True) is not None
 
     def _skipped(self, target: BackupTarget, reason: str) -> RunOutcome:
+        by_itself = target.parsed_schedule.every is not Every.MANUAL
         if target.kind is TargetKind.LOCAL:
+            then = "the backup starts by itself" if by_itself else "run the backup again"
+            friendly = f"{target.label} is not connected: plug it in and {then}"
+        elif by_itself:
             friendly = (
-                f"{target.label} is not connected: plug it in and the backup starts by itself"
+                f"{target.label} cannot be reached right now: it is backed up as soon as it can be"
             )
         else:
             friendly = (
-                f"{target.label} cannot be reached right now: it is backed up as soon as it can be"
+                f"{target.label} cannot be reached right now: run the backup again when it can be"
             )
         return RunOutcome(BackupRunStatus.SKIPPED, error=friendly, details=reason)
 
@@ -642,7 +652,7 @@ class BackupService:
             restore_failing=test is not None and test.status is BackupRunStatus.FAILED,
             last_mirror_at=(copied.finished_at or copied.started_at) if copied else None,
             mirror_error=(copy.error or "the copy failed") if copy and copy_failed else None,
-            skipped_since=last.started_at
+            skipped_since=last.started_at.astimezone(self._config.local_tz)
             if last and last.status is BackupRunStatus.SKIPPED
             else None,
             mirror_overdue=bool(target.mirror_path) and self._mirror_overdue(target, copied, now),

@@ -276,6 +276,35 @@ def test_fewer_than_two_healthy_places_is_an_alert() -> None:
     assert _messages(result, Severity.ALERT) == ["Only 1 of 2 backup places is up to date."]
 
 
+@pytest.mark.parametrize(
+    "flag",
+    [
+        {"last_run": _failed_run("boom")},
+        {"overdue": True},
+        {"restore_failing": True},
+        {"mirror_error": "not signed in"},
+        {"mirror_overdue": True},
+        {"last_mirror_at": None},
+    ],
+    ids=[
+        "failing",
+        "overdue",
+        "restore_failing",
+        "mirror_failing",
+        "mirror_overdue",
+        "never_copied",
+    ],
+)
+def test_each_fault_takes_one_place_out_of_a_fresh_pair(flag: dict[str, Any]) -> None:
+    """One target is two places (the repository and its Proton copy): one fault, one place."""
+    base = status("A")
+    fresh = replace(base, target=replace(base.target, mirror_path="/proton/a"), last_mirror_at=NOON)
+    result = protection([replace(fresh, **flag)])
+    assert (result.places_ok, result.places_total) == (1, 2)
+    assert not result.protected
+    assert "Only 1 of 2 backup places is up to date." in _messages(result, Severity.ALERT)
+
+
 def test_a_failed_backup_alerts_with_its_reason() -> None:
     failing = status("A", last_run=_failed_run("disk full"))
     result = protection([failing, status("B")])
@@ -381,6 +410,36 @@ def test_a_skipped_place_that_is_not_overdue_raises_nothing() -> None:
     result = protection([away, status("B")])
     assert result.problems == ()
     assert result.protected
+
+
+def _manual(**overrides: Any) -> TargetStatus:
+    base = status("Disk", **overrides)
+    return replace(base, target=replace(base.target, schedule="manual"))
+
+
+def test_a_manual_place_that_was_skipped_is_not_a_healthy_place() -> None:
+    away = _manual(skipped_since=NOON)
+    result = protection([away, status("B")])
+    assert (result.places_ok, result.places_total) == (1, 2)
+    assert (
+        Problem(
+            Severity.WARNING,
+            "Disk was not connected at its last backup: connect it and run the backup again.",
+            away.target.id,
+        )
+        in result.problems
+    )
+    assert _messages(result, Severity.ALERT) == ["Only 1 of 2 backup places is up to date."]
+
+
+def test_two_manual_places_that_were_skipped_are_not_protected() -> None:
+    result = protection([_manual(skipped_since=NOON), _manual(skipped_since=NOON)])
+    assert not result.protected and result.places_ok == 0
+
+
+def test_a_manual_place_that_was_not_skipped_stays_healthy_and_quiet() -> None:
+    result = protection([_manual(), status("B")])
+    assert result.protected and result.problems == ()
 
 
 def test_alerts_come_before_warnings() -> None:
