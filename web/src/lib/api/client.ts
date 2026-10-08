@@ -84,6 +84,13 @@ export class ApiError extends Error {
 	}
 }
 
+/**
+ * No answer from the library server: the network dropped, or something else answered in its
+ * place (a Wi-Fi sign-in page). Browsers only say "Failed to fetch" or "Unexpected token <".
+ */
+export const unreachable = () =>
+	new ApiError(0, 'The library server could not be reached. Check the connection and try again.');
+
 export type ApiOptions = {
 	/** Origin of the API, '' for same origin (the default; the dev server proxies /api). */
 	base?: string;
@@ -139,21 +146,30 @@ export function createApi(options: ApiOptions = {}) {
 	// Late-bound so tests that stub globalThis.fetch after creation still work.
 	const fetcher: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
 
+	const send = (path: string, init: RequestInit) =>
+		fetcher(`${base}${path}`, init).catch(() => {
+			throw unreachable();
+		});
+
 	async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
 		const init: RequestInit = { method, credentials: 'same-origin' };
 		if (body !== undefined) {
 			init.body = JSON.stringify(body);
 			init.headers = { 'content-type': 'application/json' };
 		}
-		const response = await fetcher(`${base}${path}`, init);
+		const response = await send(path, init);
 		if (!response.ok) {
 			if (response.status === 401 && path !== '/api/auth/login') options.onUnauthorized?.();
 			throw new ApiError(response.status, await readDetail(response));
 		}
 		if (response.status === 204 || response.headers.get('content-length') === '0')
 			return undefined as T;
-		const text = await response.text();
-		return (text ? JSON.parse(text) : undefined) as T;
+		try {
+			const text = await response.text();
+			return (text ? JSON.parse(text) : undefined) as T;
+		} catch {
+			throw unreachable();
+		}
 	}
 
 	/** A binary answer (a PDF): the body as a Blob plus its headers; errors as ApiError. */
@@ -163,12 +179,15 @@ export function createApi(options: ApiOptions = {}) {
 			init.body = JSON.stringify(body);
 			init.headers = { 'content-type': 'application/json' };
 		}
-		const response = await fetcher(`${base}${path}`, init);
+		const response = await send(path, init);
 		if (!response.ok) {
 			if (response.status === 401) options.onUnauthorized?.();
 			throw new ApiError(response.status, await readDetail(response));
 		}
-		return { blob: await response.blob(), headers: response.headers };
+		const blob = await response.blob().catch(() => {
+			throw unreachable();
+		});
+		return { blob, headers: response.headers };
 	}
 
 	const get = <T>(path: string) => request<T>('GET', path);

@@ -84,6 +84,42 @@ describe('createApi', () => {
 		expect(error.message).toBe('The library server answered 502.');
 	});
 
+	it('says the server could not be reached when the network fails', async () => {
+		const offline = (async () => {
+			throw new TypeError('Failed to fetch');
+		}) as typeof fetch;
+		const api = createApi({ fetch: offline });
+		const calls = [
+			() => api.me(),
+			() => api.printPdf(1, { trim: 'a4', theme: 'quiet', cover: true })
+		];
+		for (const call of calls) {
+			const error = (await call().catch((e: unknown) => e)) as ApiError;
+			expect(error).toBeInstanceOf(ApiError);
+			expect(error.status).toBe(0);
+			expect(error.message).toBe(
+				'The library server could not be reached. Check the connection and try again.'
+			);
+		}
+	});
+
+	it('treats a 200 that is not JSON (a Wi-Fi sign-in page) as not reaching the server', async () => {
+		const { fetcher } = fakeServer([
+			new Response('<html>Sign in to this network</html>', {
+				status: 200,
+				headers: { 'content-type': 'text/html' }
+			})
+		]);
+		const error = (await createApi({ fetch: fetcher })
+			.me()
+			.catch((e: unknown) => e)) as ApiError;
+		expect(error).toBeInstanceOf(ApiError);
+		expect(error.status).toBe(0);
+		expect(error.message).toBe(
+			'The library server could not be reached. Check the connection and try again.'
+		);
+	});
+
 	it('joins validation messages from a 422 list', async () => {
 		const { fetcher } = fakeServer([
 			json(

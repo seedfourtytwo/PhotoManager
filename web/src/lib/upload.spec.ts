@@ -39,6 +39,8 @@ class FakeXhr implements UploadRequest {
 	upload = { onprogress: null as ((e: ProgressEvent) => void) | null };
 	onload: (() => void) | null = null;
 	onerror: (() => void) | null = null;
+	onabort: (() => void) | null = null;
+	ontimeout: (() => void) | null = null;
 	status = 0;
 	responseText = '';
 	opened: [string, string] | null = null;
@@ -88,5 +90,38 @@ describe('uploadFiles', () => {
 		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
 		xhr.onerror?.();
 		await expect(done).rejects.toThrow('The upload was interrupted');
+	});
+
+	it('fails in words when a 2xx answer is not JSON, instead of hanging', async () => {
+		const xhr = new FakeXhr();
+		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
+		xhr.status = 200;
+		xhr.responseText = '<html>Sign in to this network</html>';
+		xhr.onload?.();
+		await expect(done).rejects.toThrow(
+			'The library server could not be reached. Check the connection and try again.'
+		);
+	});
+
+	it('settles when the upload is aborted or times out', async () => {
+		for (const end of ['onabort', 'ontimeout'] as const) {
+			const xhr = new FakeXhr();
+			const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
+			xhr[end]?.();
+			await expect(done).rejects.toThrow('The upload was interrupted');
+		}
+	});
+
+	it('reports a lost session like every other request', async () => {
+		const xhr = new FakeXhr();
+		let lost = 0;
+		const done = uploadFiles([new File(['x'], 'a.jpg')], {
+			url: '/u',
+			request: () => xhr,
+			onUnauthorized: () => lost++
+		});
+		xhr.respond(401, { detail: 'not signed in' });
+		await expect(done).rejects.toThrow('Not signed in');
+		expect(lost).toBe(1);
 	});
 });
