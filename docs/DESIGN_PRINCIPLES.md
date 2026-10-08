@@ -39,11 +39,10 @@ over photos are translucent glass. This is the **Safelight** theme; the earlier 
 lives on as the **Album** theme (serif titles, small corners, indigo ink). A theme changes
 colours, corners and the title face, never layout.
 
-**Arriving with the next redesign steps** (issue #11, then #10): the icon set and the bars
-that use it, glass on floating bars (the `.glass` utility exists; nothing uses it yet), mono
-for counts and dates outside the photo view (class `.data`), and status dots on the System
-page (`--ok` / `--fail`). Until then the rules below describe the target; the checklist items
-about icons and glass apply once those pieces exist.
+**Arriving with the next redesign steps** (issue #11, then #10): mono for counts and dates
+outside the photo view (class `.data`), and status dots on the System page (`--ok` /
+`--fail`). Until then the rules below describe the target; the checklist items about those
+apply once they exist.
 
 The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefaces) and
 `tokens.css` (everything else); the tables below mirror them for Safelight.
@@ -105,7 +104,7 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--r-1` / `--r-2` / `--r-pill` | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded |
 | `--check-radius` | 4 px: checkbox corners (`--r-1` would make a 16 px box round) |
 | `--target` | 44 px: minimum control height on touch screens (`pointer: coarse`) |
-| `--rail` / `--margin` / `--bar` | 120 px rail · 256 px right margin · 56 px phone bar |
+| `--top` / `--dock` / `--margin` | 56 px top bar on a laptop (0 on a phone; everything sticky offsets by it) · 56 px phone dock · 256 px right margin |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
 
 ### Component rules
@@ -123,7 +122,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
   right, Cancel left of the primary. On a phone every dialog, the filters and the loupe's info
   become **bottom sheets** with rounded top corners and safe-area padding.
-- **Menus** ("More" in the nav and the selection bar) are small raised sheets of 44 px rows.
+- **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
+  together. Escape or a press outside closes it. The account button shows the person's initial;
+  a count that needs attention sits on it in full ink, never the accent.
 - **Toasts**: one line on a raised slip, bottom centre, the action (Undo) as a bold word.
 - **Selection**: a 3 px accent frame inset on the photo (with a 1 px shade so it reads on any
   photo) and a filled accent circle with a check; the count in the selection bar is the only
@@ -149,7 +150,7 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 
 | | Laptop (≥ 1024 px) | Phone (< 640 px) |
 |---|---|---|
-| Navigation | slim left rail: Library · Map · People · Albums · Search | bottom bar, same 5 items |
+| Navigation | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
 | Filters | right margin, always visible, collapsible | bottom sheet |
 | Loupe metadata | right margin "sidenote" | Info opens a bottom sheet |
 | Loupe actions | one band above the photo | Close/Info on top, actions in a bottom bar |
