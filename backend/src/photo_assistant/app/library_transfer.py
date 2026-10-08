@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from photo_assistant.domain.library_paths import (
+    DATABASE_FILE,
+    LIBRARY_FOLDERS,
     InvalidLibraryPathError,
     ensure_relative,
     nested_or_same,
@@ -27,8 +29,7 @@ from photo_assistant.ports.library_files import (
     LibraryUnreadableError,
 )
 
-DATABASE = "library.db"
-EXPORT_FOLDERS = ("originals", "recipes", "config", "inbox")
+DATABASE = DATABASE_FILE
 DERIVED_FOLDER = "derived"  # thumbnails and previews: rebuildable, but saves hours of work
 IN_PROGRESS_MARKER = ".export-in-progress"
 ORIGINALS_FOLDER = "originals"
@@ -124,7 +125,7 @@ class LibraryTransfer:
         say("snapshotting the database")
         self._snapshot(source_root / DATABASE, destination / DATABASE)
         summary = ExportSummary(destination)
-        folders = [*EXPORT_FOLDERS, *([DERIVED_FOLDER] if include_derived else [])]
+        folders = [*LIBRARY_FOLDERS, *([DERIVED_FOLDER] if include_derived else [])]
         for folder in folders:
             self._copy_folder(source_root, destination, folder, summary)
             say(f"{folder}: {summary.copied} copied, {summary.already_there} already there")

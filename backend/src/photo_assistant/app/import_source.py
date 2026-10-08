@@ -438,7 +438,7 @@ class ImportSource:
             original_stem = edited_original_stem(path.name)
             if original_name is None or original_stem is None:
                 continue
-            original_path = str(path.parent / original_name).removeprefix("./")
+            original_path = str(path.parent / original_name)
             original_id = (
                 known.get(original_path.lower())
                 or self._repo.asset_id_for_source_path(source.id, original_path)

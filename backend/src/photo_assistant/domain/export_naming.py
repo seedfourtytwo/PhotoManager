@@ -2,13 +2,13 @@
 
 import itertools
 import math
-import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
 
+from photo_assistant.domain.archive_name import UNSAFE_NAME_CHARS
 from photo_assistant.domain.edit_recipe import fit_within
 from photo_assistant.domain.errors import InvalidError
 
@@ -36,7 +36,6 @@ _FORMAT_FACTOR = {"jpeg": 0.95, "webp": 0.4, "png": 3.7}
 _SCALE_EXPONENT = {"jpeg": 0.55, "webp": 0.5, "png": 0.8}
 # JPEG/WebP size relative to quality 90 (piecewise linear between these points):
 _QUALITY_CURVE = ((1, 0.1), (50, 0.35), (75, 0.55), (90, 1.0), (95, 1.5), (100, 3.0))
-_UNSAFE = re.compile(r"[\x00-\x1f\x7f/\\:*?\"<>|]")
 
 
 class Naming(StrEnum):
@@ -79,7 +78,7 @@ class ExportOptions:
 
 
 def _safe(text: str) -> str:
-    return _UNSAFE.sub("_", unicodedata.normalize("NFC", text))
+    return UNSAFE_NAME_CHARS.sub("_", unicodedata.normalize("NFC", text))
 
 
 def export_stem(

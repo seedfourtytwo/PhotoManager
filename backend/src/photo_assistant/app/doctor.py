@@ -5,12 +5,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from photo_assistant.domain.backup import GB
+from photo_assistant.domain.library_paths import DATABASE_FILE
 from photo_assistant.ports.system_probe import SystemProbe
 
 MIN_EXIFTOOL = (12, 15)  # pyexiftool's minimum
 MIN_LIBVIPS = (8, 12)
 MIN_RESTIC = (0, 14)  # Debian bookworm; the adapter is written for it
-GB = 1000**3
 
 
 class Level(StrEnum):
@@ -82,7 +83,7 @@ def _writable(probe: SystemProbe, root: Path) -> Check:
 
 
 def _database(probe: SystemProbe, root: Path) -> Check:
-    database = root / "library.db"
+    database = root / DATABASE_FILE
     if not database.exists():
         return Check("Library database", Level.OK, "none yet (created by the first import)")
     result = probe.database_integrity(database)
