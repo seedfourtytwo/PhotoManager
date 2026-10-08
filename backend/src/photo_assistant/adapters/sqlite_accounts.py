@@ -4,7 +4,7 @@ import sqlite3
 from datetime import UTC, datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
-from photo_assistant.domain.access import Role, User
+from photo_assistant.domain.access import Role, User, too_many_failures
 from photo_assistant.ports.accounts import (
     NoActiveAdminError,
     NotFirstUserError,
@@ -81,16 +81,19 @@ class AccountsMixin(SqliteBase):
         display_name: str | None = None,
         role: Role | None = None,
         disabled: bool | None = None,
+        password_hash: str | None = None,
     ) -> None:
         with self._transaction():  # the last-admin rule is checked inside (QA A8)
             self._conn.execute(
                 """UPDATE user SET display_name = COALESCE(?, display_name),
-                       role = COALESCE(?, role), disabled = COALESCE(?, disabled)
+                       role = COALESCE(?, role), disabled = COALESCE(?, disabled),
+                       password_hash = COALESCE(?, password_hash)
                    WHERE id = ?""",
                 (
                     display_name,
                     role.value if role else None,
                     None if disabled is None else int(disabled),
+                    password_hash,
                     user_id,
                 ),
             )
@@ -138,6 +141,13 @@ class AccountsMixin(SqliteBase):
             "DELETE FROM session WHERE user_id = ? AND token_hash IS NOT ?", (user_id, keep)
         )
 
+    def prune_sessions(self, last_seen_before: datetime) -> int:
+        """Delete sessions idle since before then: expired ones whose cookie never came back
+        (a session is otherwise only deleted when it is presented again)."""
+        return self._count(
+            "DELETE FROM session WHERE last_seen_at < ?", (utc_text(last_seen_before),)
+        )
+
     def revoke_devices_of(self, user_id: int, now: datetime) -> None:
         self._write(
             "UPDATE device SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
@@ -146,17 +156,19 @@ class AccountsMixin(SqliteBase):
 
     # --- failed logins ---------------------------------------------------------------------
 
-    def add_login_failure(self, username: str, ip: str, at: datetime) -> None:
-        self._write(
-            "INSERT INTO login_failure (username, ip, at) VALUES (?, ?, ?)",
-            (username, ip, utc_text(at)),
-        )
-
-    def count_login_failures(self, username: str, ip: str, since: datetime) -> int:
-        return self._scalar(
-            "SELECT COUNT(*) FROM login_failure WHERE username = ? AND ip = ? AND at > ?",
-            (username, ip, utc_text(since)),
-        )
+    def record_login_attempt(self, username: str, ip: str, at: datetime, since: datetime) -> bool:
+        with self._transaction():  # count and insert as one step: parallel guesses queue here
+            recent = self._conn.execute(
+                "SELECT COUNT(*) FROM login_failure WHERE username = ? AND ip = ? AND at > ?",
+                (username, ip, utc_text(since)),
+            ).fetchone()[0]
+            if too_many_failures(recent):
+                return False
+            self._conn.execute(
+                "INSERT INTO login_failure (username, ip, at) VALUES (?, ?, ?)",
+                (username, ip, utc_text(at)),
+            )
+            return True
 
     def clear_login_failures(self, username: str, ip: str) -> None:
         self._write("DELETE FROM login_failure WHERE username = ? AND ip = ?", (username, ip))
@@ -164,3 +176,8 @@ class AccountsMixin(SqliteBase):
     def clear_all_login_failures(self, username: str) -> None:
         # the column is COLLATE NOCASE: "Lea" and "lea" are the same account
         self._write("DELETE FROM login_failure WHERE username = ?", (username,))
+
+    def prune_login_failures(self, before: datetime) -> int:
+        """Forget failures older than the lockout looks back: those of names that never log
+        in successfully are otherwise kept forever."""
+        return self._count("DELETE FROM login_failure WHERE at < ?", (utc_text(before),))

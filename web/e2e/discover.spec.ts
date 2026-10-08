@@ -7,7 +7,8 @@ import {
 	REAL_BACKEND,
 	resetMock,
 	signIn,
-	test
+	test,
+	toast
 } from './helpers.ts';
 
 test('search without models: word matches and a calm note on how to get AI search', async ({
@@ -61,7 +62,7 @@ test('people: grid of faces, rename, merge, and a person’s photos', async ({ p
 	const post = page.waitForRequest((r) => r.url().endsWith('/merge'));
 	await merge.getByRole('button', { name: /^Merge/ }).click();
 	expect((await post).postDataJSON().source_ids).toHaveLength(1);
-	await expect(page.getByRole('status')).toContainText('Merged 1 into Uncle Jo');
+	await expect(toast(page)).toContainText('Merged 1 into Uncle Jo');
 	await page.goto('/people');
 	await expect(page.getByRole('link', { name: /Uncle Jo/ })).toBeVisible();
 });
@@ -95,4 +96,24 @@ test('navigation: the same five places everywhere; Trash and Settings under More
 	if (isPhone(page)) await nav.getByRole('button', { name: 'More' }).click();
 	await expect(nav.getByRole('link', { name: 'Admin' })).toBeVisible();
 	await expectAccessible(page);
+});
+
+test('phone: “More” in the navigation closes on Escape and on a tap outside', async ({ page }) => {
+	await resetMock();
+	await signIn(page);
+	test.skip(!isPhone(page), 'the menu is the phone layout');
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	const more = nav.getByRole('button', { name: 'More' });
+	const trash = nav.getByRole('link', { name: 'Trash' });
+	await more.click();
+	await expect(trash).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(trash).toBeHidden();
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(more).toBeFocused();
+
+	await more.click();
+	await expect(trash).toBeVisible();
+	await page.getByRole('heading', { level: 1 }).first().click();
+	await expect(trash).toBeHidden();
 });

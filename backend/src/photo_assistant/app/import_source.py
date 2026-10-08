@@ -16,7 +16,13 @@ from pathlib import Path, PurePosixPath
 from photo_assistant.domain.capture_time import pick_capture_time
 from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.library_paths import derived_relpath, original_relpath
-from photo_assistant.domain.media_types import MediaKind, classify, edited_original_name
+from photo_assistant.domain.media_types import (
+    MediaKind,
+    classify,
+    edited_original_name,
+    edited_original_stem,
+    is_picture,
+)
 from photo_assistant.domain.model import (
     ImportReport,
     ItemResult,
@@ -99,12 +105,24 @@ def _first_line(exc: BaseException) -> str:
 
 
 def _photo_stems(files: Iterable[SourceFile]) -> set[tuple[str, str]]:
-    stems = set()
-    for f in files:
-        if classify(f.relative_path) in (MediaKind.PHOTO, MediaKind.RAW):
-            path = PurePosixPath(f.relative_path)
-            stems.add((str(path.parent), path.stem.lower()))
-    return stems
+    return {_stem_key(f.relative_path) for f in files if is_picture(f.relative_path)}
+
+
+def _stem_key(relative_path: str) -> tuple[str, str]:
+    """(folder, name without extension, lower case): what a photo shares with its Live Photo
+    video and with its edit."""
+    path = PurePosixPath(relative_path)
+    return str(path.parent), path.stem.lower()
+
+
+def _pictures_by_stem(items: Iterable[ItemResult]) -> dict[tuple[str, str], int]:
+    """The asset behind each (folder, stem); the first path in name order when several
+    extensions share one."""
+    found: dict[tuple[str, str], int] = {}
+    for item in sorted(items, key=lambda i: i.relative_path):
+        if item.asset_id is not None and is_picture(item.relative_path):
+            found.setdefault(_stem_key(item.relative_path), item.asset_id)
+    return found
 
 
 class ImportSource:
@@ -184,9 +202,13 @@ class ImportSource:
     def _list_files(self, source: Source) -> list[SourceFile]:
         try:
             return list(self._reader.walk(source))
-        except FileNotFoundError as exc:
+        except OSError as exc:
+            if isinstance(exc, FileNotFoundError) and not Path(source.root).is_dir():
+                raise SourceUnavailableError(
+                    f"source '{source.label}' folder not found: {source.root}"
+                ) from exc
             raise SourceUnavailableError(
-                f"source '{source.label}' folder not found: {source.root}"
+                f"source '{source.label}' could not be read: {exc.strerror or exc}"
             ) from exc
 
     def _triage(
@@ -236,7 +258,7 @@ class ImportSource:
         if problem is not None:
             return ItemResult(printable_name(f.relative_path), Outcome.FAILED, problem)
         if kind is MediaKind.VIDEO:
-            is_live = (str(path.parent), path.stem.lower()) in photo_stems
+            is_live = _stem_key(f.relative_path) in photo_stems
             reason = "Live Photo video half" if is_live else "video"
             return ItemResult(
                 f.relative_path, Outcome.SKIPPED, f"{reason} (videos not supported yet)"
@@ -406,20 +428,25 @@ class ImportSource:
                 report.add(ItemResult(d.file.relative_path, Outcome.FAILED, reason))
 
     def _link_edits(self, source: Source, report: ImportReport) -> None:
-        """FEATURES 11.8: an iPhone ``IMG_E1234`` edit points at ``IMG_1234``."""
+        """FEATURES 11.8: an iPhone ``IMG_E1234`` edit points at ``IMG_1234``: the file with
+        the edit's own extension if there is one, else any photo of that name beside it."""
         known = {
             i.relative_path.lower(): i.asset_id for i in report.items if i.asset_id is not None
         }
+        by_stem = _pictures_by_stem(report.items)
         for item in report.items:
             if item.outcome is not Outcome.IMPORTED or item.asset_id is None:
                 continue
             path = PurePosixPath(item.relative_path)
             original_name = edited_original_name(path.name)
-            if original_name is None:
+            original_stem = edited_original_stem(path.name)
+            if original_name is None or original_stem is None:
                 continue
-            original_path = str(path.parent / original_name).removeprefix("./")
-            original_id = known.get(original_path.lower()) or self._repo.asset_id_for_source_path(
-                source.id, original_path
+            original_path = str(path.parent / original_name)
+            original_id = (
+                known.get(original_path.lower())
+                or self._repo.asset_id_for_source_path(source.id, original_path)
+                or by_stem.get((str(path.parent), original_stem.lower()))
             )
             if original_id is not None and original_id != item.asset_id:
                 self._repo.set_variant_of(item.asset_id, original_id)

@@ -1,15 +1,12 @@
 """Composition of the integrations (uploads, device tokens, remote sources, AI).
 
-The integrator calls ``build_integrations`` from ``api/services.py`` and stores the result on
-``app.state.integrations``; see docs/wiring/ai-sources.md for the exact steps.
+``api/services.py`` calls ``build_integrations`` and keeps the result as
+``Services.integrations``; routes reach it through ``api/deps.py``.
 """
 
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
-
-from fastapi import Depends, Request
 
 from photo_assistant.adapters.filesystem import SystemClock
 from photo_assistant.adapters.ollama_ai import build_ai_provider
@@ -69,6 +66,7 @@ def build_integrations(
     repo: Repository,
     importer: Importer,
     clock: Clock | None = None,
+    min_free_bytes: int = 0,
 ) -> Integrations:
     clock = clock or SystemClock()
     remote_sources = SqliteRemoteSources(conn, repo)
@@ -81,7 +79,7 @@ def build_integrations(
         spool=DiskUploadSpool(data_root / "tmp"),
         clock=clock,
         inbox_root=inbox_root(data_root),
-        settings=UploadSettings(max_bytes=settings.upload_max_bytes),
+        settings=UploadSettings(max_bytes=settings.upload_max_bytes, min_free_bytes=min_free_bytes),
     )
     sync_source = SyncSource(
         sources=repo,
@@ -106,11 +104,3 @@ def build_integrations(
         ai=build_ai_provider(settings.ollama(), ai_log),
         ai_log=ai_log,
     )
-
-
-def get_integrations(request: Request) -> Integrations:
-    integrations: Integrations = request.app.state.integrations
-    return integrations
-
-
-IntegrationsDep = Annotated[Integrations, Depends(get_integrations)]

@@ -41,10 +41,13 @@ terminate HTTPS somewhere else, e.g. Caddy).
 The app refuses requests for host names it doesn't know (protection against DNS
 rebinding). Add the Tailscale name:
 
-- laptop, in `.env`: `PA_ALLOWED_HOSTS=["127.0.0.1","localhost","photos.tail1234.ts.net"]`
+- laptop, in `.env`: `PA_ALLOWED_HOSTS=127.0.0.1,localhost,photos.tail1234.ts.net`
   then `systemctl --user restart photo-assistant`
 - server with Docker, in `deploy/server.env`: same line, then
   `docker compose -f deploy/compose.yml up -d`
+
+Write the names separated by commas, with no quotes, brackets or spaces: that form is read the
+same way by `just run`, the systemd service and Docker.
 
 ## 5. Use it
 

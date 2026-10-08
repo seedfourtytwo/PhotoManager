@@ -17,7 +17,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=@REPO@/backend
-# Settings come from the same .env as `just run`. PA_HOST stays 127.0.0.1 until login exists.
+# Settings come from the same .env as `just run`. Keep PA_HOST on 127.0.0.1: other devices
+# come in through `tailscale serve` (docs/guides/remote-access.md), never a public address.
 EnvironmentFile=@REPO@/.env
 # The built web app (`just build`), served from the same port as the API.
 Environment=PA_WEB_DIR=@REPO@/web/build
@@ -36,6 +37,12 @@ IOSchedulingClass=best-effort
 IOSchedulingPriority=6
 # Guard against a runaway process (a huge panorama, a leak): killed and restarted instead of
 # freezing the laptop. Raise it if previews of very large images fail.
+# These two numbers were chosen before local ML existed and have NOT been measured with it:
+# the same process also loads the CLIP and face models and renders previews on several
+# threads. If the service is killed during `just ml-backfill` (`systemctl --user status
+# photo-assistant` says "oom-kill"), raise both in a drop-in that survives a reinstall:
+# `systemctl --user edit photo-assistant`, then [Service] / MemoryHigh=… / MemoryMax=…
+# (MemoryHigh slows the process down, MemoryMax kills it; keep High below Max).
 MemoryHigh=1536M
 MemoryMax=2G
 

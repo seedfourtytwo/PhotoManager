@@ -10,8 +10,10 @@ blocks you, raise it in the PR; don't quietly break it.
    folders are byte-identical before and after every import test.
 2. **Test first.** Red → green → refactor. The PR shows the failing test commit before the fix
    commit (or the test is clearly written against the spec, not the implementation).
-3. **Main is always releasable.** CI green, app starts, migrations apply.
-4. **No secrets in the repo.** gitleaks runs in pre-commit and CI.
+3. **Main is always releasable.** `just check` green, app starts, migrations apply. (CI is
+   defined in `ci/` but not switched on yet: until it is, the checks run locally through
+   `just check` and pre-commit.)
+4. **No secrets in the repo.** gitleaks runs in pre-commit (and is a job in the CI file).
 5. **Real photos stay home.** They never go to a cloud workspace, GitHub or any other service;
    development and CI use synthetic fixtures only. Real-data dry runs (QA step 2) run on the
    laptop itself and report only counts, timings and reasons.
@@ -27,9 +29,9 @@ blocks you, raise it in the PR; don't quietly break it.
 
 | Level | Scope | Speed | Coverage target |
 |---|---|---|---|
-| Unit | `domain/`, `app/` with fakes | whole suite < 10 s | ≥ 95 % lines, ≥ 90 % branches |
+| Unit | `domain/`; `app/` mostly on the real SQLite repository in memory, with small fakes for outside tools | whole suite < 10 s | one floor for the whole package, all levels together: 90 % (`fail_under` in `pyproject.toml`, branch coverage on) |
 | Property | date fallback, dedup, layout fitting, crop math | seconds | key invariants listed in code |
-| Contract | each adapter satisfies its port (same test suite run against fake + real) | < 1 min | every port |
+| Contract | an adapter satisfies its port (same checks run against fake + real) | < 1 min | target: every port that has a fake. Today: the backup store only (`tests/adapters/test_backup_store.py`) |
 | Integration | real ExifTool, libvips, SQLite, Typst on the fixture set | < 3 min | every adapter |
 | API | FastAPI routes through httpx | < 1 min | every route, incl. auth & private items |
 | E2E | Playwright: import → browse → album → PDF, desktop + phone viewport | < 5 min | the 6 golden journeys |
@@ -39,9 +41,13 @@ blocks you, raise it in the PR; don't quietly break it.
 Coverage is a floor, not a goal. A test that asserts nothing useful is worse than none.
 
 ### Fixture library
-`tests/fixtures/photos/` — ~40 small, **self-made or CC0** images covering: HEIC, RAW-with-preview,
-PNG screenshot, no EXIF, wrong timezone, GPS / no GPS, rotated EXIF, Live Photo pair, burst,
-exact duplicate under two names, near-duplicate, corrupt file, emoji file name, 0-byte file.
+`tests/fixtures/photos/` — 18 small files, all drawn by `scripts/make_fixtures.py` (nothing
+third-party), covering: HEIC with its Live Photo video, PNG screenshot with the date only in
+its name, no EXIF, a placeholder EXIF date, GPS / no GPS, rotated EXIF, an iPhone edited copy,
+exact duplicate under two names, truncated file, text named `.jpg`, 0-byte file, emoji file
+name, a 1×1 image, and files that must be skipped or ignored (PDF, video, `.AAE`,
+`.DS_Store`). What importing them must give is in `tests/fixtures/expected.py`. Not in the
+set: RAW-with-preview, wrong timezone, burst, near-duplicate.
 Never commit real family photos.
 
 ## 4. Clean code
@@ -57,7 +63,8 @@ Never commit real family photos.
   (exception: the AI port, which exists by design with a Null implementation).
 - **Comments explain *why*.** The code explains what.
 - **Dependencies are decisions.** A new dependency needs a line in `TECH_DECISIONS.md`.
-- **Config** via env/`settings.toml` validated by pydantic-settings; no magic constants in code.
+- **Config** via environment variables (`PA_*`, also read from `.env`) validated by
+  pydantic-settings; there is no settings file. No magic constants in code.
 
 ## 5. Git & PR workflow
 

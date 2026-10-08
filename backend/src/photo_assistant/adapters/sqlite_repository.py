@@ -8,7 +8,7 @@ from collections.abc import Callable, Collection, Mapping
 from datetime import datetime
 from pathlib import Path
 
-from photo_assistant.adapters.sqlite_access import AccessMixin
+from photo_assistant.adapters.sqlite_access import AccessMixin, UnknownUserError
 from photo_assistant.adapters.sqlite_accounts import AccountsMixin
 from photo_assistant.adapters.sqlite_albums import AlbumsMixin
 from photo_assistant.adapters.sqlite_base import (
@@ -18,6 +18,7 @@ from photo_assistant.adapters.sqlite_base import (
     encode_cursor,
     source_from_row,
 )
+from photo_assistant.adapters.sqlite_base import iso_text as _iso
 from photo_assistant.adapters.sqlite_database import Database, open_database
 from photo_assistant.adapters.sqlite_database import migrations as _migrations
 from photo_assistant.adapters.sqlite_edits import EditsMixin
@@ -36,13 +37,16 @@ from photo_assistant.domain.model import (
     Source,
 )
 from photo_assistant.domain.recheck import Recheck
-from photo_assistant.ports import DuplicateAssetError, Fingerprint, Job, Page, RenderedImage
+from photo_assistant.ports import (
+    IMPORT_RUNS_LISTED,
+    DuplicateAssetError,
+    Fingerprint,
+    Job,
+    Page,
+    RenderedImage,
+)
 
 __all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
-
-
-def _iso(value: datetime) -> str:
-    return value.isoformat()
 
 
 class SqliteRepository(
@@ -96,6 +100,10 @@ class SqliteRepository(
         grants = access or default_source_access(kind, owner_id)
         try:
             with self._transaction():
+                for user_id in {owner_id, *(uid for uid, _ in grants.users)} - {None}:
+                    known = self._conn.execute("SELECT 1 FROM user WHERE id = ?", (user_id,))
+                    if not known.fetchone():
+                        raise UnknownUserError(f"no user with id {user_id}")
                 placeholder = root if isinstance(root, str) else f"pending:{uuid.uuid4().hex}"
                 source_id = self._write(
                     """INSERT INTO source (kind, label, root, owner_id, config_json)
@@ -103,11 +111,12 @@ class SqliteRepository(
                     (kind, label, placeholder, owner_id, json.dumps(config) if config else None),
                 )
                 if not isinstance(root, str):
-                    self._write(
-                        "UPDATE source SET root = ? WHERE id = ?", (root(source_id), source_id)
-                    )
+                    placeholder = root(source_id)
+                    self._write("UPDATE source SET root = ? WHERE id = ?", (placeholder, source_id))
                 self._grant(source_id, grants)
         except sqlite3.IntegrityError as exc:
+            if "source.root" not in str(exc):
+                raise  # not a folder clash: don't report it as one
             raise ValueError(f"folder is already a source: {placeholder}") from exc
         source = self.get_source(source_id)
         assert source is not None
@@ -158,6 +167,9 @@ class SqliteRepository(
             if r["source_id"] is not None
         ]
 
+    def rename_source(self, source_id: int, label: str) -> None:
+        self._write("UPDATE source SET label = ? WHERE id = ?", (label, source_id))
+
     # --- assets ----------------------------------------------------------------------------
 
     _asset = staticmethod(asset_from_row)
@@ -185,17 +197,11 @@ class SqliteRepository(
         job_kind: str,
         fingerprint: Fingerprint | None = None,
     ) -> int:
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                asset_id = self.add_asset(asset, imported_at)
-                self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
-                self.set_thumbnail(asset_id, thumb)
-                self.enqueue(job_kind, {"asset_id": asset_id})
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        with self._transaction():
+            asset_id = self.add_asset(asset, imported_at)
+            self.add_asset_source(asset_id, source_id, relative_path, fingerprint)
+            self.set_thumbnail(asset_id, thumb)
+            self.enqueue(job_kind, {"asset_id": asset_id})
             return asset_id
 
     def _insert_asset(self, asset: NewAsset, imported_at: datetime) -> int:
@@ -322,47 +328,33 @@ class SqliteRepository(
         )
         return int(row["asset_id"]) if row else None
 
-    def origins_of(self, asset_id: int) -> list[tuple[Source, str]]:
-        rows = self._all(
-            """SELECT s.*, a.relative_path FROM asset_source a JOIN source s ON s.id = a.source_id
-               WHERE a.asset_id = ? ORDER BY s.id, a.relative_path""",
-            (asset_id,),
-        )
-        return [(self._source(r), r["relative_path"]) for r in rows]
-
     # --- import runs -----------------------------------------------------------------------
 
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int:
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                run_id = self._write(
-                    """INSERT INTO import_run (source_id, status, started_at, finished_at,
-                           ignored, summary_json, message) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        report.source_id,
-                        report.status.value,
-                        _iso(started_at),
-                        _iso(finished_at),
-                        report.ignored,
-                        json.dumps(report.summary()),
-                        report.message,
-                    ),
-                )
-                self._conn.executemany(
-                    """INSERT INTO import_item (run_id, relative_path, outcome, reason, asset_id)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    [
-                        (run_id, i.relative_path, i.outcome.value, i.reason, i.asset_id)
-                        for i in report.items
-                    ],
-                )
-                self._conn.execute("COMMIT")
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
+        with self._transaction():
+            run_id = self._write(
+                """INSERT INTO import_run (source_id, status, started_at, finished_at,
+                       ignored, summary_json, message) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    report.source_id,
+                    report.status.value,
+                    _iso(started_at),
+                    _iso(finished_at),
+                    report.ignored,
+                    json.dumps(report.summary()),
+                    report.message,
+                ),
+            )
+            self._conn.executemany(
+                """INSERT INTO import_item (run_id, relative_path, outcome, reason, asset_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    (run_id, i.relative_path, i.outcome.value, i.reason, i.asset_id)
+                    for i in report.items
+                ],
+            )
         return run_id
 
     def get_import_report(self, run_id: int) -> ImportReport | None:
@@ -381,13 +373,33 @@ class SqliteRepository(
             message=run["message"],
         )
 
-    def list_import_runs(self, source_id: int | None = None) -> list[dict[str, object]]:
+    def import_run_summary(self, run_id: int) -> dict[str, int] | None:
+        """The counts saved with the run: they outlive its per-file rows (prune_import_items)."""
+        row = self._one("SELECT summary_json FROM import_run WHERE id = ?", (run_id,))
+        return json.loads(row["summary_json"]) if row else None
+
+    def prune_import_items(self, keep_runs: int) -> int:
+        """Delete the per-file rows of all but each source's ``keep_runs`` newest runs (one row
+        per file seen on every rescan adds up). The runs and their summaries stay."""
+        return self._count(
+            """DELETE FROM import_item WHERE run_id IN (
+                   SELECT id FROM (
+                       SELECT id, ROW_NUMBER() OVER (PARTITION BY source_id ORDER BY id DESC) AS n
+                       FROM import_run)
+                   WHERE n > ?)""",
+            (keep_runs,),
+        )
+
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED
+    ) -> list[dict[str, object]]:
+        """Newest first, at most ``limit``."""
         sql = "SELECT * FROM import_run"
         params: tuple[object, ...] = ()
         if source_id is not None:
             sql += " WHERE source_id = ?"
             params = (source_id,)
-        rows = self._all(sql + " ORDER BY id DESC", params)
+        rows = self._all(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
         return [
             {
                 "id": r["id"],
@@ -480,7 +492,8 @@ class SqliteRepository(
     def retry_job(self, job_id: int) -> bool:
         with self._lock:
             cur = self._conn.execute(
-                "UPDATE job SET status = 'queued', error = NULL WHERE id = ? AND status = 'failed'",
+                """UPDATE job SET status = 'queued', error = NULL, attempts = 0
+                   WHERE id = ? AND status = 'failed'""",
                 (job_id,),
             )
             return cur.rowcount > 0

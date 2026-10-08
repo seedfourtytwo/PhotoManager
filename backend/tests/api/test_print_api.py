@@ -106,6 +106,18 @@ def test_print_renditions_are_cached_with_the_edit_applied(
     assert [p.stat().st_mtime_ns for p in renditions] == stamps, "made once, then reused"
 
 
+def test_an_oversized_print_request_is_unprocessable(
+    admin: TestClient, album: dict[str, int]
+) -> None:
+    url = f"/api/albums/{album['album']}/print/plan"
+    fine = [{"layout_id": "text", "asset_ids": [], "text": "x" * 5000}]
+    assert admin.post(url, json={**REQUEST, "pages": fine}).status_code == 200
+    long_text = [{"layout_id": "text", "asset_ids": [], "text": "x" * 5001}]
+    assert admin.post(url, json={**REQUEST, "pages": long_text}).status_code == 422
+    many = [{"layout_id": "text", "asset_ids": []}] * 10_001
+    assert admin.post(url, json={**REQUEST, "pages": many}).status_code == 422
+
+
 def test_manual_pages_and_bad_layouts(admin: TestClient, album: dict[str, int]) -> None:
     pages = [{"layout_id": "two-side", "asset_ids": [album["p0"], album["p1"]], "text": "Day 1"}]
     body = admin.post(

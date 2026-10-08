@@ -43,6 +43,9 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
+/** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
+export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
+
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 
 /** Touch pointer events, dispatched directly (Playwright has tap but no long-press/swipe). */

@@ -37,3 +37,8 @@ export function nextCheckText(iso: string | null | undefined, now: number = Date
 	if (!when) return '';
 	return `next check ${Date.parse(iso!) > now ? when : 'within a few minutes'}`;
 }
+
+/** What to tell the user about a failure: the error's own sentence, else `fallback`. */
+export function errorMessage(error: unknown, fallback: string): string {
+	return (error instanceof Error && error.message) || fallback;
+}

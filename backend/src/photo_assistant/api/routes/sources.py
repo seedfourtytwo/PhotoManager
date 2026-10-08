@@ -95,6 +95,8 @@ def patch_source(
     require_source(services, source_id)
     if body.enabled is not None:
         services.repo.set_source_enabled(source_id, body.enabled)
+    if body.label is not None:
+        services.repo.rename_source(source_id, body.label)
     if body.owner_id is not None:
         services.repo.set_source_owner(source_id, body.owner_id)  # unknown user: 422
     if body.recheck is not None:

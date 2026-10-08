@@ -1,6 +1,7 @@
 """Backup schedules (FEATURES 9b.3): parsing, next run, quiet window, due and overdue."""
 
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from hypothesis import given
@@ -154,6 +155,54 @@ def test_overdue_after_two_intervals_without_success() -> None:
     assert is_overdue(daily, None, created, datetime(2026, 9, 3, 1, 0)), "never succeeded"
     assert not is_overdue(daily, None, created, datetime(2026, 9, 2, 0, 0))
     assert not is_overdue(parse_schedule("manual"), None, created, datetime(2030, 1, 1))
+
+
+def test_not_overdue_while_the_quiet_window_keeps_runs_from_happening() -> None:
+    hourly, created = parse_schedule("hourly"), datetime(2026, 9, 1)
+    night = parse_window("22:00-06:00")  # crosses midnight
+    last = datetime(2026, 9, 29, 5, 0)
+    assert is_overdue(hourly, last, created, datetime(2026, 9, 29, 12, 0)), "no window: late"
+    assert not is_overdue(hourly, last, created, datetime(2026, 9, 29, 12, 0), night)
+    assert not is_overdue(hourly, last, created, datetime(2026, 9, 29, 23, 0), night)
+    assert is_overdue(hourly, last, created, datetime(2026, 9, 29, 23, 1), night)
+    assert is_overdue(hourly, last, created, datetime(2026, 9, 30, 12, 0), night), "missed a night"
+
+
+def test_overdue_inside_the_window_is_still_two_intervals() -> None:
+    hourly, created = parse_schedule("hourly"), datetime(2026, 9, 1)
+    night = parse_window("22:00-06:00")
+    last = datetime(2026, 9, 29, 23, 30)
+    assert not is_overdue(hourly, last, created, datetime(2026, 9, 30, 1, 30), night)
+    assert is_overdue(hourly, last, created, datetime(2026, 9, 30, 1, 31), night)
+
+
+def test_overdue_with_a_daytime_window_and_a_daily_slot_outside_it() -> None:
+    daily, created = parse_schedule("daily 02:30"), datetime(2026, 9, 1)
+    office = parse_window("09:00-17:00")  # the 02:30 slot waits for 09:00
+    last = datetime(2026, 9, 28, 9, 5)
+    assert not is_overdue(daily, last, created, datetime(2026, 9, 30, 9, 0), office)
+    assert is_overdue(daily, last, created, datetime(2026, 9, 30, 9, 6), office)
+    assert not is_overdue(daily, None, created, datetime(2026, 9, 2, 9, 0), office)
+    assert is_overdue(daily, None, created, datetime(2026, 9, 3, 0, 1), office), "never ran"
+
+
+def test_overdue_on_a_daylight_saving_day_follows_the_wall_clock() -> None:
+    berlin = ZoneInfo("Europe/Berlin")  # 2026-03-29: 02:00 jumps to 03:00
+
+    def local(day: int, hour: int, minute: int = 0) -> datetime:
+        utc = datetime(2026, 3, day, hour, minute, tzinfo=UTC)
+        return utc.astimezone(berlin).replace(tzinfo=None)  # as the app layer converts
+
+    hourly, created = parse_schedule("hourly"), datetime(2026, 3, 1)
+    night = parse_window("22:00-06:00")
+    last = local(29, 3)  # 05:00 summer time, an hour before the window closes
+    assert last == datetime(2026, 3, 29, 5, 0)
+    assert not is_overdue(hourly, last, created, local(29, 10), night)
+    assert not is_overdue(hourly, last, created, local(29, 21), night), "23:00 on the wall"
+    assert is_overdue(hourly, last, created, local(29, 21, 1), night)
+    before = local(28, 23, 30)  # 00:30 winter time; the clocks jump while the window is open
+    assert not is_overdue(hourly, before, created, local(29, 0, 59), night), "01:59"
+    assert is_overdue(hourly, before, created, local(29, 1, 1), night), "03:01 on the wall"
 
 
 @given(

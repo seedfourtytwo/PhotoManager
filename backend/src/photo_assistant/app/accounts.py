@@ -6,6 +6,7 @@ Session tokens are random; only their SHA-256 is stored. A session ends after
 
 import hashlib
 import secrets
+import threading
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -16,7 +17,6 @@ from photo_assistant.domain.access import (
     leaves_no_admin,
     pin_problem,
     session_expired,
-    too_many_failures,
     username_problem,
 )
 from photo_assistant.domain.errors import ConflictError, InvalidError
@@ -31,6 +31,7 @@ from photo_assistant.ports.accounts import (
 )
 
 _TOUCH_EVERY = timedelta(minutes=1)  # don't write to the database on every request
+_VERIFIES_AT_ONCE = 2  # an argon2 check holds its whole memory cost (64 MiB) while it runs
 
 
 class AccountError(InvalidError):
@@ -109,7 +110,7 @@ class Accounts:
         self._store = store
         self._hasher = hasher
         self._clock = clock
-        self._dummy_hash: str | None = None
+        self._verifying = threading.BoundedSemaphore(_VERIFIES_AT_ONCE)
 
     # --- first run -------------------------------------------------------------------------
 
@@ -164,17 +165,20 @@ class Accounts:
         self._guard_last_admin(user, patch)
         if patch.pin is not None:
             _check_pin(patch.pin)
-            self._store.set_pin_hash(user_id, self._hasher.hash(patch.pin))
-            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays
-            self._store.delete_sessions_of(user_id)
-            self._store.revoke_devices_of(user_id, self._clock.now())
-        try:
+        try:  # the one step that can still be refused goes first, and writes the PIN with it
             self._store.update_user(
-                user_id, display_name=patch.display_name, role=patch.role, disabled=patch.disabled
+                user_id,
+                display_name=patch.display_name,
+                role=patch.role,
+                disabled=patch.disabled,
+                password_hash=None if patch.pin is None else self._hasher.hash(patch.pin),
             )
         except NoActiveAdminError as exc:  # a concurrent change got past the early check
             raise LastAdminError() from exc
-        if patch.disabled:
+        if patch.pin is not None:
+            # an admin reset is for a lost or leaked PIN: nothing the old one opened stays
+            self._store.revoke_devices_of(user_id, self._clock.now())
+        if patch.pin is not None or patch.disabled:
             self._store.delete_sessions_of(user_id)
         updated = self._store.get_user(user_id)
         assert updated is not None
@@ -197,23 +201,26 @@ class Accounts:
     # --- sessions --------------------------------------------------------------------------
 
     def login(self, username: str, pin: str, ip: str) -> tuple[User, str]:
-        now = self._clock.now()
-        since = now - FAILED_LOGIN_WINDOW
-        if too_many_failures(self._store.count_login_failures(username, ip, since)):
-            raise TooManyAttemptsError()
         found = self._store.find_user_by_username(username)
         if found is None:
-            self._hasher.verify(self._dummy(), pin)  # same work: don't reveal who exists
-        if found is None or not self._hasher.verify(found[1], pin) or found[0].disabled:
-            self._store.add_login_failure(username, ip, now)
+            # the login screen lists every account name, so who exists is no secret: an
+            # unknown name costs no hash and leaves no row
+            raise InvalidCredentialsError()
+        user, pin_hash = found
+        if not self._guess(username, pin_hash, pin, ip) or user.disabled:
             raise InvalidCredentialsError()
         self._store.clear_login_failures(username, ip)
-        return found[0], self._start_session(found[0])
+        return user, self._start_session(user)
 
-    def _dummy(self) -> str:
-        if self._dummy_hash is None:
-            self._dummy_hash = self._hasher.hash(secrets.token_hex(16))
-        return self._dummy_hash
+    def _guess(self, username: str, pin_hash: str, pin: str, ip: str) -> bool:
+        """One counted try at a PIN: is it right? The try is counted *before* the PIN is
+        checked, so guesses sent at the same moment can't all get in under the limit; the
+        caller clears the count when the try turns out right. Raises TooManyAttemptsError."""
+        now = self._clock.now()
+        if not self._store.record_login_attempt(username, ip, now, now - FAILED_LOGIN_WINDOW):
+            raise TooManyAttemptsError()
+        with self._verifying:
+            return self._hasher.verify(pin_hash, pin)
 
     def _start_session(self, user: User) -> str:
         token = secrets.token_urlsafe(32)
@@ -238,12 +245,14 @@ class Accounts:
     def logout(self, token: str) -> None:
         self._store.delete_session(_token_hash(token))
 
-    def change_pin(self, user: User, current: str, new: str, keep_token: str) -> None:
+    def change_pin(self, user: User, current: str, new: str, keep_token: str, ip: str) -> None:
         """Every other session of this user ends (a thief's included); ``keep_token``, the
-        session making the change, stays signed in."""
+        session making the change, stays signed in. A wrong current PIN counts as a failed
+        login from ``ip``: an open session is no way to guess the PIN without limit."""
         found = self._store.find_user_by_username(user.username)
-        if found is None or not self._hasher.verify(found[1], current):
+        if found is None or not self._guess(user.username, found[1], current, ip):
             raise InvalidCredentialsError()
+        self._store.clear_login_failures(user.username, ip)
         _check_pin(new)
         self._store.set_pin_hash(user.id, self._hasher.hash(new))
         self._store.delete_sessions_of(user.id, keep=_token_hash(keep_token))

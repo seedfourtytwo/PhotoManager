@@ -32,6 +32,7 @@
 			: [])
 	]);
 	let more = $state(false);
+	let moreButton: HTMLButtonElement | undefined = $state();
 	const inRest = $derived(rest.some((l) => l.match(path)));
 
 	// Close the phone menu whenever the page changes.
@@ -40,6 +41,19 @@
 		more = false;
 	});
 </script>
+
+<!-- The phone menu closes like any menu: Escape (focus back on "More") or a tap anywhere else. -->
+<svelte:window
+	onkeydown={(e) => {
+		if (!more || e.key !== 'Escape') return;
+		more = false;
+		moreButton?.focus();
+	}}
+	onclick={(e) => {
+		const target = e.target as Element;
+		if (more && target !== moreButton && !target.closest('#nav-more')) more = false;
+	}}
+/>
 
 <nav aria-label="Main">
 	<p class="mark" aria-hidden="true">Photos</p>
@@ -56,6 +70,7 @@
 				class:current={inRest}
 				aria-expanded={more}
 				aria-controls="nav-more"
+				bind:this={moreButton}
 				onclick={() => (more = !more)}>More</button
 			>
 		</li>

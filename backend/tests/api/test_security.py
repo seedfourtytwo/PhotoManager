@@ -80,3 +80,53 @@ def test_odd_header_bytes_do_not_crash_the_guard() -> None:
     scope = {"type": "http", "method": "GET", "headers": [(b"x-name", b"caf\xe9")]}
     asyncio.run(guard(scope, None, None))  # type: ignore[arg-type]
     assert reached == [True]
+
+
+# --- request size and content sniffing ---------------------------------------------------------
+
+LOGIN = "/api/auth/login"
+JSON = {"Content-Type": "application/json"}
+
+
+def _login_body(size: int) -> bytes:
+    """A well-formed login of about ``size`` bytes: only its length is wrong."""
+    return b'{"username": "admin", "pin": "' + b"0" * size + b'"}'
+
+
+def test_an_oversized_body_is_refused_by_its_declared_length(client: TestClient) -> None:
+    anon = TestClient(client.app, base_url="http://127.0.0.1:8420")
+    huge = anon.post(LOGIN, content=_login_body(3_000_000), headers=JSON)
+    assert huge.status_code == 413 and "too large" in huge.json()["detail"]
+    usual = anon.post(LOGIN, content=_login_body(900_000), headers=JSON)
+    assert usual.status_code == 422, "under the limit it is read, and judged for what it says"
+
+
+def test_an_oversized_body_sent_without_a_length_is_cut_off_while_streaming(
+    client: TestClient,
+) -> None:
+    anon = TestClient(client.app, base_url="http://127.0.0.1:8420")
+    body = _login_body(3_000_000)
+    chunks = (body[i : i + 65_536] for i in range(0, len(body), 65_536))
+    streamed = anon.post(LOGIN, content=chunks, headers=JSON)
+    assert "content-length" not in streamed.request.headers
+    assert streamed.status_code == 413 and "too large" in streamed.json()["detail"]
+
+
+def test_uploads_are_not_held_to_the_small_body_limit(client: TestClient) -> None:
+    files = [("file", ("notes.bin", b"x" * 1_500_000, "application/octet-stream"))]
+    response = client.post("/api/upload", files=files)
+    assert response.status_code == 200, "its own per-file limit applies (PA_UPLOAD_MAX_MB)"
+    assert [f["outcome"] for f in response.json()["files"]] == ["rejected"], "not a photo"
+
+
+def test_every_response_tells_the_browser_not_to_guess_content_types(client: TestClient) -> None:
+    responses = [
+        client.get("/api/health"),
+        client.get("/api/assets/999/thumb"),  # 404
+        client.post("/api/sources/scan-all", headers={"Origin": "https://attacker.example"}),
+        client.get("/api/health", headers={"Host": "attacker.example"}),
+        client.post(LOGIN, content=_login_body(3_000_000), headers=JSON),
+    ]
+    assert [r.status_code for r in responses] == [200, 404, 403, 400, 413]
+    for response in responses:
+        assert response.headers["x-content-type-options"] == "nosniff", response.status_code

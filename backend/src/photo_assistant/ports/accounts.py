@@ -51,9 +51,10 @@ class AccountStore(Protocol):
         display_name: str | None = None,
         role: Role | None = None,
         disabled: bool | None = None,
+        password_hash: str | None = None,
     ) -> None:
         """One transaction; raises NoActiveAdminError (and changes nothing) if afterwards no
-        active admin is left."""
+        active admin is left. None leaves a value as it is."""
         ...
 
     def set_pin_hash(self, user_id: int, password_hash: str) -> None: ...
@@ -76,8 +77,11 @@ class AccountStore(Protocol):
         ...
 
     # failed logins (rate limit)
-    def add_login_failure(self, username: str, ip: str, at: datetime) -> None: ...
-    def count_login_failures(self, username: str, ip: str, since: datetime) -> int: ...
+    def record_login_attempt(self, username: str, ip: str, at: datetime, since: datetime) -> bool:
+        """Atomically: False (and nothing recorded) if this name already has too many failures
+        from this address after ``since``; otherwise count one more, at ``at``, and True."""
+        ...
+
     def clear_login_failures(self, username: str, ip: str) -> None: ...
     def clear_all_login_failures(self, username: str) -> None:
         """Every address's failures for this username, in any letter case."""

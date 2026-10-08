@@ -33,9 +33,13 @@ the issue you are working on, and the relevant section of `docs/ARCHITECTURE.md`
 ## Commands
 
 ```
-just setup     # install everything
-just dev       # run api + web with reload
-just check     # lint, layer contracts, types, all tests (what CI runs)
-just fmt       # auto-fix formatting
-# coming: just e2e (Playwright, desktop + phone), just qa (pre-release checklist)
+just setup      # install everything
+just dev        # run api + web with reload
+just check      # lint, layer contracts, types, all tests (the steps in ci/github-ci.yml, not switched on yet)
+just test-fast  # backend tests without the ones that need external tools
+just fmt        # auto-fix formatting
+just e2e        # Playwright, desktop + phone, against the real backend on a synthetic library
+just e2e-mock   # the same suite against the in-memory mock API
+just doctor     # check this machine: tools, disk, database, backups
+just            # list every recipe (run, build, import, models, backup, install-service, …)
 ```

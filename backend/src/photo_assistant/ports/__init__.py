@@ -163,6 +163,9 @@ class Job:
     attempts: int
 
 
+IMPORT_RUNS_LISTED = 200  # the import history shows the newest runs, not every rescan ever
+
+
 class SourceRegistry(Protocol):
     def add_source(
         self,
@@ -175,7 +178,8 @@ class SourceRegistry(Protocol):
         config: Mapping[str, object] | None = None,
     ) -> Source:
         """The one way to create a source (any kind); access defaults to the domain rule.
-        Raises ValueError if its folder is already a source."""
+        Raises ValueError if its folder is already a source, and an InvalidError if the owner
+        or someone on the access list is not an account."""
         ...
 
 
@@ -233,14 +237,17 @@ class Repository(SourceRegistry, Protocol):
         self, asset_id: int, source_id: int, exclude: str
     ) -> str | None: ...
     def asset_id_for_source_path(self, source_id: int, relative_path: str) -> int | None: ...
-    def origins_of(self, asset_id: int) -> list[tuple[Source, str]]: ...
 
     # import runs
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int: ...
     def get_import_report(self, run_id: int) -> ImportReport | None: ...
-    def list_import_runs(self, source_id: int | None = None) -> list[dict[str, object]]: ...
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED
+    ) -> list[dict[str, object]]:
+        """Newest first, at most ``limit``."""
+        ...
 
     # job queue
     def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...

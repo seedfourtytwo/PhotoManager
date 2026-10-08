@@ -10,7 +10,6 @@ from photo_assistant.adapters.sqlite_repository import open_database
 from photo_assistant.adapters.system_probe import LocalSystemProbe
 from photo_assistant.api.ops_services import doctor_sample
 from photo_assistant.app.doctor import (
-    GB,
     DoctorConfig,
     Level,
     exit_code,
@@ -18,6 +17,7 @@ from photo_assistant.app.doctor import (
     run_doctor,
     version_tuple,
 )
+from photo_assistant.domain.backup import GB
 
 
 @dataclass

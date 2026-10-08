@@ -3,16 +3,18 @@
 Each user has an inbox source, ``<data>/inbox/<user_id>/``, private to them by default. A file
 is received into ``data/tmp`` (hashed on the way), accepted only if its bytes prove it is a
 photo and the library doesn't have it yet, then moved atomically into the inbox under a safe,
-unique name (``YYYY-MM/<name>``). One import of the inbox is queued per request.
+unique name (``YYYY-MM/<name>``). One import of the inbox is queued per request; a periodic
+rescan picks up a file whose request died before that (ARCHITECTURE, "Phone inbox").
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
-from photo_assistant.domain.access import Viewer
+from photo_assistant.domain.access import INBOX_KIND, Viewer
+from photo_assistant.domain.model import Source
 from photo_assistant.domain.uploads import (
     is_content_hash,
     numbered_names,
@@ -28,12 +30,14 @@ from photo_assistant.ports.upload import (
     UploadSpool,
 )
 
+INBOX_RESCAN_SECONDS = 3600.0  # the safety net; a normal upload queues its own import
 NOT_A_PHOTO = "not a photo (only JPEG, PNG, HEIC, WebP, TIFF, GIF, AVIF and RAW are accepted)"
 
 
 @dataclass(frozen=True, slots=True)
 class UploadSettings:
     max_bytes: int = 200 * 1000**2
+    min_free_bytes: int = 0  # keep this much of the disk free, as the importer does
     max_check_hashes: int = 5000
     import_job_kind: str = SCAN_JOB_KIND
 
@@ -76,6 +80,18 @@ class UploadInbox:
         """A writer for the next file; its ``write`` enforces the size limit."""
         return self._spool.open(self._settings.max_bytes)
 
+    def no_room(self, client_name: str) -> UploadResult | None:
+        """The refusal for a file arriving while the disk is under its free-space floor
+        (asked before a byte of it is stored), or None while there is room."""
+        free, floor = self._spool.free_bytes(), self._settings.min_free_bytes
+        if free >= floor:
+            return None
+        reason = (
+            f"the library disk is almost full ({free / 1000**3:.1f} GB free; uploads keep at "
+            f"least {floor / 1000**3:.0f} GB free): free up space on the server, then send it again"
+        )
+        return UploadResult(client_name, UploadOutcome.REJECTED, reason=reason)
+
     def accept(self, viewer: Viewer, client_name: str, spooled: SpooledUpload) -> UploadResult:
         """Store a received photo in the uploader's inbox, unless *they* already have it.
 
@@ -96,9 +112,10 @@ class UploadInbox:
         user_id = viewer.user_id
         month = self._clock.now().strftime("%Y-%m")
         name = safe_upload_name(client_name, ext)
-        stored = self._spool.commit(
-            spooled, self._user_folder(user_id) / month, numbered_names(name)
-        )
+        folder = self._user_folder(user_id)
+        # before the file: an inbox the rescan knows of, even if this request never finishes
+        self._inbox.ensure_inbox_source(user_id, str(folder))
+        stored = self._spool.commit(spooled, folder / month, numbered_names(name))
         return UploadResult(
             client_name, UploadOutcome.STORED, f"{month}/{stored.name}", content_hash=digest
         )
@@ -117,6 +134,23 @@ class UploadInbox:
             return None
         source = self._inbox.ensure_inbox_source(user_id, str(self._user_folder(user_id)))
         return self._library.enqueue(self._settings.import_job_kind, {"source_id": source.id})
+
+    def rescan(
+        self,
+        sources: Iterable[Source],
+        enqueue_once: Callable[[str, dict[str, object]], int | None],
+    ) -> int:
+        """Queue an import of every enabled inbox among ``sources`` unless one is already
+        waiting (so they never pile up); how many were queued."""
+        queued = 0
+        for source in sources:
+            if source.kind != INBOX_KIND or not source.enabled or source.owner_id is None:
+                continue
+            folder = self._user_folder(source.owner_id)
+            current = self._inbox.ensure_inbox_source(source.owner_id, str(folder))
+            job = enqueue_once(self._settings.import_job_kind, {"source_id": current.id})
+            queued += job is not None
+        return queued
 
     def missing(self, viewer: Viewer, hashes: Sequence[str]) -> list[str]:
         """Of these content hashes, the ones this viewer doesn't have (in order, no repeats).

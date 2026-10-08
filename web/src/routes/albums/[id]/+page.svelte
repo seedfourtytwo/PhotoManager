@@ -3,6 +3,8 @@
 	import { goto } from '$app/navigation';
 	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
+	import { LatestWriter } from '$lib/latest';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
@@ -14,7 +16,8 @@
 	import ShareDialog from '$lib/components/ShareDialog.svelte';
 
 	const id = $derived(Number(page.params.id));
-	let album = $state<AlbumDetail | null>(null);
+	// The header fields apart from the photos; both replaced whole, so neither is a deep proxy.
+	let album = $state.raw<Omit<AlbumDetail, 'items'> | null>(null);
 	let items = $state.raw<AssetOut[]>([]);
 	let selection = $state<Selection>(EMPTY);
 	let arrange = $state(false);
@@ -23,6 +26,8 @@
 	let description = $state('');
 	let width = $state(0);
 	let error = $state('');
+	/** Renaming or deleting: one request at a time, a double click must not send two. */
+	let busy = $state(false);
 
 	const canEdit = $derived(album?.role === 'owner' || album?.role === 'editor');
 	const layout = $derived(
@@ -40,38 +45,54 @@
 	const tracker = new LoupeTracker();
 	$effect(() => tracker.seen(loupeId));
 
+	/** Only the latest load counts: an answer for the album you left must not replace this one. */
+	let loads = 0;
 	async function load() {
+		const run = ++loads;
 		try {
-			album = await api.album(id);
-			items = album.items;
+			const loaded = await api.album(id);
+			if (run !== loads) return;
+			const { items: photos, ...header } = loaded;
+			album = header;
+			items = photos;
+			error = '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not open the album.';
+			if (run !== loads) return;
+			error = errorMessage(e, 'Could not open the album.');
 		}
 	}
 
+	// Another album: nothing of the previous one stays on screen while this one loads.
 	$effect(() => {
 		void id;
+		album = null;
+		items = [];
+		selection = EMPTY;
+		arrange = false;
+		dialog = null;
+		error = '';
 		void load();
 	});
 
-	async function move(assetId: Id, to: number) {
+	// Each move saves the whole order, so saves go one at a time and only the newest waits.
+	// If one fails, the screen goes back to the order the server has.
+	const savedOrder = new LatestWriter<{ album: Id; ids: Id[] }>(
+		({ album, ids }) => api.reorderAlbum(album, ids),
+		(e) => {
+			notice.error(e);
+			void load();
+		}
+	);
+
+	function move(assetId: Id, to: number) {
 		const next = items.filter((a) => a.id !== assetId);
 		next.splice(
 			to,
 			0,
 			items.find((a) => a.id === assetId)!
 		);
-		const before = items;
 		items = next;
-		try {
-			await api.reorderAlbum(
-				id,
-				next.map((a) => a.id)
-			);
-		} catch (e) {
-			items = before;
-			notice.error(e);
-		}
+		void savedOrder.set({ album: id, ids: next.map((a) => a.id) });
 		// Keep keyboard focus on the moved photo.
 		queueMicrotask(() =>
 			document.querySelector<HTMLElement>(`.tile[data-id="${assetId}"]`)?.focus()
@@ -129,22 +150,30 @@
 	}
 
 	async function rename() {
+		if (busy) return;
+		busy = true;
 		try {
 			await api.updateAlbum(id, { title: title.trim(), description: description.trim() });
 			dialog = null;
 			await load();
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			busy = false;
 		}
 	}
 
 	async function remove() {
+		if (busy) return;
+		busy = true;
 		try {
 			await api.deleteAlbum(id);
 			notice.show('Album deleted. Its photos are still in the library.');
 			await goto('/albums');
 		} catch (e) {
 			notice.error(e);
+		} finally {
+			busy = false;
 		}
 	}
 </script>
@@ -245,14 +274,16 @@
 		<label class="field">Title <input bind:value={title} /></label>
 		<label class="field">Description <input bind:value={description} /></label>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={!title.trim()} onclick={rename}>Save</button>
+			<button class="primary" type="button" disabled={busy || !title.trim()} onclick={rename}
+				>Save</button
+			>
 		{/snippet}
 	</Dialog>
 {:else if dialog === 'delete'}
 	<Dialog title="Delete album?" onclose={() => (dialog = null)}>
 		<p>The album goes away; its photos stay in the library.</p>
 		{#snippet actions()}
-			<button class="primary" type="button" onclick={remove}>Delete album</button>
+			<button class="primary" type="button" disabled={busy} onclick={remove}>Delete album</button>
 		{/snippet}
 	</Dialog>
 {/if}

@@ -24,6 +24,15 @@ class FileKeyVault:
         descriptor = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "w") as handle:
             handle.write(f"{key}\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        # the folder entry too: a repository is created with this key right after, and a
+        # power cut must not leave a backup whose key file is gone
+        folder = os.open(self._folder, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(folder)
+        finally:
+            os.close(folder)
         return key_file, key
 
     def read(self, key_file: Path) -> str:
@@ -33,11 +42,15 @@ class FileKeyVault:
             raise PasswordFileError(
                 f"the key file is gone: {key_file} (the saved recovery key still opens the backup)"
             ) from exc
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:  # unreadable, or damaged (not text)
             raise PasswordFileError(f"the key file can't be read: {key_file}") from exc
         if not key:
             raise PasswordFileError(f"the key file is empty: {key_file}")
         return key
+
+    def holds(self, key_file: Path) -> bool:
+        folder, target = self._folder.resolve(), key_file.resolve()
+        return target != folder and target.is_relative_to(folder)
 
     def discard(self, key_file: Path) -> None:
         key_file.unlink(missing_ok=True)

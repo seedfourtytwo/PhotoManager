@@ -343,3 +343,54 @@ async function sessionCookie(): Promise<string> {
 	});
 	return (response.headers.get('set-cookie') ?? '').split(';')[0];
 }
+
+describe('the mock answers like the server (routes/sources.py, imports.py, system.py)', () => {
+	beforeEach(() => start('seed'));
+
+	it('refuses a relative or missing folder with 422, and a folder added twice with 409', async () => {
+		const api = await signedIn();
+		await expect(api.addSource({ label: 'Rel', path: 'Pictures' })).rejects.toMatchObject({
+			status: 422
+		});
+		await expect(api.addSource({ label: 'Gone', path: '/home/c/missing' })).rejects.toMatchObject({
+			status: 422,
+			message: expect.stringMatching(/folder not found/i)
+		});
+		await api.addSource({ label: 'Scans', path: '/home/c/Scans' });
+		await expect(
+			api.addSource({ label: 'Scans again', path: '/home/c/Scans/' })
+		).rejects.toMatchObject({
+			status: 409,
+			message: expect.stringMatching(/already a source/i)
+		});
+	});
+
+	it('lists only the sources a viewer may see, counting only the photos they can see', async () => {
+		const all = await (await signedIn()).sources();
+		expect(all.map((s) => s.id)).toEqual(expect.arrayContaining([1, 2, 3]));
+		// Source 3 is shared with the partner alone.
+		const partner = await (await signedIn('partner', '2345')).sources();
+		expect(partner.map((s) => s.id)).toEqual(expect.arrayContaining([1, 2, 3]));
+		const guest = await (await signedIn('guest', '3456')).sources();
+		expect(guest.map((s) => s.id)).toEqual([1, 2]);
+		expect(guest.every((s) => s.path === null)).toBe(true);
+		for (const source of guest)
+			expect(source.asset_count).toBeLessThanOrEqual(
+				all.find((s) => s.id === source.id)!.asset_count
+			);
+	});
+
+	it('keeps jobs, import runs, reports and source access for admins', async () => {
+		const admin = await signedIn();
+		const [run] = await admin.imports();
+		for (const who of [await signedIn('partner', '2345'), await signedIn('guest', '3456')]) {
+			await expect(who.jobs()).rejects.toMatchObject({ status: 403 });
+			await expect(who.imports()).rejects.toMatchObject({ status: 403 });
+			await expect(who.importReport(run.id)).rejects.toMatchObject({ status: 403 });
+			await expect(who.sourceAccess(1)).rejects.toMatchObject({ status: 403 });
+		}
+		await expect(admin.jobs()).resolves.toBeInstanceOf(Array);
+		await expect(admin.importReport(run.id)).resolves.toMatchObject({ id: run.id });
+		await expect(admin.sourceAccess(1)).resolves.toMatchObject({ everyone: 'download' });
+	});
+});

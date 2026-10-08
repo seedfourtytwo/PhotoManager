@@ -25,12 +25,20 @@ services:
     volumes:
       # The library: the folder you copied with `just export-library` (stays on the host disk).
       - ${PA_HOST_DATA_ROOT:-/srv/photo-assistant/data}:/data
-      # restic password file(s) and rclone config: outside the library, read-only.
+      # Password files you made yourself (`just backup add --password-file`): read-only.
       - ${PA_HOST_SECRETS:-/srv/photo-assistant/secrets}:/secrets:ro
+      # What the app writes about this machine, outside the library: the backup encryption
+      # keys the guided setup makes (photo-assistant/backup-keys/) and rclone's config
+      # (rclone/rclone.conf). Without this mount both vanish with every `up -d --build`.
+      # Create it first, for you only: mkdir -p -m 700 /srv/photo-assistant/config
+      - ${PA_HOST_CONFIG:-/srv/photo-assistant/config}:/home/app/.config
       # Backup disk(s) on the server, if you back up to one.
       - ${PA_HOST_BACKUP_DISK:-/srv/photo-assistant/backup}:/backup
       # restic's cache makes incremental backups fast; keep it between restarts.
       - restic-cache:/home/app/.cache
+      # Photo folders on the server to import from: one line each, always read-only (`:ro`).
+      # In the app, add the folder by its path inside the container (/sources/photos).
+      # - /srv/photos:/sources/photos:ro
     stop_grace_period: 60s
     mem_limit: 4g
     logging:
@@ -44,7 +52,7 @@ services:
   # `tailscale serve --bg 8420` there. Use this sidecar only if you want the app to appear
   # as its own machine ("photos") on your tailnet. Then also: remove `ports:` above, add
   # `network_mode: service:tailscale` to photo-assistant, put
-  # PA_ALLOWED_HOSTS=["photos.<tailnet>.ts.net"] in server.env, and create an auth key in the
+  # PA_ALLOWED_HOSTS=photos.<tailnet>.ts.net in server.env, and create an auth key in the
   # Tailscale admin console (Settings → Keys), stored in /srv/photo-assistant/secrets/ts-authkey.
   #
   # tailscale:

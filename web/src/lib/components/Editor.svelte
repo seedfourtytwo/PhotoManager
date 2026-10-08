@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { describePhoto } from './PhotoGrid.svelte';
+	import Dialog from './Dialog.svelte';
 	import { IDENTITY_RECIPE, type AssetOut, type CropRect, type Recipe } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import {
@@ -23,6 +24,9 @@
 	const FULL: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 	let recipe = $state<Recipe>({ ...IDENTITY_RECIPE });
 	let loaded = $state(false);
+	/** The saved edit could not be read: saving now would overwrite it with a blank one. */
+	let failed = $state(false);
+	let confirming = $state(false);
 	let ratio = $state<number | null>(null);
 	let imageAspect = $state(
 		untrack(() => (asset.width && asset.height ? asset.width / asset.height : 1.5))
@@ -56,6 +60,7 @@
 			})
 			.catch((e: unknown) => {
 				notice.error(e);
+				failed = true;
 				loaded = true;
 			});
 	});
@@ -128,6 +133,7 @@
 	}
 
 	async function revert() {
+		confirming = false;
 		busy = true;
 		try {
 			await api.revertRecipe(asset.id);
@@ -225,6 +231,12 @@
 				oninput={(e) => (recipe = { ...recipe, straighten: Number(e.currentTarget.value) })}
 			/>
 		</label>
+		{#if failed}
+			<p role="alert">
+				The saved edit could not be loaded, so nothing can be saved over it. Close the editor and
+				open it again.
+			</p>
+		{/if}
 		<div class="group end">
 			<button
 				type="button"
@@ -235,13 +247,26 @@
 				}}>Reset</button
 			>
 			{#if asset.edited}
-				<button type="button" disabled={busy} onclick={revert}>Revert to original</button>
+				<button type="button" disabled={busy} onclick={() => (confirming = true)}
+					>Revert to original</button
+				>
 			{/if}
 			<button type="button" onclick={onclose}>Cancel</button>
-			<button type="button" class="primary" disabled={busy || !loaded} onclick={save}>Save</button>
+			<button type="button" class="primary" disabled={busy || !loaded || failed} onclick={save}
+				>Save</button
+			>
 		</div>
 	</div>
 </dialog>
+
+{#if confirming}
+	<Dialog title="Go back to the original?" onclose={() => (confirming = false)}>
+		<p>The saved crop and rotation are removed. The original file was never changed.</p>
+		{#snippet actions()}
+			<button class="primary" type="button" onclick={revert}>Revert</button>
+		{/snippet}
+	</Dialog>
+{/if}
 
 <style>
 	.editor {

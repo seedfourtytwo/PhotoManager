@@ -1,5 +1,6 @@
 {
-	// Type-checks code that runs in Node rather than the browser: the mock API and E2E tests.
+	// Type-checks code that runs in Node rather than the browser: the mock API, E2E tests
+	// and the asset scripts.
 	"compilerOptions": {
 		"target": "es2023",
 		"module": "esnext",
@@ -14,5 +15,5 @@
 		"verbatimModuleSyntax": true,
 		"resolveJsonModule": true
 	},
-	"include": ["mock-api/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"]
+	"include": ["mock-api/**/*.ts", "e2e/**/*.ts", "scripts/**/*.ts", "playwright.config.ts"]
 }
