@@ -35,6 +35,7 @@ from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
+from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
 from photo_assistant.app.worker import Lanes
 
 
@@ -133,6 +134,11 @@ def build_services(settings: Settings) -> Services:
             "prune finished jobs",
             24 * 3600,
             lambda: repo.prune_done_jobs(clock.now() - timedelta(days=7)),
+        ),
+        PeriodicTask(
+            "inbox rescan",
+            INBOX_RESCAN_SECONDS,
+            lambda: integrations.upload.rescan(repo.list_sources(), repo.enqueue_once),
         ),
     ]
     ops = build_ops_services(
