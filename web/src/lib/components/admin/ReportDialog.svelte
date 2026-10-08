@@ -68,7 +68,7 @@
 			</table>
 		{/each}
 	{:else}
-		<p class="quiet">Loading…</p>
+		<p class="quiet" role="status">Loading…</p>
 	{/if}
 </Dialog>
 

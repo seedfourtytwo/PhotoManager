@@ -40,10 +40,10 @@ def test_ai_calls_are_logged_as_json_summaries(conn: sqlite3.Connection) -> None
         AICall("caption", "m", {"images": [{"bytes": 10}]}, {"status": 200}, True, 12, None, 1)
     )
     log.record(AICall("plan_album", "p", {}, {}, False, 5, "bad json", 2))
-    rows = log.recent(10)
+    rows = conn.execute("SELECT * FROM ai_log ORDER BY id DESC").fetchall()
     assert [r["capability"] for r in rows] == ["plan_album", "caption"]
-    assert rows[1]["request"] == {"images": [{"bytes": 10}]}
-    assert (rows[0]["ok"], rows[0]["error"], rows[0]["attempt"]) == (False, "bad json", 2)
+    assert json.loads(rows[1]["request_json"]) == {"images": [{"bytes": 10}]}
+    assert (rows[0]["ok"], rows[0]["error"], rows[0]["attempt"]) == (0, "bad json", 2)
 
 
 def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(

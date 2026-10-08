@@ -1,12 +1,27 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import type { AssetFilters, AssetOut, Id } from '$lib/api';
-	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
+	import type { AssetFilters, Id } from '$lib/api';
+	import { api, library, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { monthTotals } from '$lib/calendar';
 	import { TimelineLoader } from '$lib/loader.svelte';
-	import { closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
-	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
+	import {
+		LinkedPhoto,
+		LoupeTracker,
+		closePhoto,
+		openPhoto,
+		openPhotoId,
+		showPhoto
+	} from '$lib/loupe.svelte';
+	import {
+		EMPTY,
+		TOO_MANY_SELECTED,
+		applyClick,
+		limitSelection,
+		selectAll,
+		selectAllLabel,
+		type Selection
+	} from '$lib/selection';
 	import DateScrubber from '$lib/components/DateScrubber.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -15,14 +30,14 @@
 	import UploadButton from '$lib/components/UploadButton.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 
-	/** A shared link to a photo loads at most this many photos looking for it. */
+	/** A linked photo is looked for among at most this many photos of the timeline. */
 	const DEEP_LINK_LIMIT = 2000;
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	const query = $derived(filtersToQuery(filters));
 	let selection = $state<Selection>(EMPTY);
-	let months = $state<{ key: string; count: number }[]>([]);
+	let months = $state.raw<{ key: string; count: number }[]>([]);
 	let total = $state<number | null>(null);
 	let currentMonth = $state<string | null>(null);
 	let downloadAll = $state(false);
@@ -74,38 +89,37 @@
 	// --- the loupe follows ?photo=<id> -------------------------------------------------------
 	const loupeId = $derived(openPhotoId(page));
 	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
-	/** A linked photo that is not among the loaded ones (yet), shown on its own. */
-	let single = $state<AssetOut | null>(null);
-	let lastOpen: Id | undefined;
-
-	$effect(() => {
-		const id = loupeId;
-		if (id !== undefined) {
-			lastOpen = id;
-			if (loupeIndex < 0 && single?.id !== id) void findPhoto(id);
-		} else if (lastOpen !== undefined) {
-			// Closed: back to where that photo is in the grid, with focus on it.
-			const id = lastOpen;
-			lastOpen = undefined;
-			single = null;
-			void timeline?.reveal(id);
-		}
+	// A linked photo shows at once on its own; the timeline looks for it meanwhile (so far and
+	// no further) and takes over when it has it. Closed: back to where the photo is in the grid.
+	const linked = new LinkedPhoto({
+		fetch: (id) => api.asset(id),
+		find: (id) =>
+			void loader.until(
+				(items) => items.some((a) => a.id === id) || items.length >= DEEP_LINK_LIMIT
+			)
 	});
+	const tracker = new LoupeTracker((id) => void timeline?.reveal(id));
+	$effect(() => {
+		tracker.seen(loupeId);
+		linked.seen(loupeId, loupeIndex >= 0);
+	});
+	const shown = $derived(
+		loupeIndex >= 0
+			? { items: loader.items, index: loupeIndex }
+			: linked.single && linked.single.id === loupeId
+				? { items: [linked.single], index: 0 }
+				: null
+	);
 
-	async function findPhoto(id: Id) {
-		await loader.until(
-			(items) => items.some((a) => a.id === id) || items.length >= DEEP_LINK_LIMIT
-		);
-		if (loader.items.some((a) => a.id === id) || openPhotoId(page) !== id) return;
-		try {
-			single = await api.asset(id);
-		} catch {
-			closePhoto();
-		}
+	/** Every way of selecting ends here, so no selection outgrows what one action may carry. */
+	function select(next: Selection) {
+		const kept = limitSelection(next);
+		if (kept !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+		selection = kept;
 	}
 
 	function toggle(id: Id, range: boolean) {
-		selection = applyClick(selection, id, order, { shift: range, toggle: true });
+		select(applyClick(selection, id, order, { shift: range, toggle: true }));
 	}
 
 	function onkeydown(event: KeyboardEvent) {
@@ -114,7 +128,7 @@
 		if (event.key === 'Escape' && selection.ids.size) selection = EMPTY;
 		if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
 			event.preventDefault();
-			selection = selectAll(order);
+			select(selectAll(order));
 		}
 	}
 </script>
@@ -131,7 +145,9 @@
 			<button type="button" onclick={() => (downloadAll = true)}>Download all</button>
 		{/if}
 		{#if order.length}
-			<button type="button" onclick={() => (selection = selectAll(order))}>Select all</button>
+			<button type="button" onclick={() => select(selectAll(order))}
+				>{selectAllLabel(order.length, loader.done)}</button
+			>
 		{/if}
 		<UploadButton onuploaded={reloadAll} />
 	</ViewHeader>
@@ -157,7 +173,7 @@
 		{selection}
 		onopen={openPhoto}
 		ontoggle={toggle}
-		onselect={(next) => (selection = next)}
+		onselect={select}
 		onmonth={(key) => (currentMonth = key)}
 	/>
 
@@ -179,23 +195,14 @@
 	</div>
 {/if}
 
-{#if loupeIndex >= 0}
+{#if shown}
 	<Loupe
-		items={loader.items}
-		index={loupeIndex}
-		onindex={(i) => showPhoto(loader.items[i].id)}
+		items={shown.items}
+		index={shown.index}
+		onindex={(i) => showPhoto(shown.items[i].id)}
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
-		onchanged={(a) => loader.update(a.id, a)}
-		ondates={reloadAll}
-	/>
-{:else if single && loupeId === single.id}
-	<Loupe
-		items={[single]}
-		index={0}
-		onindex={() => undefined}
-		onclose={closePhoto}
-		onchanged={(a) => (single = { ...single!, ...a })}
+		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
 		ondates={reloadAll}
 	/>
 {/if}

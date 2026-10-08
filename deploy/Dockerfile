@@ -65,12 +65,15 @@ RUN apt-get update \
 
 # Non-root. UID/GID 1000 matches the first user on a typical Ubuntu server, so the bind-mounted
 # library stays owned by you; override with --build-arg if yours differ (`id -u`).
+# ~/.config (backup keys, rclone config) and ~/.cache (restic cache) are mount points in
+# compose.yml: they must exist and belong to the app user, or Docker creates them as root.
 ARG APP_UID=1000
 ARG APP_GID=1000
 RUN groupadd --gid ${APP_GID} app \
  && useradd --uid ${APP_UID} --gid ${APP_GID} --create-home --shell /usr/sbin/nologin app \
- && mkdir -p /data \
- && chown app:app /data
+ && mkdir -p /data /home/app/.config /home/app/.cache \
+ && chown app:app /data /home/app/.config /home/app/.cache \
+ && chmod 700 /home/app/.config
 
 COPY --from=python /opt/venv /opt/venv
 COPY --from=web /src/web/build /app/web

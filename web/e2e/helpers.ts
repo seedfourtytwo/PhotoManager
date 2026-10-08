@@ -49,6 +49,8 @@ export async function openAccountMenu(page: Page): Promise<Locator> {
 	await nav.getByRole('button', { name: /^Account/ }).click();
 	return nav;
 }
+/** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
+export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 

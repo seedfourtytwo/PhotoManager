@@ -1,5 +1,10 @@
 # Web app wiring (M2)
 
+> **Historical integration record.** This page describes how a branch was wired in and is not
+> kept up to date: file, class and migration names in it may be stale. For the settings see
+> [`docs/guides/settings.md`](../guides/settings.md); for how the app is built today see
+> [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
+
 The web app is a static SvelteKit SPA (`web/`, adapter-static, `ssr = false`). It talks only
 to `/api/*` as described in [`docs/contracts/api-v1.md`](../contracts/api-v1.md), through the
 typed client in `web/src/lib/api/` (types in `types.ts`, one method per route in `client.ts`).

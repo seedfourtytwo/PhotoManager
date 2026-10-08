@@ -1,8 +1,12 @@
 """File names and folders inside a download (FEATURES 4b.6), and size estimates."""
 
+import time
 from datetime import datetime
+from pathlib import PurePosixPath
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from photo_assistant.domain.export_naming import (
     ExportOptions,
@@ -57,6 +61,46 @@ def test_names_never_collide() -> None:
         "2019/a_2_2.jpg",
         "b",
     ]
+
+
+def restarting_unique_names(names: list[str]) -> list[str]:
+    """The original: counts up from 2 again for every repeat (quadratic). The oracle."""
+    taken: set[str] = set()
+    result = []
+    for name in names:
+        path = PurePosixPath(name)
+        candidate, n = name, 1
+        while candidate.lower() in taken:
+            n += 1
+            candidate = str(path.with_name(f"{path.stem}_{n}{path.suffix}"))
+        taken.add(candidate.lower())
+        result.append(candidate)
+    return result
+
+
+_STEMS = st.sampled_from(["a", "A", "a_2", "A_2", "a_3", "a_2_2", "b", "IMG_1", "img_1_2"])
+_NAMES = st.builds(
+    lambda folder, stem, suffix: f"{folder}{stem}{suffix}",
+    st.sampled_from(["", "2019/", "2019/07/"]),
+    _STEMS,
+    st.sampled_from(["", ".jpg", ".JPG", ".heic"]),
+)
+
+
+@given(st.lists(_NAMES, max_size=60))
+def test_numbering_is_the_same_as_counting_up_from_two_every_time(names: list[str]) -> None:
+    assert unique_names(names) == restarting_unique_names(names)
+
+
+def test_thousands_of_identical_names_are_numbered_quickly() -> None:
+    """Was 92 s for 8,000 (every repeat tried _2, _3, … again)."""
+    names = ["IMG_0001.JPG"] * 8000 + ["img_0001_2.jpg"] * 100
+    started = time.perf_counter()
+    unique = unique_names(names)
+    assert time.perf_counter() - started < 2.0
+    assert unique[:3] == ["IMG_0001.JPG", "IMG_0001_2.JPG", "IMG_0001_3.JPG"]
+    assert unique[7999] == "IMG_0001_8000.JPG" and unique[8000] == "img_0001_2_2.jpg"
+    assert len({u.lower() for u in unique}) == len(names)
 
 
 def test_options_are_checked() -> None:

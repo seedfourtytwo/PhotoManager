@@ -34,6 +34,10 @@
 	let detail = $state<AssetDetail | null>(null);
 	let info = $state(viewport.desktop);
 	let idle = $state(false);
+	/** Keyboard focus is in the toolbar: it stays visible (see the style), so it stays usable. */
+	let toolbarFocus = $state(false);
+	/** The press that brings hidden chrome back must not also press what it uncovers. */
+	let waking = $state(false);
 	let dialog = $state<'download' | 'date' | 'edit' | null>(null);
 	let root: HTMLDialogElement | undefined = $state();
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -90,6 +94,11 @@
 		clearTimeout(idleTimer);
 		idleTimer = setTimeout(() => (idle = true), IDLE_MS);
 	}
+	function onchromedown(e: PointerEvent) {
+		if ((e.target as HTMLElement).closest('.stage')) return;
+		waking = idle;
+		wake();
+	}
 	function hideChrome() {
 		clearTimeout(idleTimer);
 		idle = true;
@@ -128,7 +137,6 @@
 		const keys: Record<string, () => void> = {
 			ArrowLeft: () => go(-1),
 			ArrowRight: () => go(1),
-			Escape: onclose,
 			f: () => void toggleFullscreen(),
 			i: () => (info = !info)
 		};
@@ -201,8 +209,14 @@
 	aria-label="Photo viewer"
 	tabindex="-1"
 	onpointermove={(e) => e.pointerType === 'mouse' && wake()}
-	onpointerdown={(e) => !(e.target as HTMLElement).closest('.stage') && wake()}
-	oncancel={(e) => e.preventDefault()}
+	onpointerdown={onchromedown}
+	onclickcapture={() => (waking = false)}
+	oncancel={(e) => {
+		// Esc, and a phone's Back gesture: the page closes the loupe (and tidies the URL).
+		e.preventDefault();
+		onclose();
+	}}
+	onclose={() => onclose()}
 >
 	{#if asset}
 		<div
@@ -235,7 +249,14 @@
 			><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5 16.5 12 9 19.5" /></svg></button
 		>
 
-		<div class="top" role="toolbar" aria-label="Photo actions">
+		<div
+			class="top"
+			role="toolbar"
+			aria-label="Photo actions"
+			inert={(idle || waking) && !toolbarFocus}
+			onfocusin={(e) => (toolbarFocus = (e.target as HTMLElement).matches(':focus-visible'))}
+			onfocusout={() => (toolbarFocus = false)}
+		>
 			<button type="button" onclick={onclose}>Close</button>
 			<span class="spacer"></span>
 			<div class="actions">
@@ -326,7 +347,7 @@
 					</p>
 					<h3>Sources</h3>
 					<ul>
-						{#each detail.origins as origin (origin.source_id + origin.relative_path)}
+						{#each detail.origins as origin (`${origin.source_id}:${origin.relative_path}`)}
 							<li>{origin.source_label} <span class="quiet small">{origin.relative_path}</span></li>
 						{/each}
 					</ul>

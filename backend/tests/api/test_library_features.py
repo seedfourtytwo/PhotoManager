@@ -188,8 +188,11 @@ def test_fix_dates_set_and_shift_keep_history(lib: Lib) -> None:
     )
     assert shift.json() == {"updated": 2}
     assert c.get(f"/api/assets/{ids['paris1']}").json()["taken_at"] == "2019-07-04T16:30:00"
-    history = services_of(c).repo.date_history(ids["nodate"])
-    assert history[0][1] == "file_mtime" and history[0][2] == datetime(2015, 6, 1, 10)
+    history = services_of(c).db.writer.execute(
+        "SELECT old_date_source, new_taken_at FROM date_change WHERE asset_id = ? ORDER BY id",
+        (ids["nodate"],),
+    )
+    assert tuple(history.fetchall()[0]) == ("file_mtime", "2015-06-01T10:00:00")
     both = c.post(
         "/api/assets/dates",
         json={"ids": [ids["winter"]], "set": "2015-06-01T10:00:00", "shift_minutes": 5},

@@ -8,6 +8,7 @@ import pytest
 from photo_assistant.adapters.filesystem import Blake3Hasher
 from photo_assistant.app.backup import (
     BACKUP_JOB,
+    MIRROR_JOB,
     RESTORE_TEST_JOB,
     BackupConfig,
     BackupService,
@@ -23,9 +24,16 @@ from photo_assistant.domain.backup import (
     TargetSettings,
 )
 from photo_assistant.domain.schedule import InvalidScheduleError
-from photo_assistant.ports.backup import AssetFile, BackupError, Disk, WrongPasswordError
+from photo_assistant.ports.backup import (
+    AssetFile,
+    BackupError,
+    Disk,
+    MirrorSignInError,
+    WrongPasswordError,
+)
 from tests.fakes_backup import (
     FakeEngine,
+    FakeMirror,
     FakePlaces,
     FakeQueue,
     FakeSnapshotter,
@@ -52,6 +60,9 @@ class World:
         self.queue = FakeQueue()
         self.places = FakePlaces()
         self.vault = FakeVault(tmp_path / "keys")
+        self.probed: list[Path] = []
+        self.integrity = "ok"  # what the integrity probe says of a restored database
+        self.mirror = FakeMirror()
         self.disk = tmp_path / "usb"
         self.disk.mkdir()
         self.service = BackupService(
@@ -64,7 +75,13 @@ class World:
             queue=self.queue,
             places=self.places,
             vault=self.vault,
+            database_integrity=self.probe_database,
+            mirror=self.mirror,
         )
+
+    def probe_database(self, database: Path) -> str:
+        self.probed.append(database)
+        return self.integrity
 
     def _make_assets(self) -> list[AssetFile]:
         hasher = Blake3Hasher()
@@ -124,6 +141,25 @@ def test_a_failing_backup_is_recorded_with_its_reason_and_nothing_is_pruned(
     assert run.status is BackupRunStatus.FAILED
     assert run.error == "wrong password for the backup"
     assert "forget" not in world.engine.calls
+
+
+def test_a_snapshot_that_was_written_counts_even_when_pruning_fails(world: World) -> None:
+    world.engine.fail["forget"] = BackupError("repository is locked")
+    target_id = world.target()
+    run = world.service.run_now(target_id)
+    assert run.status is BackupRunStatus.SUCCEEDED and run.error is None
+    assert run.snapshot_id == f"{1:064x}" and run.repo_bytes == 99_000
+    assert run.details == "snapshot ok; pruning failed: repository is locked"
+    (status,) = world.service.status()
+    assert status.last_success_at is not None and not status.failing
+
+
+def test_a_snapshot_that_was_written_counts_even_when_its_size_is_unknown(world: World) -> None:
+    world.engine.fail["size"] = OSError("network is unreachable")
+    run = world.service.run_now(world.target())
+    assert run.status is BackupRunStatus.SUCCEEDED and run.snapshot_id == f"{1:064x}"
+    assert run.repo_bytes is None
+    assert run.details == "snapshot ok; measuring the backup failed: network is unreachable"
 
 
 def test_a_failed_database_snapshot_stops_the_run_before_restic(world: World) -> None:
@@ -295,6 +331,47 @@ def test_restore_test_flags_a_missing_database_snapshot(world: World) -> None:
     assert "database snapshot missing" in (run.error or "")
 
 
+def test_restore_test_fails_when_the_restored_database_is_damaged(world: World) -> None:
+    """A file that is there and not empty proves nothing: it has to open and check out."""
+    target_id = world.target()
+    world.service.run_now(target_id)
+    world.integrity = "database disk image is malformed"
+    run = world.service.restore_test(target_id, sample_size=0)
+    assert run.status is BackupRunStatus.FAILED
+    assert "database snapshot is damaged: database disk image is malformed" in (run.error or "")
+    (probed,) = world.probed
+    assert probed.name == "library.db" and world.root not in probed.parents, "the restored copy"
+
+
+def test_restore_test_runs_the_real_integrity_probe_on_the_restored_database(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    from photo_assistant.adapters.system_probe import LocalSystemProbe
+
+    world = World(tmp_path)
+    service = BackupService(
+        world.store,
+        world.engine,
+        world.snapshotter,
+        Blake3Hasher(),
+        world.clock,
+        BackupConfig(data_root=world.root, local_tz=UTC),
+        database_integrity=LocalSystemProbe().database_integrity,
+    )
+    target_id = world.target()
+    service.run_now(target_id)
+    snapshot = world.root / "db-snapshot" / "library.db"
+    snapshot.write_bytes(b"SQLite format 3\x00" + b"not really" * 500)
+    assert service.restore_test(target_id, sample_size=0).status is BackupRunStatus.FAILED
+    snapshot.unlink()
+    with sqlite3.connect(snapshot) as conn:
+        conn.execute("CREATE TABLE asset (id INTEGER PRIMARY KEY)")
+    conn.close()
+    assert service.restore_test(target_id, sample_size=0).status is BackupRunStatus.SUCCEEDED
+
+
 def test_restore_test_without_any_snapshot_fails_clearly(world: World) -> None:
     run = world.service.restore_test(world.target())
     assert run.status is BackupRunStatus.FAILED
@@ -352,6 +429,7 @@ def test_queueing_needs_a_queue(tmp_path: Path) -> None:
         Blake3Hasher(),
         world.clock,
         BackupConfig(data_root=world.root),
+        database_integrity=world.probe_database,
     )
     target_id = world.target()
     with pytest.raises(RuntimeError, match="job queue"):
@@ -545,3 +623,135 @@ def test_a_disabled_target_is_not_restore_tested(world: World) -> None:
     world.clock.current += timedelta(days=30)
     world.service.run_due()
     assert len(world.service.runs(target.id)) == 2
+
+
+def test_a_quiet_window_does_not_raise_the_overdue_banner_during_the_day(world: World) -> None:
+    target_id = world.target(schedule="hourly", quiet_window="22:00-06:00")
+    world.clock.current = T0.replace(hour=5)
+    world.service.run_now(target_id)
+    world.clock.current = T0.replace(hour=12)
+    (waiting,) = world.service.status()
+    assert not waiting.overdue and not waiting.needs_attention
+    world.clock.current = T0.replace(hour=23, minute=30)
+    assert world.service.status()[0].overdue, "the window opened and nothing ran"
+
+
+# --- an off-site copy on Proton Drive (issue 14) -----------------------------------------------
+
+PROTON = "/my-files/Backups"
+
+
+def mirrored(world: World) -> int:
+    target_id = world.target()
+    world.service.set_mirror(target_id, PROTON)
+    return target_id
+
+
+def kinds(world: World, target_id: int) -> list[tuple[RunKind, BackupRunStatus]]:
+    return [(r.kind, r.status) for r in reversed(world.service.runs(target_id))]
+
+
+def test_after_a_successful_backup_the_copy_on_proton_is_brought_up_to_date(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.run_now(target_id)
+    repository = Path(world.service.target(target_id).repository)
+    assert world.mirror.calls == [(repository, PROTON, world.root / "mirror" / f"{target_id}.json")]
+    assert kinds(world, target_id) == [
+        (RunKind.BACKUP, BackupRunStatus.SUCCEEDED),
+        (RunKind.MIRROR, BackupRunStatus.SUCCEEDED),
+    ]
+    copy = world.service.runs(target_id)[0]
+    assert copy.details == "2 new files sent (5 MB), 1 old file removed"
+    (status,) = world.service.status()
+    assert status.last_mirror_at == copy.finished_at and not status.mirror_failing
+    assert not status.needs_attention
+
+
+def test_without_a_copy_configured_or_after_a_failed_backup_nothing_is_sent(world: World) -> None:
+    plain = world.target()
+    world.service.run_now(plain)
+    world.service.set_mirror(plain, PROTON)
+    world.queue.jobs.clear()
+    world.engine.fail["backup"] = BackupError("disk unplugged")
+    world.service.run_now(plain)
+    assert world.mirror.calls == []
+    assert RunKind.MIRROR not in [k for k, _ in kinds(world, plain)]
+
+
+def test_a_failed_copy_is_recorded_and_raises_the_banner_until_it_works_again(
+    world: World,
+) -> None:
+    target_id = mirrored(world)
+    world.service.confirm_key_saved(target_id)
+    world.mirror.fail = MirrorSignInError("Proton Drive is not signed in: run 'x'")
+    backup = world.service.run_now(target_id)
+    assert backup.status is BackupRunStatus.SUCCEEDED, "the backup itself is fine"
+    (status,) = world.service.status()
+    assert status.mirror_failing and status.needs_attention
+    assert status.mirror_error == "Proton Drive is not signed in: run 'x'"
+    assert status.last_mirror_at is None
+    world.mirror.fail = None
+    world.service.run_now(target_id)
+    (status,) = world.service.status()
+    assert not status.mirror_failing and status.mirror_error is None
+    assert status.last_mirror_at is not None
+
+
+def test_scheduled_backups_are_copied_too(world: World) -> None:
+    target_id = mirrored(world)
+    world.clock.current = T0 + timedelta(hours=2)  # past 02:30
+    world.service.run_due()
+    assert (RunKind.MIRROR, BackupRunStatus.SUCCEEDED) in kinds(world, target_id)
+
+
+def test_switching_the_copy_on_queues_a_first_copy_when_a_backup_exists(world: World) -> None:
+    target_id = world.target()
+    world.service.set_mirror(target_id, PROTON)
+    assert world.queue.jobs == [], "nothing to copy before the first backup"
+    world.service.run_now(target_id)
+    world.service.set_mirror(target_id, None)
+    assert world.service.target(target_id).mirror_path is None
+    world.service.set_mirror(target_id, "/my-files/Elsewhere")
+    assert world.queue.jobs == [(MIRROR_JOB, {"target_id": target_id})]
+    world.service.job_handlers()[MIRROR_JOB]({"target_id": target_id})
+    assert world.mirror.calls[-1][1] == "/my-files/Elsewhere"
+
+
+def test_a_copy_job_for_a_target_whose_copy_was_switched_off_does_nothing(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.set_mirror(target_id, None)
+    world.service.job_handlers()[MIRROR_JOB]({"target_id": target_id})
+    assert world.mirror.calls == []
+
+
+@pytest.mark.parametrize("path", ["/photos", "/trash", "my-files", "/my-files/../x", ""])
+def test_the_copy_must_go_in_a_folder_in_my_files(world: World, path: str) -> None:
+    with pytest.raises(ValueError, match="My files"):
+        world.service.set_mirror(world.target(), path)
+
+
+def test_only_a_backup_on_this_machine_can_have_a_copy(world: World) -> None:
+    cloud = world.target(repository="rclone:nas:photos")
+    with pytest.raises(ValueError, match="folder or disk"):
+        world.service.set_mirror(cloud, PROTON)
+    with pytest.raises(UnknownTargetError):
+        world.service.set_mirror(999, PROTON)
+
+
+def test_without_proton_set_up_on_the_server_the_copy_cannot_be_switched_on(
+    tmp_path: Path,
+) -> None:
+    world = World(tmp_path)
+    world.service._mirror = None
+    with pytest.raises(ValueError, match="not available"):
+        world.service.set_mirror(world.target(), PROTON)
+
+
+def test_old_files_that_could_not_be_deleted_for_good_are_mentioned(world: World) -> None:
+    from photo_assistant.ports.backup import MirrorReport
+
+    target_id = mirrored(world)
+    world.mirror.report = MirrorReport(uploaded=0, removed=3, bytes_sent=0, left_in_trash=2)
+    world.service.run_now(target_id)
+    details = world.service.runs(target_id)[0].details
+    assert details == "0 new files sent (0 MB), 3 old files removed (2 left in Proton's trash)"

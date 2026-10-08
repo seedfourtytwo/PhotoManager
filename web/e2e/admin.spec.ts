@@ -1,4 +1,13 @@
-import { expect, expectAccessible, REAL_BACKEND, resetMock, signIn, test } from './helpers.ts';
+import type { Page } from '@playwright/test';
+import {
+	expect,
+	expectAccessible,
+	REAL_BACKEND,
+	resetMock,
+	signIn,
+	test,
+	toast
+} from './helpers.ts';
 
 /** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
 const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
@@ -98,6 +107,27 @@ test('a scan of a folder that has gone says “folder not found” on the folder
 	await expect(report.getByText(/folder not found on this machine/)).toBeVisible();
 });
 
+test('a folder can be told to check itself again on a timer', async ({ page }) => {
+	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	const auto = row.getByLabel('Check automatically');
+	await expect(auto).toHaveValue('off');
+	await expect(row.getByText(/next check/)).toHaveCount(0);
+
+	await auto.selectOption({ label: 'Every day' });
+	await expect(row.getByText(/next check (\d|within a few minutes)/)).toBeVisible();
+	await expect(row.getByRole('button', { name: 'Check again' })).toBeVisible();
+	await expectAccessible(page);
+
+	await page.reload();
+	await expect(auto).toHaveValue('daily');
+	await expect(row.getByText(/next check/)).toBeVisible();
+	const others = page.getByRole('listitem').filter({ hasText: 'Partner' });
+	await expect(others.getByLabel('Check automatically')).toHaveValue('off');
+
+	await auto.selectOption({ label: 'Off' });
+	await expect(row.getByText(/next check/)).toHaveCount(0);
+});
+
 test('import progress is live while a scan runs', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'timing of the mock’s scan');
 	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
@@ -112,7 +142,7 @@ test('a refused role change puts the old role back; disabled people say so', asy
 	const me = rowOf('admin');
 	const role = me.getByRole('combobox');
 	await role.selectOption('member');
-	await expect(page.getByRole('status')).toContainText(/at least one (active )?admin/i);
+	await expect(toast(page)).toContainText(/at least one (active )?admin/i);
 	await expect(role).toHaveValue('admin');
 
 	const guest = rowOf('guest');
@@ -266,4 +296,344 @@ test('Proton Drive: when the computer is not signed in, it says what to do', asy
 	await dialog.getByRole('button', { name: 'Check again' }).click();
 	await expect(dialog.getByRole('radio', { name: /My Proton photos/ })).toBeChecked();
 	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
+});
+
+test.describe('adding a folder when the second step fails or the button is pressed twice', () => {
+	test.beforeEach(() => test.skip(REAL_BACKEND, 'failures and delays are staged on the mock'));
+
+	async function pickScans(page: Page) {
+		await page.getByRole('button', { name: 'Add folder' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+		await dialog.getByRole('button', { name: /^scans$/i }).click();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Scans');
+		return dialog;
+	}
+
+	test('folder added but the import could not start: it is listed, and the reason is said', async ({
+		page
+	}) => {
+		await page.route(/\/api\/sources\/\d+\/scan$/, (route) =>
+			route.fulfill({ status: 503, json: { detail: 'The import queue is full; try again.' } })
+		);
+		const dialog = await pickScans(page);
+		await dialog.getByRole('button', { name: 'Add and import' }).click();
+		await expect(dialog).toBeHidden();
+		await expect(
+			page.getByRole('status').filter({ hasText: 'The import queue is full; try again.' })
+		).toBeVisible();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toBeVisible();
+	});
+
+	test('a double click on “Add and import” adds the folder once', async ({ page }) => {
+		let posts = 0;
+		await page.route('**/api/sources', async (route) => {
+			if (route.request().method() !== 'POST') return route.fallback();
+			posts++;
+			await new Promise((r) => setTimeout(r, 300));
+			await route.fallback();
+		});
+		const dialog = await pickScans(page);
+		await dialog.getByRole('button', { name: 'Add and import' }).dblclick();
+		await expect(dialog).toBeHidden();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toHaveCount(1);
+		expect(posts).toBe(1);
+	});
+
+	test('the dialog opens fresh: no old error, no name typed last time', async ({ page }) => {
+		await page.route('**/api/sources', (route) =>
+			route.request().method() === 'POST'
+				? route.fulfill({ status: 409, json: { detail: 'That folder is already a source.' } })
+				: route.fallback()
+		);
+		const dialog = await pickScans(page);
+		await dialog.getByLabel('Name').fill('My own name');
+		await dialog.getByRole('button', { name: 'Add and import' }).click();
+		await expect(dialog.getByText('That folder is already a source.')).toBeVisible();
+		await dialog.getByRole('button', { name: 'Cancel' }).click();
+		await page.getByRole('button', { name: 'Add folder' }).click();
+		await expect(dialog.getByRole('button', { name: /^scans$/i })).toBeVisible();
+		await expect(dialog.getByText('That folder is already a source.')).toHaveCount(0);
+		await expect(dialog.getByLabel('Name')).not.toHaveValue('My own name');
+	});
+
+	async function fillCloud(page: Page) {
+		await page.getByRole('button', { name: 'Add cloud folder' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add a cloud folder' });
+		await dialog.getByLabel('Name').fill('Drive photos');
+		await dialog.getByRole('combobox', { name: 'Remote' }).selectOption('gdrive');
+		await dialog.getByLabel('Folder on the remote').fill('Photos/2024');
+		return dialog;
+	}
+
+	test('cloud folder added but the pull could not start: listed once, reason said', async ({
+		page
+	}) => {
+		await page.route(/\/api\/remote-sources\/\d+\/pull$/, (route) =>
+			route.fulfill({ status: 503, json: { detail: 'rclone is busy; try again.' } })
+		);
+		const dialog = await fillCloud(page);
+		await dialog.getByRole('button', { name: 'Add and pull' }).click();
+		// Staying open with the error would invite a second press, and a second copy of the folder.
+		await expect(dialog).toBeHidden();
+		await expect(
+			page.getByRole('status').filter({ hasText: 'Rclone is busy; try again.' })
+		).toBeVisible();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
+	});
+
+	test('a double click on “Add and pull” adds the cloud folder once', async ({ page }) => {
+		let posts = 0;
+		await page.route('**/api/remote-sources', async (route) => {
+			if (route.request().method() !== 'POST') return route.fallback();
+			posts++;
+			await new Promise((r) => setTimeout(r, 300));
+			await route.fallback();
+		});
+		const dialog = await fillCloud(page);
+		await dialog.getByRole('button', { name: 'Add and pull' }).dblclick();
+		await expect(dialog).toBeHidden();
+		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
+		expect(posts).toBe(1);
+	});
+});
+
+test.describe('Proton Drive: one folder, on a slow or failing listing', () => {
+	test.beforeEach(() => test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool'));
+
+	/** Listings wait until released; `fail` makes the next ones answer with an error. */
+	async function slowListings(page: Page) {
+		const control = { release: () => {}, fail: false, hold: false };
+		await page.route('**/api/proton/folders**', async (route) => {
+			if (control.fail)
+				return route.fulfill({ status: 502, json: { detail: 'Proton Drive did not answer.' } });
+			if (control.hold) await new Promise<void>((resolve) => (control.release = resolve));
+			await route.fallback();
+		});
+		return control;
+	}
+
+	async function openOneFolder(page: Page) {
+		await page.getByRole('button', { name: 'Add from Proton' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
+		await dialog.getByRole('radio', { name: /One folder/ }).check();
+		return dialog;
+	}
+
+	test('“Add and import” waits for the folder you clicked, so it never adds its parent', async ({
+		page
+	}) => {
+		const listings = await slowListings(page);
+		const dialog = await openOneFolder(page);
+		const add = dialog.getByRole('button', { name: 'Add and import' });
+		const inside = dialog.getByRole('list', { name: 'Folders inside' });
+		await expect(inside.getByRole('button', { name: 'Trips' })).toBeVisible();
+		await expect(add).toBeEnabled();
+		listings.hold = true;
+		await inside.getByRole('button', { name: 'Trips' }).click();
+		await expect(dialog.getByRole('status')).toHaveText('Looking…');
+		await expect(add).toBeDisabled();
+		listings.hold = false;
+		listings.release();
+		await expect(dialog.getByText('My files / Trips', { exact: true })).toBeVisible();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
+		await add.click();
+		await expect(
+			page.getByRole('listitem').filter({ hasText: 'Proton Drive · My files / Trips' })
+		).toBeVisible();
+	});
+
+	test('switching to Photos and back starts again at “My files”, name and all', async ({
+		page
+	}) => {
+		const listings = await slowListings(page);
+		const dialog = await openOneFolder(page);
+		const add = dialog.getByRole('button', { name: 'Add and import' });
+		await dialog
+			.getByRole('list', { name: 'Folders inside' })
+			.getByRole('button', { name: 'Trips' })
+			.click();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
+		await dialog.getByRole('radio', { name: /My Proton photos/ }).check();
+		listings.hold = true;
+		await dialog.getByRole('radio', { name: /One folder/ }).check();
+		// The picker shows "My files" again: the old subfolder must not be what gets added.
+		await expect(dialog.getByText('My files', { exact: true })).toBeVisible();
+		await expect(add).toBeDisabled();
+		await expect(dialog.getByLabel('Name')).toHaveValue('Proton Drive');
+		listings.hold = false;
+		listings.release();
+		await expect(add).toBeEnabled();
+	});
+
+	test('a listing that fails can be tried again; nothing can be added meanwhile', async ({
+		page
+	}) => {
+		const listings = await slowListings(page);
+		listings.fail = true;
+		const dialog = await openOneFolder(page);
+		await expect(dialog.getByRole('alert')).toContainText('Proton Drive did not answer.');
+		await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeDisabled();
+		listings.fail = false;
+		await dialog.getByRole('button', { name: 'Try again' }).click();
+		await expect(dialog.getByRole('alert')).toHaveCount(0);
+		await expect(
+			dialog.getByRole('list', { name: 'Folders inside' }).getByRole('button', { name: 'Trips' })
+		).toBeVisible();
+		await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeEnabled();
+	});
+});
+
+test('backups: “Back” from “It fits” returns to the folder that was chosen', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'the mock simulates the disks');
+	await page.getByRole('region', { name: 'Backups' }).getByRole('button', { name: 'Add backup' }).click(); // prettier-ignore
+	const dialog = page.getByRole('dialog', { name: 'Set up a backup' });
+	await dialog.getByLabel('Another folder').check();
+	await dialog.getByRole('button', { name: 'Documents' }).click();
+	const folder = dialog.getByRole('textbox', { name: 'Folder' });
+	await expect(folder).toHaveValue('/home/c/Documents');
+	await dialog.getByLabel('Name').fill('Documents copy');
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	await expect(dialog.getByText(/It fits\./)).toBeVisible();
+	await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+	await expect(dialog.getByLabel('Another folder')).toBeChecked();
+	await expect(folder).toHaveValue('/home/c/Documents');
+	await expect(dialog.getByLabel('Name')).toHaveValue('Documents copy');
+	// Still the same place: checking again asks about Documents, not the home folder.
+	const plan = page.waitForRequest((r) => r.url().includes('/api/backups/plan'));
+	await dialog.getByRole('button', { name: 'Check this place' }).click();
+	expect((await plan).postDataJSON()).toEqual({ place: '/home/c/Documents' });
+});
+
+test('loading texts in the admin dialogs are announced as status', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'the delays are staged on the mock');
+	let release = () => {};
+	const hold = async (route: import('@playwright/test').Route) => {
+		await new Promise<void>((resolve) => (release = resolve));
+		await route.fallback();
+	};
+	await page.route(/\/api\/sources\/\d+\/access$/, hold);
+	await page.route(/\/api\/imports\/\d+/, hold);
+	await page.route('**/api/proton', hold);
+	await page.route('**/api/folders**', hold);
+
+	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	await row.getByRole('button', { name: 'Access' }).click();
+	const access = page.getByRole('dialog', { name: /Who sees/ });
+	await expect(access.getByRole('status')).toHaveText('Loading…');
+	release();
+	await expect(access.getByLabel('Everyone')).toBeVisible();
+	await access.getByRole('button', { name: 'Cancel' }).click();
+
+	await row.getByRole('button', { name: 'Report' }).click();
+	const report = page.getByRole('dialog', { name: /Last import/ });
+	await expect(report.getByRole('status')).toHaveText('Loading…');
+	release();
+	await expect(report.getByRole('status')).toHaveCount(0);
+	await report.getByRole('button', { name: 'Close' }).click();
+
+	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	const proton = page.getByRole('dialog', { name: 'Add from Proton Drive' });
+	await expect(proton.getByRole('status')).toHaveText('Asking Proton Drive…');
+	release();
+	await expect(proton.getByRole('radio', { name: /My Proton photos/ })).toBeVisible();
+	await proton.getByRole('button', { name: 'Cancel' }).click();
+
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	const folder = page.getByRole('dialog', { name: 'Add a folder' });
+	await expect(folder.getByRole('status')).toHaveText('Looking…');
+	release();
+	await expect(folder.getByRole('status')).toHaveCount(0);
+});
+
+test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialog stays for another try', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'the refusal is staged on the mock');
+	let refuse = true;
+	await page.route(/\/api\/users\/\d+$/, (route) =>
+		refuse && route.request().method() === 'PATCH'
+			? route.fulfill({ status: 503, json: { detail: 'The library is busy; try again.' } })
+			: route.fallback()
+	);
+	const row = page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: 'partner', exact: true }) });
+	await row.getByRole('button', { name: 'Reset PIN' }).click();
+	const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
+	await dialog.getByLabel('PIN').fill('8642');
+	await dialog.getByRole('button', { name: 'Set PIN' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'The library is busy; try again.' })
+	).toBeVisible();
+	await expect(page.getByText(/New PIN set/)).toHaveCount(0);
+	await expect(dialog).toBeVisible();
+
+	refuse = false;
+	await dialog.getByRole('button', { name: 'Set PIN' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'New PIN set for partner.' })
+	).toBeVisible();
+	await expect(dialog).toBeHidden();
+	// The next person's dialog starts empty.
+	await page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: 'guest', exact: true }) })
+		.getByRole('button', { name: 'Reset PIN' })
+		.click();
+	await expect(
+		page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabel('PIN')
+	).toHaveValue('');
+});
+
+test('folder picker: a folder that is not there yet can be created on the spot', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, "uses the mock machine's folders");
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
+	const field = dialog.getByLabel('Folder', { exact: true });
+	await field.fill('/home/c/missing drop box');
+	await field.press('Enter');
+	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);
+	await dialog.getByRole('button', { name: 'Create this folder' }).click();
+	await expect(dialog.getByRole('alert')).toHaveCount(0);
+	await expect(field).toHaveValue('/home/c/missing drop box');
+	await expect(dialog.getByText('No folders inside.')).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Create this folder' })).toHaveCount(0);
+});
+
+test('backups: keep a copy on Proton Drive in a folder made on the spot, then stop', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool');
+	await page.evaluate(() =>
+		fetch('/api/backups', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				label: 'USB disk',
+				repository: '/media/c/USB disk/photos',
+				password_file: '/home/c/.backup-key'
+			})
+		})
+	);
+	await page.reload();
+	const backups = page.getByRole('region', { name: 'Backups' });
+	const cloud = backups.getByRole('listitem').filter({ hasText: 'Home server' });
+	await expect(cloud.getByRole('button', { name: 'Copy to Proton' })).toHaveCount(0);
+	const row = backups.getByRole('listitem').filter({ hasText: 'USB disk' });
+	await row.getByRole('button', { name: 'Copy to Proton' }).click();
+
+	const dialog = page.getByRole('dialog', { name: 'Copy this backup to Proton Drive' });
+	await expect(dialog.getByText('My files', { exact: true })).toBeVisible();
+	await dialog.getByLabel('New folder').fill('Photo backup');
+	await dialog.getByRole('button', { name: 'Create' }).click();
+	await expect(dialog.getByText('My files / Photo backup')).toBeVisible();
+	await dialog.getByRole('button', { name: 'Keep a copy here' }).click();
+	await expect(row.getByText(/Proton copy: My files \/ Photo backup/)).toBeVisible();
+	await expect(row.getByText(/first copy after the next backup/)).toBeVisible();
+
+	await row.getByRole('button', { name: 'Copy to Proton' }).click();
+	await dialog.getByRole('button', { name: 'Stop copying' }).click();
+	await expect(row.getByText(/Proton copy/)).toHaveCount(0);
 });

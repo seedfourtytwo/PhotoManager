@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { FolderListing } from '$lib/api';
+	import { ApiError } from '$lib/api';
 	import { api } from '$lib/app.svelte';
 
 	/** What the picker shows right now. */
@@ -12,14 +14,19 @@
 		 *  hold the main button until Enter or leaving the field has settled it. */
 		pending: boolean;
 	};
-	type Props = { onpick: (picked: Picked) => void };
-	let { onpick }: Props = $props();
+	type Props = {
+		onpick: (picked: Picked) => void;
+		/** The folder to open first (the server's start folder when left out). */
+		initial?: string;
+	};
+	let { onpick, initial }: Props = $props();
 
 	let listing = $state<FolderListing | null>(null);
 	let shown = $state(''); // the folder the list belongs to; '' after a failed read
 	let typed = $state('');
 	let error = $state('');
 	let loading = $state(false);
+	let missing = $state(''); // a folder that was asked for and is not there: it can be created
 	let asked = 0; // only the latest answer counts when clicks outrun the server
 
 	$effect(() => {
@@ -30,15 +37,16 @@
 		});
 	});
 
-	async function open(folder?: string) {
+	async function open(folder?: string, create = false) {
 		const mine = ++asked;
 		// The field follows at once: a click right after typing must not be undone by the
 		// field's own change event opening what was typed.
 		if (folder !== undefined) typed = folder;
 		loading = true;
 		try {
-			const found = await api.folders(folder);
+			const found = create && folder ? await api.createFolder(folder) : await api.folders(folder);
 			if (mine !== asked) return;
+			missing = '';
 			// An old error stays up until the answer is in: taking it away at once would move
 			// the dialog under the pointer and swallow the click that asked for this.
 			error = '';
@@ -49,11 +57,14 @@
 			listing = listing && { ...listing, folders: [] };
 			shown = '';
 			error = e instanceof Error ? e.message : 'Could not read that folder.';
+			missing = !create && folder && e instanceof ApiError && e.status === 404 ? folder : '';
 		} finally {
 			if (mine === asked) loading = false;
 		}
 	}
-	$effect(() => void open());
+	// Read once, now: the first report below ('' while loading) may change what the parent passes.
+	const first = untrack(() => initial) || undefined;
+	$effect(() => void open(first));
 
 	function go(event: KeyboardEvent) {
 		if (event.key !== 'Enter') return;
@@ -75,13 +86,19 @@
 		<input
 			bind:value={typed}
 			onkeydown={go}
-			oninput={() => (error = '')}
+			oninput={() => {
+				error = '';
+				missing = '';
+			}}
 			onchange={() => typed.trim() !== shown && open(typed.trim())}
 			autocomplete="off"
 			spellcheck="false"
 		/>
 	</label>
 	{#if error}<p role="alert">{error}</p>{/if}
+	{#if missing}
+		<p><button type="button" onclick={() => open(missing, true)}>Create this folder</button></p>
+	{/if}
 	{#if listing}
 		<ul aria-label="Folders inside">
 			{#if listing.parent && !error}
@@ -97,7 +114,7 @@
 			{#if listing.truncated}<li class="quiet small">Only the first 1,000 are shown.</li>{/if}
 		</ul>
 	{:else if !error}
-		<p class="quiet">Looking…</p>
+		<p class="quiet" role="status">Looking…</p>
 	{/if}
 </div>
 

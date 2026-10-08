@@ -5,6 +5,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -50,7 +51,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         repo=repo,
         importer=StubImporter(),
     )
-    app.state.integrations = integrations
+    app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     client = TestClient(app, base_url="http://127.0.0.1")
     yield World(client, repo, tmp_path / "data", cloud, integrations)
@@ -150,3 +151,38 @@ def test_the_stored_settings_hold_no_account_details(world: World) -> None:
     config = world.integrations.remote_sources.remote_config(created["id"])
     assert config is not None
     assert json.dumps(config.to_mapping()) == '{"provider": "proton", "path": "/photos"}'
+
+
+def test_a_new_folder_is_made_in_my_files_and_shown(world: World) -> None:
+    made = world.client.post(
+        "/api/proton/folders", json={"parent": "/my-files", "name": "Photo backup"}, headers=ADMIN
+    )
+    assert made.status_code == 201, made.text
+    assert made.json() == {"path": "/my-files/Photo backup", "folders": []}
+    listed = world.client.get("/api/proton/folders?path=/my-files", headers=ADMIN).json()
+    assert listed["folders"] == ["archive", "Photo backup", "Trips"]
+
+
+@pytest.mark.parametrize(
+    ("parent", "name", "code"),
+    [
+        ("/my-files", "Trips", 422),  # already there
+        ("/my-files", "", 422),
+        ("/my-files", "a/b", 422),
+        ("/my-files", "..", 422),
+        ("/my-files", "-rf", 422),
+        ("/my-files", " x", 422),
+        ("/my-files", "x" * 300, 422),
+        ("/photos", "x", 422),
+        ("/trash", "x", 422),
+        ("/my-files/Nope", "x", 404),
+    ],
+)
+def test_a_folder_is_not_made_with_a_bad_name_or_in_a_bad_place(
+    world: World, parent: str, name: str, code: int
+) -> None:
+    refused = world.client.post(
+        "/api/proton/folders", json={"parent": parent, "name": name}, headers=ADMIN
+    )
+    assert refused.status_code == code, refused.text
+    assert not any(call[:2] == ["filesystem", "create-folder"] for call in world.cloud.calls())

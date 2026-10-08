@@ -7,6 +7,11 @@ setting". These functions are the single place that rule is applied.
 
 from pathlib import PurePath, PurePosixPath
 
+DATABASE_FILE = "library.db"  # in the data root; a backup's snapshot of it has the same name
+# What a library is besides its database: everything that cannot be rebuilt. ``derived/``
+# (thumbnails, previews) can.
+LIBRARY_FOLDERS = ("originals", "recipes", "config", "inbox")
+
 _HASH_ALPHABET = frozenset("0123456789abcdef")
 _BLAKE3_HEX_LENGTH = 64
 

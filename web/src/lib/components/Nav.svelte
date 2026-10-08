@@ -183,9 +183,8 @@
 			height: 100%;
 			padding: 0;
 			font-size: var(--fs-12);
-			color: var(
-				--ink
-			); /* over a bright photo the dimmer ink is weak; the pill marks the page you are on */
+			/* Over a bright photo the dimmer ink is weak; the pill marks the page you are on. */
+			color: var(--ink);
 		}
 		.search {
 			flex: none;

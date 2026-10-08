@@ -2,7 +2,9 @@
 	import type { BackupRecovery, BackupRun, BackupTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatBytes, formatWhen } from '$lib/format';
+	import { protonPlaceName } from '$lib/proton';
 	import BackupSetup from './BackupSetup.svelte';
+	import ProtonCopy from './ProtonCopy.svelte';
 	import RecoveryKey from './RecoveryKey.svelte';
 
 	type Props = { targets: BackupTarget[]; onchange: () => void };
@@ -11,13 +13,15 @@
 	let adding = $state(false);
 	let busy = $state<number | null>(null);
 	let showing = $state<{ target: BackupTarget; recovery: BackupRecovery } | null>(null);
+	let copying = $state<BackupTarget | null>(null);
 	let open = $state<number | null>(null);
 	let runs = $state<BackupRun[]>([]);
 
 	const KIND: Record<BackupRun['kind'], string> = {
 		backup: 'backup',
 		check: 'check',
-		restore_test: 'restore test'
+		restore_test: 'restore test',
+		mirror: 'copy to Proton'
 	};
 
 	function lastLine(t: BackupTarget): string {
@@ -36,7 +40,7 @@
 		try {
 			if (what === 'run') await api.runBackup(target.id);
 			else if (what === 'restore') await api.restoreTest(target.id);
-			else await api.setBackupEnabled(target.id, !target.enabled);
+			else await api.updateBackup(target.id, { enabled: !target.enabled });
 			if (what !== 'toggle')
 				notice.show(what === 'run' ? `Backing up to ${target.label}.` : 'Restore test started.');
 			onchange();
@@ -103,6 +107,14 @@
 				<p class="small status" class:attention={t.needs_attention}>
 					{t.overdue ? 'overdue · ' : ''}{lastLine(t)}{#if proofLine(t)}&nbsp;· {proofLine(t)}{/if}
 				</p>
+				{#if t.mirror_path}
+					<p class="small status" class:attention={!!t.mirror_error && t.enabled}>
+						Proton copy: {protonPlaceName(t.mirror_path)} ·
+						{#if t.mirror_error}failed: {t.mirror_error}{:else if t.last_mirror_at}up to date {formatWhen(
+								t.last_mirror_at
+							)}{:else}first copy after the next backup{/if}
+					</p>
+				{/if}
 				{#if !t.key_saved}
 					<p class="small status" class:attention={t.enabled}>
 						The recovery key is not saved yet: without it this backup cannot be read.
@@ -121,6 +133,9 @@
 						>Recent runs</button
 					>
 					<button type="button" onclick={() => showKey(t)}>Recovery key</button>
+					{#if t.kind === 'local'}
+						<button type="button" onclick={() => (copying = t)}>Copy to Proton</button>
+					{/if}
 					<button type="button" disabled={busy !== null} onclick={() => act(t, 'toggle')}
 						>{t.enabled ? 'Disable' : 'Enable'}</button
 					>
@@ -151,6 +166,8 @@
 
 {#if adding}
 	<BackupSetup onclose={() => (adding = false)} {onchange} />
+{:else if copying}
+	<ProtonCopy target={copying} onclose={() => (copying = null)} {onchange} />
 {:else if showing}
 	<RecoveryKey
 		targetId={showing.target.id}

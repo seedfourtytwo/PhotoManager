@@ -5,14 +5,21 @@
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
-	import { clusterPoints, clusterRadius, dominantPlace, type Cluster } from '$lib/geo';
+	import { eachPage } from '$lib/paging';
+	import {
+		clusterPoints,
+		clusterRadius,
+		clustersInView,
+		dominantPlace,
+		type Cluster
+	} from '$lib/geo';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import { LAND_PATH } from '$lib/world';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
-	let points = $state<MapPoint[]>([]);
+	let points = $state.raw<MapPoint[]>([]);
 	let loaded = $state(false);
 	let located = $state.raw<Map<Id, AssetOut>>(new Map());
 	let chosen = $state<Cluster | null>(null);
@@ -24,20 +31,19 @@
 	const aspectRatio = 2;
 	const vh = $derived(view.w / aspectRatio);
 	const pxPerUnit = $derived(width ? width / view.w : 1);
-	const clusters = $derived(
+	// Clustering depends on the points and the zoom only, so panning (x, y) never redoes it;
+	// what is on screen is a cheap filter over the result.
+	const allClusters = $derived(
 		clusterPoints(
 			points,
 			{ width: 360, height: 180 },
 			22 / pxPerUnit,
 			// the drawn dot plus a little air, so dots never overlap or hide each other
 			(n) => (Math.max(clusterRadius(n, 2), 3) + 2) / pxPerUnit
-		).filter(
-			(c) =>
-				c.x >= view.x - 5 &&
-				c.x <= view.x + view.w + 5 &&
-				c.y >= view.y - 5 &&
-				c.y <= view.y + vh + 5
 		)
+	);
+	const clusters = $derived(
+		clustersInView(allClusters, { x: view.x, y: view.y, w: view.w, h: vh }, 5)
 	);
 
 	$effect(() => {
@@ -52,27 +58,29 @@
 				loaded = true;
 			})
 			.catch((e: unknown) => notice.error(e));
-		void loadLocated(f, () => stale);
+		loadLocated(f, () => stale).catch((e: unknown) => !stale && notice.error(e));
 		return () => (stale = true);
 	});
 
-	/** List items (with place names) for every located photo, for cluster names and grids. */
-	async function loadLocated(f: typeof filters, isStale: () => boolean) {
-		// Built here, then swapped in whole as $state.raw: no need for a reactive map.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const next = new Map<Id, AssetOut>();
-		let cursor: string | null = null;
-		do {
-			const res: Awaited<ReturnType<typeof api.assets>> = await api.assets(
-				{ ...f, has_location: true },
-				cursor,
-				500
-			);
-			if (isStale()) return;
-			for (const a of res.items) next.set(a.id, a);
-			cursor = res.next_cursor;
-		} while (cursor);
-		located = next;
+	/**
+	 * List items (with place names) for every located photo, for cluster names and grids.
+	 * Swapped in after every page, so a chosen dot shows its photos while the rest still loads.
+	 */
+	function loadLocated(f: typeof filters, isStale: () => boolean) {
+		let first = true;
+		return eachPage(
+			(cursor) => api.assets({ ...f, has_location: true }, cursor, 500),
+			(items) => {
+				// Grown from what is shown (it may hold an edit made in the loupe meanwhile) and
+				// replaced whole as $state.raw: no need for a reactive map.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const next = new Map(first ? [] : located);
+				first = false;
+				for (const a of items) next.set(a.id, a);
+				located = next;
+			},
+			isStale
+		);
 	}
 
 	function copyWith(map: Map<Id, AssetOut>, asset: AssetOut) {
@@ -102,7 +110,12 @@
 		};
 	}
 
-	let pan: { x: number; y: number; view: typeof view; moved: boolean } | null = null;
+	let pan: { x: number; y: number; view: typeof view } | null = null;
+	/**
+	 * The pointer moved since it went down. It outlives `pan` (cleared on pointerup) because the
+	 * click that ends a pan fires after pointerup, and that click must not choose a dot.
+	 */
+	let dragged = false;
 	function onwheel(event: WheelEvent) {
 		event.preventDefault();
 		const p = toMap(event, event.currentTarget as SVGSVGElement);
@@ -176,14 +189,16 @@
 			aria-label="World map of photo locations; drag to pan, wheel to zoom"
 			{onwheel}
 			onpointerdown={(e) => {
-				pan = { x: e.clientX, y: e.clientY, view, moved: false };
+				pan = { x: e.clientX, y: e.clientY, view };
+				dragged = false;
 			}}
 			onpointermove={(e) => {
 				if (!pan || !width) return;
 				const dx = ((e.clientX - pan.x) / width) * pan.view.w;
 				const dy = ((e.clientY - pan.y) / width) * pan.view.w;
-				if (Math.abs(dx) + Math.abs(dy) > 0.5) pan.moved = true;
-				if (pan.moved) view = clamp({ ...pan.view, x: pan.view.x - dx, y: pan.view.y - dy });
+				// In pixels, so a click with a slightly unsteady hand is still a click at any zoom.
+				if (Math.abs(e.clientX - pan.x) + Math.abs(e.clientY - pan.y) > 4) dragged = true;
+				if (dragged) view = clamp({ ...pan.view, x: pan.view.x - dx, y: pan.view.y - dy });
 			}}
 			onpointerup={() => (pan = null)}
 			onpointerleave={() => (pan = null)}
@@ -197,7 +212,8 @@
 					aria-label={`${c.ids.length} photo${c.ids.length === 1 ? '' : 's'} here`}
 					onclick={(e) => {
 						e.preventDefault();
-						if (!pan?.moved) choose(c);
+						// detail 0 is the keyboard (Enter), which no drag precedes
+						if (e.detail === 0 || !dragged) choose(c);
 					}}
 				>
 					<circle

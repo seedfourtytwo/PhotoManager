@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from photo_assistant.domain.grouping import group_shots, regroup_runs, runs_with
+from photo_assistant.domain.grouping import group_shots, runs_with
 from photo_assistant.ports.enrich import EnrichmentStore, Geocoder, PerceptualHasher
 
 log = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ class GroupSimilar:
         if not new:
             return 0
         runs = runs_with(self._repo.shot_times(), new)
-        return self._repo.set_groups(regroup_runs(self._repo.shots_in(runs)))
+        return self._repo.set_groups(group_shots(self._repo.shots_in(runs)))
 
     def _hash_missing(self) -> set[int]:
         """Hash every photo that has a thumbnail but no hash yet; returns their ids."""

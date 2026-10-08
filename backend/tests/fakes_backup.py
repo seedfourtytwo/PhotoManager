@@ -21,6 +21,7 @@ from photo_assistant.ports.backup import (
     AssetFile,
     BackupError,
     Disk,
+    MirrorReport,
     PasswordFileError,
     RepositoryRef,
     SnapshotInfo,
@@ -70,6 +71,10 @@ class InMemoryBackupStore:
     def set_target_enabled(self, target_id: int, enabled: bool) -> None:
         if target_id in self.targets:
             self.targets[target_id] = replace(self.targets[target_id], enabled=enabled)
+
+    def set_target_mirror(self, target_id: int, mirror_path: str | None) -> None:
+        if target_id in self.targets:
+            self.targets[target_id] = replace(self.targets[target_id], mirror_path=mirror_path)
 
     def set_target_settings(self, target_id: int, settings: TargetSettings) -> None:
         if target_id in self.targets:
@@ -224,6 +229,9 @@ class FakeVault:
             raise PasswordFileError(f"the key file is gone: {key_file}")
         return key_file.read_text().strip()
 
+    def holds(self, key_file: Path) -> bool:
+        return key_file.parent == self.folder
+
     def discard(self, key_file: Path) -> None:
         key_file.unlink(missing_ok=True)
 
@@ -256,3 +264,18 @@ class SteppingClock:
 
     def now(self) -> datetime:
         return self.current
+
+
+class FakeMirror:
+    """Remembers what it was asked to copy where; fails on demand."""
+
+    def __init__(self) -> None:
+        self.fail: BackupError | None = None
+        self.calls: list[tuple[Path, str, Path]] = []
+        self.report = MirrorReport(uploaded=2, removed=1, bytes_sent=5_000_000)
+
+    def mirror(self, repository: Path, remote_folder: str, state_file: Path) -> MirrorReport:
+        self.calls.append((repository, remote_folder, state_file))
+        if self.fail:
+            raise self.fail
+        return self.report

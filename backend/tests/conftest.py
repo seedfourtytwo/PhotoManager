@@ -5,15 +5,48 @@ folder must leave it byte-identical. Import tests (M1) take this fixture.
 
 `no_settings_from_the_shell` keeps the developer's own `.env` out: `just` exports it into every
 recipe, and the environment beats a test's own values.
+
+`PA_REQUIRE_TOOLS=1` (CI sets it) turns a skip for a missing external tool into a failure, so
+a machine that is meant to have every tool can't go green with those tests left out.
 """
 
 import hashlib
 import os
 import shutil
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 import pytest
+
+pytest_plugins = ["pytester"]  # tests/unit/test_require_tools.py runs the hooks below
+
+EXTERNAL_TOOLS = ("exiftool", "vips", "restic", "rclone")
+_REQUIRE_TOOLS = pytest.StashKey[bool]()
+
+
+def missing_tool(skip_reason: str) -> str | None:
+    """The external tool a skip reason names ("restic missing" -> "restic"), if any."""
+    reason = skip_reason.lower()
+    return next((tool for tool in EXTERNAL_TOOLS if tool in reason), None)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # read here: `no_settings_from_the_shell` clears every PA_* variable before the tests run
+    config.stash[_REQUIRE_TOOLS] = os.environ.get("PA_REQUIRE_TOOLS") == "1"
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    report = yield
+    plain_skip = report.skipped and not hasattr(report, "wasxfail")
+    if plain_skip and item.config.stash[_REQUIRE_TOOLS] and isinstance(report.longrepr, tuple):
+        reason = str(report.longrepr[2]).removeprefix("Skipped: ")
+        if tool := missing_tool(reason):
+            report.outcome = "failed"
+            report.longrepr = f"PA_REQUIRE_TOOLS=1 but {tool} is not installed ({reason})"
+    return report
 
 
 def snapshot_tree(root: Path) -> dict[str, tuple[str, int, int]]:

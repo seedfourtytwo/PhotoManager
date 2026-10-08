@@ -108,7 +108,7 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--dock` | 56 px: the floating dock on a phone, and the photo view's action bar |
 | `--bar` | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock |
 | `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
-| `--margin` | 256 px right margin for notes and filters on a laptop |
+| `--margin` | 224 px (16rem) right margin for notes and filters on a laptop |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
 
 ### Component rules

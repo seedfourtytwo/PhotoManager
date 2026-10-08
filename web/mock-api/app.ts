@@ -15,6 +15,8 @@ import type {
 	Level,
 	Recipe,
 	Role,
+	Source,
+	SourcePatch,
 	User
 } from '../src/lib/api/types.ts';
 import { isPin } from '../src/lib/api/types.ts';
@@ -27,6 +29,7 @@ import {
 	rng,
 	type MockAlbum,
 	type MockAsset,
+	type MockSource,
 	type MockState,
 	type MockUser
 } from './data.ts';
@@ -46,6 +49,8 @@ import {
 	type Route
 } from './http.ts';
 
+/** How long a source that checks itself waits between checks. */
+const RECHECK_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
 const LEVELS: Level[] = ['view', 'download', 'edit'];
 const rank = (level: Level | null) => (level ? LEVELS.indexOf(level) : -1);
 const maxLevel = (a: Level | null, b: Level | null) => (rank(a) >= rank(b) ? a : b);
@@ -381,6 +386,28 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		});
 	}
 
+	/** A source as the API sends it: counted, its path for admins only (v1.2), its next check. */
+	function sourceOut(s: MockSource, isAdmin: boolean): Source {
+		const recheck = s.recheck ?? 'off';
+		const last = state.reports.find((r) => r.source_id === s.id); // newest first
+		const next =
+			recheck === 'off' || !s.enabled
+				? null
+				: last
+					? Date.parse(last.started_at) + RECHECK_MS[recheck]
+					: now(); // never checked: due at once
+		return {
+			...s,
+			path: isAdmin ? s.path : null,
+			problem: s.path.includes('gone') ? 'folder not found' : null,
+			asset_count: state.assets.filter(
+				(a) => live(a) && a.sources.some((o) => o.source_id === s.id)
+			).length,
+			recheck,
+			next_check_at: next === null ? null : new Date(next).toISOString()
+		};
+	}
+
 	function inboxFor(user: MockUser) {
 		let inbox = state.sources.find((s) => s.kind === 'inbox' && s.owner_id === user.id);
 		if (!inbox) {
@@ -595,6 +622,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/jobs$/,
 			(ctx) => {
+				admin(ctx);
 				const status = ctx.url.searchParams.get('status');
 				return ok(
 					state.jobs
@@ -816,18 +844,24 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		[
 			'GET',
 			/^\/api\/sources$/,
-			(ctx) =>
-				ok(
-					state.sources.map((s) => ({
-						...s,
-						// v1.2: paths only for admins; a folder that has gone says so.
-						path: ctx.user?.role === 'admin' ? s.path : null,
-						problem: s.path.includes('gone') ? 'folder not found' : null,
-						asset_count: state.assets.filter(
-							(a) => live(a) && a.sources.some((o) => o.source_id === s.id)
-						).length
-					}))
-				)
+			(ctx) => {
+				// Like the server: an admin sees every source; anyone else their own and those
+				// shared with them or with everyone, each with the photos they can see.
+				const user = me(ctx);
+				const shared = (id: number) => {
+					const access = state.access.get(id);
+					return !!access && (access.everyone !== null || access.users.some((u) => u.user_id === user.id)); // prettier-ignore
+				};
+				return ok(
+					state.sources
+						.filter((s) => user.role === 'admin' || s.owner_id === user.id || shared(s.id))
+						.map((s) => ({
+							...sourceOut(s, user.role === 'admin'),
+							asset_count: visible(user).filter((a) => a.sources.some((o) => o.source_id === s.id))
+								.length
+						}))
+				);
+			}
 		],
 		[
 			'POST',
@@ -836,10 +870,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const user = admin(ctx);
 				const body = requireFields<{ label: string; path: string }>(ctx.body, ['label', 'path']);
 				if (!body.label.trim()) throw new HttpError(422, 'Give the source a name.');
+				// Statuses and sentences as in routes/sources.py.
 				if (!body.path.startsWith('/'))
-					throw new HttpError(400, 'Use an absolute folder path, like /home/c/Pictures.');
+					throw new HttpError(422, 'give the full path of the folder, starting with /');
 				if (body.path.includes('missing'))
-					throw new HttpError(400, `Folder not found: ${body.path}`);
+					throw new HttpError(422, `folder not found on this machine: ${body.path}`);
+				const same = (path: string) => path.replace(/\/+$/, '') === body.path.replace(/\/+$/, '');
+				if (state.sources.some((s) => same(s.path)))
+					throw new HttpError(409, `folder is already a source: ${body.path}`);
 				const source = {
 					id: state.nextId.source++,
 					label: body.label,
@@ -851,7 +889,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				};
 				state.sources.push(source);
 				state.access.set(source.id, { everyone: 'download', users: [] });
-				return ok(source, 201);
+				return ok(sourceOut(source, true), 201);
 			}
 		],
 		[
@@ -861,10 +899,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				admin(ctx);
 				const source = state.sources.find((s) => s.id === idParam(ctx));
 				if (!source) throw new HttpError(404, 'Source not found.');
-				const body = (ctx.body ?? {}) as { enabled?: boolean; label?: string };
+				const body = (ctx.body ?? {}) as SourcePatch;
+				if (body.recheck !== undefined && !(body.recheck === 'off' || body.recheck in RECHECK_MS))
+					throw new HttpError(422, 'Check automatically: off, hourly, daily or weekly.');
 				if (body.enabled !== undefined) source.enabled = body.enabled;
 				if (body.label) source.label = body.label;
-				return ok(source);
+				if (body.recheck !== undefined) source.recheck = body.recheck;
+				return ok(sourceOut(source, true));
 			}
 		],
 		[
@@ -892,6 +933,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/sources\/(\d+)\/access$/,
 			(ctx) => {
+				admin(ctx);
 				const access = state.access.get(idParam(ctx));
 				if (!access) throw new HttpError(404, 'Source not found.');
 				return ok(access);
@@ -912,6 +954,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/imports$/,
 			(ctx) => {
+				admin(ctx);
 				const sourceId = ctx.url.searchParams.get('source_id');
 				return ok(
 					state.reports
@@ -924,6 +967,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/imports\/(\d+)$/,
 			(ctx) => {
+				admin(ctx);
 				const report = state.reports.find((r) => r.id === idParam(ctx));
 				if (!report) throw new HttpError(404, 'Import run not found.');
 				const outcome = ctx.url.searchParams.get('outcome');

@@ -6,18 +6,20 @@ ML section. The sections are plain models filled by ``Settings`` (they never rea
 environment themselves), so one ``Settings()`` is the whole configuration of a process.
 """
 
+import logging
 import os
 from collections.abc import Mapping
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
+    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
@@ -26,6 +28,8 @@ from photo_assistant.adapters.ollama_ai import OllamaSettings
 from photo_assistant.domain.clustering import ClusterParams
 from photo_assistant.domain.tags import TagParams
 from photo_assistant.ports.sync import SyncOptions
+
+log = logging.getLogger(__name__)
 
 # --- sections --------------------------------------------------------------------------------
 
@@ -211,10 +215,17 @@ class Settings(BaseSettings):
     preview_workers: int = 0  # threads rendering previews; 0 = max(1, cores - 2) (C28)
     log_level: str = "INFO"
     # Host names the server answers to. Add the Tailscale name when remote access arrives (M6).
-    allowed_hosts: list[str] = ["127.0.0.1", "localhost"]
+    # NoDecode: read by _host_names below, which takes more spellings than strict JSON.
+    allowed_hosts: Annotated[list[str], NoDecode] = ["127.0.0.1", "localhost"]
+    # Who may tell the server "this request arrived over https, from that address"
+    # (X-Forwarded-Proto / X-Forwarded-For): the TLS proxy in front, as uvicorn sees it.
+    # Comma-separated addresses or networks. Docker + tailscale serve: the Docker gateway.
+    trusted_proxies: str = "127.0.0.1"
     web_dir: Path | None = None  # built web app to serve at "/" (just run sets it)
     # argon2id cost (RFC 9106 low-memory profile). Tests lower it; never lower it in use.
     trash_purge_every_hours: float = 6.0  # how often the 30-day trash expiry runs
+    # how often the server looks for sources whose automatic re-check is due
+    source_recheck_poll_seconds: float = 300.0
     argon2_time_cost: int = 3
     argon2_memory_kib: int = 65536
     # Sections, filled from their flat names (see _FlatSections and docs/wiring/*.md):
@@ -226,9 +237,33 @@ class Settings(BaseSettings):
     # E2E only: adds POST /__test/reset. Refused unless the server stays on this machine.
     test_mode: bool = False
 
+    @field_validator("allowed_hosts", mode="before")
+    @classmethod
+    def _host_names(cls, value: object) -> object:
+        """``["a","b"]`` (JSON), ``[a,b]`` (what systemd's EnvironmentFile leaves of that: it
+        strips the double quotes) or ``a,b``."""
+        if not isinstance(value, str):
+            return value
+        names = (name.strip().strip("\"'") for name in value.strip().strip("[]").split(","))
+        return [name for name in names if name]
+
     def preview_threads(self) -> int:
         """Preview renders in parallel: leave two cores to the import and the web server."""
         return self.preview_workers or max(1, (os.cpu_count() or 1) - 2)
+
+
+def unknown_setting_names(environ: Mapping[str, str]) -> list[str]:
+    """The ``PA_*`` names in ``environ`` that are no setting: almost always a misspelt one
+    (``PA_ALLOWED_HOST``), which would otherwise be ignored without a word."""
+    known = {f"PA_{field}".upper() for field in Settings.model_fields}
+    for model, prefix in _SECTIONS.values():
+        known |= {f"{prefix}{field}".upper() for field in model.model_fields}
+    return sorted(n for n in environ if n.upper().startswith("PA_") and n.upper() not in known)
+
+
+def warn_about_unknown_settings() -> None:
+    for name in unknown_setting_names(os.environ):
+        log.warning("%s is set but is not a setting of this app: check its spelling", name)
 
 
 @lru_cache

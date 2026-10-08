@@ -15,7 +15,12 @@ from typing import Protocol
 
 from photo_assistant.app.import_source import SourceUnavailableError
 from photo_assistant.domain.model import ImportReport, RunStatus, Source
-from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
+from photo_assistant.domain.remote_source import (
+    PROTON_PHOTOS,
+    RemoteConfig,
+    RemoteConfigError,
+    proton_folder_name_problem,
+)
 from photo_assistant.ports import Clock
 from photo_assistant.ports.sync import (
     RemoteSourceStore,
@@ -34,6 +39,22 @@ SCAN_JOB_KIND = "scan_source"  # the job kind api.services registers for every s
 # Retrying these at once can't help (and hammering a throttling provider makes it worse):
 # record them for the user and finish the job.
 _FINAL = (SyncAuthError, SyncNotFoundError, SyncRateLimitedError)
+_SHOWN_ERRORS = 3  # of a partial pull, in the import history; the log has the count
+
+
+def partial_pull_message(label: str, pulled: SyncReport) -> str:
+    """What the import history says about a pull that brought only part of the remote."""
+    count = pulled.errors
+    text = (
+        f"{count} file{'' if count == 1 else 's'} could not be downloaded from '{label}' "
+        "(what did arrive was imported)"
+    )
+    shown = pulled.error_messages[:_SHOWN_ERRORS]
+    if shown:
+        text += ": " + "; ".join(shown)
+    if shown and count > len(shown):
+        text += f"; and {count - len(shown)} more"
+    return text
 
 
 class SourceLookup(Protocol):
@@ -83,6 +104,8 @@ class ProtonAccount(Protocol):
 
     def folders(self, path: str) -> list[str]: ...
 
+    def create_folder(self, parent: str, name: str) -> str: ...
+
 
 def add_proton_source(
     store: RemoteSourceStore, account: ProtonAccount, staging_root: Path, label: str, path: str
@@ -95,6 +118,19 @@ def add_proton_source(
     else:
         account.folders(path)
     return store.add_remote_source(label, config, staging_root)
+
+
+def create_proton_folder(account: ProtonAccount, parent: str, name: str) -> str:
+    """Make a new folder in My files (a place for a backup copy); its path. Raises
+    RemoteConfigError for a bad place or name, SyncError subclasses when Proton can't."""
+    if parent == PROTON_PHOTOS:
+        raise RemoteConfigError("folders can only be made in My files")
+    RemoteConfig.proton(parent)
+    if problem := proton_folder_name_problem(name):
+        raise RemoteConfigError(problem)
+    if name in account.folders(parent):
+        raise RemoteConfigError(f"'{name}' already exists there")
+    return account.create_folder(parent, name)
 
 
 class ProviderSync:
@@ -152,12 +188,18 @@ class SyncSource:
         except SyncError as exc:
             self._record_failure(source, started, exc)
             raise
+        outcome = self._import(source_id, pulled)
         if pulled.partial:
             log.warning(
                 "remote pull incomplete",
                 extra={"source_id": source_id, "errors": pulled.errors},
             )
-        return self._import(source_id, pulled)
+            # after the import, so it is the first thing the source's history shows
+            note = ImportReport(
+                source.id, RunStatus.FAILED, message=partial_pull_message(source.label, pulled)
+            )
+            self._reports.save_import_report(note, started, self._clock.now())
+        return outcome
 
     def _import(self, source_id: int, pulled: SyncReport | None) -> SyncOutcome:
         run_id, report = self._importer.run(source_id)

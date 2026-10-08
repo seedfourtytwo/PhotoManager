@@ -16,6 +16,7 @@ RTX 2070 Max-Q 8 GB). Every design choice must also hold at 100k so the home-ser
 | 1.1 | Import a local folder (recursive), **read-only** on the source | Must | M1 ✅ |
 | 1.1a | **Multiple source folders**, each registered once with a label (e.g. "Laptop Pictures", "Old HDD", "Partner's export"); all aggregated into the one de-duplicated library; "rescan all" picks up new files from every source | Must | M1 ✅ |
 | 1.1d | **Pick a folder by browsing** the machine's folders in the web app (admin, read-only listing; the library's own folder is never offered) | Must | ✅ |
+| 1.1e | **Automatic re-check** per source (folder, cloud, Proton): off / every hour / day / week, set on Admin → Folders, which also shows the next check. It queues the same read-only check as "Check again"; a failed check waits for the next interval | Should | ✅ |
 | 1.1b | **Remote folders** as sources: anything rclone can reach read-only — SFTP/SSH (e.g. the home server), SMB/NAS share, WebDAV, plus MEGA/Proton (1.6). Same staging → import path | Should | M4 |
 | 1.1c | Per-source view: how many photos came from each source, overlap between sources, last scan, errors | Should | M2 |
 | 1.2 | Supported formats: JPEG, PNG, HEIC/HEIF, WebP, TIFF, GIF, AVIF ✅; common RAW recognised, decoding to verify in M2 with real RAW files; Live Photo video halves detected and reported ✅ | Must | M1 |
@@ -199,6 +200,7 @@ fixed now so nothing in M1–M5 makes it harder (data folder layout, DB snapshot
 | 9b.9 | Full restore guide (new machine → working library) — tested once per milestone | Should | M6 |
 | 9b.10 | **Guided setup in the web app**: pick a disk, folder or cloud remote; space check; the app makes the key and insists on a saved copy; first backup starts at once | Must | ✅ |
 | 9b.11 | **Proven restores**: an automatic restore test after the first backup and every week; a failed proof raises the banner | Must | ✅ |
+| 9b.12 | **Off-site copy on Proton Drive** (issue 14): a local backup is also copied, encrypted, to a Proton Drive folder after every run, through Proton's own CLI (no Proton password in the app); a failed copy raises the banner; restore steps in the backup guide | Should | ✅ |
 
 ## 10. Web and phone app
 

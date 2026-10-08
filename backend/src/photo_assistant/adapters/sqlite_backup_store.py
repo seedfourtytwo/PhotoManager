@@ -1,13 +1,14 @@
 """SQLite implementation of the BackupStore port (tables from migration 0016).
 
-It takes its own connection to library.db (``open_database`` in the composition root), so it
-needs nothing from SqliteRepository; WAL mode lets both write safely.
+It shares the process's one ``Database`` (writer, lock and per-thread readers) with every other
+store, and needs nothing from SqliteRepository.
 """
 
 import json
 import sqlite3
 from datetime import UTC, datetime
 
+from photo_assistant.adapters.sqlite_base import iso_text
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.backup import (
     BackupRun,
@@ -20,10 +21,6 @@ from photo_assistant.domain.backup import (
     TargetSettings,
 )
 from photo_assistant.ports.backup import AssetFile
-
-
-def _iso(value: datetime) -> str:
-    return value.isoformat()
 
 
 def _when(value: str | None) -> datetime | None:
@@ -42,6 +39,7 @@ def _target(row: sqlite3.Row) -> BackupTarget:
         enabled=bool(row["enabled"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         key_saved_at=_when(row["key_saved_at"]),
+        mirror_path=row["mirror_path"],
     )
 
 
@@ -103,8 +101,8 @@ class SqliteBackupStore:
                     target.schedule,
                     target.quiet_window,
                     json.dumps(target.retention.as_dict()),
-                    _iso(created_at),
-                    _iso(created_at) if target.key_saved else None,
+                    iso_text(created_at),
+                    iso_text(created_at) if target.key_saved else None,
                 ),
             )
         except sqlite3.IntegrityError as exc:
@@ -124,7 +122,14 @@ class SqliteBackupStore:
         self._write("UPDATE backup_target SET enabled = ? WHERE id = ?", (int(enabled), target_id))
 
     def mark_key_saved(self, target_id: int, at: datetime) -> None:
-        self._write("UPDATE backup_target SET key_saved_at = ? WHERE id = ?", (_iso(at), target_id))
+        self._write(
+            "UPDATE backup_target SET key_saved_at = ? WHERE id = ?", (iso_text(at), target_id)
+        )
+
+    def set_target_mirror(self, target_id: int, mirror_path: str | None) -> None:
+        self._write(
+            "UPDATE backup_target SET mirror_path = ? WHERE id = ?", (mirror_path, target_id)
+        )
 
     def library_bytes(self) -> int:
         row = self._one("SELECT COALESCE(SUM(byte_size), 0) FROM asset")
@@ -147,7 +152,7 @@ class SqliteBackupStore:
     def start_run(self, target_id: int, kind: RunKind, started_at: datetime) -> int:
         return self._write(
             "INSERT INTO backup_run (target_id, kind, status, started_at) VALUES (?, ?, ?, ?)",
-            (target_id, kind.value, BackupRunStatus.RUNNING.value, _iso(started_at)),
+            (target_id, kind.value, BackupRunStatus.RUNNING.value, iso_text(started_at)),
         )
 
     def finish_run(self, run_id: int, finished_at: datetime, outcome: RunOutcome) -> None:
@@ -158,7 +163,7 @@ class SqliteBackupStore:
                WHERE id = ?""",
             (
                 outcome.status.value,
-                _iso(finished_at),
+                iso_text(finished_at),
                 outcome.snapshot_id,
                 outcome.bytes_added,
                 outcome.files_new,
@@ -199,7 +204,7 @@ class SqliteBackupStore:
                 """UPDATE backup_run SET status = ?, finished_at = ?,
                        error = 'interrupted (the app stopped during the run)'
                    WHERE status = ?""",
-                (BackupRunStatus.FAILED.value, _iso(now), BackupRunStatus.RUNNING.value),
+                (BackupRunStatus.FAILED.value, iso_text(now), BackupRunStatus.RUNNING.value),
             )
             return cur.rowcount
 
@@ -209,7 +214,7 @@ class SqliteBackupStore:
         rows = self._all(
             """SELECT id, content_hash, library_path, thumb_path, preview_path FROM asset
                WHERE imported_at <= ? ORDER BY RANDOM() LIMIT ?""",
-            (_iso(imported_before.astimezone(UTC)), count),
+            (iso_text(imported_before.astimezone(UTC)), count),
         )
         return [
             AssetFile(

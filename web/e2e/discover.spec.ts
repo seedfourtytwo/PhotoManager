@@ -6,7 +6,8 @@ import {
 	REAL_BACKEND,
 	resetMock,
 	signIn,
-	test
+	test,
+	toast
 } from './helpers.ts';
 
 test('search without models: word matches and a calm note on how to get AI search', async ({
@@ -60,7 +61,7 @@ test('people: grid of faces, rename, merge, and a person’s photos', async ({ p
 	const post = page.waitForRequest((r) => r.url().endsWith('/merge'));
 	await merge.getByRole('button', { name: /^Merge/ }).click();
 	expect((await post).postDataJSON().source_ids).toHaveLength(1);
-	await expect(page.getByRole('status')).toContainText('Merged 1 into Uncle Jo');
+	await expect(toast(page)).toContainText('Merged 1 into Uncle Jo');
 	await page.goto('/people');
 	await expect(page.getByRole('link', { name: /Uncle Jo/ })).toBeVisible();
 });

@@ -159,7 +159,10 @@ describe('backups, devices and remote sources', () => {
 		await api.addSource({ label: 'Pics', path: pictures.path });
 		expect((await api.folders(pictures.path)).source_problem).toBe('already added as “Pics”');
 		expect((await api.folders('/')).parent).toBeNull();
-		await expect(api.folders('/home/c/missing')).rejects.toMatchObject({ status: 422 });
+		await expect(api.folders('/home/c/missing')).rejects.toMatchObject({ status: 404 });
+		expect((await api.createFolder('/home/c/missing')).folders).toEqual([]);
+		expect((await api.folders('/home/c/missing')).path).toBe('/home/c/missing');
+		await expect(api.createFolder('/home/c/missing')).rejects.toMatchObject({ status: 422 });
 		await expect(api.folders('Pictures')).rejects.toMatchObject({ status: 422 });
 		const member = await h.signedIn('partner', '2345');
 		await expect(member.folders()).rejects.toMatchObject({ status: 403 });
@@ -233,7 +236,7 @@ describe('backups, devices and remote sources', () => {
 		const runs = await api.backupRuns(target.id);
 		expect(runs[0].status).toBe('succeeded');
 		await api.restoreTest(target.id);
-		expect((await api.setBackupEnabled(target.id, false)).enabled).toBe(false);
+		expect((await api.updateBackup(target.id, { enabled: false })).enabled).toBe(false);
 		const changed = await api.updateBackup(target.id, {
 			schedule: 'weekly sun 03:00',
 			quiet_window: '22:00-06:00',

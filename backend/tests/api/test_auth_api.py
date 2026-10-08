@@ -65,6 +65,14 @@ def test_login_logout_and_wrong_pin(admin: TestClient) -> None:
     assert admin.get("/api/auth/me").status_code == 200, "other sessions are unaffected"
 
 
+def test_logging_out_tells_the_browser_to_drop_its_cached_photos(admin: TestClient) -> None:
+    """A shared browser: the next account must not open the last one's cached thumbnails."""
+    out = admin.post("/api/auth/logout")
+    assert out.status_code == 204
+    assert out.headers["clear-site-data"] == '"cache"'
+    assert "pa_session=" in out.headers["set-cookie"], "and the cookie still goes"
+
+
 def test_the_login_screen_lists_the_active_accounts_without_a_session(admin: TestClient) -> None:
     add_user(admin, "lea")
     gone = add_user(admin, "old")
@@ -116,6 +124,16 @@ def test_change_pin(admin: TestClient) -> None:
     ok = admin.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": NEW_PIN})
     assert ok.status_code == 204
     login(admin.app, "admin", NEW_PIN)  # type: ignore[arg-type]
+
+
+def test_guessing_the_current_pin_is_rate_limited_like_login(admin: TestClient) -> None:
+    for _ in range(10):
+        wrong = admin.post("/api/auth/pin", json={"current_pin": "0000", "new_pin": NEW_PIN})
+        assert wrong.status_code == 400
+    for pin in ("0000", PIN):
+        blocked = admin.post("/api/auth/pin", json={"current_pin": pin, "new_pin": NEW_PIN})
+        assert blocked.status_code == 429 and "wait" in blocked.json()["detail"]
+    assert admin.get("/api/auth/me").status_code == 200, "the session itself is untouched"
 
 
 def test_admin_manages_users(admin: TestClient) -> None:

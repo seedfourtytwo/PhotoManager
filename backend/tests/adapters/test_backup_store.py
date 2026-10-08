@@ -85,6 +85,23 @@ def test_a_key_the_app_made_stays_unsaved_until_someone_confirms_a_copy(
     store.mark_key_saved(999, T0)  # an unknown target is nothing to mark
 
 
+def test_the_proton_copy_folder_is_kept_per_target_and_mirror_runs_are_recorded(
+    store: BackupStore,
+) -> None:
+    target = store.add_target(_target(), T0)
+    assert target.mirror_path is None
+    store.set_target_mirror(target.id, "/my-files/Backups")
+    found = store.get_target(target.id)
+    assert found is not None and found.mirror_path == "/my-files/Backups"
+    run_id = store.start_run(target.id, RunKind.MIRROR, T0)
+    store.finish_run(run_id, T0, RunOutcome(BackupRunStatus.SUCCEEDED, details="1 new file sent"))
+    last = store.last_run(target.id, RunKind.MIRROR, succeeded_only=True)
+    assert last is not None and last.details == "1 new file sent"
+    store.set_target_mirror(target.id, None)
+    cleared = store.get_target(target.id)
+    assert cleared is not None and cleared.mirror_path is None
+
+
 def test_library_bytes_is_the_size_of_every_original(store: BackupStore) -> None:
     assert store.library_bytes() == 1001 + 1002 + 1003
 

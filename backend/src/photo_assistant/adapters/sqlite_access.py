@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from photo_assistant.adapters.sqlite_base import SqliteBase
+from photo_assistant.adapters.sqlite_base import SqliteBase, source_from_row
 from photo_assistant.adapters.sqlite_library import SOURCE_VISIBLE, visibility
 from photo_assistant.domain.access import Level, SourceAccess, Viewer
 from photo_assistant.domain.errors import InvalidError
@@ -72,12 +72,4 @@ class AccessMixin(SqliteBase):
                 FROM source s WHERE {SOURCE_VISIBLE} ORDER BY s.id""",
             params,
         )
-        return [
-            (
-                Source(
-                    r["id"], r["label"], r["root"], bool(r["enabled"]), r["kind"], r["owner_id"]
-                ),
-                int(r["n"]),
-            )
-            for r in rows
-        ]
+        return [(source_from_row(r), int(r["n"])) for r in rows]

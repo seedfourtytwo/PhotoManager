@@ -13,6 +13,7 @@ import type {
 	ImportRun,
 	Job,
 	Place,
+	Recheck,
 	Recipe,
 	Role,
 	Source
@@ -134,8 +135,14 @@ export type MockAlbum = {
 
 export type MockReport = ImportRun & { items: ImportItem[] };
 
-/** The mock keeps every folder's path; the API hides it from non-admins. */
-export type MockSource = Source & { path: string };
+/**
+ * The mock keeps every folder's path; the API hides it from non-admins. No `recheck` means
+ * "off"; `next_check_at` is worked out when a source is sent.
+ */
+export type MockSource = Omit<Source, 'recheck' | 'next_check_at'> & {
+	path: string;
+	recheck?: Recheck;
+};
 
 export type MockFace = {
 	id: number;
@@ -156,6 +163,9 @@ export type MockBackup = {
 	enabled: boolean;
 	key: string;
 	key_saved: boolean;
+	/** The Proton Drive folder holding an off-site copy, and when it was last brought up to date. */
+	mirror_path?: string | null;
+	mirrored_at?: string | null;
 	/** Runs newest first; `ends_at` is when a running run finishes (mock clock). */
 	runs: (BackupRun & { ends_at: number })[];
 };
@@ -183,6 +193,10 @@ export type MockState = {
 	remotes: string[];
 	/** rclone sources: source id → remote and path. */
 	remoteSources: Map<number, { remote: string; path: string }>;
+	/** Folders made through the folder picker. */
+	createdFolders: Set<string>;
+	/** The mock Proton Drive: each folder of "My files" and the folders inside it. */
+	protonTree: Record<string, string[]>;
 };
 
 /** Park–Miller PRNG: same seed, same library. */
@@ -538,7 +552,15 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 		],
 		devices: [],
 		remotes: ['gdrive', 'nas'],
-		remoteSources: new Map()
+		remoteSources: new Map(),
+		createdFolders: new Set(),
+		protonTree: {
+			'/my-files': ['Family', 'Scans', 'Trips'],
+			'/my-files/Trips': ['2019 Alps'],
+			'/my-files/Trips/2019 Alps': [],
+			'/my-files/Family': [],
+			'/my-files/Scans': []
+		}
 	};
 	return state;
 }

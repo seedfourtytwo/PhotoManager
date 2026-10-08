@@ -62,7 +62,11 @@
 		name = '';
 	}
 
+	/** Revoking cannot be undone (the token is shown only once), so it asks first. */
+	let revoking = $state<Device | null>(null);
+
 	async function revoke(device: Device) {
+		revoking = null;
 		try {
 			await api.revokeDevice(device.id);
 			notice.show(`“${device.name}” can no longer upload.`);
@@ -90,7 +94,7 @@
 						: 'never used'}{#if device.revoked}&nbsp;· revoked{/if}
 				</span>
 				{#if !device.revoked}
-					<button type="button" onclick={() => revoke(device)}>Revoke</button>
+					<button type="button" onclick={() => (revoking = device)}>Revoke</button>
 				{/if}
 			</li>
 		{/each}
@@ -98,7 +102,18 @@
 	<button type="button" class="add" onclick={() => (adding = true)}>Add a device</button>
 </section>
 
-{#if adding}
+{#if revoking}
+	{@const device = revoking}
+	<Dialog title={`Revoke “${device.name}”?`} onclose={() => (revoking = null)}>
+		<p>
+			It stops uploading at once. Its token cannot be shown again: to use this device later, add it
+			again and put the new token in it.
+		</p>
+		{#snippet actions()}
+			<button class="primary" type="button" onclick={() => revoke(device)}>Revoke</button>
+		{/snippet}
+	</Dialog>
+{:else if adding}
 	<Dialog title="Add a device" onclose={close} cancelLabel={token ? 'Done' : 'Cancel'} wide>
 		{#if !token}
 			<label class="field">Name <input bind:value={name} placeholder="Léa’s iPhone" /></label>

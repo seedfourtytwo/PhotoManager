@@ -59,6 +59,24 @@ describe('filtersFromParams', () => {
 		);
 		expect(filtersFromParams(params)).toEqual({});
 	});
+
+	it('drops days that do not exist, which the server would refuse', () => {
+		expect(filtersFromParams(new URLSearchParams('from=2019-02-31'))).toEqual({});
+		expect(filtersFromParams(new URLSearchParams('to=2021-02-29'))).toEqual({});
+		expect(filtersFromParams(new URLSearchParams('from=2020-02-29'))).toEqual({
+			from: '2020-02-29'
+		});
+	});
+
+	it('drops a `to` that lies before `from`', () => {
+		expect(filtersFromParams(new URLSearchParams('from=2020-05-10&to=2020-05-01'))).toEqual({
+			from: '2020-05-10'
+		});
+		expect(filtersFromParams(new URLSearchParams('from=2020-05-10&to=2020-05-10'))).toEqual({
+			from: '2020-05-10',
+			to: '2020-05-10'
+		});
+	});
 });
 
 describe('withFilter', () => {

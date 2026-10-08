@@ -50,9 +50,14 @@ export type Source = {
 	asset_count: number;
 	/** v1.2: "folder not found" when the folder is gone, else null (absent before v1.2). */
 	problem?: string | null;
+	/** How often the folder checks itself again; "off" = only when someone asks. */
+	recheck: Recheck;
+	/** When it next checks itself; null when it never does (off, or disabled). */
+	next_check_at: string | null;
 };
+export type Recheck = 'off' | 'hourly' | 'daily' | 'weekly';
 export type SourceIn = { label: string; path: string };
-export type SourcePatch = Partial<{ enabled: boolean; label: string }>;
+export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Recheck }>;
 
 export type Access = { everyone: Level | null; users: { user_id: Id; level: Level }[] };
 
@@ -311,7 +316,7 @@ export type PrintedPdf = { blob: Blob; filename: string; warnings: number };
 
 export type BackupRun = {
 	id: Id;
-	kind: 'backup' | 'check' | 'restore_test';
+	kind: 'backup' | 'check' | 'restore_test' | 'mirror';
 	status: 'running' | 'succeeded' | 'failed';
 	started_at: string;
 	finished_at: string | null;
@@ -342,6 +347,11 @@ export type BackupTarget = {
 	restore_failing: boolean;
 	/** Someone confirmed a copy of the recovery key exists outside this machine. */
 	key_saved: boolean;
+	/** The Proton Drive folder (`/my-files/...`) that holds an off-site copy, if any. */
+	mirror_path: string | null;
+	last_mirror_at: string | null;
+	/** Why the last copy to Proton failed. */
+	mirror_error: string | null;
 	/** Drives the warning banner. */
 	needs_attention: boolean;
 };

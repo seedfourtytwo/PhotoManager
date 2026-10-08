@@ -109,10 +109,13 @@ def test_a_preview_job_also_repairs_a_missing_thumbnail_from_the_same_decode(
     assert store.absolute(asset.thumb_path).is_file()
 
 
-def test_preview_for_a_missing_asset_is_an_error(repo: SqliteRepository, tmp_path: Path) -> None:
+def test_a_preview_job_for_a_photo_purged_meanwhile_finishes_quietly(
+    repo: SqliteRepository, tmp_path: Path
+) -> None:
     job = GeneratePreview(repo, DiskLibraryStore(tmp_path), VipsRenderer())
-    with pytest.raises(LookupError, match="no asset"):
-        job({"asset_id": 42})
+    repo.enqueue("preview", {"asset_id": 42})
+    Worker(repo, {"preview": job}, FixedClock()).run_until_idle()
+    assert repo.list_jobs("failed") == [] and len(repo.list_jobs("done")) == 1
 
 
 def test_busy_library_requeues_without_using_up_attempts(repo: SqliteRepository) -> None:
@@ -132,16 +135,45 @@ def test_busy_library_requeues_without_using_up_attempts(repo: SqliteRepository)
     assert repo.list_jobs("done"), "succeeded on the 5th try although max_attempts is 3"
 
 
-def test_periodic_jobs_are_queued_once_per_interval(repo: SqliteRepository) -> None:
-    worker = Worker(repo, {"tidy": lambda payload: None}, FixedClock(), periodic={"tidy": 3600})
-    worker.enqueue_due(now=0.0)
-    worker.enqueue_due(now=10.0)
-    assert len(repo.list_jobs("queued")) == 1, "not due again yet"
-    worker.enqueue_due(now=3601.0)
-    assert len(repo.list_jobs("queued")) == 1, "never two of the same kind waiting"
+def test_a_job_that_keeps_killing_the_process_is_given_up_on(repo: SqliteRepository) -> None:
+    """A segfault or OOM never reaches the worker's except branch: only the claims count."""
+    ran: list[object] = []
+    repo.enqueue("crashy", {})
+    for _ in range(3):  # three starts: claimed, the process dies, the next start requeues it
+        assert repo.claim_next_job(NOW) is not None
+        assert repo.recover_interrupted_jobs() == 1
+    worker = Worker(repo, {"crashy": ran.append}, FixedClock(), max_attempts=3)
+    assert worker.run_once() is True
+    assert ran == [], "not run a fourth time"
+    (failed,) = repo.list_jobs("failed")
+    assert "3 attempts" in str(failed["error"])
+    assert worker.run_once() is False
+
+
+def test_a_job_interrupted_fewer_times_than_allowed_still_runs(repo: SqliteRepository) -> None:
+    ran: list[object] = []
+    repo.enqueue("flaky", {})
+    for _ in range(2):
+        repo.claim_next_job(NOW)
+        repo.recover_interrupted_jobs()
+    Worker(repo, {"flaky": ran.append}, FixedClock(), max_attempts=3).run_until_idle()
+    assert ran == [{}] and len(repo.list_jobs("done")) == 1
+
+
+def test_a_failed_job_retried_by_hand_runs_again(repo: SqliteRepository) -> None:
+    calls: list[int] = []
+
+    def boom(payload: dict[str, object]) -> None:
+        calls.append(1)
+        raise ValueError("decoder exploded")
+
+    job_id = repo.enqueue("boom", {})
+    worker = Worker(repo, {"boom": boom}, FixedClock(), max_attempts=3)
     worker.run_until_idle()
-    worker.enqueue_due(now=7300.0)
-    assert len(repo.list_jobs("queued")) == 1
+    assert len(calls) == 3
+    assert repo.retry_job(job_id)
+    worker.run_until_idle()
+    assert len(calls) > 3, "the retry button must run the job, not fail it unseen"
 
 
 def test_enqueue_once_skips_a_waiting_duplicate(repo: SqliteRepository) -> None:
@@ -203,6 +235,24 @@ def test_run_until_idle_drains_every_lane(repo: SqliteRepository) -> None:
     )
     assert lanes.run_until_idle() == 2
     assert sorted(done) == ["backup", "p"]
+
+
+def test_run_until_idle_can_be_limited_to_some_job_kinds(repo: SqliteRepository) -> None:
+    from photo_assistant.app.worker import Lanes
+
+    done: list[str] = []
+    for kind in ("backup_run", "preview", "geocode", "preview"):
+        repo.enqueue(kind, {})
+    lanes = Lanes(
+        repo,
+        {k: (lambda p, k=k: done.append(k)) for k in ("backup_run", "preview", "geocode")},
+        FixedClock(),
+        long_kinds={"backup_run"},
+        pooled={"preview": 2},
+    )
+    assert lanes.run_until_idle(only={"preview", "geocode"}) == 3
+    assert done == ["preview", "geocode", "preview"]
+    assert [j["kind"] for j in repo.list_jobs("queued")] == ["backup_run"]
 
 
 def test_previews_run_on_a_pool_of_threads(tmp_path: Path) -> None:

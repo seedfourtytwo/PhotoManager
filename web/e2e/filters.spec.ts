@@ -43,6 +43,30 @@ test('the filter panel searches the library by free text', async ({ page }) => {
 	await expect(page).toHaveURL(/q=carnac/);
 });
 
+test('search keeps the space between words when you pause while typing', async ({ page }) => {
+	const panel = await openFilters(page);
+	const search = panel.getByRole('searchbox', { name: 'Search' });
+	await search.pressSequentially('new ');
+	await expect(page).toHaveURL(/q=new$/); // the pause: the first word is already searched
+	await search.pressSequentially('york');
+	await expect(search).toHaveValue('new york');
+	await expect(page).toHaveURL(/q=new(\+|%20)york$/);
+	// Anything else that changes the URL still shows in the field.
+	await panel.getByRole('button', { name: 'Clear' }).click();
+	await expect(page).not.toHaveURL(/q=/);
+	await expect(search).toHaveValue('');
+});
+
+test('a search typed just before leaving the page does not follow you there', async ({ page }) => {
+	const panel = await openFilters(page);
+	await panel.getByRole('searchbox', { name: 'Search' }).pressSequentially('carnac');
+	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
+	await page.getByRole('link', { name: 'Collections', exact: true }).click();
+	await expect(page).toHaveURL(/\/collections$/);
+	await page.waitForTimeout(500);
+	await expect(page).toHaveURL(/\/collections$/);
+});
+
 test('calendar: click a day to open the filtered library', async ({ page }) => {
 	test.slow(); // axe walks every day of every year
 	await page.goto('/calendar');
@@ -81,5 +105,34 @@ test('hiding the filters, a real click on "Filters" brings them back', async ({ 
 	// No `force`: the button must not sit under the top bar.
 	await page.getByRole('button', { name: /^Filters/ }).click();
 	await expect(panel).toBeVisible();
-	await page.evaluate(() => localStorage.removeItem('pa.filters')); // leave no hidden state behind
+});
+
+test('phone: the filter sheet is modal: focus moves in and stays, Escape closes it', async ({
+	page
+}) => {
+	test.skip(!isPhone(page), 'the sheet is the phone layout');
+	const opener = page.getByRole('button', { name: 'Filter', exact: true });
+	await opener.click();
+	const panel = page.getByRole('complementary', { name: 'Filters' });
+	await expect(panel).toBeVisible();
+	const focusInside = () =>
+		page.evaluate(() => {
+			const at = document.activeElement;
+			return !!at?.closest('#filters') || at?.getAttribute('aria-label') === 'Close filters';
+		});
+	await expect.poll(focusInside).toBe(true);
+	// The page behind is out of reach for the keyboard and for screen readers.
+	await expect(page.locator('main#main')).toHaveAttribute('inert', '');
+	await expect(page.locator('nav[aria-label="Main"]')).toHaveAttribute('inert', '');
+	for (let i = 0; i < 40; i++) {
+		await page.keyboard.press('Tab');
+		// Between the last and the first control Tab passes through the browser's own bar
+		// (the body here), as in any modal dialog; it never lands on the page behind.
+		const onBody = await page.evaluate(() => document.activeElement === document.body);
+		expect(onBody || (await focusInside())).toBe(true);
+	}
+	await page.keyboard.press('Escape');
+	await expect(panel).toBeHidden();
+	await expect(page.locator('main#main')).not.toHaveAttribute('inert', '');
+	await expect(opener).toBeFocused();
 });

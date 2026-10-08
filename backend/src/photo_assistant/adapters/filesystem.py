@@ -4,6 +4,8 @@ import fcntl
 import logging
 import os
 import shutil
+import stat
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -20,6 +22,9 @@ log = logging.getLogger(__name__)
 
 _CHUNK = 1024 * 1024
 _REMOVABLE = {"originals", "derived"}
+# A half-written derivative younger than this may belong to an import running beside the
+# server (the CLI): the start-up sweep leaves it alone.
+_STALE_SECONDS = 3600.0
 
 
 class Blake3Hasher:
@@ -36,6 +41,22 @@ class SystemClock:
         return datetime.now(UTC)
 
 
+def _regular_file(path: Path) -> os.stat_result | None:
+    """One look at ``path``: its facts if it is a plain file, None for anything else (a link,
+    a pipe, a file that went away since its folder was listed)."""
+    try:
+        found = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        log.warning(
+            "source file could not be read",
+            extra={"file": str(path), "error": exc.strerror or str(exc)},
+        )
+        return None
+    return found if stat.S_ISREG(found.st_mode) else None
+
+
 class FolderSourceReader:
     """Walks a source folder. Never follows symlinks out of it, never writes to it."""
 
@@ -43,22 +64,38 @@ class FolderSourceReader:
         root = Path(source.root)
         if not root.is_dir():
             raise FileNotFoundError(f"source folder not found: {root}")
-        for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+
+        def unreadable(exc: OSError) -> None:
+            if exc.filename == str(root):
+                raise exc  # nothing at all can be listed: that is not an empty folder
+            log.warning(
+                "source folder could not be read",
+                extra={"folder": str(exc.filename), "error": exc.strerror or str(exc)},
+            )
+
+        for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=unreadable):
             dirnames.sort()
             for name in sorted(filenames):
                 path = Path(dirpath) / name
-                if path.is_symlink() or not path.is_file():
+                found = _regular_file(path)
+                if found is None:
                     continue
-                stat = path.stat()
                 yield SourceFile(
                     relative_path=path.relative_to(root).as_posix(),
                     absolute_path=path,
-                    byte_size=stat.st_size,
+                    byte_size=found.st_size,
                     # local wall-clock time with its offset: what the user saw when saving
-                    mtime=datetime.fromtimestamp(stat.st_mtime).astimezone(),
-                    mtime_ns=stat.st_mtime_ns,
-                    ctime_ns=stat.st_ctime_ns,
+                    mtime=datetime.fromtimestamp(found.st_mtime).astimezone(),
+                    mtime_ns=found.st_mtime_ns,
+                    ctime_ns=found.st_ctime_ns,
                 )
+
+
+def _modified_before(path: Path, timestamp: float) -> bool:
+    try:
+        return path.lstat().st_mtime < timestamp
+    except OSError:
+        return False
 
 
 class HashMismatchError(RuntimeError):
@@ -105,18 +142,26 @@ class DiskLibraryStore:
             raise ValueError(f"only library originals and derivatives can be removed: {path}")
         self.absolute(relative_path).unlink(missing_ok=True)
 
-    def remove_edited(self, content_hash: str) -> None:
-        folder = self.root / "derived" / "edited" / content_hash[:2]
-        for cached in folder.glob(f"{content_hash}-*.webp"):
-            cached.unlink(missing_ok=True)
+    def remove_renditions(self, content_hash: str) -> None:
+        """Delete every cached render of a photo's edits: edited previews and the
+        full-resolution print renditions (derived files only, never an original)."""
+        for kind, suffix in (("edited", "webp"), ("print", "jpg")):
+            folder = self.root / "derived" / kind / content_hash[:2]
+            for cached in folder.glob(f"{content_hash}-*.{suffix}"):
+                cached.unlink(missing_ok=True)
 
     def sweep_tmp(self) -> int:
-        """Remove half-written copies left by a crash (only ever in data/tmp)."""
-        if not self._tmp.is_dir():
-            return 0
-        leftovers = list(self._tmp.glob("*.partial"))
-        for partial in leftovers:
-            partial.unlink(missing_ok=True)
+        """Remove what a crash left half-written: copies and uploads (``*.partial``) and
+        download files (``download-*``) in data/tmp, old ``*.partial`` renders in derived/.
+        For the server start only: run from a CLI command it would cut the server's work."""
+        leftovers = [*self._tmp.glob("*.partial"), *self._tmp.glob("download-*")]
+        before = time.time() - _STALE_SECONDS
+        leftovers += [
+            p for p in (self.root / "derived").rglob("*.partial") if _modified_before(p, before)
+        ]
+        leftovers = [p for p in leftovers if p.is_file()]
+        for leftover in leftovers:
+            leftover.unlink(missing_ok=True)
         return len(leftovers)
 
     def overlaps(self, folder: Path) -> bool:

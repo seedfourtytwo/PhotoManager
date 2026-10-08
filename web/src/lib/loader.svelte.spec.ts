@@ -77,6 +77,37 @@ describe('TimelineLoader', () => {
 		await loader.until(() => false);
 	});
 
+	it('drops photos it already has when pages overlap (offset paging after a change)', async () => {
+		const book: Record<string, AssetPage> = {
+			start: { items: [makeAsset(1), makeAsset(2)], next_cursor: 'b' },
+			b: { items: [makeAsset(2), makeAsset(3)], next_cursor: null }
+		};
+		const loader = new TimelineLoader(async (_f, cursor) => book[cursor ?? 'start']);
+		await loader.reset({});
+		await loader.loadMore();
+		expect(loader.items.map((a) => a.id)).toEqual([1, 2, 3]);
+		expect(loader.done).toBe(true);
+	});
+
+	it('retries the page that failed, keeping the pages already loaded', async () => {
+		const { calls, fetchPage } = pages(25, 10);
+		let broken = false;
+		const loader = new TimelineLoader((f, c) => {
+			if (!broken) return fetchPage(f, c);
+			calls.push({ filters: f, cursor: c });
+			return Promise.reject(new Error('The library server could not be reached.'));
+		});
+		await loader.reset({});
+		broken = true;
+		await loader.loadMore();
+		expect(loader.error).toBe('The library server could not be reached.');
+		broken = false;
+		await loader.retry();
+		expect(loader.error).toBeNull();
+		expect(loader.items).toHaveLength(20);
+		expect(calls.map((c) => c.cursor)).toEqual([null, '10', '10']);
+	});
+
 	it('updates and removes items without reloading', async () => {
 		const { fetchPage } = pages(3, 10);
 		const loader = new TimelineLoader(fetchPage);

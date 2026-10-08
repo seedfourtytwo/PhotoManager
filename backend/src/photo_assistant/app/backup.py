@@ -36,8 +36,10 @@ from photo_assistant.domain.backup import (
     TargetStatus,
     plan_backup,
     restore_proof_due,
+    size_text,
 )
 from photo_assistant.domain.library_paths import nested_or_same
+from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.domain.schedule import is_due, is_overdue, next_run, parse_window
 from photo_assistant.ports import Clock, Hasher
 from photo_assistant.ports.backup import (
@@ -50,6 +52,9 @@ from photo_assistant.ports.backup import (
     Disk,
     JobQueue,
     KeyVault,
+    MirrorReport,
+    PasswordFileError,
+    RepositoryMirror,
     RepositoryRef,
 )
 
@@ -58,7 +63,9 @@ log = logging.getLogger(__name__)
 BACKUP_JOB = "backup_run"
 RESTORE_TEST_JOB = "backup_restore_test"
 BACKUP_DUE_JOB = "backup_due"  # queued by the periodic check: runs every target that is due
-LONG_JOBS = frozenset({BACKUP_JOB, RESTORE_TEST_JOB, BACKUP_DUE_JOB})
+MIRROR_JOB = "backup_mirror"  # bring one target's off-site copy up to date
+LONG_JOBS = frozenset({BACKUP_JOB, RESTORE_TEST_JOB, BACKUP_DUE_JOB, MIRROR_JOB})
+MIRROR_STATE_DIR = "mirror"  # in the data root, outside what a backup contains
 DB_SNAPSHOT_PATH = f"{DB_SNAPSHOT_DIR}/{DB_SNAPSHOT_FILE}"
 REPOSITORY_FOLDER = "photo-assistant-backup"  # a guided setup always makes its own folder
 RCLONE_PREFIX = "rclone:"
@@ -109,6 +116,16 @@ def _inside(a: Path, b: Path) -> bool:
     return nested_or_same(a.expanduser().resolve(), b.expanduser().resolve())
 
 
+def _files(count: int, word: str) -> str:
+    return f"{count} {word} file{'' if count == 1 else 's'}"
+
+
+def _mirror_summary(report: MirrorReport) -> str:
+    sent = f"{_files(report.uploaded, 'new')} sent ({size_text(report.bytes_sent)})"
+    kept = f" ({report.left_in_trash} left in Proton's trash)" if report.left_in_trash else ""
+    return f"{sent}, {_files(report.removed, 'old')} removed{kept}"
+
+
 def _message(exc: BaseException) -> str:
     return str(exc) or type(exc).__name__
 
@@ -125,7 +142,12 @@ class BackupService:
         queue: JobQueue | None = None,
         places: BackupPlaces | None = None,
         vault: KeyVault | None = None,
+        mirror: RepositoryMirror | None = None,
+        *,
+        database_integrity: Callable[[Path], str],
     ) -> None:
+        """``database_integrity``: the probe ``just doctor`` uses (SystemProbe): "ok", or what
+        is wrong with the SQLite file at that path."""
         if config.scratch_dir is not None and _inside(config.scratch_dir, config.data_root):
             raise ValueError("the restore-test folder must be outside the library")
         self._store = store
@@ -137,11 +159,21 @@ class BackupService:
         self._queue = queue
         self._places = places
         self._vault = vault
+        self._database_integrity = database_integrity
+        self._mirror = mirror
         self._lock = threading.Lock()  # one run at a time per process; restic locks the repo
 
     # --- targets ---------------------------------------------------------------------------
 
-    def add_target(self, new: NewBackupTarget) -> BackupTarget:
+    def add_target(self, new: NewBackupTarget, *, own_key_only: bool = False) -> BackupTarget:
+        """``own_key_only`` (requests over HTTP): the password file must be one of the key
+        vault's own files. The recovery sheet shows that file, so a free path would let a
+        browser session read any file; the command line may still point anywhere."""
+        if own_key_only and not self._need_vault().holds(Path(new.password_file)):
+            raise ValueError(
+                "the password file must be a key file in this app's key folder; for a file "
+                "elsewhere on the server use the command line (just backup add)"
+            )
         self._validate_locations(new)
         return self._store.add_target(new, self._clock.now())
 
@@ -227,8 +259,13 @@ class BackupService:
 
     def recovery(self, target_id: int) -> RecoverySheet:
         target = self.target(target_id)
-        key = self._need_vault().read(Path(target.password_file))
-        return RecoverySheet(target.label, target.repository, key)
+        vault, key_file = self._need_vault(), Path(target.password_file)
+        if not vault.holds(key_file):  # never read a file the vault doesn't own
+            raise PasswordFileError(
+                "this backup's password file was chosen on the command line, so it is not "
+                f"shown here: read {key_file} on the server"
+            )
+        return RecoverySheet(target.label, target.repository, vault.read(key_file))
 
     def confirm_key_saved(self, target_id: int) -> None:
         """The owner says a copy of the key exists outside this machine. The first time counts."""
@@ -285,7 +322,47 @@ class BackupService:
 
     def run_now(self, target_id: int) -> BackupRun:
         target = self.target(target_id)
-        return self._record(target, RunKind.BACKUP, lambda: self._backup(target))
+        run = self._record(target, RunKind.BACKUP, lambda: self._backup(target))
+        if run.status is BackupRunStatus.SUCCEEDED:
+            self.mirror_now(target_id)
+        return run
+
+    # --- the off-site copy (issue 14) --------------------------------------------------------
+
+    def set_mirror(self, target_id: int, mirror_path: str | None) -> BackupTarget:
+        """Keep a copy of this backup in a Proton Drive folder (None: stop). The first copy
+        is queued at once when there is a backup to copy."""
+        target = self.target(target_id)
+        if mirror_path is not None:
+            if self._mirror is None:
+                raise ValueError("a copy on Proton Drive is not available on this machine")
+            if target.kind is not TargetKind.LOCAL:
+                raise ValueError("only a backup in a folder or disk of this machine can be copied")
+            try:
+                if mirror_path == PROTON_PHOTOS:
+                    raise RemoteConfigError
+                RemoteConfig.proton(mirror_path)
+            except RemoteConfigError as exc:
+                raise ValueError("choose a folder in My files on Proton Drive") from exc
+        self._store.set_target_mirror(target_id, mirror_path)
+        has_backup = self._store.last_run(target_id, RunKind.BACKUP, succeeded_only=True)
+        if mirror_path is not None and has_backup is not None and self._queue is not None:
+            self._queue.enqueue(MIRROR_JOB, {"target_id": target_id})
+        return self.target(target_id)
+
+    def mirror_now(self, target_id: int) -> BackupRun | None:
+        """Bring the off-site copy up to date; None when this target has none."""
+        target = self.target(target_id)
+        mirror, remote = self._mirror, target.mirror_path
+        if mirror is None or remote is None:
+            return None
+        state = self._config.data_root / MIRROR_STATE_DIR / f"{target.id}.json"
+
+        def work() -> RunOutcome:
+            report = mirror.mirror(Path(target.repository), remote, state)
+            return RunOutcome(BackupRunStatus.SUCCEEDED, details=_mirror_summary(report))
+
+        return self._record(target, RunKind.MIRROR, work)
 
     def check(self, target_id: int, read_data_subset: str | None = None) -> BackupRun:
         target = self.target(target_id)
@@ -374,14 +451,28 @@ class BackupService:
         self._engine.ensure_repository(repo)
         self._snapshotter.snapshot(root / DB_SNAPSHOT_DIR / DB_SNAPSHOT_FILE)
         summary = self._engine.backup(repo, root, BACKUP_FOLDERS)
-        self._engine.forget(repo, target.retention)
+        # The snapshot exists from here on: trouble while tidying up (a locked repository, a
+        # network blip) is reported in the details, never as a failed backup.
+        problems = []
+        try:
+            self._engine.forget(repo, target.retention)
+        except (BackupError, OSError) as exc:
+            problems.append(f"pruning failed: {_message(exc)}")
+        repo_bytes = None
+        try:
+            repo_bytes = self._engine.repository_size(repo)
+        except (BackupError, OSError) as exc:
+            problems.append(f"measuring the backup failed: {_message(exc)}")
+        if problems:
+            log.warning("backup written, tidying up failed", extra={"target": target.label})
         return RunOutcome(
             BackupRunStatus.SUCCEEDED,
             snapshot_id=summary.snapshot_id,
             bytes_added=summary.bytes_added,
             files_new=summary.files_new,
             files_changed=summary.files_changed,
-            repo_bytes=self._engine.repository_size(repo),
+            repo_bytes=repo_bytes,
+            details="; ".join(["snapshot ok", *problems]) if problems else None,
         )
 
     # --- restore test (FEATURES 9b.8) ------------------------------------------------------
@@ -403,9 +494,13 @@ class BackupService:
 
     def _check_database(self, scratch: Path) -> RestoreCheck:
         restored = scratch / DB_SNAPSHOT_PATH
-        if restored.is_file() and restored.stat().st_size > 0:
-            return RestoreCheck(DB_SNAPSHOT_PATH, True)
-        return RestoreCheck(DB_SNAPSHOT_PATH, False, "database snapshot missing from the backup")
+        if not restored.is_file() or restored.stat().st_size == 0:
+            reason = "database snapshot missing from the backup"
+            return RestoreCheck(DB_SNAPSHOT_PATH, False, reason)
+        verdict = self._database_integrity(restored)
+        if verdict != "ok":
+            return RestoreCheck(DB_SNAPSHOT_PATH, False, f"database snapshot is damaged: {verdict}")
+        return RestoreCheck(DB_SNAPSHOT_PATH, True)
 
     def _check(self, scratch: Path, asset: AssetFile) -> RestoreCheck:
         restored = scratch / asset.library_path
@@ -425,20 +520,27 @@ class BackupService:
         last = self._store.last_run(target.id, RunKind.BACKUP)
         success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
         schedule = target.parsed_schedule
-        upcoming = None
-        if target.enabled:
-            upcoming = next_run(
-                schedule, self._last_attempt(target), parse_window(target.quiet_window)
-            )
+        window = parse_window(target.quiet_window)
+        upcoming = (
+            next_run(schedule, self._last_attempt(target), window) if target.enabled else None
+        )
         success_at = (success.finished_at or success.started_at) if success else None
         overdue = is_overdue(
             schedule,
             self._local(success_at) if success_at else None,
             self._local(target.created_at),
             now,
+            window,
         )
         test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven = self._store.last_run(target.id, RunKind.RESTORE_TEST, succeeded_only=True)
+        copy = self._store.last_run(target.id, RunKind.MIRROR) if target.mirror_path else None
+        copied = (
+            self._store.last_run(target.id, RunKind.MIRROR, succeeded_only=True)
+            if target.mirror_path
+            else None
+        )
+        copy_failed = copy is not None and copy.status is BackupRunStatus.FAILED
         return TargetStatus(
             target=target,
             last_success_at=success_at,
@@ -448,6 +550,8 @@ class BackupService:
             overdue=overdue,
             last_proven_at=(proven.finished_at or proven.started_at) if proven else None,
             restore_failing=test is not None and test.status is BackupRunStatus.FAILED,
+            last_mirror_at=(copied.finished_at or copied.started_at) if copied else None,
+            mirror_error=(copy.error or "the copy failed") if copy and copy_failed else None,
         )
 
     def _local(self, moment: datetime) -> datetime:
@@ -478,4 +582,5 @@ class BackupService:
             BACKUP_JOB: lambda payload: self._run_and_prove(int(str(payload["target_id"]))),
             RESTORE_TEST_JOB: lambda payload: self.restore_test(int(str(payload["target_id"]))),
             BACKUP_DUE_JOB: lambda payload: self.run_due(),
+            MIRROR_JOB: lambda payload: self.mirror_now(int(str(payload["target_id"]))),
         }

@@ -3,7 +3,14 @@
 	import { page } from '$app/state';
 	import { api, library, notice, session, settings, viewport } from '$lib/app.svelte';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
-	import { EMPTY, applyClick, selectAll, type Selection } from '$lib/selection';
+	import {
+		EMPTY,
+		TOO_MANY_SELECTED,
+		applyClick,
+		limitSelection,
+		selectAll,
+		type Selection
+	} from '$lib/selection';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -25,6 +32,13 @@
 			3
 		)
 	);
+
+	/** No selection outgrows what one action may carry (the trash itself loads whole). */
+	function select(next: Selection) {
+		const kept = limitSelection(next);
+		if (kept !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+		selection = kept;
+	}
 
 	async function load() {
 		try {
@@ -59,8 +73,9 @@
 
 	async function empty() {
 		try {
-			const ids = selection.ids.size ? [...selection.ids] : undefined;
-			const { purged } = await api.emptyTrash(ids);
+			// Always the photos on screen (the dialog counted those), never "everything": the
+			// trash may have grown from another device since this page loaded.
+			const { purged } = await api.emptyTrash(selection.ids.size ? [...selection.ids] : order);
 			notice.show(`Deleted ${purged} library cop${purged === 1 ? 'y' : 'ies'} for good.`);
 			confirmEmpty = false;
 			selection = EMPTY;
@@ -83,7 +98,7 @@
 		</p>
 		{#if list.length}
 			<div class="tools">
-				<button type="button" onclick={() => (selection = selectAll(order))}>Select all</button>
+				<button type="button" onclick={() => select(selectAll(order))}>Select all</button>
 				{#if session.isAdmin}
 					<button type="button" onclick={() => (confirmEmpty = true)}>Empty trash</button>
 				{/if}
@@ -106,7 +121,7 @@
 			selecting={selection.ids.size > 0}
 			onopen={openPhoto}
 			ontoggle={(id, range) =>
-				(selection = applyClick(selection, id, order, { shift: range, toggle: true }))}
+				select(applyClick(selection, id, order, { shift: range, toggle: true }))}
 		/>
 	</div>
 

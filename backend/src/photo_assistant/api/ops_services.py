@@ -17,13 +17,14 @@ from photo_assistant.adapters.restic_backup import ResticBackup
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
+from photo_assistant.adapters.system_probe import LocalSystemProbe
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupService
 from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer
 from photo_assistant.app.periodic import Periodic, PeriodicTask
 from photo_assistant.domain.library_paths import nested_or_same
-from photo_assistant.ports.backup import JobQueue
+from photo_assistant.ports.backup import JobQueue, RepositoryMirror
 
 DATABASE = "library.db"
 
@@ -63,6 +64,7 @@ def build_backup_service(
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
     db: Database | None = None,
     rclone: RcloneTool | None = None,
+    mirror: RepositoryMirror | None = None,
 ) -> tuple[BackupService, SqliteBackupStore]:
     """``db``: the app's one Database; None (the CLI) opens the library database here."""
     database = data_root / DATABASE
@@ -75,7 +77,12 @@ def build_backup_service(
     store = SqliteBackupStore(db or Database.open(database, backup_dir=data_root / "db-backups"))
     service = BackupService(
         store=store,
-        engine=ResticBackup(binary=ops.restic_binary, cache_dir=ops.restic_cache_dir),
+        engine=ResticBackup(
+            binary=ops.restic_binary,
+            cache_dir=ops.restic_cache_dir,
+            rclone_binary=rclone.binary,
+            rclone_config=rclone.config,
+        ),
         snapshotter=SqliteSnapshotter(database),
         hasher=Blake3Hasher(),
         clock=SystemClock(),
@@ -88,6 +95,8 @@ def build_backup_service(
         queue=queue,
         places=LocalBackupPlaces(rclone.binary, rclone.config),
         vault=FileKeyVault(key_dir),
+        database_integrity=LocalSystemProbe().database_integrity,
+        mirror=mirror,
     )
     return service, store
 
@@ -100,11 +109,13 @@ def build_ops_services(
     source_roots: Callable[[], Sequence[Path]] = lambda: (),
     db: Database | None = None,
     rclone: RcloneTool | None = None,
+    mirror: RepositoryMirror | None = None,
 ) -> OpsServices:
     """``housekeeping``: further periodic tasks of other areas (trash purge, face clustering).
-    ``source_roots``: the library's source folders (backups may not overlap them)."""
+    ``source_roots``: the library's source folders (backups may not overlap them).
+    ``mirror``: where local backups can keep an off-site copy (Proton Drive), if anywhere."""
     ops = ops or OpsSettings()
-    backup, store = build_backup_service(data_root, ops, queue, source_roots, db, rclone)
+    backup, store = build_backup_service(data_root, ops, queue, source_roots, db, rclone, mirror)
     # with a job queue (the server) the check only enqueues: backups run on the long-job lane
     check: Callable[[], object] = (
         (lambda: queue.enqueue_once(BACKUP_DUE_JOB)) if queue is not None else backup.run_due
