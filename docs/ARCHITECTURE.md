@@ -161,6 +161,21 @@ a copy (`backup_target.key_saved_at`, migration `0018`). The recovery guarantee 
 `restore_proof_due`: a restore test after the first successful backup, then weekly, a day
 after a failed one; a failed proof or an unconfirmed key raises the banner.
 
+Absent places: `_backup` first calls `BackupEngine.probe` (`restic cat config`, no lock; exit 10
+means "no repository") for a target that has had a successful backup, and never runs `init` for
+it. If the repository is not there the run is recorded as `skipped` (`BackupRunStatus.SKIPPED`)
+and the loop moves on to the next target; wrong password, lock and the rest stay `failed`. A
+skipped run is not an attempt: while the latest run is skipped, `run_due` probes the place at most
+every `SKIP_RETRY` (15 min), writes nothing while it stays away, and backs up at once if overdue,
+otherwise when the quiet window allows. The Proton copy follows the same rule. Known limit: a
+target with no successful backup yet can still get its repository created on the first run, so
+the very first backup must be started with the disk connected.
+
+`protection()` (pure) turns the target statuses into `places_ok / places_total` plus problems; a
+place is an enabled target or its Proton copy, "protected" is two or more ok. `GET
+/api/backups/health` serves it to admins and the root layout shows `BackupBanner` from it on
+every page. `backup run-due` exits 1 only when a run failed, not when one was skipped.
+
 ### Phone inbox
 `data/inbox/<user>/` is served over WebDAV (per-user credentials, LAN/Tailscale only).
 It is registered as a normal `source`; a file watcher (plus a periodic rescan as safety net)

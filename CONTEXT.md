@@ -72,3 +72,17 @@ _Avoid_: Setting, override, variable, token
 **Switch**:
 One choice from a fixed list that changes what an account's app shows or where it starts, such as whether Today appears.
 _Avoid_: Layout, feature flag, option
+
+### Backups
+
+**Backup place**:
+An enabled backup target, or the Proton Drive copy of one. The copy is shown as a copy because it does not survive a damaged repository.
+_Avoid_: Destination, location
+
+**Skipped run**:
+A backup or copy not attempted because its place is not connected. It is not a failure and not an attempt; the app looks again every 15 minutes.
+_Avoid_: Failed run, missed run
+
+**Protected**:
+At least two backup places are up to date. When not, admins see a banner on every page.
+_Avoid_: Safe, backed up

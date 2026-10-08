@@ -60,8 +60,11 @@ just backup add "External disk" /media/$USER/BackupDisk/photo-backup \
 just backup run 1          # first run creates the repository and copies everything (slow once)
 ```
 
-If the disk isn't plugged in when a backup is due, the run fails with "plug in / mount the
-backup disk" — it never creates a backup on the laptop's own disk by mistake.
+If the disk isn't plugged in when a backup is due, the backup is **skipped**, not failed: the
+history says "not connected", the other backups still run, and nothing is written to the
+laptop's own disk. Plug the disk in and that is all: within 15 minutes the app notices, and
+backs up at once if it is overdue, otherwise at the next time its quiet hours allow. Start the
+very first backup with the disk plugged in.
 
 ## 3. Target 2: the server (over SSH, via rclone)
 
@@ -105,6 +108,13 @@ just backup list
 Shows each target: ok / OVERDUE / FAILED, last success, next run, size, and the last error.
 A target is **overdue** when it had no success for two intervals (e.g. two days for a daily
 one). The web app shows the same as a warning banner.
+
+**Two places.** The photos count as safe when at least two places are up to date: a backup
+target, or the Proton Drive copy of one (shown as a copy, because it cannot save you if the
+backup itself is damaged). When fewer than two are, every page shows a warning banner to
+admins. You cannot close it; it goes when the problem is fixed. There is no email or phone
+alert yet, so if the app is not running, nobody is warned. A disk that is simply unplugged
+raises nothing until its backup is overdue.
 
 ## 6. Restore drill (do it once a month, and at every QA session)
 
@@ -162,6 +172,6 @@ and continue as in section 6 (move the database into place, verify the library).
 | Message | Fix |
 |---|---|
 | `wrong password for the backup` | the password file changed; restore it from your password manager |
-| `no backup repository at … plug in` | mount the disk / check the server is reachable |
+| `… is not connected` (skipped) | plug the disk in / check the server is reachable; it backs up by itself |
 | `locked by another run` | if nothing else is running: `restic -r <repo> unlock` |
 | `some library files could not be read` | run `just verify-library`; check disk health |
