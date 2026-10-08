@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
+from photo_assistant.api.integrations import Integrations
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Role, User, Viewer
 from photo_assistant.domain.model import MAX_ID, Source
@@ -28,6 +29,13 @@ def get_services(request: Request) -> Services:
 
 
 ServicesDep = Annotated[Services, Depends(get_services)]
+
+
+def get_integrations(services: ServicesDep) -> Integrations:
+    return services.integrations
+
+
+IntegrationsDep = Annotated[Integrations, Depends(get_integrations)]
 
 
 def current_user(request: Request, services: ServicesDep) -> User:

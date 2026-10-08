@@ -41,7 +41,7 @@ router = APIRouter(prefix="/api/assets", tags=["assets"], dependencies=LOGGED_IN
 IMMUTABLE = "private, max-age=31536000, immutable"
 
 
-def asset_out(services: Services, view: AssetView) -> AssetOut:
+def asset_out(view: AssetView) -> AssetOut:
     return AssetOut.of(view)
 
 
@@ -57,9 +57,7 @@ def list_assets(
         page = services.repo.list_views(viewer, f, limit, cursor)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return AssetPage(
-        items=[asset_out(services, v) for v in page.items], next_cursor=page.next_cursor
-    )
+    return AssetPage(items=[asset_out(v) for v in page.items], next_cursor=page.next_cursor)
 
 
 @router.get("/facets")
@@ -93,7 +91,7 @@ def detail_of(services: Services, viewer: Viewer, view: AssetView) -> AssetDetai
     ]
     albums = [AlbumRef(id=i, title=t) for i, t in services.repo.albums_of(viewer, a.id)]
     return AssetDetail(
-        **asset_out(services, view).model_dump(),
+        **asset_out(view).model_dump(),
         byte_size=a.byte_size,
         mime_type=a.mime_type,
         camera_make=a.camera_make,
@@ -142,7 +140,7 @@ def patch_state(
         services.repo.set_user_state(
             viewer.user_id, [asset_id], favourite=body.favourite, hidden=body.hidden
         )
-    return asset_out(services, require_view(services, viewer, asset_id))
+    return asset_out(require_view(services, viewer, asset_id))
 
 
 def _serve_webp(services: Services, view: AssetView, kind: str) -> Response:

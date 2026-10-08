@@ -7,8 +7,7 @@ takes or stores account details. Pulling uses the ordinary remote-source and sou
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from photo_assistant.api.deps import ADMIN_ONLY
-from photo_assistant.api.integrations import IntegrationsDep
+from photo_assistant.api.deps import ADMIN_ONLY, IntegrationsDep
 from photo_assistant.app.sync_source import add_proton_source
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.ports.sync import SyncError, SyncNotFoundError

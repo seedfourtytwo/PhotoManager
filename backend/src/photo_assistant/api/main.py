@@ -70,9 +70,7 @@ def _mount_web(app: FastAPI, web_dir: Path | None) -> None:
 
 
 def _install_services(app: FastAPI, services: Services) -> None:
-    app.state.services = services
-    app.state.integrations = services.integrations
-    app.state.ops = services.ops
+    app.state.services = services  # read in one place: deps.get_services
 
 
 async def _domain_error(request: Request, exc: Exception) -> JSONResponse:

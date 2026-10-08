@@ -3,6 +3,7 @@
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -37,7 +38,7 @@ class Env:
         app = FastAPI()
         # core's admin check (session + role) is covered in test_wiring.py
         app.dependency_overrides[admin_user] = lambda: User(1, "c", "C", Role.ADMIN)
-        app.state.ops = self.ops
+        app.state.services = SimpleNamespace(ops=self.ops)
         app.include_router(backup.router)
         self.client = TestClient(app)
 
