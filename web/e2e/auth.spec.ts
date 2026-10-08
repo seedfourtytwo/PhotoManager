@@ -1,4 +1,13 @@
-import { ADMIN, expect, expectAccessible, resetMock, signIn, test, toast } from './helpers.ts';
+import {
+	ADMIN,
+	GUEST,
+	expect,
+	expectAccessible,
+	resetMock,
+	signIn,
+	test,
+	toast
+} from './helpers.ts';
 
 test.describe('first run and sign-in', () => {
 	test('first-run setup creates the admin and opens the library', async ({ page }) => {
@@ -60,4 +69,39 @@ test.describe('first run and sign-in', () => {
 		await page.getByRole('button', { name: 'Sign out' }).click();
 		await expect(page).toHaveURL(/\/login$/);
 	});
+});
+
+test('after too many wrong PINs the sign-in screen says to wait; an admin can unlock the account', async ({
+	page,
+	request
+}) => {
+	await resetMock();
+	// Ten wrong PINs, sent straight to the API (a separate cookie jar from the page's).
+	for (let i = 0; i < 10; i++) {
+		const wrong = await request.post('/api/auth/login', {
+			data: { username: GUEST.username, pin: '0000' }
+		});
+		expect(wrong.status()).toBe(401);
+	}
+	await page.goto('/login');
+	await page.getByRole('button', { name: GUEST.name, exact: true }).click();
+	await page.getByLabel('PIN').fill(GUEST.pin); // the right PIN: it is the account that is locked
+	await expect(page.getByRole('alert')).toContainText(/too many .*wait 15 minutes and try again/i);
+	await expect(page).toHaveURL(/\/login/);
+	await expect(page.getByLabel('PIN')).toHaveValue('');
+	await expectAccessible(page);
+
+	// The admin lifts the lock from Admin → People.
+	await signIn(page, '/admin');
+	const row = page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: GUEST.username, exact: true }) });
+	await row.getByRole('button', { name: 'Unlock' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: `${GUEST.username} can try their PIN again.` })
+	).toBeVisible();
+	const again = await request.post('/api/auth/login', {
+		data: { username: GUEST.username, pin: GUEST.pin }
+	});
+	expect(again.status()).toBe(200);
 });

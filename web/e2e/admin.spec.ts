@@ -523,3 +523,43 @@ test('loading texts in the admin dialogs are announced as status', async ({ page
 	release();
 	await expect(folder.getByRole('status')).toHaveCount(0);
 });
+
+test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialog stays for another try', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'the refusal is staged on the mock');
+	let refuse = true;
+	await page.route(/\/api\/users\/\d+$/, (route) =>
+		refuse && route.request().method() === 'PATCH'
+			? route.fulfill({ status: 503, json: { detail: 'The library is busy; try again.' } })
+			: route.fallback()
+	);
+	const row = page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: 'partner', exact: true }) });
+	await row.getByRole('button', { name: 'Reset PIN' }).click();
+	const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
+	await dialog.getByLabel('PIN').fill('8642');
+	await dialog.getByRole('button', { name: 'Set PIN' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'The library is busy; try again.' })
+	).toBeVisible();
+	await expect(page.getByText(/New PIN set/)).toHaveCount(0);
+	await expect(dialog).toBeVisible();
+
+	refuse = false;
+	await dialog.getByRole('button', { name: 'Set PIN' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'New PIN set for partner.' })
+	).toBeVisible();
+	await expect(dialog).toBeHidden();
+	// The next person's dialog starts empty.
+	await page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: 'guest', exact: true }) })
+		.getByRole('button', { name: 'Reset PIN' })
+		.click();
+	await expect(
+		page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabel('PIN')
+	).toHaveValue('');
+});
