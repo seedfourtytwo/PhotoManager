@@ -98,6 +98,28 @@ def test_an_in_memory_database_uses_its_one_connection_for_everything() -> None:
     db.close()  # idempotent
 
 
+@pytest.mark.parametrize("folder", ["photos #1", "what? where", "100%20real", "plain"])
+def test_reads_work_in_a_data_folder_with_url_characters_in_its_name(
+    tmp_path: Path, folder: str
+) -> None:
+    """The reader is opened by URI: '#', '?' and '%XX' in the path must be escaped, or the
+    read lands on another (new, empty) file."""
+    root = tmp_path / folder
+    root.mkdir()
+    db = Database.open(root / "library.db")
+    repo = SqliteRepository(db)
+    repo.enqueue("x", {})
+    seen: list[str] = []
+    reader = threading.Thread(target=lambda: seen.extend(j["kind"] for j in repo.list_jobs()))
+    reader.start()
+    reader.join()
+    assert [j["kind"] for j in repo.list_jobs()] == ["x"]
+    assert seen == ["x"], "and from another thread's reader"
+    db.close()
+    strays = {p.name for p in tmp_path.rglob("*")} - {folder, "library.db"}
+    assert strays <= {"library.db-wal", "library.db-shm"}, f"stray files: {strays}"
+
+
 def test_a_database_from_a_newer_version_of_the_app_is_refused(tmp_path: Path) -> None:
     """Opening it anyway would skip, forever, any later migration that reuses its number."""
     path = tmp_path / "library.db"

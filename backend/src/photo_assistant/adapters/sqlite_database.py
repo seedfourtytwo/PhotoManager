@@ -145,7 +145,9 @@ class Database:
     def _reader(self) -> sqlite3.Connection:
         conn: sqlite3.Connection | None = getattr(self._local, "conn", None)
         if conn is None:
-            uri = f"file:{self._path}?mode=ro"
+            assert self._path is not None  # reading() sends in-memory databases to the writer
+            # as_uri escapes '#', '?' and '%' in the folder name (they mean something in a URI)
+            uri = f"{self._path.resolve().as_uri()}?mode=ro"
             conn = sqlite3.connect(uri, uri=True, check_same_thread=False, isolation_level=None)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA busy_timeout = 5000")
