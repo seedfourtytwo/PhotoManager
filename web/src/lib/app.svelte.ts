@@ -39,6 +39,7 @@ class Session {
 	/** Any 401: forget the user and go to the sign-in page, coming back here afterwards. */
 	lost() {
 		this.user = null;
+		library.forget();
 		if (PUBLIC_ROUTES.some((p) => location.pathname.startsWith(p))) return;
 		void goto(`/login?next=${encodeURIComponent(currentPath())}`, { replaceState: true });
 	}
@@ -58,12 +59,14 @@ class Session {
 
 	signedIn(user: User, next: string | null) {
 		this.user = user;
+		library.forget();
 		void goto(sameSitePath(next), { replaceState: true });
 	}
 
 	async signOut() {
 		await api.logout().catch(() => undefined);
 		this.user = null;
+		library.forget();
 		await goto('/login', { replaceState: true });
 	}
 }
@@ -86,7 +89,10 @@ class Library {
 		this.version++;
 	}
 
-	/** Sources you may see (who owns what decides who may make a photo private). */
+	/**
+	 * The sources the signed-in user may see, asked once and kept until `forget()` (another
+	 * user sees other sources). A failed request is not kept: the next call asks again.
+	 */
 	sources(): Promise<Source[]> {
 		this.#sources ??= api.sources().catch(() => {
 			this.#sources = null;
@@ -97,10 +103,14 @@ class Library {
 
 	/** Whether the local ML models are installed (search by meaning, similar photos). */
 	ml(): Promise<MlStatus | null> {
-		this.#ml ??= api.mlStatus().catch(() => null);
+		this.#ml ??= api.mlStatus().catch(() => {
+			this.#ml = null;
+			return null;
+		});
 		return this.#ml;
 	}
 
+	/** The signed-in user changed, or an admin changed the sources: ask again next time. */
 	forget() {
 		this.#sources = null;
 		this.#ml = null;
