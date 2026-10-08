@@ -143,12 +143,17 @@ class FakeEngine:
     backed_up: list[tuple[Path, tuple[str, ...]]] = field(default_factory=list)
     retention: Retention | None = None
     corrupt: set[str] = field(default_factory=set)
+    absent: dict[str, str] = field(default_factory=dict)  # repository location → why unreachable
     now: datetime = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 
     def _call(self, name: str) -> None:
         self.calls.append(name)
         if name in self.fail:
             raise self.fail[name]
+
+    def probe(self, repo: RepositoryRef) -> str | None:
+        self._call("probe")
+        return self.absent.get(repo.location)
 
     def ensure_repository(self, repo: RepositoryRef) -> bool:
         self._call("ensure")
@@ -268,7 +273,13 @@ class FakeMirror:
 
     def __init__(self) -> None:
         self.fail: BackupError | None = None
+        self.absent: str | None = None
         self.calls: list[tuple[Path, str, Path]] = []
+
+    def probe(self, repository: Path, remote_folder: str) -> str | None:
+        if self.fail:
+            raise self.fail
+        return self.absent
 
     def mirror(self, repository: Path, remote_folder: str, state_file: Path) -> MirrorReport:
         self.calls.append((repository, remote_folder, state_file))
