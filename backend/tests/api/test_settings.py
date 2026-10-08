@@ -1,11 +1,16 @@
 """One Settings, read once, with nested sections; every existing env name still works (B22)."""
 
+import os
 from pathlib import Path
 
 import pytest
 from pydantic_settings import BaseSettings
 
 from photo_assistant.api.settings import IntegrationSettings, MlSettings, OpsSettings, Settings
+
+
+def test_no_setting_leaks_in_from_the_shell_that_started_the_tests() -> None:
+    assert [name for name in os.environ if name.startswith("PA_")] == []
 
 
 def test_the_flat_environment_names_fill_the_nested_sections(
