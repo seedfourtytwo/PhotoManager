@@ -56,12 +56,31 @@
 		}
 	}
 
-	async function reset() {
-		if (!resetting) return;
-		await patch(resetting, { pin: newPin });
-		notice.show(`New PIN set for ${resetting.username}.`);
+	function closeReset() {
 		resetting = null;
 		newPin = '';
+	}
+
+	async function reset() {
+		// The dialog may be cancelled while the request is on its way: remember who it was for.
+		const who = resetting;
+		if (!who || !(await patch(who, { pin: newPin }))) return;
+		notice.show(`New PIN set for ${who.username}.`);
+		if (resetting?.id === who.id) closeReset();
+	}
+
+	/** Too many wrong PINs lock an account for a while; this lets them try again now. */
+	async function unlock(user: User) {
+		if (pending !== null) return;
+		pending = user.id;
+		try {
+			await api.unlockUser(user.id);
+			notice.show(`${user.username} can try their PIN again.`);
+		} catch (e) {
+			notice.error(e);
+		} finally {
+			pending = null;
+		}
 	}
 </script>
 
@@ -83,7 +102,7 @@
 						<select
 							aria-label={`Role of ${user.username}`}
 							value={user.role}
-							disabled={pending === user.id}
+							disabled={pending !== null}
 							onchange={(e) =>
 								patch(user, { role: e.currentTarget.value as Role }, e.currentTarget)}
 						>
@@ -99,14 +118,23 @@
 						{#if user.id !== session.user?.id}
 							<button
 								type="button"
-								disabled={pending === user.id}
+								disabled={pending !== null}
 								onclick={() => patch(user, { disabled: !user.disabled })}
 							>
 								{user.disabled ? 'Enable' : 'Disable'}
 							</button>
 						{:else}<span class="quiet">· you</span>{/if}
 					</td>
-					<td><button type="button" onclick={() => (resetting = user)}>Reset PIN</button></td>
+					<td>
+						<button type="button" disabled={pending !== null} onclick={() => (resetting = user)}
+							>Reset PIN</button
+						>
+						{#if user.id !== session.user?.id}
+							<button type="button" disabled={pending !== null} onclick={() => unlock(user)}
+								>Unlock</button
+							>
+						{/if}
+					</td>
 				</tr>
 			{/each}
 		</tbody>
@@ -146,12 +174,15 @@
 		{/snippet}
 	</Dialog>
 {:else if resetting}
-	<Dialog title={`New PIN for ${resetting.username}`} onclose={() => (resetting = null)}>
+	<Dialog title={`New PIN for ${resetting.username}`} onclose={closeReset}>
 		<label class="field">PIN <input {...PIN_FIELD} bind:value={newPin} autocomplete="off" /></label>
 		<p class="quiet small">Exactly {PIN_LENGTH} digits.</p>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={!isPin(newPin)} onclick={reset}
-				>Set PIN</button
+			<button
+				class="primary"
+				type="button"
+				disabled={!isPin(newPin) || pending !== null}
+				onclick={reset}>Set PIN</button
 			>
 		{/snippet}
 	</Dialog>
