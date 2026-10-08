@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import CalendarHeatmap from './CalendarHeatmap.svelte';
 import DateScrubber from './DateScrubber.svelte';
+import SelectionActions from './SelectionActions.svelte';
 import SelectionBar from './SelectionBar.svelte';
+import { makeAsset } from '$lib/testing/fixtures';
+import { session } from '$lib/app.svelte';
+import type { AssetOut, Id } from '$lib/api';
 
 describe('DateScrubber', () => {
 	const months = [
@@ -69,5 +73,44 @@ describe('SelectionBar', () => {
 		await page.getByRole('button', { name: 'Clear selection' }).click();
 		expect(run).toHaveBeenCalledOnce();
 		expect(onclear).toHaveBeenCalledOnce();
+	});
+});
+
+describe('SelectionActions', () => {
+	it('a refused Favourite puts every photo back as it was, favourites included', async () => {
+		session.user = { id: 1, username: 'c', display_name: 'C', role: 'admin', disabled: false };
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(JSON.stringify({ detail: 'The library is read-only right now.' }), {
+					status: 503,
+					headers: { 'content-type': 'application/json' }
+				})
+		);
+		const selected = [
+			makeAsset(1, undefined, 4, 3, { favourite: true }),
+			makeAsset(2),
+			makeAsset(3)
+		];
+		const favourite = new Map(selected.map((a) => [a.id, a.favourite]));
+		const onpatch = vi.fn((ids: Set<Id>, patch: Partial<AssetOut>) => {
+			for (const id of ids) if (patch.favourite !== undefined) favourite.set(id, patch.favourite);
+		});
+		render(SelectionActions, {
+			selected,
+			onclear: () => {},
+			onpatch,
+			onremove: () => {},
+			onreload: () => {}
+		});
+		await page.getByRole('button', { name: 'Favourite', exact: true }).click();
+		await vi.waitFor(() => expect(onpatch.mock.calls.length).toBeGreaterThan(1));
+		expect([...favourite]).toEqual([
+			[1, true],
+			[2, false],
+			[3, false]
+		]);
+		vi.unstubAllGlobals();
+		session.user = null;
 	});
 });
