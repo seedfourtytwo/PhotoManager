@@ -8,6 +8,7 @@ import pytest
 from photo_assistant.adapters.filesystem import Blake3Hasher
 from photo_assistant.app.backup import (
     BACKUP_JOB,
+    MIRROR_JOB,
     RESTORE_TEST_JOB,
     BackupConfig,
     BackupService,
@@ -23,9 +24,16 @@ from photo_assistant.domain.backup import (
     TargetSettings,
 )
 from photo_assistant.domain.schedule import InvalidScheduleError
-from photo_assistant.ports.backup import AssetFile, BackupError, Disk, WrongPasswordError
+from photo_assistant.ports.backup import (
+    AssetFile,
+    BackupError,
+    Disk,
+    MirrorSignInError,
+    WrongPasswordError,
+)
 from tests.fakes_backup import (
     FakeEngine,
+    FakeMirror,
     FakePlaces,
     FakeQueue,
     FakeSnapshotter,
@@ -52,6 +60,7 @@ class World:
         self.queue = FakeQueue()
         self.places = FakePlaces()
         self.vault = FakeVault(tmp_path / "keys")
+        self.mirror = FakeMirror()
         self.disk = tmp_path / "usb"
         self.disk.mkdir()
         self.service = BackupService(
@@ -64,6 +73,7 @@ class World:
             queue=self.queue,
             places=self.places,
             vault=self.vault,
+            mirror=self.mirror,
         )
 
     def _make_assets(self) -> list[AssetFile]:
@@ -545,3 +555,114 @@ def test_a_disabled_target_is_not_restore_tested(world: World) -> None:
     world.clock.current += timedelta(days=30)
     world.service.run_due()
     assert len(world.service.runs(target.id)) == 2
+
+
+# --- an off-site copy on Proton Drive (issue 14) -----------------------------------------------
+
+PROTON = "/my-files/Backups"
+
+
+def mirrored(world: World) -> int:
+    target_id = world.target()
+    world.service.set_mirror(target_id, PROTON)
+    return target_id
+
+
+def kinds(world: World, target_id: int) -> list[tuple[RunKind, BackupRunStatus]]:
+    return [(r.kind, r.status) for r in reversed(world.service.runs(target_id))]
+
+
+def test_after_a_successful_backup_the_copy_on_proton_is_brought_up_to_date(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.run_now(target_id)
+    repository = Path(world.service.target(target_id).repository)
+    assert world.mirror.calls == [(repository, PROTON, world.root / "mirror" / f"{target_id}.json")]
+    assert kinds(world, target_id) == [
+        (RunKind.BACKUP, BackupRunStatus.SUCCEEDED),
+        (RunKind.MIRROR, BackupRunStatus.SUCCEEDED),
+    ]
+    copy = world.service.runs(target_id)[0]
+    assert copy.details == "2 new files sent (5 MB), 1 old file removed"
+    (status,) = world.service.status()
+    assert status.last_mirror_at == copy.finished_at and not status.mirror_failing
+    assert not status.needs_attention
+
+
+def test_without_a_copy_configured_or_after_a_failed_backup_nothing_is_sent(world: World) -> None:
+    plain = world.target()
+    world.service.run_now(plain)
+    world.service.set_mirror(plain, PROTON)
+    world.queue.jobs.clear()
+    world.engine.fail["backup"] = BackupError("disk unplugged")
+    world.service.run_now(plain)
+    assert world.mirror.calls == []
+    assert RunKind.MIRROR not in [k for k, _ in kinds(world, plain)]
+
+
+def test_a_failed_copy_is_recorded_and_raises_the_banner_until_it_works_again(
+    world: World,
+) -> None:
+    target_id = mirrored(world)
+    world.service.confirm_key_saved(target_id)
+    world.mirror.fail = MirrorSignInError("Proton Drive is not signed in: run 'x'")
+    backup = world.service.run_now(target_id)
+    assert backup.status is BackupRunStatus.SUCCEEDED, "the backup itself is fine"
+    (status,) = world.service.status()
+    assert status.mirror_failing and status.needs_attention
+    assert status.mirror_error == "Proton Drive is not signed in: run 'x'"
+    assert status.last_mirror_at is None
+    world.mirror.fail = None
+    world.service.run_now(target_id)
+    (status,) = world.service.status()
+    assert not status.mirror_failing and status.mirror_error is None
+    assert status.last_mirror_at is not None
+
+
+def test_scheduled_backups_are_copied_too(world: World) -> None:
+    target_id = mirrored(world)
+    world.clock.current = T0 + timedelta(hours=2)  # past 02:30
+    world.service.run_due()
+    assert (RunKind.MIRROR, BackupRunStatus.SUCCEEDED) in kinds(world, target_id)
+
+
+def test_switching_the_copy_on_queues_a_first_copy_when_a_backup_exists(world: World) -> None:
+    target_id = world.target()
+    world.service.set_mirror(target_id, PROTON)
+    assert world.queue.jobs == [], "nothing to copy before the first backup"
+    world.service.run_now(target_id)
+    world.service.set_mirror(target_id, None)
+    assert world.service.target(target_id).mirror_path is None
+    world.service.set_mirror(target_id, "/my-files/Elsewhere")
+    assert world.queue.jobs == [(MIRROR_JOB, {"target_id": target_id})]
+    world.service.job_handlers()[MIRROR_JOB]({"target_id": target_id})
+    assert world.mirror.calls[-1][1] == "/my-files/Elsewhere"
+
+
+def test_a_copy_job_for_a_target_whose_copy_was_switched_off_does_nothing(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.set_mirror(target_id, None)
+    world.service.job_handlers()[MIRROR_JOB]({"target_id": target_id})
+    assert world.mirror.calls == []
+
+
+@pytest.mark.parametrize("path", ["/photos", "/trash", "my-files", "/my-files/../x", ""])
+def test_the_copy_must_go_in_a_folder_in_my_files(world: World, path: str) -> None:
+    with pytest.raises(ValueError, match="My files"):
+        world.service.set_mirror(world.target(), path)
+
+
+def test_only_a_backup_on_this_machine_can_have_a_copy(world: World) -> None:
+    cloud = world.target(repository="rclone:nas:photos")
+    with pytest.raises(ValueError, match="folder or disk"):
+        world.service.set_mirror(cloud, PROTON)
+    with pytest.raises(UnknownTargetError):
+        world.service.set_mirror(999, PROTON)
+
+
+def test_without_proton_set_up_on_the_server_the_copy_cannot_be_switched_on(
+    tmp_path: Path,
+) -> None:
+    world = World(tmp_path)
+    world.service._mirror = None
+    with pytest.raises(ValueError, match="not available"):
+        world.service.set_mirror(world.target(), PROTON)

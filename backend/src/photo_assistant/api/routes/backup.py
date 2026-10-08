@@ -131,6 +131,9 @@ class TargetOut(BaseModel):
     last_proven_at: datetime | None  # the last restore test that matched every hash
     restore_failing: bool
     key_saved: bool  # someone confirmed a copy of the recovery key exists
+    mirror_path: str | None  # the Proton Drive folder holding an off-site copy, if any
+    last_mirror_at: datetime | None  # that copy was last brought up to date
+    mirror_error: str | None  # why the last copy failed
     needs_attention: bool  # drives the warning banner
 
     @classmethod
@@ -153,6 +156,9 @@ class TargetOut(BaseModel):
             last_proven_at=s.last_proven_at,
             restore_failing=s.restore_failing,
             key_saved=not s.key_unsaved,
+            mirror_path=t.mirror_path,
+            last_mirror_at=s.last_mirror_at,
+            mirror_error=s.mirror_error,
             needs_attention=s.needs_attention,
         )
 
@@ -290,6 +296,23 @@ def key_saved(service: BackupDep, target_id: int) -> TargetOut:
     """The admin confirms a copy of the recovery key exists outside this machine."""
     _known(service, target_id)
     service.confirm_key_saved(target_id)
+    return _status_of(service, target_id)
+
+
+class ProtonCopyIn(BaseModel):
+    path: str | None = Field(max_length=1024)  # a folder in My files; null stops the copy
+
+
+@router.put("/{target_id}/proton-copy")
+def proton_copy(service: BackupDep, target_id: int, body: ProtonCopyIn) -> TargetOut:
+    """Keep an off-site copy of this backup on Proton Drive, brought up to date after every
+    backup (issue 14). The copy is the encrypted repository; null switches it off (what is
+    already on Proton stays there)."""
+    _known(service, target_id)
+    try:
+        service.set_mirror(target_id, body.path)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return _status_of(service, target_id)
 
 

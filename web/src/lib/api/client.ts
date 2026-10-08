@@ -371,6 +371,9 @@ export function createApi(options: ApiOptions = {}) {
 		updateBackup: (id: Id, body: BackupPatch) =>
 			request<BackupTarget>('PATCH', `/api/backups/${id}`, body),
 		runBackup: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/run`),
+		/** Keep an off-site copy in this Proton Drive folder; null stops it. */
+		setProtonCopy: (id: Id, path: string | null) =>
+			request<BackupTarget>('PUT', `/api/backups/${id}/proton-copy`, { path }),
 		restoreTest: (id: Id) => request<QueuedRun>('POST', `/api/backups/${id}/restore-test`),
 		backupRuns: (id: Id, limit = 10) =>
 			get<BackupRun[]>(query(`/api/backups/${id}/runs`, { limit })),
@@ -393,6 +396,8 @@ export function createApi(options: ApiOptions = {}) {
 			get<{ path: string; folders: string[] }>(
 				`/api/proton/folders?path=${encodeURIComponent(path)}`
 			),
+		createProtonFolder: (parent: string, name: string) =>
+			request<{ path: string; folders: string[] }>('POST', '/api/proton/folders', { parent, name }),
 		addProtonSource: (body: ProtonSourceIn) =>
 			request<ProtonSource>('POST', '/api/proton/sources', body)
 	};

@@ -130,6 +130,30 @@ class KeyVault(Protocol):
     def discard(self, key_file: Path) -> None: ...
 
 
+class MirrorError(BackupError):
+    """The off-site copy could not be brought up to date; the message says why."""
+
+
+class MirrorSignInError(MirrorError):
+    """The cloud account is not signed in on this machine."""
+
+
+@dataclass(frozen=True, slots=True)
+class MirrorReport:
+    uploaded: int  # files that were not in the copy before
+    removed: int  # files the backup no longer has, deleted from the copy
+    bytes_sent: int
+
+
+class RepositoryMirror(Protocol):
+    """A second, off-site copy of a local backup repository (already encrypted)."""
+
+    def mirror(self, repository: Path, remote_folder: str, state_file: Path) -> MirrorReport:
+        """Make ``<remote_folder>/<repository's name>`` hold exactly the repository's files.
+        ``state_file`` is the mirror's own bookkeeping; the repository is only read."""
+        ...
+
+
 class DatabaseSnapshotter(Protocol):
     def snapshot(self, destination: Path) -> None:
         """Write a consistent copy of the live database (online backup API), atomically."""
@@ -156,6 +180,7 @@ class BackupStore(Protocol):
     def list_targets(self) -> list[BackupTarget]: ...
     def set_target_enabled(self, target_id: int, enabled: bool) -> None: ...
     def mark_key_saved(self, target_id: int, at: datetime) -> None: ...
+    def set_target_mirror(self, target_id: int, mirror_path: str | None) -> None: ...
     def library_bytes(self) -> int:
         """Bytes of every original the library holds: what a first backup has to store."""
         ...

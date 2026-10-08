@@ -42,6 +42,7 @@ def _target(row: sqlite3.Row) -> BackupTarget:
         enabled=bool(row["enabled"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         key_saved_at=_when(row["key_saved_at"]),
+        mirror_path=row["mirror_path"],
     )
 
 
@@ -125,6 +126,11 @@ class SqliteBackupStore:
 
     def mark_key_saved(self, target_id: int, at: datetime) -> None:
         self._write("UPDATE backup_target SET key_saved_at = ? WHERE id = ?", (_iso(at), target_id))
+
+    def set_target_mirror(self, target_id: int, mirror_path: str | None) -> None:
+        self._write(
+            "UPDATE backup_target SET mirror_path = ? WHERE id = ?", (mirror_path, target_id)
+        )
 
     def library_bytes(self) -> int:
         row = self._one("SELECT COALESCE(SUM(byte_size), 0) FROM asset")

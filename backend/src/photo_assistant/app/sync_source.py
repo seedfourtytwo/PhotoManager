@@ -15,7 +15,12 @@ from typing import Protocol
 
 from photo_assistant.app.import_source import SourceUnavailableError
 from photo_assistant.domain.model import ImportReport, RunStatus, Source
-from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
+from photo_assistant.domain.remote_source import (
+    PROTON_PHOTOS,
+    RemoteConfig,
+    RemoteConfigError,
+    proton_folder_name_problem,
+)
 from photo_assistant.ports import Clock
 from photo_assistant.ports.sync import (
     RemoteSourceStore,
@@ -83,6 +88,8 @@ class ProtonAccount(Protocol):
 
     def folders(self, path: str) -> list[str]: ...
 
+    def create_folder(self, parent: str, name: str) -> str: ...
+
 
 def add_proton_source(
     store: RemoteSourceStore, account: ProtonAccount, staging_root: Path, label: str, path: str
@@ -95,6 +102,19 @@ def add_proton_source(
     else:
         account.folders(path)
     return store.add_remote_source(label, config, staging_root)
+
+
+def create_proton_folder(account: ProtonAccount, parent: str, name: str) -> str:
+    """Make a new folder in My files (a place for a backup copy); its path. Raises
+    RemoteConfigError for a bad place or name, SyncError subclasses when Proton can't."""
+    if parent == PROTON_PHOTOS:
+        raise RemoteConfigError("folders can only be made in My files")
+    RemoteConfig.proton(parent)
+    if problem := proton_folder_name_problem(name):
+        raise RemoteConfigError(problem)
+    if name in account.folders(parent):
+        raise RemoteConfigError(f"'{name}' already exists there")
+    return account.create_folder(parent, name)
 
 
 class ProviderSync:

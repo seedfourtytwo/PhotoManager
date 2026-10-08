@@ -1,4 +1,5 @@
-"""Proton Drive sources: is the machine signed in, which folders are there, add a source.
+"""Proton Drive: is the machine signed in, which folders are there, add a source, make a
+folder (for a backup copy).
 
 The sign-in itself happens in Proton's own tool on this machine (a browser login); nothing here
 takes or stores account details. Pulling uses the ordinary remote-source and source routes.
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 
 from photo_assistant.api.deps import ADMIN_ONLY
 from photo_assistant.api.integrations import IntegrationsDep
-from photo_assistant.app.sync_source import add_proton_source
+from photo_assistant.app.sync_source import add_proton_source, create_proton_folder
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.ports.sync import SyncError, SyncNotFoundError
 
@@ -64,6 +65,21 @@ def folders(path: str, integrations: IntegrationsDep) -> ProtonFolders:
         return ProtonFolders(path=path, folders=integrations.proton.folders(path))
     except (RemoteConfigError, SyncError) as exc:
         raise _failure(exc) from exc
+
+
+class NewProtonFolder(BaseModel):
+    parent: str
+    name: str
+
+
+@router.post("/folders", status_code=status.HTTP_201_CREATED)
+def create_folder(body: NewProtonFolder, integrations: IntegrationsDep) -> ProtonFolders:
+    """Make a new, empty folder in My files (a place for a backup copy) and show it."""
+    try:
+        path = create_proton_folder(integrations.proton, body.parent, body.name)
+    except (RemoteConfigError, SyncError) as exc:
+        raise _failure(exc) from exc
+    return ProtonFolders(path=path, folders=[])
 
 
 @router.post("/sources", status_code=status.HTTP_201_CREATED)
