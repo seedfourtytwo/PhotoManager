@@ -57,6 +57,17 @@ def test_add_list_and_disable_sources(client: TestClient, source_guard: Path) ->
     assert patched.json()["enabled"] is False
 
 
+def test_a_source_can_be_renamed(client: TestClient, source_guard: Path) -> None:
+    created = client.post("/api/sources", json={"label": "Pictures", "path": str(source_guard)})
+    source_id = created.json()["id"]
+    renamed = client.patch(f"/api/sources/{source_id}", json={"label": "Holidays"})
+    assert renamed.status_code == 200 and renamed.json()["label"] == "Holidays"
+    assert [s["label"] for s in client.get("/api/sources").json()] == ["Holidays"]
+    untouched = client.patch(f"/api/sources/{source_id}", json={"enabled": False}).json()
+    assert (untouched["label"], untouched["enabled"]) == ("Holidays", False)
+    assert client.patch(f"/api/sources/{source_id}", json={"label": ""}).status_code == 422
+
+
 def test_sources_are_validated(client: TestClient, source_guard: Path, tmp_path: Path) -> None:
     missing = client.post("/api/sources", json={"label": "x", "path": str(tmp_path / "nope")})
     assert missing.status_code == 422 and "folder not found" in missing.json()["detail"]
