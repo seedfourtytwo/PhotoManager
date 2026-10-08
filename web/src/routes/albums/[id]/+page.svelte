@@ -279,7 +279,8 @@
 		max-width: 20ch;
 	}
 	.desc {
-		font-family: var(--font-text);
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-style: italic;
 		font-size: var(--fs-20);
 		margin-bottom: var(--s-1) !important;

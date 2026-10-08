@@ -176,7 +176,8 @@
 	/* The query is written in the album's hand: a serif line to write on. */
 	input {
 		flex: 1;
-		font-family: var(--font-text);
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-size: var(--fs-20) !important;
 		padding-block: var(--s-1);
 	}

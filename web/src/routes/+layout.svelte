@@ -74,7 +74,8 @@
 	}
 	.opening {
 		padding: var(--s-6) var(--page-x);
-		font-family: var(--font-text);
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-style: italic;
 		font-size: var(--fs-16);
 	}

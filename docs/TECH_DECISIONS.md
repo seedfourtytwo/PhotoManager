@@ -115,7 +115,8 @@ mobile; installable as a PWA (no app-store work). Built as static files served b
 - Charts (calendar heat map, small multiples): D3 scales + hand-written SVG, no chart kit
   with default chrome (see DESIGN_PRINCIPLES).
 - Map: MapLibre GL with a muted, self-hostable style (e.g. Protomaps PMTiles file) — no tile API keys.
-- API client generated from OpenAPI (`openapi-typescript`) — one source of truth for types.
+- API types are hand-written in `web/src/lib/api/types.ts` against `docs/contracts/api-v1.md`;
+  the mock API imports the same types.
 **Rejected:** React (heavier, no clear gain here), native mobile apps (later, if ever).
 
 ## Print: Typst (via `typst` Python package)
@@ -195,9 +196,12 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 | CI | GitHub Actions: lint → types → unit → integration (with exiftool/libvips in container) → E2E |
 | Versioning | Conventional Commits, release-please |
 
-## Typefaces (decided 2026-10-02)
+## Typefaces (decided 2026-10-08)
 
-Newsreader (serif, optical sizes) for titles, dates and captions; Instrument Sans for controls.
-Both are SIL Open Font License; the woff2 files and licences are vendored in `web/static/fonts/`
-(about 520 KB), served by the app itself — no font CDN, nothing fetched at runtime. Fallbacks:
-Iowan/Charter/Georgia and the system sans.
+Hanken Grotesk (sans, variable weight) for everything you read or operate, including titles;
+Martian Mono (variable weight and width, set at 80 % width) for data: dates, counts, camera
+settings, file names, system status. Newsreader (serif, optical sizes) stays as the title face
+of the Album theme. All SIL Open Font License; the woff2 files and licences are vendored in
+`web/static/fonts/`, served by the app itself — no font CDN, nothing fetched at runtime.
+Fallbacks: the system sans, the system monospace, Iowan/Charter/Georgia.
+Replaced Instrument Sans (2026-10-02) in the 2026-10-08 redesign.

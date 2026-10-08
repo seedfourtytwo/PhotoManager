@@ -45,8 +45,8 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
-					// Vitest blanks CSS files by default; the theme tests read themes.css as text.
-					css: { include: [/themes\.css/] },
+					// Vitest blanks CSS files by default; the style tests read these files as text.
+					css: { include: [/src\/lib\/.*\.css/] },
 					include: ['src/**/*.{test,spec}.{js,ts}', 'mock-api/**/*.spec.ts'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}

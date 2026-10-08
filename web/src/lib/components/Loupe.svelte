@@ -512,13 +512,15 @@
 		margin: 0 0 var(--s-1);
 	}
 	.date {
-		font-family: var(--font-text);
+		font-family: var(--font-data);
+		font-stretch: 80%;
 		font-size: var(--fs-20);
 		line-height: var(--lh-tight);
 		margin-bottom: var(--s-1) !important;
 	}
 	.place {
-		font-family: var(--font-text);
+		font-family: var(--font-data);
+		font-stretch: 80%;
 		font-style: italic;
 		font-size: var(--fs-16);
 		margin-top: var(--s-3) !important;

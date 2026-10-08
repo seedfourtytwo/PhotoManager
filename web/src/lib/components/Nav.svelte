@@ -74,8 +74,8 @@
 	.mark {
 		margin: 0 0 var(--s-5);
 		padding: var(--s-1) var(--s-2) 0;
-		font-family: var(--font-text);
-		font-style: italic;
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-size: var(--fs-20);
 		line-height: 1;
 		color: var(--ink);

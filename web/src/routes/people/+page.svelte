@@ -91,7 +91,8 @@
 		margin-bottom: var(--s-1);
 	}
 	.name {
-		font-family: var(--font-text);
+		font-family: var(--font-title);
+		font-weight: var(--title-weight);
 		font-size: var(--fs-16);
 		line-height: var(--lh-tight);
 		overflow: hidden;
