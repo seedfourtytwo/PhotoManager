@@ -36,7 +36,14 @@ more would hurt understanding.
 sans; dates, counts and camera settings speak in a monospace, like the figures in a viewfinder.
 One accent — **safelight amber** — marks selection and focus and nothing else. Bars that sit
 over photos are translucent glass. This is the **Safelight** theme; the earlier serif look
-ships as the **Album** theme. A theme changes colours, corners and the title face, never layout.
+lives on as the **Album** theme (serif titles, small corners, indigo ink). A theme changes
+colours, corners and the title face, never layout.
+
+**Arriving with the next redesign steps** (issue #11, then #10): the icon set and the bars
+that use it, glass on floating bars (the `.glass` utility exists; nothing uses it yet), mono
+for counts and dates outside the photo view (class `.data`), and status dots on the System
+page (`--ok` / `--fail`). Until then the rules below describe the target; the checklist items
+about icons and glass apply once those pieces exist.
 
 The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefaces) and
 `tokens.css` (everything else); the tables below mirror them for Safelight.
@@ -86,7 +93,7 @@ Three families, all self-hosted under `web/static/fonts` (SIL OFL; nothing fetch
 
 Line heights: `--lh-tight` 1.15 (titles), `--lh-ui` 1.45 (interface), `--lh-text` 1.6 (prose,
 max `--measure` 36 rem). Group labels (`h3`, `legend`) are 12 px / 600 / `--ink-2`, **sentence
-case** — no uppercase tracking. A count beside a title is set in the sans at 12 px.
+case** — no uppercase tracking. A count beside a title is set in the data face at 12 px.
 
 ### Space, shape, motion
 
@@ -164,6 +171,6 @@ case** — no uppercase tracking. A count beside a title is set in the sans at 1
 - [ ] Charts: zero-based, directly labelled, no chartjunk?
 - [ ] Works at 375 px wide and at 1440 px wide?
 - [ ] Keyboard reachable, visible focus, AA contrast, reduced motion respected?
-- [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`?
+- [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`, `themes.css` and `fonts.css`?
 - [ ] Phone: 44 px targets, nothing wraps to a second toolbar line, safe areas respected?
 - [ ] Checked in both themes?
