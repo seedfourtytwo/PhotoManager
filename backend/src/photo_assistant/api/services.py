@@ -1,4 +1,13 @@
-"""Composition root: the one place that picks real adapters and wires them together."""
+"""Composition root: the one place that picks real adapters and wires them together.
+
+For both the server (``api/main.py``) and the command line (``__main__.py``): each calls
+``build_services`` and gets the same objects on the one library ``Database``. What only the
+server does (the job worker, the periodic tasks, the start-up sweeps) is not started here: the
+server's lifespan starts it. The builders of the areas live beside this module
+(``integrations.py``, ``ml_services.py``, ``ops_services.py``); the ops commands
+(``api/cli_ops.py``), which must also work without a library, call those of
+``ops_services.py`` directly.
+"""
 
 from dataclasses import dataclass
 from datetime import timedelta
