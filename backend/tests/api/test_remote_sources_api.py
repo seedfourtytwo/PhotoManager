@@ -10,7 +10,9 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.filesystem import SystemClock
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.api.deps import admin_user
 from photo_assistant.api.integrations import build_integrations
 from photo_assistant.api.routes import remote_sources
@@ -46,22 +48,23 @@ def _admin_from_header(request: Request) -> User:
 def world(tmp_path: Path) -> Iterator[World]:
     config = tmp_path / "rclone.conf"
     config.write_text("[mega]\ntype = local\n")
-    conn = open_database(":memory:")
-    repo = SqliteRepository(conn)
+    db = Database.open(":memory:")
+    repo = SqliteRepository(db)
     repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
     app.include_router(remote_sources.router)
     integrations = build_integrations(
         data_root=tmp_path / "data",
         settings=IntegrationSettings(rclone_config=config),
-        conn=conn,
+        db=db,
         repo=repo,
+        clock=SystemClock(),
         importer=StubImporter(),
     )
     app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     yield World(TestClient(app, base_url="http://127.0.0.1"), repo, tmp_path / "data")
-    conn.close()
+    db.close()
 
 
 def test_the_configured_rclone_remotes_are_listed(world: World) -> None:
@@ -124,8 +127,13 @@ def test_ai_stays_off_unless_ollama_is_chosen(tmp_path: Path) -> None:
     from photo_assistant.adapters.null_ai import NullAIProvider
     from photo_assistant.adapters.ollama_ai import OllamaProvider
 
-    conn = open_database(":memory:")
-    common = {"data_root": tmp_path, "conn": conn, "repo": SqliteRepository(conn)}
+    db = Database.open(":memory:")
+    common = {
+        "data_root": tmp_path,
+        "db": db,
+        "repo": SqliteRepository(db),
+        "clock": SystemClock(),
+    }
     off = build_integrations(settings=IntegrationSettings(), importer=StubImporter(), **common)  # type: ignore[arg-type]
     on = build_integrations(
         settings=IntegrationSettings(ai_provider="ollama", ollama_plan_model="p"),
@@ -134,7 +142,7 @@ def test_ai_stays_off_unless_ollama_is_chosen(tmp_path: Path) -> None:
     )
     assert isinstance(off.ai, NullAIProvider)
     assert isinstance(on.ai, OllamaProvider)
-    conn.close()
+    db.close()
 
 
 def test_the_importer_store_accepts_staging_and_inbox_folders(tmp_path: Path) -> None:

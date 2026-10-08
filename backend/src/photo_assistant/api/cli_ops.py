@@ -12,6 +12,7 @@ from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.system_probe import LocalSystemProbe
 from photo_assistant.api.ops_services import (
+    RcloneTool,
     build_backup_service,
     build_doctor_config,
     build_library_transfer,
@@ -221,7 +222,11 @@ def _backup(args: argparse.Namespace, settings: Settings) -> int:
     db = Database.open(root / "library.db", backup_dir=root / "db-backups")
     repo = SqliteRepository(db)  # the same pieces as the server: one Database, every store
     service, _ = build_backup_service(
-        root, settings.ops, source_roots=lambda: [Path(s.root) for s in repo.list_sources()], db=db
+        root,
+        settings.ops,
+        db=db,
+        rclone=RcloneTool(),
+        source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
     )
     try:
         return _BACKUP[args.backup_command](service, args)

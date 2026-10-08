@@ -11,7 +11,7 @@ from pathlib import Path
 
 from photo_assistant.adapters.faces_insightface import InsightFaceAnalyzer
 from photo_assistant.adapters.faces_opencv import YuNetSFaceAnalyzer
-from photo_assistant.adapters.ml_store import SqliteMlStore, open_ml_store
+from photo_assistant.adapters.ml_store import SqliteMlStore
 from photo_assistant.adapters.onnx_clip import OnnxClip
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.api.settings import MlSettings
@@ -72,12 +72,12 @@ def build_ml_services(
     ml: MlSettings,
     repo: Repository,
     library: ImagePaths,
-    db: Database | None = None,
+    db: Database,
     on_tags: Callable[[int, Sequence[TagScore]], object] | None = None,
 ) -> MlServices:
     """``repo``/``library``: the app's Repository and LibraryStore; ``db``: the app's one
-    Database (None: open the library database for this store alone, as tools do)."""
-    store = SqliteMlStore(db) if db is not None else open_ml_store(data_root / "library.db")
+    Database, which the ML store shares with every other store."""
+    store = SqliteMlStore(db)
     clip = OnnxClip(
         ml.clip_dir(data_root), ml.clip_model, provider=ml.provider, batch_size=ml.clip_batch_size
     )

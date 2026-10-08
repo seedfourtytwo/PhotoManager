@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from photo_assistant.adapters.ml_store import SqliteMlStore, from_blob, open_ml_store, to_blob
+from photo_assistant.adapters.ml_store import SqliteMlStore, from_blob, to_blob
+from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
@@ -54,8 +55,8 @@ def test_migration_creates_the_ml_tables(conn: sqlite3.Connection) -> None:
     assert {"clip_embedding", "face", "person", "tag", "asset_tag", "ml_task"} <= names
 
 
-def test_open_ml_store_on_a_file_migrates_and_loads_sqlite_vec(tmp_path: Path) -> None:
-    store = open_ml_store(tmp_path / "library.db")
+def test_the_ml_store_on_a_database_file_migrates_and_loads_sqlite_vec(tmp_path: Path) -> None:
+    store = SqliteMlStore(Database.open(tmp_path / "library.db"))
     assert store.vec_version().startswith("v")
     store.close()
 

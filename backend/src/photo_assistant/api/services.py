@@ -119,7 +119,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
     integrations = build_integrations(
         data_root=root,
         settings=settings.integrations,
-        conn=db,
+        db=db,
         repo=repo,
         importer=importer,
         clock=clock,
@@ -173,11 +173,11 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
     ops = build_ops_services(
         root,
         settings.ops,
+        db=db,
+        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         queue=repo,
         housekeeping=housekeeping,
         source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
-        db=db,
-        rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         mirror=ProtonMirror(integrations.proton),
     )
     editor = Editor(

@@ -4,11 +4,9 @@
 ``Services.integrations``; routes reach it through ``api/deps.py``.
 """
 
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from photo_assistant.adapters.filesystem import SystemClock
 from photo_assistant.adapters.ollama_ai import build_ai_provider
 from photo_assistant.adapters.proton_drive import ProtonDrive, find_binary
 from photo_assistant.adapters.rclone_sync import RcloneSync
@@ -62,19 +60,19 @@ def build_integrations(
     *,
     data_root: Path,
     settings: IntegrationSettings,
-    conn: Database | sqlite3.Connection,
+    db: Database,
     repo: Repository,
     importer: Importer,
-    clock: Clock | None = None,
+    clock: Clock,
     min_free_bytes: int = 0,
 ) -> Integrations:
-    clock = clock or SystemClock()
-    remote_sources = SqliteRemoteSources(conn, repo)
+    """``db``: the process's one Database, which these stores share with ``repo``."""
+    remote_sources = SqliteRemoteSources(db, repo)
     rclone = RcloneSync(settings.rclone_binary, settings.rclone_config)
     proton = ProtonDrive(find_binary(settings.proton_drive_binary))
-    ai_log = SqliteAILog(conn)
+    ai_log = SqliteAILog(db)
     upload = UploadInbox(
-        inbox=SqliteInboxes(conn, repo),
+        inbox=SqliteInboxes(db, repo),
         library=repo,
         spool=DiskUploadSpool(data_root / "tmp"),
         clock=clock,
@@ -95,7 +93,7 @@ def build_integrations(
         repo=repo,
         upload=upload,
         upload_max_files=settings.upload_max_files,
-        devices=DeviceTokens(SqliteDevices(conn), clock),
+        devices=DeviceTokens(SqliteDevices(db), clock),
         remote_sources=remote_sources,
         rclone=rclone,
         proton=proton,
