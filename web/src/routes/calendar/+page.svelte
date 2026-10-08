@@ -8,7 +8,7 @@
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	const query = $derived(filtersToQuery(filters));
-	let days = $state<CalendarDay[] | null>(null);
+	let days = $state.raw<CalendarDay[] | null>(null);
 	let error = $state('');
 
 	$effect(() => {

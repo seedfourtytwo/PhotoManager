@@ -37,7 +37,7 @@
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	const query = $derived(filtersToQuery(filters));
 	let selection = $state<Selection>(EMPTY);
-	let months = $state<{ key: string; count: number }[]>([]);
+	let months = $state.raw<{ key: string; count: number }[]>([]);
 	let total = $state<number | null>(null);
 	let currentMonth = $state<string | null>(null);
 	let downloadAll = $state(false);

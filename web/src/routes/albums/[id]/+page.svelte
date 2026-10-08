@@ -15,7 +15,8 @@
 	import ShareDialog from '$lib/components/ShareDialog.svelte';
 
 	const id = $derived(Number(page.params.id));
-	let album = $state<AlbumDetail | null>(null);
+	// The header fields apart from the photos; both replaced whole, so neither is a deep proxy.
+	let album = $state.raw<Omit<AlbumDetail, 'items'> | null>(null);
 	let items = $state.raw<AssetOut[]>([]);
 	let selection = $state<Selection>(EMPTY);
 	let arrange = $state(false);
@@ -50,8 +51,9 @@
 		try {
 			const loaded = await api.album(id);
 			if (run !== loads) return;
-			album = loaded;
-			items = loaded.items;
+			const { items: photos, ...header } = loaded;
+			album = header;
+			items = photos;
 			error = '';
 		} catch (e) {
 			if (run !== loads) return;

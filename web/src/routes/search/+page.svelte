@@ -12,7 +12,7 @@
 	const like = $derived(Number(page.url.searchParams.get('like')) || null);
 	let text = $derived(q);
 	let status = $state<MlStatus | null>(null);
-	let result = $state<SearchResult | null>(null);
+	let result = $state.raw<SearchResult | null>(null);
 	let similar = $state.raw<AssetOut[] | null>(null);
 	let source = $state<AssetOut | null>(null);
 	let error = $state('');
