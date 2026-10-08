@@ -463,14 +463,14 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		if (user.locked)
 			throw new HttpError(
 				423,
-				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'"
 			);
 		const recent = wrongPinsInWindow(user);
 		if (recent.length >= MAX_RECENT_WRONG_PINS) {
 			const minutes = Math.max(1, Math.ceil((recent[0] + WRONG_PIN_WINDOW - now()) / 60_000));
 			throw new HttpError(
 				429,
-				`Too many wrong PINs; wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account.`
+				`Too many wrong PINs; wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account`
 			);
 		}
 		user.recentWrongPins = [...recent, now()];

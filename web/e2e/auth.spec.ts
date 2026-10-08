@@ -88,7 +88,7 @@ test('after ten wrong PINs the sign-in screen says how long to wait; an admin ca
 	await page.getByRole('button', { name: GUEST.name, exact: true }).click();
 	await page.getByLabel('PIN').fill(GUEST.pin); // the right PIN: it is the account that is locked
 	await expect(page.getByRole('alert')).toHaveText(
-		'Too many wrong PINs; wait 15 minutes and try again, or ask an admin to unlock this account.'
+		'Too many wrong PINs; wait 15 minutes and try again, or ask an admin to unlock this account'
 	);
 	await expect(page).toHaveURL(/\/login/);
 	await expect(page.getByLabel('PIN')).toHaveValue('');
@@ -111,7 +111,7 @@ test('a locked account is told how it gets unlocked; the right PIN works once an
 	await page.getByRole('button', { name: GUEST.name, exact: true }).click();
 	await page.getByLabel('PIN').fill(GUEST.pin); // the right PIN is refused too
 	await expect(page.getByRole('alert')).toHaveText(
-		"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+		"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'"
 	);
 	await expect(page).toHaveURL(/\/login/);
 	await expect(page.getByLabel('PIN')).toHaveValue('');

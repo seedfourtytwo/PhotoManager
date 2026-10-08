@@ -132,7 +132,7 @@ describe('with seeded users', () => {
 		await expect(browser().login({ username: 'Partner', pin: '2345' })).rejects.toMatchObject({
 			status: 429,
 			message:
-				'Too many wrong PINs; wait 6 minutes and try again, or ask an admin to unlock this account.'
+				'Too many wrong PINs; wait 6 minutes and try again, or ask an admin to unlock this account'
 		});
 		await expect(signedIn()).resolves.toBeTruthy(); // another account is not held up
 		const admin = await signedIn();
@@ -160,7 +160,7 @@ describe('with seeded users', () => {
 		await expect(browser().login(PARTNER)).rejects.toMatchObject({
 			status: 423,
 			message:
-				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'."
+				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'"
 		});
 		expect(await browser().loginAccounts()).toContainEqual({
 			username: 'partner',
