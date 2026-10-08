@@ -223,7 +223,7 @@
 		place-items: center;
 		width: 1.75rem;
 		height: 1.25rem;
-		font-family: var(--font-text);
+		font-family: var(--font-serif);
 		font-size: var(--fs-12);
 		box-shadow: 0 0 0 1px var(--hairline);
 	}

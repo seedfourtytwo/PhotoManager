@@ -1,101 +1,32 @@
 /*
  * Design tokens and the shared control language — see docs/DESIGN_PRINCIPLES.md §2–§3.
- *
- * Character: a family album, typeset. Photos sit on a deep graphite page (dark, the default
- * for viewing) or on a quiet paper page (light). Titles, dates and captions are set in a
- * serif with optical sizes (Newsreader) — the album's handwriting, typeset; the interface
- * speaks in a small, plain sans (Instrument Sans). One accent — indigo, like the fountain-pen
- * ink used to write under prints — marks selection and focus, and nothing else.
- * Fonts are served by this app (static/fonts, SIL OFL); nothing is fetched from elsewhere.
+ * Typefaces are in fonts.css, colours in themes.css.
  */
 
-@font-face {
-	font-family: 'Newsreader';
-	font-style: normal;
-	font-weight: 200 800;
-	font-display: swap;
-	src: url('/fonts/newsreader-latin-opsz-normal.woff2') format('woff2');
-	unicode-range:
-		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-	font-family: 'Newsreader';
-	font-style: normal;
-	font-weight: 200 800;
-	font-display: swap;
-	src: url('/fonts/newsreader-latin-ext-opsz-normal.woff2') format('woff2');
-	unicode-range:
-		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF,
-		U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-	font-family: 'Newsreader';
-	font-style: italic;
-	font-weight: 200 800;
-	font-display: swap;
-	src: url('/fonts/newsreader-latin-opsz-italic.woff2') format('woff2');
-	unicode-range:
-		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-	font-family: 'Newsreader';
-	font-style: italic;
-	font-weight: 200 800;
-	font-display: swap;
-	src: url('/fonts/newsreader-latin-ext-opsz-italic.woff2') format('woff2');
-	unicode-range:
-		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF,
-		U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-	font-family: 'Instrument Sans';
-	font-style: normal;
-	font-weight: 400 700;
-	font-display: swap;
-	src: url('/fonts/instrument-sans-latin-wght-normal.woff2') format('woff2');
-	unicode-range:
-		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-	font-family: 'Instrument Sans';
-	font-style: normal;
-	font-weight: 400 700;
-	font-display: swap;
-	src: url('/fonts/instrument-sans-latin-ext-wght-normal.woff2') format('woff2');
-	unicode-range:
-		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF,
-		U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
+@import './fonts.css';
+@import './themes.css';
 
 :root {
-	/* Colour — dark: a deep graphite page; values, not hues, separate layers. */
-	--bg: #181817;
-	--raised: #222120; /* dialogs, sheets, menus, toasts */
-	--ink: #eceae4;
-	--ink-2: #a6a39c; /* secondary text — 7:1 on --bg */
-	--ink-3: #7a7772; /* disabled text, chart tracks; never for text that must be read */
-	--hairline: #302f2c;
-	--tint: rgb(236 234 228 / 0.07); /* hover / pressed wash on quiet controls */
-	--accent: #a9b0ff; /* indigo ink: selection and focus only */
-	--on-accent: #181817;
-	--scrim: rgb(10 10 9 / 0.66);
-	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23181817' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	/* Colour lives in themes.css; these two are derived from it. */
+	--accent: oklch(var(--acc-l) var(--acc-c) var(--acc-h));
+	--glass: color-mix(in oklab, var(--raised) 74%, transparent);
 
-	/* Type — one serif for the album's voice, one sans for the interface. */
-	--font-text: 'Newsreader', 'Iowan Old Style', 'Charter', Georgia, serif;
+	/* Type — one sans for everything you read or operate, one mono for data. */
 	--font-ui:
-		'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-serif: 'Newsreader', 'Iowan Old Style', 'Charter', Georgia, serif;
+	--font-data: 'Martian Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--font-mono: var(--font-data);
+	--font-title: var(--font-ui);
+	--title-weight: 720;
+	--voice-style: normal; /* descriptions and opening lines: upright in the sans, italic in the Album serif */
 	/* Scale (rem = 16 px): 12 · 14 · 16 · 20 · 28 · 40. */
 	--fs-12: 0.75rem; /* metadata, counts, captions under thumbnails */
 	--fs-14: 0.875rem; /* interface text */
-	--fs-16: 1rem; /* reading text, phone controls, serif dates */
-	--fs-20: 1.25rem; /* section titles and month headings (serif) */
-	--fs-28: 1.75rem; /* page titles (serif) */
-	--fs-40: 2.5rem; /* album titles, welcome (serif, display optical size) */
+	--fs-16: 1rem; /* reading text, phone controls, dates */
+	--fs-20: 1.25rem; /* section titles and month headings */
+	--fs-28: 1.75rem; /* page titles */
+	--fs-40: 2.5rem; /* album titles, welcome */
 	--lh-tight: 1.15;
 	--lh-ui: 1.45;
 	--lh-text: 1.6;
@@ -110,12 +41,14 @@
 	--s-7: 3rem; /* 48 */
 	--s-8: 4rem; /* 64 */
 
-	/* Shape — photos are never rounded; controls barely; surfaces a little. */
-	--r-1: 3px;
-	--r-2: 8px;
+	/* Shape — photos are never rounded; controls and surfaces are soft. */
+	--r-1: 12px;
+	--r-2: 20px;
+	--r-pill: 999px;
+	--check-radius: 4px; /* a 16 px box: --r-1 would turn it into a circle */
 
 	/* Layout */
-	--gutter: 3px;
+	--gutter: 2px;
 	--rail: 7.5rem;
 	--margin: 16rem; /* right-margin notes and filters on desktop */
 	--bar: 3.5rem; /* phone bottom bar */
@@ -123,43 +56,20 @@
 	--page-x: var(--s-5); /* page side padding on a laptop */
 	--measure: 36rem; /* line length for prose */
 
-	/* Motion — only to explain; ≤ 150 ms. */
-	--motion: 120ms;
+	/* Motion — short, and it follows the finger; off under prefers-reduced-motion. */
+	--motion: 200ms;
+	--motion-sheet: 240ms;
 	--ease: cubic-bezier(0.2, 0, 0, 1);
-
-	color-scheme: dark;
 }
 
-@media (prefers-color-scheme: light) {
-	:root:not([data-theme='dark']) {
-		--bg: #f5f4f0;
-		--raised: #fcfbf8;
-		--ink: #1f1e1b;
-		--ink-2: #625f58;
-		--ink-3: #8c8981;
-		--hairline: #dcd9d1;
-		--tint: rgb(31 30 27 / 0.06);
-		--accent: #3b40b0;
-		--on-accent: #ffffff;
-		--scrim: rgb(40 38 34 / 0.38);
-		--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f4f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-		color-scheme: light;
-	}
-}
-
-:root[data-theme='light'] {
-	--bg: #f5f4f0;
-	--raised: #fcfbf8;
-	--ink: #1f1e1b;
-	--ink-2: #625f58;
-	--ink-3: #8c8981;
-	--hairline: #dcd9d1;
-	--tint: rgb(31 30 27 / 0.06);
-	--accent: #3b40b0;
-	--on-accent: #ffffff;
-	--scrim: rgb(40 38 34 / 0.38);
-	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f4f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-	color-scheme: light;
+/* The Album theme keeps its typeset character: serif titles, small corners. */
+:root[data-look='album'] {
+	--font-title: var(--font-serif);
+	--title-weight: 500;
+	--voice-style: italic;
+	--r-1: 3px;
+	--r-2: 8px;
+	--gutter: 3px;
 }
 
 @media (max-width: 1023px) {
@@ -201,18 +111,19 @@ h4 {
 	text-wrap: balance;
 }
 
-/* Titles speak in the serif; optical sizing keeps it crisp small and fine large. */
-h1 {
-	font-family: var(--font-text);
-	font-size: var(--fs-28);
-	font-optical-sizing: auto;
-	letter-spacing: -0.01em;
-}
-
+/* Titles: the theme's title face, heavy and tight in the sans, lighter in the Album serif. */
+h1,
 h2 {
-	font-family: var(--font-text);
-	font-size: var(--fs-20);
+	font-family: var(--font-title);
+	font-weight: var(--title-weight);
 	font-optical-sizing: auto;
+	letter-spacing: -0.02em;
+}
+h1 {
+	font-size: var(--fs-28);
+}
+h2 {
+	font-size: var(--fs-20);
 }
 
 /* Group labels inside panels and forms: small sans, sentence case, secondary value. */
@@ -242,12 +153,19 @@ code,
 kbd {
 	font-family: var(--font-mono);
 	font-size: 0.92em;
+	font-stretch: 80%;
+}
+
+/* Data: dates, counts, camera settings, file names. Never for a control or a sentence. */
+.data {
+	font-family: var(--font-data);
+	font-stretch: 80%;
+	letter-spacing: 0.02em;
 }
 
 :focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
-	border-radius: var(--r-1);
 }
 
 /* ——— Buttons ———
@@ -313,24 +231,29 @@ button.primary:disabled {
 /* Touch screens: every control is at least 44 px tall. */
 @media (pointer: coarse) {
 	button,
-	.button {
+	.button,
+	input:where(:not([type='checkbox'], [type='radio'], [type='range'])),
+	select {
 		min-height: var(--target);
 	}
 }
 
 /* ——— Fields ———
-   Text fields are a line to write on, not a box; focus turns the line to the accent. */
+   Text fields are a soft box; focus rings it in the accent. */
 input,
 select,
 textarea {
 	font: inherit;
 	color: inherit;
-	background: transparent;
-	border: 0;
-	border-bottom: 1px solid var(--hairline);
-	padding: var(--s-2) 0.1rem;
-	border-radius: 0;
 	min-width: 0;
+}
+input:where(:not([type='checkbox'], [type='radio'], [type='range'])),
+select,
+textarea {
+	background: var(--tint);
+	border: 1px solid transparent;
+	border-radius: var(--r-1);
+	padding: var(--s-2) var(--s-3);
 	transition: border-color var(--motion) var(--ease);
 }
 
@@ -349,19 +272,18 @@ textarea::placeholder {
 	opacity: 1;
 }
 
-input:hover,
+input:where(:not([type='checkbox'], [type='radio'], [type='range'])):hover,
 select:hover,
 textarea:hover {
-	border-bottom-color: var(--ink-3);
+	border-color: var(--hairline);
 }
 
-input:focus-visible,
+input:where(:not([type='checkbox'], [type='radio'], [type='range'])):focus-visible,
 select:focus-visible,
 textarea:focus-visible {
 	outline: none;
-	border-radius: 0;
-	border-bottom-color: var(--accent);
-	box-shadow: 0 1px 0 0 var(--accent);
+	border-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* The clear button of a search field: a thin cross in the secondary ink. */
@@ -384,8 +306,6 @@ input[type='search']::-webkit-search-cancel-button:hover {
 
 select {
 	cursor: pointer;
-	padding-left: 0;
-	padding-right: var(--s-1);
 }
 
 select option {
@@ -404,7 +324,7 @@ input[type='radio'] {
 	margin: 0;
 	padding: 0;
 	border: 1.5px solid var(--ink-2);
-	border-radius: var(--r-1);
+	border-radius: var(--check-radius);
 	background: transparent center / 100% no-repeat;
 	box-sizing: border-box;
 	cursor: pointer;
@@ -439,7 +359,7 @@ input[type='checkbox']:focus-visible,
 input[type='radio']:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
-	border-radius: var(--r-1);
+	border-radius: var(--check-radius);
 }
 input[type='checkbox']:focus-visible {
 	box-shadow: none;
@@ -518,7 +438,7 @@ label:has(> input[type='radio']) {
 	cursor: pointer;
 }
 
-/* A labelled field: the label above, the line to write on below. */
+/* A labelled field: the label above, the soft box below. */
 .field {
 	display: grid;
 	gap: var(--s-1);
@@ -584,7 +504,7 @@ legend {
 	color: var(--ink-2);
 }
 
-/* An empty or "nothing yet" state: one serif line, then what to do. */
+/* An empty or "nothing yet" state: one line, then what to do. */
 .empty-state {
 	max-width: var(--measure);
 	padding: var(--s-7) 0;
@@ -592,7 +512,8 @@ legend {
 	line-height: var(--lh-text);
 }
 .empty-state > :first-child {
-	font-family: var(--font-text);
+	font-family: var(--font-title);
+	font-weight: 400;
 	font-size: var(--fs-20);
 	color: var(--ink);
 	margin: 0 0 var(--s-2);
@@ -609,6 +530,21 @@ legend {
 	overflow: hidden;
 	clip-path: inset(50%);
 	white-space: nowrap;
+}
+
+/* Floating bars over photos. Solid when blur is unavailable or the device asks for less. */
+.glass {
+	background: var(--raised);
+	border: 1px solid var(--hairline);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	@media not (prefers-reduced-transparency: reduce) {
+		.glass {
+			background: var(--glass);
+			-webkit-backdrop-filter: blur(18px) saturate(1.4);
+			backdrop-filter: blur(18px) saturate(1.4);
+		}
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

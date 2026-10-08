@@ -196,6 +196,7 @@
 	}
 	.name .small {
 		font-family: var(--font-mono);
+		font-stretch: 80%;
 	}
 	.status {
 		color: var(--ink-2);
