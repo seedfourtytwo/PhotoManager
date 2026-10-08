@@ -197,11 +197,18 @@ def test_probe_says_an_empty_folder_holds_no_repository(
     assert list(Path(repo.location).iterdir()) == [], "a probe never creates anything"
 
 
-def test_probe_finds_an_existing_repository(engine: ResticBackup, repo: RepositoryRef) -> None:
+def test_probe_finds_an_existing_repository_without_locking_it(
+    engine: ResticBackup, repo: RepositoryRef
+) -> None:
     _ready(engine, repo)
-    names = {str(p) for p in Path(repo.location).rglob("*")}
-    assert engine.probe(repo) is None
-    assert {str(p) for p in Path(repo.location).rglob("*")} == names, "nothing added or left behind"
+    locks = Path(repo.location) / "locks"
+    before = locks.stat().st_mtime_ns
+    locks.chmod(0o555)  # a read-only repository: any attempt to take a lock would fail
+    try:
+        assert engine.probe(repo) is None
+    finally:
+        locks.chmod(0o755)
+    assert list(locks.iterdir()) == [] and locks.stat().st_mtime_ns == before
 
 
 def test_probe_raises_on_a_wrong_password(

@@ -158,7 +158,7 @@ class ResticBackup:
 
     def probe(self, repo: RepositoryRef) -> str | None:
         try:
-            self._run(repo, ["cat", "config"])
+            self._run(repo, ["--no-lock", "cat", "config"])  # reading needs no lock; write nothing
         except RepositoryNotFoundError as exc:
             return str(exc)
         except (
