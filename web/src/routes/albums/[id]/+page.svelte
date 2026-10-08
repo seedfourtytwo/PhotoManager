@@ -40,17 +40,31 @@
 	const tracker = new LoupeTracker();
 	$effect(() => tracker.seen(loupeId));
 
+	/** Only the latest load counts: an answer for the album you left must not replace this one. */
+	let loads = 0;
 	async function load() {
+		const run = ++loads;
 		try {
-			album = await api.album(id);
-			items = album.items;
+			const loaded = await api.album(id);
+			if (run !== loads) return;
+			album = loaded;
+			items = loaded.items;
+			error = '';
 		} catch (e) {
+			if (run !== loads) return;
 			error = e instanceof Error ? e.message : 'Could not open the album.';
 		}
 	}
 
+	// Another album: nothing of the previous one stays on screen while this one loads.
 	$effect(() => {
 		void id;
+		album = null;
+		items = [];
+		selection = EMPTY;
+		arrange = false;
+		dialog = null;
+		error = '';
 		void load();
 	});
 

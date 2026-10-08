@@ -55,7 +55,10 @@
 			.printPlan(albumId, body)
 			.then((p) => !stale && (plan = p))
 			.catch((e: unknown) => {
-				if (!stale) error = e instanceof Error ? e.message : 'Could not plan the pages.';
+				if (stale) return;
+				// Not the whole-page error: the form stays, so another choice can fix it.
+				plan = null;
+				printError = e instanceof Error ? e.message : 'Could not plan the pages.';
 			});
 		return () => (stale = true);
 	});

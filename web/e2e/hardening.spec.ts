@@ -205,3 +205,70 @@ test('a person’s photos: selecting shows the actions and there is a way out', 
 	else await page.keyboard.press('Escape');
 	await expect(bar).toHaveCount(0);
 });
+
+test('calendar: one failed load does not hide every later answer', async ({ page }) => {
+	await signIn(page);
+	let fail = true;
+	await page.route('**/api/calendar*', (route) =>
+		fail
+			? route.fulfill({ status: 503, json: { detail: 'the library is busy, try again' } })
+			: route.continue()
+	);
+	await follow(page, '/calendar');
+	await expect(page.getByText('The library is busy, try again')).toBeVisible();
+	fail = false;
+	await follow(page, '/calendar?year=2019');
+	await expect(page.getByText('The library is busy, try again')).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: '2019' })).toBeVisible();
+});
+
+test('print: a refused plan keeps the form, so another choice can fix it', async ({ page }) => {
+	await page.route('**/print/plan', (route) =>
+		route.request().postDataJSON().trim === 'square-20'
+			? route.fulfill({ status: 422, json: { detail: 'this album cannot be laid out square' } })
+			: route.continue()
+	);
+	await signIn(page, '/albums/1/print');
+	const size = page.getByRole('combobox', { name: 'Size' });
+	await expect(page.getByText(/\d+ pages/).first()).toBeVisible();
+	await size.selectOption({ label: 'Square 20 cm' });
+	await expect(page.getByRole('alert')).toContainText('This album cannot be laid out square');
+	await expect(size).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+	await size.selectOption({ index: 0 });
+	await expect(page.getByRole('alert')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeEnabled();
+});
+
+test('album: an album that failed to open does not block the next one', async ({ page }) => {
+	await signIn(page, '/albums/1');
+	const title = await page.getByRole('heading', { level: 1 }).textContent();
+	await follow(page, '/albums/999999');
+	await expect(page.getByRole('link', { name: 'All albums' })).toBeVisible();
+	await follow(page, '/albums/1');
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText(title!);
+	await expect(page.locator('.tile').first()).toBeVisible();
+});
+
+test('album: a slow answer for the album you left does not replace the one you are on', async ({
+	page
+}) => {
+	await signIn(page, '/albums');
+	const other = await (
+		await page.request.post('/api/albums', { data: { title: 'The other album' } })
+	).json();
+	await page.route('**/api/albums/1', async (route) => {
+		await new Promise((r) => setTimeout(r, 700));
+		await route.continue().catch(() => undefined);
+	});
+	const asked = page.waitForRequest('**/api/albums/1');
+	const late = page.waitForResponse('**/api/albums/1');
+	await follow(page, '/albums/1');
+	await asked;
+	await follow(page, `/albums/${other.id}`);
+	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
+	await late;
+	await page.waitForTimeout(100);
+	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
+	await expect(page.locator('.tile')).toHaveCount(0);
+});

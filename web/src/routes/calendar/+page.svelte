@@ -16,7 +16,11 @@
 		let stale = false;
 		api
 			.calendar(f)
-			.then((d) => !stale && (days = d))
+			.then((d) => {
+				if (stale) return;
+				days = d;
+				error = '';
+			})
 			.catch((e: unknown) => !stale && (error = e instanceof Error ? e.message : 'Failed.'));
 		return () => (stale = true);
 	});
