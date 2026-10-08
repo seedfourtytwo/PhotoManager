@@ -166,7 +166,6 @@ kbd {
 :focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
-	border-radius: var(--r-1);
 }
 
 /* ——— Buttons ———
@@ -232,7 +231,9 @@ button.primary:disabled {
 /* Touch screens: every control is at least 44 px tall. */
 @media (pointer: coarse) {
 	button,
-	.button {
+	.button,
+	input:where(:not([type='checkbox'], [type='radio'], [type='range'])),
+	select {
 		min-height: var(--target);
 	}
 }
@@ -246,7 +247,6 @@ textarea {
 	color: inherit;
 	min-width: 0;
 }
-/* Text fields are a soft box; focus rings it in the accent. */
 input:where(:not([type='checkbox'], [type='radio'], [type='range'])),
 select,
 textarea {
@@ -283,6 +283,7 @@ select:focus-visible,
 textarea:focus-visible {
 	outline: none;
 	border-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* The clear button of a search field: a thin cross in the secondary ink. */

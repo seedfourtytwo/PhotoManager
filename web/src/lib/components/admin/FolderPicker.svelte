@@ -116,6 +116,7 @@
 	}
 	.field input {
 		font-family: var(--font-mono);
+		font-stretch: 80%;
 	}
 	ul {
 		list-style: none;
