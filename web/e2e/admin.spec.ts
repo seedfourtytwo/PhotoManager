@@ -649,3 +649,38 @@ test('a finished import that left files behind says so in the folder’s row', a
 	await signIn(page, '/admin');
 	await expect(page.getByText(note)).toBeVisible();
 });
+
+test('a long import report shows its first files and loads the rest on request', async ({
+	page
+}) => {
+	await page.route(/\/api\/imports\/\d+(\?.*)?$/, async (route) => {
+		const response = await route.fetch();
+		const report = await response.json();
+		const second = new URL(route.request().url()).searchParams.get('offset') === '1';
+		const item = (name: string) => ({
+			relative_path: name,
+			outcome: 'failed',
+			reason: 'cannot read'
+		});
+		await route.fulfill({
+			response,
+			json: {
+				...report,
+				items: [item(second ? 'later.jpg' : 'first.jpg')],
+				total: 2,
+				limit: 1,
+				offset: second ? 1 : 0,
+				next_offset: second ? null : 1
+			}
+		});
+	});
+	await signIn(page, '/admin');
+	await page.getByRole('button', { name: 'Report' }).first().click();
+	const report = page.getByRole('dialog', { name: /^Last import/ });
+	await expect(report.getByText('first.jpg')).toBeVisible();
+	await expect(report.getByText('later.jpg')).toHaveCount(0);
+	await report.getByRole('button', { name: 'Show more files (1 of 2 shown)' }).click();
+	await expect(report.getByText('later.jpg')).toBeVisible();
+	await expect(report.getByText('first.jpg')).toBeVisible();
+	await expect(report.getByRole('button', { name: /Show more files/ })).toHaveCount(0);
+});

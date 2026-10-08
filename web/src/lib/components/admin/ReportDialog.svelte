@@ -14,6 +14,21 @@
 			.catch((e: unknown) => notice.error(e));
 	});
 
+	let loadingMore = $state(false);
+	/** The report comes a page at a time (problems first): fetch the next one and append. */
+	async function more() {
+		if (!report || report.next_offset === null || loadingMore) return;
+		loadingMore = true;
+		try {
+			const next = await api.importReport(runId, { offset: report.next_offset });
+			report = { ...next, items: [...report.items, ...next.items] };
+		} catch (e) {
+			notice.error(e);
+		} finally {
+			loadingMore = false;
+		}
+	}
+
 	const ORDER: Outcome[] = ['failed', 'skipped', 'duplicate', 'already_known', 'imported'];
 	const WORDS: Record<Outcome, string> = {
 		imported: 'Imported',
@@ -67,6 +82,13 @@
 				</tbody>
 			</table>
 		{/each}
+		{#if report.next_offset !== null}
+			<p>
+				<button type="button" disabled={loadingMore} onclick={more}
+					>Show more files ({report.items.length} of {report.total} shown)</button
+				>
+			</p>
+		{/if}
 	{:else}
 		<p class="quiet" role="status">Loading…</p>
 	{/if}
