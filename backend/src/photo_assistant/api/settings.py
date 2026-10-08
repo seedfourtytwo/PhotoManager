@@ -44,6 +44,8 @@ class IntegrationSettings(BaseModel):
     rclone_transfers: int = 2
     rclone_checkers: int = 4
     rclone_timeout_hours: float = 6.0
+    # Proton Drive through Proton's own CLI; the sign-in lives in that tool, never here
+    proton_drive_binary: str = "proton-drive"
 
     # AI socket: off unless explicitly switched on
     ai_provider: Literal["none", "ollama"] = "none"

@@ -13,6 +13,7 @@ from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
 from photo_assistant.ports.sync import (
     SyncAuthError,
     SyncError,
+    SyncNotFoundError,
     SyncOptions,
     SyncRateLimitedError,
     SyncReport,
@@ -174,3 +175,50 @@ def test_adding_a_remote_source_checks_the_remote_exists(world: World) -> None:
         add_remote_source(world.remotes, world.sync, world.staging, "x", {"remote": "mgea"})
     with pytest.raises(RemoteConfigError):
         add_remote_source(world.remotes, world.sync, world.staging, "x", {"remote": "-x"})
+
+
+# --- more than one kind of remote (issue 8) -------------------------------------------------------
+
+
+def test_each_remote_is_pulled_by_the_tool_for_its_provider(tmp_path: Path) -> None:
+    from photo_assistant.app.sync_source import ProviderSync
+
+    rclone, proton = FakeSync(), FakeSync()
+    sync = ProviderSync({"rclone": rclone, "proton": proton})
+    sync.pull(RemoteConfig.proton("/photos"), tmp_path, SyncOptions())
+    sync.pull(RemoteConfig("mega"), tmp_path, SyncOptions())
+    assert [c.provider for c, _ in proton.pulls] == ["proton"]
+    assert [c.remote for c, _ in rclone.pulls] == ["mega"]
+    with pytest.raises(SyncError, match="dropbox"):
+        sync.pull(RemoteConfig("x", provider="dropbox"), tmp_path, SyncOptions())
+
+
+@dataclass
+class FakeAccount:
+    known: tuple[str, ...] = ("/my-files/Trips",)
+    asked: list[str] = field(default_factory=list)
+
+    def check(self) -> None:
+        self.asked.append("check")
+
+    def folders(self, path: str) -> list[str]:
+        self.asked.append(path)
+        if path not in self.known:
+            raise SyncNotFoundError(f"folder '{path}' not found on Proton Drive")
+        return []
+
+
+def test_a_proton_source_is_only_added_for_a_place_that_exists(tmp_path: Path) -> None:
+    from photo_assistant.app.sync_source import add_proton_source
+
+    remotes, account = FakeRemotes(), FakeAccount()
+    first = add_proton_source(remotes, account, tmp_path, "Photos", "/photos")
+    second = add_proton_source(remotes, account, tmp_path, "Trips", "/my-files/Trips")
+    assert remotes.configs[first] == RemoteConfig.proton("/photos")
+    assert remotes.configs[second] == RemoteConfig.proton("/my-files/Trips")
+    assert account.asked == ["check", "/my-files/Trips"]
+    with pytest.raises(SyncNotFoundError):
+        add_proton_source(remotes, account, tmp_path, "x", "/my-files/Nope")
+    with pytest.raises(RemoteConfigError):
+        add_proton_source(remotes, account, tmp_path, "x", "/trash")
+    assert len(remotes.configs) == 2

@@ -14,12 +14,17 @@ from pathlib import Path
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.access import INBOX_KIND
 from photo_assistant.domain.model import Source
-from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
+from photo_assistant.domain.remote_source import (
+    PROTON,
+    RCLONE,
+    RemoteConfig,
+    RemoteConfigError,
+)
 from photo_assistant.ports import SourceRegistry
 from photo_assistant.ports.ai import AICall
 from photo_assistant.ports.upload import Device
 
-RCLONE_KIND = "rclone"
+REMOTE_KINDS = (RCLONE, PROTON)  # a remote source's kind is its provider
 # who may see a new source is one domain rule (access.default_source_access), applied by the
 # repository's add_source: remote sources like any folder, an inbox private to its owner
 
@@ -119,17 +124,17 @@ class _SourceCreator(_Store):
 
 class SqliteRemoteSources(_SourceCreator):
     def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
-        """A source of kind rclone pulled into ``staging/<its id>`` (default access)."""
+        """A source of its provider's kind, pulled into ``staging/<its id>`` (default access)."""
         return self._sources.add_source(
             label,
             lambda source_id: str(staging_root / str(source_id)),
-            kind=RCLONE_KIND,
+            kind=config.provider,
             config=config.to_mapping(),
         ).id
 
     def remote_config(self, source_id: int) -> RemoteConfig | None:
         row = self._one("SELECT kind, config_json FROM source WHERE id = ?", (source_id,))
-        if row is None or row["kind"] != RCLONE_KIND:
+        if row is None or row["kind"] not in REMOTE_KINDS:
             return None
         data = json.loads(row["config_json"] or "{}")
         if not isinstance(data, dict):

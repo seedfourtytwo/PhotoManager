@@ -1,9 +1,9 @@
 """SyncSource: bring a source up to date — pull it first if it is remote, then import it.
 
-A remote source (``kind = "rclone"``, ``config_json = {"remote", "path"}``) is a folder source
-whose root is ``<data>/staging/<source_id>``: rclone mirrors the remote there (read-only on the
-remote), then the ordinary ImportSource imports that folder. Any other source is just imported,
-so this is safe to use as the handler for every "scan source" job.
+A remote source (``kind`` "rclone" or "proton", its settings in ``config_json``) is a folder
+source whose root is ``<data>/staging/<source_id>``: the provider's tool mirrors the remote
+there (read-only on the remote), then the ordinary ImportSource imports that folder. Any other
+source is just imported, so this is safe to use as the handler for every "scan source" job.
 """
 
 import logging
@@ -15,7 +15,7 @@ from typing import Protocol
 
 from photo_assistant.app.import_source import SourceUnavailableError
 from photo_assistant.domain.model import ImportReport, RunStatus, Source
-from photo_assistant.domain.remote_source import RemoteConfig, RemoteConfigError
+from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
 from photo_assistant.ports import Clock
 from photo_assistant.ports.sync import (
     RemoteSourceStore,
@@ -76,6 +76,38 @@ def add_remote_source(
             "'rclone config' (see the cloud sources guide)"
         )
     return store.add_remote_source(label, config, staging_root)
+
+
+class ProtonAccount(Protocol):
+    def check(self) -> None: ...
+
+    def folders(self, path: str) -> list[str]: ...
+
+
+def add_proton_source(
+    store: RemoteSourceStore, account: ProtonAccount, staging_root: Path, label: str, path: str
+) -> int:
+    """Register a Proton Drive source for a place that exists. Raises RemoteConfigError for a
+    place that may not be read, SyncError subclasses when Proton can't confirm it."""
+    config = RemoteConfig.proton(path)
+    if path == PROTON_PHOTOS:
+        account.check()
+    else:
+        account.folders(path)
+    return store.add_remote_source(label, config, staging_root)
+
+
+class ProviderSync:
+    """One SourceSync over several: each remote is pulled by its provider's tool."""
+
+    def __init__(self, by_provider: Mapping[str, SourceSync]) -> None:
+        self._by_provider = by_provider
+
+    def pull(self, remote: RemoteConfig, staging: Path, options: SyncOptions) -> SyncReport:
+        sync = self._by_provider.get(remote.provider)
+        if sync is None:
+            raise SyncError(f"this version cannot pull from '{remote.provider}'")
+        return sync.pull(remote, staging, options)
 
 
 class SyncSource:

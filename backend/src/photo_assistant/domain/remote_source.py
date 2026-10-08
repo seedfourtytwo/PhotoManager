@@ -1,8 +1,11 @@
-"""Configuration of a remote (rclone) source: *which* remote, never *how to log in*.
+"""Configuration of a remote source: *which* place to read, never *how to log in*.
 
-Credentials live in rclone's own (encrypted) config file. The library database only stores
-the remote's name and a path on it, so only plain named remotes are accepted: rclone's
-on-the-fly ``:backend,key=value:`` syntax could smuggle secrets into our database.
+rclone remotes: credentials live in rclone's own (encrypted) config file. The library database
+only stores the remote's name and a path on it, so only plain named remotes are accepted:
+rclone's on-the-fly ``:backend,key=value:`` syntax could smuggle secrets into our database.
+
+Proton Drive: the sign-in lives in Proton's own CLI (system keyring); we store only which part
+of the Drive to read — the Photos section, or a folder under "My files".
 """
 
 import re
@@ -14,6 +17,11 @@ _REMOTE_NAME = re.compile(r"^[\w.+@][\w.+@ -]{0,63}$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 MAX_PATH_CHARS = 1024
 
+RCLONE = "rclone"
+PROTON = "proton"
+PROTON_PHOTOS = "/photos"
+PROTON_FILES = "/my-files"
+
 
 class RemoteConfigError(ValueError):
     """The remote source settings are not usable; the message says what to fix."""
@@ -23,6 +31,7 @@ class RemoteConfigError(ValueError):
 class RemoteConfig:
     remote: str
     path: str = ""
+    provider: str = RCLONE
 
     @property
     def target(self) -> str:
@@ -30,10 +39,35 @@ class RemoteConfig:
         return f"{self.remote}:{self.path}"
 
     def to_mapping(self) -> dict[str, str]:
+        if self.provider == PROTON:
+            return {"provider": PROTON, "path": self.path}
         return {"remote": self.remote, "path": self.path}
 
     @classmethod
+    def proton(cls, path: str) -> "RemoteConfig":
+        """The Photos section (``/photos``) or a place in My files (``/my-files[/...]``)."""
+        in_files = path == PROTON_FILES or path.startswith(PROTON_FILES + "/")
+        parts = path.split("/")[1:]
+        if (
+            (path != PROTON_PHOTOS and not in_files)
+            or any(part in ("", ".", "..") for part in parts)
+            or _CONTROL.search(path)
+            or len(path) > MAX_PATH_CHARS
+        ):
+            raise RemoteConfigError(
+                f"choose the Photos section ({PROTON_PHOTOS}) or a folder in My files "
+                f"({PROTON_FILES}/...)"
+            )
+        return cls(PROTON, path, PROTON)
+
+    @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> "RemoteConfig":
+        provider = data.get("provider", RCLONE)
+        if provider == PROTON:
+            path = data.get("path")
+            return cls.proton(path if isinstance(path, str) else "")
+        if provider != RCLONE:
+            raise RemoteConfigError(f"unknown provider '{provider}'")
         remote = data.get("remote")
         path = data.get("path", "")
         if not isinstance(remote, str) or not _REMOTE_NAME.fullmatch(remote):

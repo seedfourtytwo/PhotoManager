@@ -25,6 +25,7 @@ from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.library_paths import folder_path_problem
 from photo_assistant.domain.model import Source
+from photo_assistant.domain.remote_source import PROTON, RCLONE
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
 
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/api/sources", tags=["sources"])
 def _problem(source: Source) -> str | None:
     """What stops a rescan, shown next to the source (QA A13). A remote source's staging
     folder only exists after its first pull, so it is never "not found"."""
-    if source.kind != "rclone" and not Path(source.root).is_dir():
+    if source.kind not in (RCLONE, PROTON) and not Path(source.root).is_dir():
         return "folder not found"
     return None
 

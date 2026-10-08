@@ -63,7 +63,7 @@ class RemoteSourceStore(Protocol):
     """Where remote sources keep their settings (the source row's ``config_json``)."""
 
     def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
-        """Create a source of kind "rclone" whose root is ``staging_root/<id>``; its id."""
+        """Create a source of the provider's kind whose root is ``staging_root/<id>``; its id."""
         ...
 
     def remote_config(self, source_id: int) -> RemoteConfig | None:
