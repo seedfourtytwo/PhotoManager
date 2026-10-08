@@ -143,6 +143,53 @@ def test_backup_settings_come_from_the_main_settings(
     assert get_settings().ops.restic_binary == "/nowhere/restic"
 
 
+def _source_owners() -> list[int | None]:
+    services = cli.build_services(get_settings())
+    try:
+        return [s.owner_id for s in services.repo.list_sources()]
+    finally:
+        services.close()
+
+
+def _admin_id(monkeypatch: pytest.MonkeyPatch, username: str = "c") -> int:
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": PIN)
+    assert cli.main(["create-user", username, "--role", "admin"]) == 0
+    services = cli.build_services(get_settings())
+    try:
+        found = services.repo.find_user_by_username(username)
+        assert found is not None
+        return found[0].id
+    finally:
+        services.close()
+
+
+def test_a_folder_imported_from_the_command_line_belongs_to_the_first_admin(
+    data_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nobody is logged in on the command line; an ownerless source would make "private"
+    hide nothing, so it goes to the first admin, as the upgrade does for old sources."""
+    from tests.synthetic import write_photo
+
+    admin = _admin_id(monkeypatch)
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics")]) == 0
+    assert _source_owners() == [admin]
+
+
+def test_folders_imported_before_the_first_admin_exists_go_to_that_admin(
+    data_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.synthetic import write_photo
+
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics")]) == 0
+    assert _source_owners() == [None], "no account yet: nobody to give it to"
+    admin = _admin_id(monkeypatch)
+    assert _source_owners() == [admin]
+    _admin_id(monkeypatch, "second")
+    assert _source_owners() == [admin], "a later admin takes nothing over"
+
+
 def test_ml_backfill_reports_missing_models(
     data_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
