@@ -61,7 +61,11 @@ def login(
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(services: ServicesDep, user: CurrentUser, request: Request) -> Response:
     services.accounts.logout(request.cookies.get(SESSION_COOKIE, ""))
-    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    # images are cached "private, immutable" for a year: on a shared browser the next account
+    # must not open them from the cache
+    response = Response(
+        status_code=status.HTTP_204_NO_CONTENT, headers={"Clear-Site-Data": '"cache"'}
+    )
     response.delete_cookie(SESSION_COOKIE, path="/")
     return response
 

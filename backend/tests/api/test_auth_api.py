@@ -65,6 +65,14 @@ def test_login_logout_and_wrong_pin(admin: TestClient) -> None:
     assert admin.get("/api/auth/me").status_code == 200, "other sessions are unaffected"
 
 
+def test_logging_out_tells_the_browser_to_drop_its_cached_photos(admin: TestClient) -> None:
+    """A shared browser: the next account must not open the last one's cached thumbnails."""
+    out = admin.post("/api/auth/logout")
+    assert out.status_code == 204
+    assert out.headers["clear-site-data"] == '"cache"'
+    assert "pa_session=" in out.headers["set-cookie"], "and the cookie still goes"
+
+
 def test_the_login_screen_lists_the_active_accounts_without_a_session(admin: TestClient) -> None:
     add_user(admin, "lea")
     gone = add_user(admin, "old")
