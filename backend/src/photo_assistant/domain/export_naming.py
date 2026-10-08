@@ -109,13 +109,18 @@ def folder_for(taken_at: datetime, folders: Folders) -> str:
 def unique_names(names: list[str]) -> list[str]:
     """Same order; a name seen before (ignoring case) gets ``_2``, ``_3``… before its suffix."""
     taken: set[str] = set()
+    next_number: dict[str, int] = {}  # per repeated name: numbers below it are all taken
     result = []
     for name in names:
-        path = PurePosixPath(name)
-        candidate, n = name, 1
-        while candidate.lower() in taken:
-            n += 1
+        candidate, key = name, name.lower()
+        if key in taken:
+            path = PurePosixPath(name)
+            n = next_number.get(key, 2)
             candidate = str(path.with_name(f"{path.stem}_{n}{path.suffix}"))
+            while candidate.lower() in taken:
+                n += 1
+                candidate = str(path.with_name(f"{path.stem}_{n}{path.suffix}"))
+            next_number[key] = n + 1
         taken.add(candidate.lower())
         result.append(candidate)
     return result
