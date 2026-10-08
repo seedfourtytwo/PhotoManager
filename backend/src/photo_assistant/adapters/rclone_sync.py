@@ -109,7 +109,7 @@ class _Tally:
             self.copied += 1
         elif msg.startswith("Copied (replaced existing)"):
             self.updated += 1
-        elif entry.get("level") == "error":
+        elif entry.get("level") in ("error", "critical"):  # fatal setup errors are critical
             obj = entry.get("object")
             self.errors.append(f"{obj}: {msg}" if obj else msg)
         stats = entry.get("stats")

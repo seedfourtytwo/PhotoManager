@@ -13,6 +13,7 @@ from fastapi import Depends, Request
 
 from photo_assistant.adapters.filesystem import SystemClock
 from photo_assistant.adapters.ollama_ai import build_ai_provider
+from photo_assistant.adapters.proton_drive import ProtonDrive, find_binary
 from photo_assistant.adapters.rclone_sync import RcloneSync
 from photo_assistant.adapters.source_area_store import SourceAreaStore
 from photo_assistant.adapters.sqlite_database import Database
@@ -25,8 +26,9 @@ from photo_assistant.adapters.sqlite_integrations import (
 from photo_assistant.adapters.upload_spool import DiskUploadSpool
 from photo_assistant.api.settings import IntegrationSettings
 from photo_assistant.app.devices import DeviceTokens
-from photo_assistant.app.sync_source import Importer, SyncSource
+from photo_assistant.app.sync_source import Importer, ProviderSync, SyncSource
 from photo_assistant.app.upload import UploadInbox, UploadSettings
+from photo_assistant.domain.remote_source import PROTON, RCLONE
 from photo_assistant.ports import Clock, LibraryStore, Repository
 from photo_assistant.ports.ai import AIProvider
 
@@ -52,6 +54,7 @@ class Integrations:
     devices: DeviceTokens
     remote_sources: SqliteRemoteSources
     rclone: RcloneSync
+    proton: ProtonDrive
     sync_source: SyncSource
     staging_root: Path
     ai: AIProvider
@@ -70,6 +73,7 @@ def build_integrations(
     clock = clock or SystemClock()
     remote_sources = SqliteRemoteSources(conn, repo)
     rclone = RcloneSync(settings.rclone_binary, settings.rclone_config)
+    proton = ProtonDrive(find_binary(settings.proton_drive_binary))
     ai_log = SqliteAILog(conn)
     upload = UploadInbox(
         inbox=SqliteInboxes(conn, repo),
@@ -82,7 +86,7 @@ def build_integrations(
     sync_source = SyncSource(
         sources=repo,
         remotes=remote_sources,
-        sync=rclone,
+        sync=ProviderSync({RCLONE: rclone, PROTON: proton}),
         importer=importer,
         reports=repo,
         clock=clock,
@@ -96,6 +100,7 @@ def build_integrations(
         devices=DeviceTokens(SqliteDevices(conn), clock),
         remote_sources=remote_sources,
         rclone=rclone,
+        proton=proton,
         sync_source=sync_source,
         staging_root=staging_root(data_root),
         ai=build_ai_provider(settings.ollama(), ai_log),

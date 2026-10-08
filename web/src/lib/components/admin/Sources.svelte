@@ -1,10 +1,12 @@
 <script lang="ts">
-	import type { ImportRun, Source } from '$lib/api';
+	import type { ImportRun, ProtonSource as AddedProton, Source } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatWhen } from '$lib/format';
+	import { protonPlaceName } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
 	import AccessDialog from './AccessDialog.svelte';
 	import FolderPicker, { type Picked } from './FolderPicker.svelte';
+	import ProtonSource from './ProtonSource.svelte';
 	import ReportDialog from './ReportDialog.svelte';
 
 	type Props = { busy: boolean; onscan: () => void; refresh: number };
@@ -28,6 +30,7 @@
 	let remotes = $state<string[] | null>(null);
 	let remotesError = $state('');
 	let cloudError = $state('');
+	let proton = $state(false);
 	let accessFor = $state<Source | null>(null);
 	let reportFor = $state<{ run: ImportRun; label: string } | null>(null);
 	const count = new Intl.NumberFormat('en-GB');
@@ -93,6 +96,23 @@
 		}
 	}
 
+	async function addedProton(added: AddedProton) {
+		proton = false;
+		try {
+			await api.pullRemoteSource(added.id);
+			notice.show(`Added “${added.label}”. Copying from Proton, then importing.`);
+			onscan();
+		} catch (e) {
+			notice.error(e);
+		}
+		await load();
+	}
+
+	const place = (source: Source) =>
+		source.kind === 'proton' && source.path
+			? `Proton Drive · ${protonPlaceName(source.path)}`
+			: (source.path ?? '');
+
 	async function pull(source: Source) {
 		try {
 			await api.pullRemoteSource(source.id);
@@ -127,6 +147,7 @@
 	<header>
 		<h2 id="a-sources">Folders</h2>
 		<button type="button" onclick={() => (adding = true)}>Add folder</button>
+		<button type="button" onclick={() => (proton = true)}>Add from Proton</button>
 		<button type="button" onclick={openCloud}>Add cloud folder</button>
 		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
 	</header>
@@ -136,7 +157,7 @@
 			<li class:off={!source.enabled}>
 				<div class="name">
 					<span>{source.label}</span>
-					<span class="quiet small path">{source.path ?? ''}</span>
+					<span class="quiet small path">{place(source)}</span>
 					{#if source.problem}<span class="problem small">{source.problem}</span>{/if}
 				</div>
 				<div class="quiet small">
@@ -162,6 +183,8 @@
 				<div class="actions">
 					{#if source.kind === 'rclone'}
 						<button type="button" disabled={busy} onclick={() => pull(source)}>Pull now</button>
+					{:else if source.kind === 'proton'}
+						<button type="button" disabled={busy} onclick={() => pull(source)}>Check again</button>
 					{:else}
 						<button type="button" disabled={busy} onclick={() => scan(source)}>Check again</button>
 					{/if}
@@ -236,6 +259,8 @@
 			>
 		{/snippet}
 	</Dialog>
+{:else if proton}
+	<ProtonSource onclose={() => (proton = false)} onadded={addedProton} />
 {:else if accessFor}
 	<AccessDialog
 		sourceId={accessFor.id}

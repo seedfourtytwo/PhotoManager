@@ -165,3 +165,13 @@ def test_every_kind_of_source_is_created_by_the_one_repository_method(
     assert repo.get_access(remote) == (Level.DOWNLOAD, [])
     assert repo.get_access(inbox.id) == (None, [(7, Level.EDIT)])
     assert repo.get_source(remote).root == str(tmp_path / "staging" / str(remote))  # type: ignore[union-attr]
+
+
+def test_a_proton_source_is_its_own_kind_and_stores_only_the_place(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    store = SqliteRemoteSources(conn)
+    source_id = store.add_remote_source("Proton", RemoteConfig.proton("/photos"), tmp_path)
+    row = conn.execute("SELECT kind, config_json FROM source WHERE id = ?", (source_id,)).fetchone()
+    assert (row[0], json.loads(row[1])) == ("proton", {"provider": "proton", "path": "/photos"})
+    assert store.remote_config(source_id) == RemoteConfig.proton("/photos")

@@ -131,6 +131,7 @@ Until then, the inbox is visible like any other source.
 | `PA_UPLOAD_MAX_MB` | 200 | per-file limit; the upload is cut off as soon as it passes |
 | `PA_UPLOAD_MAX_FILES` | 500 | per request |
 | `PA_RCLONE_BINARY` | `rclone` | |
+| `PA_PROTON_DRIVE_BINARY` | `proton-drive` | Proton's own CLI; also looked for in `~/.local/bin` |
 | `PA_RCLONE_CONFIG` | unset (rclone's default file) | path to `rclone.conf` |
 | `PA_RCLONE_TPSLIMIT` / `_TRANSFERS` / `_CHECKERS` | 4 / 2 / 4 | MEGA-safe throttling |
 | `PA_RCLONE_TIMEOUT_HOURS` | 6 | a pull is stopped after this; rerun continues |

@@ -97,12 +97,18 @@ class SourceOut(BaseModel):
 
     @classmethod
     def of(
-        cls, s: Source, asset_count: int, show_path: bool, problem: str | None = None
+        cls,
+        s: Source,
+        asset_count: int,
+        show_path: bool,
+        problem: str | None = None,
+        place: str | None = None,
     ) -> "SourceOut":
+        """``place``: what a remote source reads, shown instead of its staging folder."""
         return cls(
             id=s.id,
             label=s.label,
-            path=s.root if show_path else None,
+            path=(place or s.root) if show_path else None,
             enabled=s.enabled,
             kind=s.kind,
             owner_id=s.owner_id,
