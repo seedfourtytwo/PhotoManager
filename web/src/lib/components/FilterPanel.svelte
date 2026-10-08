@@ -416,7 +416,7 @@
 	}
 	.reopen {
 		position: fixed;
-		top: var(--s-4);
+		top: calc(var(--top) + var(--s-4));
 		right: var(--s-4);
 		color: var(--ink-2);
 		z-index: 5;

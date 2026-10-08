@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { api, library, session } from '$lib/app.svelte';
-	import { PLACES, accountItems } from '$lib/nav';
+	import { PLACES, accountItems, initialOf } from '$lib/nav';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 
@@ -17,9 +17,7 @@
 			.catch(() => undefined); // the menu works without it
 	});
 
-	const initial = $derived(
-		(session.user?.display_name ?? '?').trim().charAt(0).toUpperCase() || '?'
-	);
+	const initial = $derived(initialOf(session.user?.display_name));
 	const items = $derived(
 		accountItems({ isAdmin: session.isAdmin, waiting }, path, () => void session.signOut())
 	);
@@ -27,7 +25,7 @@
 
 <!-- Laptop: one glass bar on top. Phone: a floating dock, Search and the account beside it. -->
 <nav aria-label="Main">
-	<a class="mark" href="/" aria-hidden="true" tabindex="-1">Photos</a>
+	<span class="mark" aria-hidden="true">Photos</span>
 	<ul class="places">
 		{#each PLACES as place (place.href)}
 			<li>
@@ -65,10 +63,22 @@
 		align-items: center;
 		gap: var(--s-5);
 		padding: 0 var(--page-x);
-		background: var(--glass);
-		-webkit-backdrop-filter: var(--blur);
-		backdrop-filter: var(--blur);
+		background: var(--fill);
+		-webkit-backdrop-filter: var(--backdrop);
+		backdrop-filter: var(--backdrop);
 		border-bottom: 1px solid var(--hairline);
+		/* Frosted glass where the browser can blur and the person has not asked for less;
+		   a solid bar otherwise (the same rule as .glass in tokens.css). */
+		--fill: var(--raised);
+		--backdrop: none;
+	}
+	@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+		@media not (prefers-reduced-transparency: reduce) {
+			nav {
+				--fill: var(--glass);
+				--backdrop: var(--blur);
+			}
+		}
 	}
 	a {
 		text-decoration: none;
@@ -116,12 +126,6 @@
 	.search[aria-current='page'] {
 		color: var(--ink);
 	}
-	.account {
-		margin-left: auto;
-	}
-	.search + .account {
-		margin-left: 0;
-	}
 	@media (hover: hover) {
 		.places a:hover,
 		.search:hover {
@@ -138,7 +142,9 @@
 			right: 0;
 			bottom: 0;
 			height: auto;
+			justify-content: center;
 			gap: var(--s-2);
+			z-index: 28; /* over the selection bar (25) so the open menu is not covered, under the filter sheet (35) */
 			padding: 0 calc(var(--s-3) + env(safe-area-inset-right))
 				calc(var(--s-3) + env(safe-area-inset-bottom)) calc(var(--s-3) + env(safe-area-inset-left));
 			background: none;
@@ -157,13 +163,14 @@
 			height: var(--dock);
 			box-sizing: border-box;
 			border-radius: var(--r-pill);
-			background: var(--glass);
-			-webkit-backdrop-filter: var(--blur);
-			backdrop-filter: var(--blur);
+			background: var(--fill);
+			-webkit-backdrop-filter: var(--backdrop);
+			backdrop-filter: var(--backdrop);
 			border: 1px solid var(--hairline);
 		}
 		.places {
 			flex: 1;
+			max-width: 26rem; /* a pill, not a bar, on a tablet or a landscape phone */
 			padding: var(--s-1);
 		}
 		.places li {
@@ -199,28 +206,6 @@
 			width: var(--dock);
 			--menu-top: auto;
 			--menu-bottom: calc(100% + var(--s-2));
-		}
-	}
-	@media (prefers-reduced-transparency: reduce) {
-		nav,
-		.places,
-		.search,
-		.account {
-			-webkit-backdrop-filter: none;
-			backdrop-filter: none;
-		}
-		nav {
-			background: var(--raised);
-		}
-	}
-	@media (prefers-reduced-transparency: reduce) and (max-width: 1023px) {
-		nav {
-			background: none;
-		}
-		.places,
-		.search,
-		.account {
-			background: var(--raised);
 		}
 	}
 </style>

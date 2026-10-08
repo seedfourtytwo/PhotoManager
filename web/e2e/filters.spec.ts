@@ -71,3 +71,15 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	await expect(page).toHaveURL(/\/\?place=/);
 	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
 });
+
+test('hiding the filters, a real click on "Filters" brings them back', async ({ page }) => {
+	test.skip(isPhone(page), 'the filter panel is a sheet on phones');
+	const panel = page.getByRole('complementary', { name: 'Filters' });
+	await expect(panel).toBeVisible();
+	await page.getByRole('button', { name: 'Hide filters' }).click();
+	await expect(panel).toBeHidden();
+	// No `force`: the button must not sit under the top bar.
+	await page.getByRole('button', { name: /^Filters/ }).click();
+	await expect(panel).toBeVisible();
+	await page.evaluate(() => localStorage.removeItem('pa.filters')); // leave no hidden state behind
+});

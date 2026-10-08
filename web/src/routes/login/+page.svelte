@@ -90,7 +90,7 @@
 {/if}
 
 <style>
-	/* The same wordmark as the rail: the front door of the album. */
+	/* The same wordmark as the top bar: the front door of the album. */
 	h1 {
 		font-style: var(--voice-style);
 		font-size: var(--fs-40);

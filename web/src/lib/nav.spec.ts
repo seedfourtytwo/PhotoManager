@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLACES, accountItems } from './nav';
+import { PLACES, accountItems, initialOf } from './nav';
 
 const current = (path: string) => PLACES.find((place) => place.match(path))?.label;
 
@@ -50,8 +50,12 @@ describe('account menu', () => {
 	it('carries the number of photos waiting on To review', () => {
 		expect(accountItems({ isAdmin: false, waiting: 4 }, '/', noop)[0]).toMatchObject({
 			href: '/review',
-			count: 4
+			count: 4,
+			countLabel: '4 photos'
 		});
+	});
+	it('says "1 photo" in the singular', () => {
+		expect(accountItems({ isAdmin: false, waiting: 1 }, '/', noop)[0].countLabel).toBe('1 photo');
 	});
 	it('marks the page you are on, including pages below it', () => {
 		const items = accountItems({ isAdmin: true, waiting: 0 }, '/settings/devices', noop);
@@ -63,5 +67,20 @@ describe('account menu', () => {
 			.at(-1)
 			?.run?.();
 		expect(called).toBe(1);
+	});
+});
+
+describe('initialOf', () => {
+	it.each([
+		['Chris', 'C'],
+		['  léa', 'L'],
+		['😀 Sam', '😀'],
+		['', '?'],
+		['   ', '?']
+	])('%j gives %j', (name, expected) => {
+		expect(initialOf(name)).toBe(expected);
+	});
+	it('falls back to ? without a name', () => {
+		expect(initialOf(undefined)).toBe('?');
 	});
 });

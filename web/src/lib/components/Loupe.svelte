@@ -548,7 +548,7 @@
 			grid-template-columns: minmax(0, 1fr);
 		}
 		.stage {
-			margin: 0 0 calc(var(--bar) + env(safe-area-inset-bottom));
+			margin: 0 0 calc(var(--dock) + env(safe-area-inset-bottom));
 		}
 		.top {
 			padding: env(safe-area-inset-top) var(--s-1) 0;
@@ -568,7 +568,7 @@
 			justify-content: space-between;
 			gap: 0;
 			padding: 0 var(--s-1) env(safe-area-inset-bottom);
-			min-height: var(--bar);
+			min-height: var(--dock);
 			background: var(--bg);
 			overflow-x: auto;
 			scrollbar-width: none;
@@ -581,7 +581,7 @@
 			position: fixed;
 			left: 0;
 			right: 0;
-			bottom: calc(var(--bar) + env(safe-area-inset-bottom));
+			bottom: calc(var(--dock) + env(safe-area-inset-bottom));
 			max-height: 50dvh;
 			background: var(--raised);
 			border-left: 0;

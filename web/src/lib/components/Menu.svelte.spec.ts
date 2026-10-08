@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import Menu, { type MenuItem } from './Menu.svelte';
 
 const items = (run = () => {}): MenuItem[] => [
-	{ label: 'To review', href: '/review', count: 4 },
+	{ label: 'To review', href: '/review', count: 4, countLabel: '4 photos' },
 	{ label: 'Trash', href: '/trash', current: true },
 	{ label: 'Sign out', run }
 ];
@@ -49,6 +49,40 @@ it('marks the current page and shows counts', async () => {
 		.element(page.getByRole('link', { name: 'Trash' }))
 		.toHaveAttribute('aria-current', 'page');
 	await expect.element(page.getByRole('link', { name: /To review/ })).toHaveTextContent('4');
+});
+
+it('names a count in words for a screen reader', async () => {
+	render(Menu, { label: 'Account', text: 'C', items: items() });
+	await page.getByRole('button', { name: 'Account' }).click();
+	await expect
+		.element(page.getByRole('link', { name: 'To review, 4 photos', exact: true }))
+		.toBeVisible();
+});
+
+it.each([
+	[0, null],
+	[1, '1'],
+	[99, '99'],
+	[100, '99+'],
+	[250, '99+']
+])('shows a badge of %i as %j', async (badge, shown) => {
+	render(Menu, {
+		label: 'Account',
+		text: 'C',
+		badge,
+		badgeLabel: `${badge} to review`,
+		items: items()
+	});
+	const button = page.getByRole('button', { name: 'Account', exact: true });
+	if (shown === null) {
+		expect(button.element().querySelector('.badge')).toBeNull();
+		await expect.element(button).not.toHaveAccessibleDescription(/to review/);
+	} else {
+		await expect
+			.element(button.element().querySelector('.badge') as HTMLElement)
+			.toHaveTextContent(shown);
+		await expect.element(button).toHaveAccessibleDescription(`${badge} to review`);
+	}
 });
 
 it('runs an action and closes', async () => {

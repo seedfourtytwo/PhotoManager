@@ -5,6 +5,7 @@ import {
 	MEMBER,
 	openAccountMenu,
 	resetMock,
+	selectTiles,
 	signIn,
 	test
 } from './helpers.ts';
@@ -61,28 +62,90 @@ test('shell: a member has no Admin, and Sign out leaves', async ({ page }) => {
 });
 
 test('shell: nothing on the page hides under the bar', async ({ page }) => {
+	if (isPhone(page)) {
+		// The dock floats over the bottom edge; the last thing on a finite page must clear it.
+		await signIn(page, '/settings');
+		const dock = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+		const viewport = page.viewportSize()!;
+		expect(dock.y + dock.height).toBeLessThanOrEqual(viewport.height);
+		expect(dock.y).toBeGreaterThan(viewport.height / 2);
+		await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+		await expect
+			.poll(() =>
+				page.evaluate(
+					() => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1
+				)
+			)
+			.toBe(true);
+		const lastBottom = await page.evaluate(() => {
+			const last = [...document.querySelectorAll('main *')]
+				.filter((el) => el.getBoundingClientRect().height > 0)
+				.map((el) => el.getBoundingClientRect().bottom);
+			return Math.max(...last);
+		});
+		expect(lastBottom).toBeLessThanOrEqual(dock.y);
+		return;
+	}
 	await signIn(page);
 	const nav = page.getByRole('navigation', { name: 'Main' });
 	const heading = page.getByRole('main').getByRole('heading').first();
 	await expect(heading).toBeVisible();
 	const bar = (await nav.boundingBox())!;
 	const head = (await heading.boundingBox())!;
-	if (isPhone(page)) {
-		// The dock floats over the bottom edge; the last thing on the page must clear it.
-		await page.keyboard.press('End');
-		const viewport = page.viewportSize()!;
-		expect(bar.y + bar.height).toBeLessThanOrEqual(viewport.height);
-		expect(bar.y).toBeGreaterThan(viewport.height / 2);
-	} else {
-		expect(bar.y).toBe(0);
-		expect(head.y).toBeGreaterThanOrEqual(bar.y + bar.height);
-		await page.mouse.wheel(0, 2000);
-		// A month heading sticks right under the bar: its top edge is the bar's bottom edge.
-		const tops = () =>
-			page
-				.getByRole('main')
-				.getByRole('heading', { level: 2 })
-				.evaluateAll((all) => all.map((h) => Math.round(h.getBoundingClientRect().top)));
-		await expect.poll(async () => (await tops()).includes(Math.round(bar.height))).toBe(true);
+	expect(bar.y).toBe(0);
+	expect(head.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+	await page.mouse.wheel(0, 2000);
+	// A month heading sticks right under the bar: its top edge is the bar's bottom edge.
+	const tops = () =>
+		page
+			.getByRole('main')
+			.getByRole('heading', { level: 2 })
+			.evaluateAll((all) => all.map((h) => Math.round(h.getBoundingClientRect().top)));
+	await expect.poll(async () => (await tops()).includes(Math.round(bar.height))).toBe(true);
+});
+
+test('shell: with a selection, every account menu row is the top thing at its centre', async ({
+	page
+}) => {
+	test.skip(!isPhone(page), 'the selection bar sits over the dock on phones');
+	await signIn(page);
+	await selectTiles(page, [0]);
+	const nav = await openAccountMenu(page);
+	const rows = nav.locator('ul[id] a, ul[id] button');
+	const count = await rows.count();
+	expect(count).toBeGreaterThanOrEqual(4);
+	for (let i = 0; i < count; i++) {
+		const covered = await rows.nth(i).evaluate((el) => {
+			const r = el.getBoundingClientRect();
+			const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+			return !(top && el.contains(top));
+		});
+		expect(covered, `row ${i} is covered`).toBe(false);
+	}
+	await nav.getByRole('link', { name: 'Settings', exact: true }).click();
+	await expect(page).toHaveURL(/\/settings$/);
+});
+
+test('shell: touch targets in the bar are at least 44 px both ways', async ({ page }) => {
+	test.skip(!isPhone(page), 'the 44 px promise is for touch');
+	await signIn(page);
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	const targets = [
+		nav.getByRole('link', { name: 'Library', exact: true }),
+		nav.getByRole('link', { name: 'Collections', exact: true }),
+		nav.getByRole('link', { name: 'Search', exact: true }),
+		nav.getByRole('button', { name: /^Account/ })
+	];
+	for (const target of targets) {
+		const box = (await target.boundingBox())!;
+		expect(box.width).toBeGreaterThanOrEqual(44);
+		expect(box.height).toBeGreaterThanOrEqual(44);
+	}
+	await openAccountMenu(page);
+	const rows = nav.locator('ul[id] a, ul[id] button');
+	for (let i = 0; i < (await rows.count()); i++) {
+		const box = (await rows.nth(i).boundingBox())!;
+		expect(box.width).toBeGreaterThanOrEqual(44);
+		expect(box.height).toBeGreaterThanOrEqual(44);
 	}
 });

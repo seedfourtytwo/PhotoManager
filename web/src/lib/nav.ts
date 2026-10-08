@@ -34,17 +34,28 @@ export function accountItems(
 	path: string,
 	signOut: () => void
 ): MenuItem[] {
-	const link = (label: string, href: string, count?: number): MenuItem => ({
+	const link = (label: string, href: string, count?: number, countLabel?: string): MenuItem => ({
 		label,
 		href,
 		count,
+		countLabel,
 		current: under(path, href)
 	});
 	return [
-		link('To review', '/review', who.waiting),
+		link(
+			'To review',
+			'/review',
+			who.waiting,
+			`${who.waiting} ${who.waiting === 1 ? 'photo' : 'photos'}`
+		),
 		link('Trash', '/trash'),
 		link('Settings', '/settings'),
 		...(who.isAdmin ? [link('Admin', '/admin')] : []),
 		{ label: 'Sign out', run: signOut }
 	];
+}
+
+/** The first letter of a name for the account button; a whole emoji counts as one character. */
+export function initialOf(name: string | undefined): string {
+	return ([...(name ?? '').trim()][0] ?? '?').toUpperCase();
 }

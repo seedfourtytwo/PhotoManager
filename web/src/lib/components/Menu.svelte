@@ -4,6 +4,8 @@
 		label: string;
 		href?: string;
 		count?: number;
+		/** What the count means, said aloud after the label: "4 photos". */
+		countLabel?: string;
 		current?: boolean;
 		run?: () => void;
 	};
@@ -61,7 +63,8 @@
 		onclick={() => (open = !open)}
 	>
 		<span aria-hidden="true">{text}</span>
-		{#if badge > 0}<span class="badge data" aria-hidden="true">{badge}</span>{/if}
+		{#if badge > 0}<span class="badge data" aria-hidden="true">{badge > 99 ? '99+' : badge}</span
+			>{/if}
 	</button>
 	{#if badge > 0 && badgeLabel}<span id={`${id}-badge`} class="visually-hidden">{badgeLabel}</span
 		>{/if}
@@ -75,8 +78,12 @@
 							aria-current={item.current ? 'page' : undefined}
 							onclick={() => close()}
 						>
-							{item.label}
-							{#if item.count}<span class="count data">{item.count}</span>{/if}
+							<span
+								>{item.label}{#if item.count}<span class="visually-hidden"
+										>, {item.countLabel ?? item.count}</span
+									>{/if}</span
+							>
+							{#if item.count}<span class="count data" aria-hidden="true">{item.count}</span>{/if}
 						</a>
 					{:else}
 						<button
