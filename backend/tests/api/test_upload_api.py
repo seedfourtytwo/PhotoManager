@@ -372,6 +372,14 @@ def test_photos_stored_before_a_failure_are_still_queued_for_import(
     assert len(world.repo.list_jobs()) == 1
 
 
+def test_guests_cannot_make_device_tokens_they_could_never_use(world: World) -> None:
+    assert world.client.patch("/api/users/3", json={"role": "guest"}, headers=_as(1)).is_success
+    made = world.client.post("/api/devices", json={"name": "Phone"}, headers=_as(3))
+    assert made.status_code == 403 and "guests" in made.json()["detail"]
+    assert world.client.get("/api/devices", headers=_as(3)).status_code == 403
+    assert world.integrations.devices.list(3) == []
+
+
 def test_guests_are_refused_and_a_disabled_accounts_token_stops_working(world: World) -> None:
     """One dependency (session or device token) for every upload route, failing closed (B18)."""
     _, token = _new_token(world, user=4)

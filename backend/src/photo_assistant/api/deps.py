@@ -80,12 +80,13 @@ SessionOrDeviceUser = Annotated[User, Depends(session_or_device_user)]
 
 
 def session_only_user(request: Request, user: CurrentUser) -> User:
-    """Managing devices needs a signed-in browser; a device token can't mint more tokens."""
+    """Managing devices needs a signed-in browser; a device token can't mint more tokens.
+    Not for guests: a device token only uploads, which they may not."""
     if request.headers.get("authorization") is not None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "sign in to manage devices (device tokens can't)"
         )
-    return user
+    return require_not_guest(user)
 
 
 SessionOnlyUser = Annotated[User, Depends(session_only_user)]
