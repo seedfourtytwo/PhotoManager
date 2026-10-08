@@ -13,3 +13,6 @@ CREATE INDEX job_waiting ON job (kind, id) WHERE status = 'queued';
 -- Purging a photo clears the variants pointing at it, and the foreign key on variant_of is
 -- checked on every DELETE FROM asset: both scanned the whole table.
 CREATE INDEX asset_by_variant_of ON asset (variant_of) WHERE variant_of IS NOT NULL;
+
+-- Purging also clears the look-alike pointers of photos held for review.
+CREATE INDEX asset_by_held_like ON asset (held_like) WHERE held_like IS NOT NULL;

@@ -278,7 +278,7 @@ def test_purging_a_photo_finds_its_variants_by_index(repo: SqliteRepository) -> 
     lookups = [p for p in plans if "variant_of" in p]
     assert len(lookups) >= 2, plans
     assert all("INDEX asset_by_variant_of (variant_of=?)" in p for p in lookups), plans
-    assert plans.count("SCAN asset") <= 1, "only held_like (no index) may still scan"
+    assert "SCAN asset" not in plans, "variants and look-alikes are both found by index"
     assert repo.get_asset(asset_id) is None
     still = repo.get_asset(variant)
     assert still is not None and still.variant_of is None

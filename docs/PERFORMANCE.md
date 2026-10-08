@@ -94,8 +94,9 @@ count reads the retry time of queued jobs; `enqueue_once` among thousands of wai
 its *own* kind still reads each (no caller does that: the ML backfill reads the queue once).
 A heartbeat thread per running job costs 0.08 ms to start and stop.
 
-Not fixed here: `held_like` has no index, so a purge still scans `asset` once (the 8 ms left),
-and the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
+The table was measured before `asset_by_held_like` was added to the same migration: with it
+the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Not fixed
+here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
 (not measured: the synthetic library has no embeddings).
 
 ## Import and previews (C28)
