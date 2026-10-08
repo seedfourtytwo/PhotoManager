@@ -71,7 +71,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 20
+    assert _latest() == 21
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -166,6 +166,8 @@ def test_a_v16_library_upgrades_with_foreign_keys_and_its_data(tmp_path: Path) -
     assert [tuple(r) for r in conn.execute("SELECT user_id, source_id FROM inbox")] == [(2, 2)]
     assert conn.execute("SELECT COUNT(*) FROM device").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM backup_run").fetchone()[0] == 2
+    # 0021: sources that were there before do not start checking themselves
+    assert {r[0] for r in conn.execute("SELECT recheck FROM source")} == {"off"}
     # private photos keep their meaning: private to the owner of their first source (lea)
     assert conn.execute("SELECT private_by FROM asset WHERE id = 1").fetchone()[0] == 2
     assert conn.execute("SELECT taken_at FROM asset WHERE id = 1").fetchone()[0] == (

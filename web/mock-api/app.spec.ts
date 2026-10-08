@@ -252,6 +252,39 @@ describe('with seeded users', () => {
 		await expect(api.addSource({ label: 'X', path: '/missing' })).rejects.toThrow(/not found/);
 	});
 
+	it('lets an admin choose how often a folder checks itself again', async () => {
+		const api = await signedIn();
+		const [phone] = await api.sources();
+		expect([phone.recheck, phone.next_check_at]).toEqual(['off', null]);
+		const [run] = await api.imports(phone.id);
+		const day = 24 * 3600 * 1000;
+
+		const daily = await api.updateSource(phone.id, { recheck: 'daily' });
+		expect(daily.recheck).toBe('daily');
+		expect(Date.parse(daily.next_check_at!)).toBe(Date.parse(run.started_at) + day);
+		expect((await api.sources())[0].next_check_at).toBe(daily.next_check_at);
+
+		const weekly = await api.updateSource(phone.id, { recheck: 'weekly' });
+		expect(Date.parse(weekly.next_check_at!)).toBe(Date.parse(run.started_at) + 7 * day);
+		const disabled = await api.updateSource(phone.id, { enabled: false });
+		expect([disabled.recheck, disabled.next_check_at]).toEqual(['weekly', null]);
+
+		const added = await api.addSource({ label: 'Scans', path: '/home/c/Scans' });
+		expect(added.recheck).toBe('off');
+		const hourly = await api.updateSource(added.id, { recheck: 'hourly' });
+		expect(Date.parse(hourly.next_check_at!)).toBe(clock); // never checked: due now
+
+		// @ts-expect-error only the four settings exist
+		await expect(api.updateSource(phone.id, { recheck: 'monthly' })).rejects.toMatchObject({
+			status: 422
+		});
+		const guest = await signedIn('guest', '3456');
+		await expect(api.updateSource(phone.id, { recheck: 'off' })).resolves.toBeTruthy();
+		await expect(guest.updateSource(phone.id, { recheck: 'daily' })).rejects.toMatchObject({
+			status: 403
+		});
+	});
+
 	it('manages users and keeps at least one admin', async () => {
 		const api = await signedIn();
 		const user = await api.createUser({

@@ -54,6 +54,7 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
     periodic = services_of(admin).ops.periodic
     assert periodic.task_names == [
         "due backups",
+        "due folder checks",
         "trash purge",
         "cluster faces",
         "optimize database",

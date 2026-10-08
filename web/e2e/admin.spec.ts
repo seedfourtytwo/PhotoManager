@@ -98,6 +98,27 @@ test('a scan of a folder that has gone says “folder not found” on the folder
 	await expect(report.getByText(/folder not found on this machine/)).toBeVisible();
 });
 
+test('a folder can be told to check itself again on a timer', async ({ page }) => {
+	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	const auto = row.getByLabel('Check automatically');
+	await expect(auto).toHaveValue('off');
+	await expect(row.getByText(/next check/)).toHaveCount(0);
+
+	await auto.selectOption({ label: 'Every day' });
+	await expect(row.getByText(/next check (\d|within a few minutes)/)).toBeVisible();
+	await expect(row.getByRole('button', { name: 'Check again' })).toBeVisible();
+	await expectAccessible(page);
+
+	await page.reload();
+	await expect(auto).toHaveValue('daily');
+	await expect(row.getByText(/next check/)).toBeVisible();
+	const others = page.getByRole('listitem').filter({ hasText: 'Partner' });
+	await expect(others.getByLabel('Check automatically')).toHaveValue('off');
+
+	await auto.selectOption({ label: 'Off' });
+	await expect(row.getByText(/next check/)).toHaveCount(0);
+});
+
 test('import progress is live while a scan runs', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'timing of the mock’s scan');
 	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
