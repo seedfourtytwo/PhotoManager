@@ -352,4 +352,4 @@ is also written next to its route above.
 |---|---|---|
 | Auth | Wrong PINs are counted per account, from all addresses together (was: per user name and address). The `429` `detail` says how many minutes to wait. | Show the `detail`. |
 | Auth | New: `423` from `POST /api/auth/login` and `POST /api/auth/pin` once an account has 30 wrong PINs since its last good sign-in. The right PIN is refused too, until an admin unlocks the account or it gets a new PIN. | Show the `detail` on the sign-in screen and in Settings. |
-| Users | `GET/POST/PATCH /api/users` answer `ManagedUser` (`User` plus `locked`). Unlock and a PIN reset lift the wait and the lock. | People shows "Locked" and offers Unlock on locked accounts only (`ManagedUser` in `api/types.ts`). |
+| Users | `GET/POST /api/users` and `PATCH /api/users/{id}` answer `ManagedUser` (`User` plus `locked`). Unlock and a PIN reset lift the wait and the lock. | People shows "Locked" and offers Unlock on locked accounts only (`ManagedUser` in `api/types.ts`). |
