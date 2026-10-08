@@ -8,15 +8,16 @@ thing it can write is a new, empty folder inside an existing one (a place for a 
 from dataclasses import dataclass
 from pathlib import Path
 
+from photo_assistant.domain.errors import InvalidError, NotFoundError
 from photo_assistant.domain.library_paths import folder_path_problem
 
 
-class FolderUnavailableError(Exception):
-    """The folder can't be listed; the message says why."""
+class FolderUnavailableError(InvalidError):
+    """The folder can't be listed or made; the message says why."""
 
 
-class FolderMissingError(FolderUnavailableError):
-    """There is no such folder (it could be created)."""
+class FolderMissingError(NotFoundError, FolderUnavailableError):
+    """There is no such folder. Its own status (404): the app offers to create it."""
 
 
 @dataclass(frozen=True, slots=True)

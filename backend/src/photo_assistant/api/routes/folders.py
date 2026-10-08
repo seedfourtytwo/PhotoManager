@@ -11,11 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from photo_assistant.adapters.folder_listing import (
-    FolderMissingError,
-    FolderUnavailableError,
-    LocalFolders,
-)
+from photo_assistant.adapters.folder_listing import LocalFolders
 from photo_assistant.api.deps import ADMIN_ONLY, ServicesDep
 from photo_assistant.api.services import Services
 from photo_assistant.domain.library_paths import folder_path_problem
@@ -76,12 +72,7 @@ def _checked(services: Services, path: str) -> Path:
 
 
 def _listing(services: Services, folder: Path) -> FolderListingOut:
-    try:
-        listing = LocalFolders().list(folder)
-    except FolderMissingError as exc:  # its own status: the app offers to create it
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except FolderUnavailableError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    listing = LocalFolders().list(folder)
     home = Path.home()
     disks = services.ops.backup.disks()
     return FolderListingOut(
@@ -115,8 +106,4 @@ def list_folders(
 def create_folder(services: ServicesDep, body: NewFolder) -> FolderListingOut:
     """Make one new, empty folder inside an existing one, and show it."""
     folder = _checked(services, body.path)
-    try:
-        created = LocalFolders().create(folder)
-    except FolderUnavailableError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    return _listing(services, created)
+    return _listing(services, LocalFolders().create(folder))
