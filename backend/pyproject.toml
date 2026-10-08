@@ -106,3 +106,14 @@ forbidden_modules = [
     "fastapi", "pydantic", "pydantic_settings", "sqlite3", "httpx", "uvicorn", "typst", "pyvips",
     "numpy", "onnxruntime", "cv2", "sqlite_vec", "tokenizers",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Use cases and ports: no frameworks, SQL, subprocesses, imaging or ML libraries"
+type = "forbidden"
+source_modules = ["photo_assistant.app", "photo_assistant.ports"]
+forbidden_modules = [
+    "fastapi", "starlette", "pydantic", "pydantic_settings", "uvicorn", "python_multipart",
+    "sqlite3", "sqlite_vec", "subprocess", "httpx", "typst", "pyvips", "PIL", "imagehash",
+    "exiftool", "blake3", "argon2", "numpy", "scipy", "onnxruntime", "cv2", "tokenizers",
+    "reverse_geocoder", "pycountry", "zipstream",
+]
