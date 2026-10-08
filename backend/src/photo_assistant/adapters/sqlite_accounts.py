@@ -4,7 +4,13 @@ import sqlite3
 from datetime import UTC, datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
-from photo_assistant.domain.access import Role, User, locks_account, too_many_failures
+from photo_assistant.domain.access import (
+    MAX_FAILED_LOGINS,
+    Role,
+    User,
+    locks_account,
+    too_many_failures,
+)
 from photo_assistant.ports.accounts import (
     NoActiveAdminError,
     NotFirstUserError,
@@ -185,6 +191,14 @@ class AccountsMixin(SqliteBase):
                     (failed, utc_text(at) if locks_account(failed) else None, username),
                 )
             return PinTry()
+
+    def users_waiting(self, since: datetime) -> set[int]:
+        rows = self._all(
+            """SELECT u.id FROM user u JOIN login_failure f ON f.username = u.username
+               WHERE f.at > ? GROUP BY u.id HAVING COUNT(*) >= ?""",
+            (utc_text(since), MAX_FAILED_LOGINS),
+        )
+        return {int(row["id"]) for row in rows}
 
     def forgive_wrong_pins(self, username: str) -> None:
         with self._transaction():

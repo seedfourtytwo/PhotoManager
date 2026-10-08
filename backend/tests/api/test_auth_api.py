@@ -39,7 +39,6 @@ def test_first_run_setup_creates_the_admin_and_logs_in(anon: TestClient) -> None
         "display_name": "C",
         "role": "admin",
         "disabled": False,
-        "locked": False,
     }
     cookie = created.headers["set-cookie"]
     assert "pa_session=" in cookie and "HttpOnly" in cookie and "SameSite=strict" in cookie
@@ -181,7 +180,24 @@ def test_a_locked_account_refuses_the_right_pin_until_an_admin_unlocks_it(
     assert admin.post(f"/api/users/{lea_id}/unlock").status_code == 204
     assert locked_flags(admin) == {"admin": False, "lea": False}
     ok = other.post("/api/auth/login", json={"username": "lea", "pin": PIN})
-    assert ok.status_code == 200 and ok.json()["locked"] is False
+    assert ok.status_code == 200 and "locked" not in ok.json()
+
+
+def test_the_fifteen_minute_wait_shows_as_locked_to_admins_and_unlock_lifts_it(
+    admin: TestClient,
+) -> None:
+    add_user(admin, "lea")
+    lea_id = user_id_of(admin, "lea")
+    other = TestClient(admin.app, base_url=BASE)
+    for _ in range(9):
+        other.post("/api/auth/login", json={"username": "lea", "pin": "0000"})
+    assert locked_flags(admin) == {"admin": False, "lea": False}, "one try is left"
+    other.post("/api/auth/login", json={"username": "Lea", "pin": "0000"})
+    assert locked_flags(admin) == {"admin": False, "lea": True}
+    renamed = admin.patch(f"/api/users/{lea_id}", json={"display_name": "Léa"})
+    assert renamed.json()["locked"] is True
+    assert admin.post(f"/api/users/{lea_id}/unlock").status_code == 204
+    assert locked_flags(admin) == {"admin": False, "lea": False}
 
 
 def test_only_admins_learn_which_accounts_are_locked(admin: TestClient) -> None:
@@ -199,7 +215,7 @@ def test_only_admins_learn_which_accounts_are_locked(admin: TestClient) -> None:
     assert all(set(entry) == {"id", "display_name"} for entry in directory)
     for client in (lea, guest):
         assert client.get("/api/users").status_code == 403
-        assert client.get("/api/auth/me").json()["locked"] is False, "only their own state"
+        assert "locked" not in client.get("/api/auth/me").json()
         unlock = client.post(f"/api/users/{user_id_of(admin, 'admin')}/unlock")
         assert unlock.status_code == 403
     assert locked_flags(admin)["admin"] is True
@@ -239,7 +255,8 @@ def test_a_locked_account_cannot_change_its_pin_from_an_open_session(admin: Test
     lock_out(admin, "admin")
     refused = admin.post("/api/auth/pin", json={"current_pin": PIN, "new_pin": NEW_PIN})
     assert refused.status_code == 423 and "locked" in refused.json()["detail"]
-    assert admin.get("/api/auth/me").json()["locked"] is True
+    assert admin.get("/api/auth/me").status_code == 200, "the open session goes on"
+    assert locked_flags(admin) == {"admin": True}
 
 
 def test_change_pin(admin: TestClient) -> None:

@@ -57,7 +57,9 @@ class User:
     display_name: str
     role: Role
     disabled: bool = False
-    locked: bool = False  # too many wrong PINs: no sign-in until an admin or a new PIN lifts it
+    # Thirty wrong PINs: no sign-in until an admin or a new PIN lifts it. In the list an admin
+    # manages, also true during the 15-minute wait after ten (Unlock lifts both).
+    locked: bool = False
 
 
 @dataclass(frozen=True, slots=True)

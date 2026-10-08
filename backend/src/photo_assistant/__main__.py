@@ -201,7 +201,9 @@ def main(argv: list[str] | None = None) -> int:
     user.add_argument("username")
     user.add_argument("--role", type=Role, choices=list(Role), default=Role.MEMBER)
     user.add_argument("--display-name")
-    pin = sub.add_parser("set-pin", help="give an account a new PIN (asks for it); this also unlocks it")
+    pin = sub.add_parser(
+        "set-pin", help="give an account a new PIN (asks for it); this also unlocks it"
+    )
     pin.add_argument("username")
     sub.add_parser("ml-backfill", help="queue ML analysis of every photo not analysed yet")
     cli_ops.register(sub)

@@ -28,7 +28,6 @@ class UserOut(BaseModel):
     display_name: str
     role: Role
     disabled: bool
-    locked: bool  # too many wrong PINs; only the account itself and admins are ever sent this
 
     @classmethod
     def of(cls, u: User) -> "UserOut":
@@ -38,8 +37,18 @@ class UserOut(BaseModel):
             display_name=u.display_name,
             role=u.role,
             disabled=u.disabled,
-            locked=u.locked,
         )
+
+
+class ManagedUserOut(UserOut):
+    """An account as an admin manages it. Whether wrong PINs have locked an account is told to
+    admins only: never on the open list of names, nor to other accounts."""
+
+    locked: bool
+
+    @classmethod
+    def of(cls, u: User) -> "ManagedUserOut":
+        return cls(**UserOut.of(u).model_dump(), locked=u.locked)
 
 
 class AccountName(BaseModel):

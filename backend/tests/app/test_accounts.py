@@ -93,11 +93,13 @@ def test_ten_wrong_pins_in_fifteen_minutes_block_the_account_from_every_address(
             accounts.login("c", "0000", f"10.0.0.{n}")  # ten addresses, one account
     with pytest.raises(TooManyAttemptsError, match=r"wait 15 minutes .* ask an admin"):
         accounts.login("c", GOOD, "10.0.0.99")  # an address that never guessed
+    assert _locked(accounts, "c"), "an admin sees the wait as locked, and can lift it"
     clock.at += timedelta(minutes=9, seconds=30)
     with pytest.raises(TooManyAttemptsError, match="wait 6 minutes"):
         accounts.login("c", GOOD, "10.0.0.1")
     clock.at += timedelta(minutes=5, seconds=31)
-    accounts.login("C", GOOD, "10.0.0.1")  # the window is over
+    assert not _locked(accounts, "c"), "the window is over"
+    accounts.login("C", GOOD, "10.0.0.1")
 
 
 def test_an_admin_unlock_lifts_the_wait_for_that_account_only(accounts: Accounts) -> None:

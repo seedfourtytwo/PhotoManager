@@ -8,7 +8,7 @@ import hashlib
 import math
 import secrets
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from photo_assistant.domain.access import (
@@ -160,7 +160,13 @@ class Accounts:
             raise NameTakenError(username) from exc
 
     def list_users(self) -> list[User]:
-        return self._store.list_users()
+        """Every account, as an admin manages them: ``locked`` is also set while an account
+        waits out the 15 minutes after ten wrong PINs, since Unlock lifts that too."""
+        return self._as_managed(self._store.list_users())
+
+    def _as_managed(self, users: list[User]) -> list[User]:
+        waiting = self._store.users_waiting(self._clock.now() - FAILED_LOGIN_WINDOW)
+        return [replace(u, locked=True) if u.id in waiting else u for u in users]
 
     def login_names(self) -> list[tuple[str, str]]:
         """(user name, display name) of every account that can log in: the login screen
@@ -203,7 +209,7 @@ class Accounts:
             self._store.delete_sessions_of(user_id)
         updated = self._store.get_user(user_id)
         assert updated is not None
-        return updated
+        return self._as_managed([updated])[0]
 
     def unlock(self, user_id: int) -> None:
         """Lift the 15-minute wait and the lock on this account, and start its count of wrong

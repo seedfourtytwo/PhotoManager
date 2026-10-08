@@ -97,6 +97,10 @@ class AccountStore(Protocol):
         since its last good sign-in, locking the account when that count is used up."""
         ...
 
+    def users_waiting(self, since: datetime) -> set[int]:
+        """Ids of the accounts with too many failures after ``since``: their next try waits."""
+        ...
+
     def forgive_wrong_pins(self, username: str) -> None:
         """Forget every counted try at this account's PIN (the name in any letter case) and
         lift its lock: after a right PIN, an admin's unlock, or a new PIN."""
