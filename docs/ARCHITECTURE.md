@@ -41,8 +41,7 @@ or an AI endpoint.
 Rule: dependencies point inward. `domain` never imports FastAPI, SQL, or a file path.
 import-linter checks this (`uv run lint-imports`, part of `just check`): the layer order, and
 that `domain`, `app` and `ports` import no framework, SQL, subprocess, imaging or ML library.
-CI is defined in `ci/` but not switched on yet, so today the check runs on the developer's
-machine.
+CI (`.github/workflows/ci.yml`) runs the same check on every pull request.
 
 ## 3. Data model
 

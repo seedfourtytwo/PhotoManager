@@ -35,7 +35,7 @@ the issue you are working on, and the relevant section of `docs/ARCHITECTURE.md`
 ```
 just setup      # install everything
 just dev        # run api + web with reload
-just check      # lint, layer contracts, types, all tests (the steps in ci/github-ci.yml, not switched on yet)
+just check      # lint, layer contracts, types, all tests (what CI runs: .github/workflows/ci.yml)
 just test-fast  # backend tests without the ones that need external tools
 just fmt        # auto-fix formatting
 just e2e        # Playwright, desktop + phone, against the real backend on a synthetic library
