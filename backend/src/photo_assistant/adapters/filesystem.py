@@ -4,6 +4,7 @@ import fcntl
 import logging
 import os
 import shutil
+import stat
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -36,6 +37,22 @@ class SystemClock:
         return datetime.now(UTC)
 
 
+def _regular_file(path: Path) -> os.stat_result | None:
+    """One look at ``path``: its facts if it is a plain file, None for anything else (a link,
+    a pipe, a file that went away since its folder was listed)."""
+    try:
+        found = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        log.warning(
+            "source file could not be read",
+            extra={"file": str(path), "error": exc.strerror or str(exc)},
+        )
+        return None
+    return found if stat.S_ISREG(found.st_mode) else None
+
+
 class FolderSourceReader:
     """Walks a source folder. Never follows symlinks out of it, never writes to it."""
 
@@ -43,21 +60,30 @@ class FolderSourceReader:
         root = Path(source.root)
         if not root.is_dir():
             raise FileNotFoundError(f"source folder not found: {root}")
-        for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+
+        def unreadable(exc: OSError) -> None:
+            if exc.filename == str(root):
+                raise exc  # nothing at all can be listed: that is not an empty folder
+            log.warning(
+                "source folder could not be read",
+                extra={"folder": str(exc.filename), "error": exc.strerror or str(exc)},
+            )
+
+        for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=unreadable):
             dirnames.sort()
             for name in sorted(filenames):
                 path = Path(dirpath) / name
-                if path.is_symlink() or not path.is_file():
+                found = _regular_file(path)
+                if found is None:
                     continue
-                stat = path.stat()
                 yield SourceFile(
                     relative_path=path.relative_to(root).as_posix(),
                     absolute_path=path,
-                    byte_size=stat.st_size,
+                    byte_size=found.st_size,
                     # local wall-clock time with its offset: what the user saw when saving
-                    mtime=datetime.fromtimestamp(stat.st_mtime).astimezone(),
-                    mtime_ns=stat.st_mtime_ns,
-                    ctime_ns=stat.st_ctime_ns,
+                    mtime=datetime.fromtimestamp(found.st_mtime).astimezone(),
+                    mtime_ns=found.st_mtime_ns,
+                    ctime_ns=found.st_ctime_ns,
                 )
 
 
