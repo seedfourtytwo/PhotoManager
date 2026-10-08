@@ -295,12 +295,9 @@ def merge_people(
 
 @router.post("/people/split", dependencies=NOT_GUEST)
 def split_people(services: ServicesDep, viewer: ViewerDep, body: SplitIn) -> PersonOut:
-    try:
-        person = services.ml.people.split(
-            body.face_ids, _visible(services, viewer), person_id=body.person_id, name=body.name
-        )
-    except ValueError as exc:  # a name that is too long: bare in people.py, see _clean_name
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    person = services.ml.people.split(
+        body.face_ids, _visible(services, viewer), person_id=body.person_id, name=body.name
+    )
     return PersonOut.of(person)
 
 

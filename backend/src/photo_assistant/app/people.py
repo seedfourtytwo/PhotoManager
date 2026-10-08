@@ -22,15 +22,13 @@ class FaceNotFoundError(NotFoundError):
 
 
 class InvalidPeopleChangeError(InvalidError, ValueError):
-    """A merge or a move of faces that makes no sense as asked."""
+    """A merge, a move of faces or a name that cannot be taken as asked."""
 
 
 def _clean_name(name: str | None) -> str | None:
     cleaned = " ".join((name or "").split())
     if len(cleaned) > MAX_NAME:
-        # Bare on purpose: the split route answers it with a 422, the rename route does not
-        # catch it. A domain error here would change what a rename answers.
-        raise ValueError(f"name too long (max {MAX_NAME} characters)")
+        raise InvalidPeopleChangeError(f"name too long (max {MAX_NAME} characters)")
     return cleaned or None
 
 

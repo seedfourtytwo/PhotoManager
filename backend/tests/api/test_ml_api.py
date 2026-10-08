@@ -228,6 +228,8 @@ def test_people_refusals_say_why(admin: TestClient, library: dict[str, int]) -> 
     assert refusal(admin.post(split, json={"face_ids": [face_id], "person_id": 99})) == nobody
     long_name = admin.post(split, json={"face_ids": [face_id], "name": "x" * 101})
     assert refusal(long_name) == (422, {"detail": "name too long (max 100 characters)"})
+    renamed = admin.patch(f"/api/people/{lea}", json={"name": "x" * 101})
+    assert refusal(renamed) == (422, {"detail": "name too long (max 100 characters)"})
 
 
 def test_preview_jobs_plan_ml_analysis_after_import_only_with_models(
