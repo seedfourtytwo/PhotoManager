@@ -135,3 +135,22 @@ describe('ShareDialog', () => {
 		expect(sent.some((s) => s.startsWith('PUT'))).toBe(false);
 	});
 });
+
+describe('AddToAlbumDialog', () => {
+	it('groups the albums without calling the title field a radio', async () => {
+		const { default: AddToAlbumDialog } = await import('./AddToAlbumDialog.svelte');
+		stubFetch(() => [
+			{ id: 1, title: 'Summers', count: 12, role: 'owner' },
+			{ id: 2, title: 'Trips', count: 3, role: 'editor' }
+		]);
+		render(AddToAlbumDialog, { ids: [1, 2], onclose: () => {}, ondone: () => {} });
+		await expect.element(page.getByRole('radio', { name: /Summers/ })).toBeInTheDocument();
+		// A radiogroup may hold radios only; the albums are a named group of native radios.
+		expect(page.getByRole('radiogroup').elements()).toHaveLength(0);
+		const group = page.getByRole('group', { name: 'Album' });
+		expect(group.getByRole('radio').elements()).toHaveLength(3);
+		await expect
+			.element(group.getByRole('textbox', { name: 'New album title' }))
+			.toBeInTheDocument();
+	});
+});

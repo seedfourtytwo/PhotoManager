@@ -52,6 +52,13 @@ describe('Timeline', () => {
 		expect(loader.done).toBe(false);
 	});
 
+	it('says “Loading…” as a status while a page is on its way', async () => {
+		const loader = new TimelineLoader(() => new Promise<AssetPage>(() => {}));
+		void loader.reset({});
+		mount(loader);
+		await expect.element(page.getByRole('status')).toHaveTextContent('Loading…');
+	});
+
 	it('a cancelled drag does not swallow the next click on the page', async () => {
 		const { fetchPage } = yearOfPages();
 		const loader = new TimelineLoader(fetchPage);

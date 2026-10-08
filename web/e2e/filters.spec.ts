@@ -95,3 +95,33 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	await expect(page).toHaveURL(/\/\?place=/);
 	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
 });
+
+test('phone: the filter sheet is modal: focus moves in and stays, Escape closes it', async ({
+	page
+}) => {
+	test.skip(!isPhone(page), 'the sheet is the phone layout');
+	const opener = page.getByRole('button', { name: 'Filter', exact: true });
+	await opener.click();
+	const panel = page.getByRole('complementary', { name: 'Filters' });
+	await expect(panel).toBeVisible();
+	const focusInside = () =>
+		page.evaluate(() => {
+			const at = document.activeElement;
+			return !!at?.closest('#filters') || at?.getAttribute('aria-label') === 'Close filters';
+		});
+	await expect.poll(focusInside).toBe(true);
+	// The page behind is out of reach for the keyboard and for screen readers.
+	await expect(page.locator('main#main')).toHaveAttribute('inert', '');
+	await expect(page.locator('nav[aria-label="Main"]')).toHaveAttribute('inert', '');
+	for (let i = 0; i < 40; i++) {
+		await page.keyboard.press('Tab');
+		// Between the last and the first control Tab passes through the browser's own bar
+		// (the body here), as in any modal dialog; it never lands on the page behind.
+		const onBody = await page.evaluate(() => document.activeElement === document.body);
+		expect(onBody || (await focusInside())).toBe(true);
+	}
+	await page.keyboard.press('Escape');
+	await expect(panel).toBeHidden();
+	await expect(page.locator('main#main')).not.toHaveAttribute('inert', '');
+	await expect(opener).toBeFocused();
+});

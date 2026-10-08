@@ -1,5 +1,13 @@
 import type { Page } from '@playwright/test';
-import { expect, expectAccessible, REAL_BACKEND, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	REAL_BACKEND,
+	resetMock,
+	signIn,
+	test,
+	toast
+} from './helpers.ts';
 
 /** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
 const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
@@ -113,7 +121,7 @@ test('a refused role change puts the old role back; disabled people say so', asy
 	const me = rowOf('admin');
 	const role = me.getByRole('combobox');
 	await role.selectOption('member');
-	await expect(page.getByRole('status')).toContainText(/at least one (active )?admin/i);
+	await expect(toast(page)).toContainText(/at least one (active )?admin/i);
 	await expect(role).toHaveValue('admin');
 
 	const guest = rowOf('guest');
@@ -473,4 +481,45 @@ test('backups: “Back” from “It fits” returns to the folder that was chos
 	const plan = page.waitForRequest((r) => r.url().includes('/api/backups/plan'));
 	await dialog.getByRole('button', { name: 'Check this place' }).click();
 	expect((await plan).postDataJSON()).toEqual({ place: '/home/c/Documents' });
+});
+
+test('loading texts in the admin dialogs are announced as status', async ({ page }) => {
+	test.skip(REAL_BACKEND, 'the delays are staged on the mock');
+	let release = () => {};
+	const hold = async (route: import('@playwright/test').Route) => {
+		await new Promise<void>((resolve) => (release = resolve));
+		await route.fallback();
+	};
+	await page.route(/\/api\/sources\/\d+\/access$/, hold);
+	await page.route(/\/api\/imports\/\d+/, hold);
+	await page.route('**/api/proton', hold);
+	await page.route('**/api/folders**', hold);
+
+	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	await row.getByRole('button', { name: 'Access' }).click();
+	const access = page.getByRole('dialog', { name: /Who sees/ });
+	await expect(access.getByRole('status')).toHaveText('Loading…');
+	release();
+	await expect(access.getByLabel('Everyone')).toBeVisible();
+	await access.getByRole('button', { name: 'Cancel' }).click();
+
+	await row.getByRole('button', { name: 'Report' }).click();
+	const report = page.getByRole('dialog', { name: /Last import/ });
+	await expect(report.getByRole('status')).toHaveText('Loading…');
+	release();
+	await expect(report.getByRole('status')).toHaveCount(0);
+	await report.getByRole('button', { name: 'Close' }).click();
+
+	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	const proton = page.getByRole('dialog', { name: 'Add from Proton Drive' });
+	await expect(proton.getByRole('status')).toHaveText('Asking Proton Drive…');
+	release();
+	await expect(proton.getByRole('radio', { name: /My Proton photos/ })).toBeVisible();
+	await proton.getByRole('button', { name: 'Cancel' }).click();
+
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	const folder = page.getByRole('dialog', { name: 'Add a folder' });
+	await expect(folder.getByRole('status')).toHaveText('Looking…');
+	release();
+	await expect(folder.getByRole('status')).toHaveCount(0);
 });

@@ -44,7 +44,8 @@
 
 <Dialog title="Add to album" {onclose}>
 	<p class="quiet">{ids.length} photo{ids.length === 1 ? '' : 's'}</p>
-	<div class="list" role="radiogroup" aria-label="Album">
+	<!-- A group, not a radiogroup: it also holds the title field. The radios share a name. -->
+	<div class="list" role="group" aria-label="Album">
 		<label>
 			<input type="radio" name="album" value="new" bind:group={choice} />
 			New album

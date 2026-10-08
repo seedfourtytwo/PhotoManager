@@ -9,7 +9,8 @@ import {
 	test,
 	GUEST,
 	longPress,
-	viewOnlyPhoto
+	viewOnlyPhoto,
+	toast
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -80,7 +81,7 @@ test('fix date: shift a selection with a before → after preview', async ({ pag
 	const post = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
 	await dialog.getByRole('button', { name: 'Change date' }).click();
 	expect((await post).postDataJSON()).toMatchObject({ shift_minutes: -120 });
-	await expect(page.getByRole('status')).toContainText('Changed the date of 1 photo');
+	await expect(toast(page)).toContainText('Changed the date of 1 photo');
 });
 
 test('fix date from the loupe: set an exact date', async ({ page }) => {
@@ -120,14 +121,14 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 		.getByRole('button', { name: 'Revert', exact: true })
 		.click();
 	await del;
-	await expect(page.getByRole('status')).toContainText('Back to the original');
+	await expect(toast(page)).toContainText('Back to the original');
 });
 
 test('trash: move, see it with its thumbnail, open it full size, restore', async ({ page }) => {
 	const id = await page.locator('.tile').first().getAttribute('data-id');
 	await selectTiles(page, [0]);
 	await selectionAction(page, 'Move to trash');
-	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
+	await expect(toast(page)).toContainText('Moved 1 photo to the trash');
 	await expect(page.locator(`.tile[data-id="${id}"]`)).toHaveCount(0);
 	await page.goto('/trash');
 	const tile = page.locator(`.tile[data-id="${id}"]`);
@@ -144,7 +145,7 @@ test('trash: move, see it with its thumbnail, open it full size, restore', async
 		.toBeGreaterThan(0);
 	await expect(loupe.getByRole('button', { name: 'Edit' })).toHaveCount(0);
 	await loupe.getByRole('button', { name: 'Restore' }).click();
-	await expect(page.getByRole('status')).toContainText('Restored 1 photo');
+	await expect(toast(page)).toContainText('Restored 1 photo');
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
 });
 
@@ -161,11 +162,11 @@ test('fix date can be undone: the previous dates come back', async ({ page }) =>
 	await dialog.getByLabel('Set exactly').check();
 	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
 	await dialog.getByRole('button', { name: 'Change date' }).click();
-	await expect(page.getByRole('status')).toContainText('Changed the date of 2 photos');
+	await expect(toast(page)).toContainText('Changed the date of 2 photos');
 	const undo = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
-	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+	await toast(page).getByRole('button', { name: 'Undo' }).click();
 	expect((await undo).postDataJSON()).toHaveProperty('set');
-	await expect(page.getByRole('status')).toContainText('Dates put back');
+	await expect(toast(page)).toContainText('Dates put back');
 	for (const [id, alt] of before)
 		await expect(page.locator(`.tile[data-id="${id}"] img`)).toHaveAttribute('alt', alt!);
 });
@@ -181,7 +182,7 @@ test('download: a server error or an expired session is said, not swallowed', as
 			: route.continue()
 	);
 	await dialog.getByRole('button', { name: 'Download', exact: true }).click();
-	await expect(page.getByRole('status')).toContainText(
+	await expect(toast(page)).toContainText(
 		'The download did not start: Not enough space for the ZIP'
 	);
 

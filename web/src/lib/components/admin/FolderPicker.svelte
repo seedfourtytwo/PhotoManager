@@ -104,7 +104,7 @@
 			{#if listing.truncated}<li class="quiet small">Only the first 1,000 are shown.</li>{/if}
 		</ul>
 	{:else if !error}
-		<p class="quiet">Looking…</p>
+		<p class="quiet" role="status">Looking…</p>
 	{/if}
 </div>
 

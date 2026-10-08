@@ -57,7 +57,7 @@
 
 <Dialog title="Add from Proton Drive" {onclose}>
 	{#if !status}
-		<p class="quiet">Asking Proton Drive…</p>
+		<p class="quiet" role="status">Asking Proton Drive…</p>
 	{:else if !status.ready}
 		<p role="alert">{status.problem}</p>
 		<p class="quiet small">

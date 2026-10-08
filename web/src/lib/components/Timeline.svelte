@@ -302,7 +302,7 @@
 			<button type="button" onclick={() => loader.reload()}>Try again</button>
 		</p>
 	{:else if loader.loading}
-		<p class="quiet status">Loading…</p>
+		<p class="quiet status" role="status">Loading…</p>
 	{/if}
 </div>
 

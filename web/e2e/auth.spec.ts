@@ -1,4 +1,4 @@
-import { ADMIN, expect, expectAccessible, resetMock, signIn, test } from './helpers.ts';
+import { ADMIN, expect, expectAccessible, resetMock, signIn, test, toast } from './helpers.ts';
 
 test.describe('first run and sign-in', () => {
 	test('first-run setup creates the admin and opens the library', async ({ page }) => {
@@ -56,7 +56,7 @@ test.describe('first run and sign-in', () => {
 		await expect(page.getByRole('alert')).toContainText('current PIN');
 		await page.getByLabel('Current PIN').fill(ADMIN.pin);
 		await page.getByRole('button', { name: 'Change PIN' }).click();
-		await expect(page.getByRole('status')).toContainText('PIN changed');
+		await expect(toast(page)).toContainText('PIN changed');
 		await page.getByRole('button', { name: 'Sign out' }).click();
 		await expect(page).toHaveURL(/\/login$/);
 	});

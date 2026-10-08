@@ -6,7 +6,7 @@ import DateScrubber from './DateScrubber.svelte';
 import SelectionActions from './SelectionActions.svelte';
 import SelectionBar from './SelectionBar.svelte';
 import { makeAsset } from '$lib/testing/fixtures';
-import { session } from '$lib/app.svelte';
+import { session, viewport } from '$lib/app.svelte';
 import type { AssetOut, Id } from '$lib/api';
 
 describe('DateScrubber', () => {
@@ -124,6 +124,44 @@ describe('SelectionBar', () => {
 		await page.getByRole('button', { name: 'Clear selection' }).click();
 		expect(run).toHaveBeenCalledOnce();
 		expect(onclear).toHaveBeenCalledOnce();
+	});
+});
+
+describe('SelectionBar on a phone', () => {
+	const actions = ['Favourite', 'Hide', 'Add to album', 'Download', 'Fix date'].map((label) => ({
+		label,
+		run: () => {}
+	}));
+
+	async function openMore() {
+		viewport.width = 390;
+		render(SelectionBar, { count: 3, actions, onclear: () => {} });
+		const more = page.getByRole('button', { name: 'More' });
+		await more.click();
+		await expect.element(page.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+		return more;
+	}
+
+	it('announces the count as a status', async () => {
+		render(SelectionBar, { count: 3, actions, onclear: () => {} });
+		await expect.element(page.getByRole('status')).toHaveTextContent('3 selected');
+	});
+
+	it('Escape closes “More” and hands focus back to it', async () => {
+		const more = await openMore();
+		await userEvent.keyboard('{Escape}');
+		await expect.element(page.getByRole('button', { name: 'Download' })).not.toBeInTheDocument();
+		await expect.element(more).toHaveAttribute('aria-expanded', 'false');
+		await expect.element(more).toHaveFocus();
+		viewport.width = window.innerWidth;
+	});
+
+	it('a tap outside closes “More”', async () => {
+		const more = await openMore();
+		document.body.click();
+		await expect.element(page.getByRole('button', { name: 'Download' })).not.toBeInTheDocument();
+		await expect.element(more).toHaveAttribute('aria-expanded', 'false');
+		viewport.width = window.innerWidth;
 	});
 });
 

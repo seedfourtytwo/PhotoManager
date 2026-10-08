@@ -6,7 +6,8 @@ import {
 	selectionAction,
 	selectTiles,
 	signIn,
-	test
+	test,
+	toast
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -22,7 +23,7 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 	const dialog = page.getByRole('dialog', { name: 'Add to album' });
 	await dialog.getByLabel('New album title').fill('Test trip');
 	await dialog.getByRole('button', { name: 'Add' }).click();
-	await expect(page.getByRole('status')).toContainText('Created “Test trip” with 3 photos');
+	await expect(toast(page)).toContainText('Created “Test trip” with 3 photos');
 
 	await page.goto('/albums');
 	await page.getByRole('link', { name: /Test trip/ }).click();
@@ -55,7 +56,7 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 
 	await selectTiles(page, [1]);
 	await selectionAction(page, 'Set as cover');
-	await expect(page.getByRole('status')).toContainText('Cover changed');
+	await expect(toast(page)).toContainText('Cover changed');
 });
 
 test('share an album with another person', async ({ page }) => {
@@ -124,7 +125,7 @@ test('remove from album, then Undo puts the photos back where they were', async 
 	await selectTiles(page, [1, 3]);
 	await selectionAction(page, 'Remove from album');
 	await expect(tiles).toHaveCount(order.length - 2);
-	await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+	await toast(page).getByRole('button', { name: 'Undo' }).click();
 	await expect(tiles).toHaveCount(order.length);
 	await expect
 		.poll(() => tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-id'))))
