@@ -65,7 +65,8 @@ history says "not connected", the other backups still run, and nothing is writte
 laptop's own disk. Plug the disk in and that is all: the app finds it again by itself and
 backs up at once if the backup is overdue, otherwise at the next time its quiet hours allow.
 This can take up to about 15 minutes after it is due. Start the
-very first backup with the disk plugged in.
+very first backup with the disk plugged in, and keep it plugged in until that backup has
+succeeded: until then, a disk that is missing can end up with an empty backup folder in its place.
 
 ## 3. Target 2: the server (over SSH, via rclone)
 

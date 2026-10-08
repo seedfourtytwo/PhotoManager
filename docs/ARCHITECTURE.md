@@ -171,14 +171,17 @@ skipped run is not an attempt: while the latest run is skipped, `run_due` probes
 every `SKIP_RETRY` (15 min), writes nothing while it stays away, and backs up at once if overdue,
 otherwise when the quiet window allows. A skipped Proton copy is also re-checked at most every
 15 min (`_catch_up_copy`), with no overdue check and no quiet window: it runs as soon as Proton
-Drive and the backup folder can be reached. Known limit: a
-target with no successful backup yet can still get its repository created on the first run, so
-the very first backup must be started with the disk connected.
+Drive and the backup folder can be reached. Known limit: the
+guard only covers a target that has had a successful backup. Until its first backup has
+succeeded (a new target, or one whose attempts have only failed) the repository may be created on
+any run, so an empty folder left behind by an unplugged disk gets one; start the first backup
+with the disk connected and check it succeeded.
 
 `protection()` (pure) turns the target statuses into `places_ok / places_total` plus problems; a
 place is an enabled target or its Proton copy, "protected" is two or more ok. `GET
 /api/backups/health` serves it to admins and the root layout shows `BackupBanner` from it on
-every page. `backup run-due` exits 1 only when a run failed, not when one was skipped.
+every page. `backup run-due` exits 1 when a run failed or a skipped place is overdue, not for a
+fresh skip.
 
 ### Phone inbox
 `data/inbox/<user>/` is served over WebDAV (per-user credentials, LAN/Tailscale only).
