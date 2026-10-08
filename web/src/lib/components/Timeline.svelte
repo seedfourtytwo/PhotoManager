@@ -3,7 +3,7 @@
 	import type { Id } from '$lib/api';
 	import { settings, viewport } from '$lib/app.svelte';
 	import type { TimelineLoader } from '$lib/loader.svelte';
-	import { idsInRect, selectMany, type Rect, type Selection } from '$lib/selection';
+	import { idsInRect, selectMany, type Placed, type Rect, type Selection } from '$lib/selection';
 	import {
 		aspect,
 		groupByMonth,
@@ -203,8 +203,8 @@
 	}
 
 	// --- lasso (desktop): drag across photos to select them -----------------------------
-	type Placed = Parameters<typeof idsInRect>[0];
-	let start: { x: number; y: number; base: Selection; placed: Placed | null } | null = null;
+	let start: { x: number; y: number; base: Selection; placed: readonly Placed[] | null } | null =
+		null;
 	let lasso = $state<Rect | null>(null);
 	let lassoFrame = 0;
 

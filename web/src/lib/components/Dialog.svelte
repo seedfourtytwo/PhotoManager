@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { modal } from '$lib/modal';
 
 	type Props = {
 		title: string;
@@ -13,26 +14,10 @@
 	};
 	let { title, onclose, children, actions, wide = false, cancelLabel = 'Cancel' }: Props = $props();
 
-	let dialog: HTMLDialogElement | undefined = $state();
 	const id = `dlg-${Math.random().toString(36).slice(2, 8)}`;
-
-	$effect(() => {
-		// Modal: focus moves in, Tab stays in, Esc closes, the page behind is inert.
-		dialog?.showModal();
-		return () => dialog?.close();
-	});
 </script>
 
-<dialog
-	bind:this={dialog}
-	class:wide
-	aria-labelledby={id}
-	oncancel={(e) => {
-		e.preventDefault();
-		onclose();
-	}}
-	onkeydown={(e) => e.stopPropagation()}
->
+<dialog use:modal={onclose} class:wide aria-labelledby={id} onkeydown={(e) => e.stopPropagation()}>
 	<h2 {id}>{title}</h2>
 	{@render children()}
 	<div class="actions">

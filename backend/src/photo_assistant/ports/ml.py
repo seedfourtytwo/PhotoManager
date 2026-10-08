@@ -5,11 +5,12 @@ files are missing, calls raise ``ModelUnavailableError`` and the job handlers re
 "model missing" status instead of failing forever.
 """
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
@@ -19,6 +20,7 @@ __all__ = [
     "BoundingBox",
     "Face",
     "FaceAnalyzer",
+    "FaceMatches",
     "ImageEmbedder",
     "MlStore",
     "ModelFormatError",
@@ -29,7 +31,13 @@ __all__ = [
     "ScoredAsset",
     "StoredFace",
     "TextEmbedder",
+    "Visible",
 ]
+
+# Which photos a read may show. A Viewer: the photos of that person's library, by the access
+# rule, decided in SQL next to the query (people, similar photos). A collection of asset ids:
+# exactly those (search hands over what is left after its filters).
+Visible = Viewer | Collection[int]
 
 
 class ModelUnavailableError(UnavailableError):
@@ -99,6 +107,14 @@ class StoredFace:
 
 
 @dataclass(frozen=True, slots=True)
+class FaceMatches:
+    """What clustering asks about one face, within its reach."""
+
+    count: int  # other faces within reach
+    person_id: int | None  # the person of the nearest of them that has one
+
+
+@dataclass(frozen=True, slots=True)
 class PersonSummary:
     id: int
     name: str | None
@@ -108,8 +124,12 @@ class PersonSummary:
 
 
 class MlStore(Protocol):
-    """Embeddings, faces, people and tags. Every read that lists assets takes the ids the
-    viewer may see (computed by the visibility function elsewhere) and never widens them."""
+    """Embeddings, faces, people and tags. Every read that lists assets takes what the viewer
+    may see (``Visible``) and never widens it."""
+
+    def seen(self, asset_ids: Collection[int], visible: Visible) -> set[int]:
+        """Those of ``asset_ids`` that ``visible`` covers."""
+        ...
 
     # task bookkeeping: status per (asset, task, model), e.g. "done", "model_missing"
     def task_status(self, asset_id: int, task: str, model: str) -> str | None: ...
@@ -122,8 +142,16 @@ class MlStore(Protocol):
     def save_clip(self, asset_id: int, model: str, vector: Vector) -> None: ...
     def clip_vector(self, asset_id: int, model: str) -> Vector | None: ...
     def nearest_assets(
-        self, query: Vector, model: str, candidates: Collection[int], limit: int
-    ) -> list[ScoredAsset]: ...
+        self,
+        query: Vector,
+        model: str,
+        candidates: Visible,
+        limit: int,
+        *,
+        leave_out: int | None = None,
+    ) -> list[ScoredAsset]:
+        """Closest first; ``leave_out``: the photo the others are compared with."""
+        ...
 
     # faces
     def replace_faces(self, asset_id: int, model: str, faces: Sequence[Face]) -> list[int]:
@@ -133,8 +161,18 @@ class MlStore(Protocol):
     def faces_to_cluster(
         self, model: str, *, deferred: bool, asset_id: int | None = None
     ) -> list[int]: ...
-    def count_face_matches(self, face_id: int, max_distance: float, limit: int) -> int: ...
-    def nearest_person(self, face_id: int, max_distance: float) -> int | None: ...
+    def face_matches(self, face_id: int, max_distance: float) -> FaceMatches: ...
+    def face_marks(self, model: str) -> Mapping[int, object]:
+        """Per face of the model, a value that is different once the face was detected again,
+        placed with a person or moved on in clustering: two readings tell what changed."""
+        ...
+
+    def deferred_faces_near(
+        self, model: str, face_ids: Collection[int], max_distance: float
+    ) -> list[int]:
+        """The deferred faces with one of ``face_ids`` (other than itself) within reach."""
+        ...
+
     def mark_deferred(self, face_id: int) -> None: ...
     def mark_clustered(self, face_id: int) -> None: ...
     def assign_face(self, face_id: int, person_id: int, *, by_user: bool = False) -> None: ...
@@ -143,13 +181,16 @@ class MlStore(Protocol):
     def get_face(self, face_id: int) -> StoredFace | None: ...
 
     # people (visibility-scoped reads)
-    def list_persons(self, visible: Collection[int]) -> list[PersonSummary]: ...
-    def get_person(self, person_id: int, visible: Collection[int]) -> PersonSummary | None: ...
+    def list_persons(self, visible: Visible) -> list[PersonSummary]: ...
+    def get_person(self, person_id: int, visible: Visible) -> PersonSummary | None: ...
     def rename_person(self, person_id: int, name: str | None) -> None: ...
     def merge_persons(self, target_id: int, source_ids: Sequence[int]) -> None: ...
     def move_faces(self, face_ids: Sequence[int], person_id: int) -> None: ...
     def create_empty_person(self, name: str | None) -> int: ...
-    def person_asset_ids(self, person_id: int, visible: Collection[int]) -> list[int]: ...
+    def person_asset_ids(self, person_id: int, visible: Visible) -> list[int]:
+        """Newest first, like the timeline."""
+        ...
+
     def delete_empty_persons(self) -> int: ...
 
     # tags
@@ -158,5 +199,5 @@ class MlStore(Protocol):
     ) -> None: ...
     def tags_of(self, asset_id: int) -> list[TagScore]: ...
     def is_screen_or_document(self, asset_id: int) -> bool | None: ...
-    def asset_ids_with_tag(self, name: str, visible: Collection[int]) -> list[int]: ...
-    def screen_or_document_ids(self, visible: Collection[int]) -> list[int]: ...
+    def asset_ids_with_tag(self, name: str, visible: Visible) -> list[int]: ...
+    def screen_or_document_ids(self, visible: Visible) -> list[int]: ...

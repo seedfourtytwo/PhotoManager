@@ -4,6 +4,7 @@
 	import Dialog from './Dialog.svelte';
 	import { IDENTITY_RECIPE, type AssetOut, type CropRect, type Recipe } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
+	import { modal } from '$lib/modal';
 	import {
 		MAX_STRAIGHTEN,
 		RATIOS,
@@ -33,12 +34,6 @@
 	);
 	let busy = $state(false);
 	let areaW = $state(0);
-	let dialog: HTMLDialogElement | undefined = $state();
-
-	$effect(() => {
-		dialog?.showModal();
-		return () => dialog?.close();
-	});
 	let areaH = $state(0);
 
 	const crop = $derived(recipe.crop ?? FULL);
@@ -150,11 +145,7 @@
 <dialog
 	class="editor"
 	aria-label="Edit photo"
-	bind:this={dialog}
-	oncancel={(e) => {
-		e.preventDefault();
-		onclose();
-	}}
+	use:modal={onclose}
 	onkeydown={(e) => e.stopPropagation()}
 >
 	<div class="area" bind:clientWidth={areaW} bind:clientHeight={areaH}>

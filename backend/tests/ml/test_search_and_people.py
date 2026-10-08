@@ -133,7 +133,7 @@ def test_person_assets_are_limited_to_visible_ones(
     store: SqliteMlStore, family: dict[str, int]
 ) -> None:
     assets = People(store).assets(family["lea"], visible(family))
-    assert assets == [family["a"], family["b"]]
+    assert assets == [family["b"], family["a"]], "newest first; same moment: highest id first"
 
 
 def test_merge(store: SqliteMlStore, family: dict[str, int]) -> None:

@@ -71,6 +71,9 @@ ends `done` in the queue and records `model_missing` per asset in `ml_task`.
 `python -m photo_assistant ml-backfill`). It queues every unfinished (asset, task) plus one
 global `cluster_faces {}`. Also queue a global `cluster_faces {}` nightly, or after each
 import run, so faces deferred during import (not enough look-alikes yet) get a person later.
+A global pass remembers what it saw and next time steps only the deferred faces near a face
+that was added or placed since (same people as stepping all of them); the first pass after a
+start steps every deferred face once (the memory is the process's, `ClusterFaces`).
 
 Settings: either keep `MlSettings` as its own class (env prefix `PA_ML_`, same `.env`), or
 add `ml: MlSettings = Field(default_factory=MlSettings)` to `Settings`. Fields:
@@ -98,15 +101,15 @@ passes it in. The use cases never widen it; ids outside it are 404.
 | Method | Path | Body / query | Response | Use case |
 |---|---|---|---|---|
 | GET | `/api/search` | `q`, `limit` (≤200) + the `/api/assets` filters | `{items: (AssetOut + {score})[], text, facets}` | `parse_query(q)`; facets narrow `visible` (person → `people.assets`, tag → `store.asset_ids_with_tag`, date/place/camera → existing SQL filters); free text → `ml.search(text, candidates, limit)`; no free text → plain filtered timeline. `503 {"detail": "Search needs the CLIP model: run just models"}` on `SearchUnavailableError`. |
-| GET | `/api/assets/{id}/similar` | `limit` | `(AssetOut + {score})[]` | `ml.similar(id, visible, limit)`; `LookupError` → 404, `NotIndexedError` → 409 "not analysed yet" |
+| GET | `/api/assets/{id}/similar` | `limit` | `(AssetOut + {score})[]` | `ml.similar(id, viewer, limit)`; `LookupError` → 404, `NotIndexedError` → 409 "not analysed yet" |
 | GET | `/api/assets/{id}/faces` | – | `[{id, box:{x,y,w,h}, score, person_id}]` | `people.faces_of_asset` |
 | GET | `/api/assets/{id}/tags` | – | `[{name, score}]` + `screen_or_document` | `store.tags_of`, `store.is_screen_or_document` |
-| GET | `/api/people` | – | `[{id, name, face_count, asset_count, cover:{face_id, asset_id, box}}]` | `people.list_all(visible)` |
+| GET | `/api/people` | – | `[{id, name, face_count, asset_count, cover:{face_id, asset_id, box}}]` | `people.list_all(viewer)` |
 | GET | `/api/people/{id}` | – | same item | `people.get` |
 | PATCH | `/api/people/{id}` | `{name}` | item | `people.rename` (member/admin) |
 | POST | `/api/people/{id}/merge` | `{source_ids}` | item | `people.merge` |
 | POST | `/api/people/split` | `{face_ids, person_id? , name?}` | item | `people.split` (no `person_id` → new person) |
-| GET | `/api/people/{id}/assets` | `limit`, `cursor` | `{items: AssetOut[], next_cursor}` | `people.assets(id, visible)` then the normal timeline query on those ids |
+| GET | `/api/people/{id}/assets` | `limit`, `cursor` | `{items: AssetOut[], next_cursor}` | `people.assets(id, viewer)` (newest first) then the normal timeline query on that page's ids |
 | GET | `/api/ml/status` | – | `{clip:{ready,detail}, faces:{ready,detail}, counts:{task:{status:n}}}` | `ml.status()` + `ml_task` counts |
 | POST | `/api/ml/backfill` | – | `{queued}` (admin) | `ml.backfill()` |
 
@@ -121,8 +124,10 @@ Tables: `ml_task`, `clip_embedding`, `face`, `person`, `tag`, `asset_tag`, `asse
 All reference `asset(id)` with `ON DELETE CASCADE` (trash purge cleans up).
 
 **Deviation from ARCHITECTURE §3 (`vec_clip USING vec0(...)`):** vectors are float32 BLOBs in
-ordinary tables, searched with sqlite-vec's `vec_distance_cosine` by brute force over a temp
-candidate table (the visible ids). Reasons: the migration runner uses a plain connection that
+ordinary tables, searched with sqlite-vec's `vec_distance_cosine` by brute force within what
+the caller may see (`ports.ml.Visible`): a viewer, for whom the store puts the library's access
+rule into its own statement, or a set of ids (search, after its filters) held in a temp
+candidate table. Reasons: the migration runner uses a plain connection that
 can't load extensions; vec0 fixes the dimension per table while the CLIP model (512/640/768/
 1024-d) is a setting; and filtering KNN by an arbitrary id set is simpler and exact this way.
 At 10k photos this is milliseconds, at 100k well under the 500 ms budget. If it ever isn't,

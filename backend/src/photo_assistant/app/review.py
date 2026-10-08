@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Protocol
 
 from photo_assistant.domain.access import Viewer
+from photo_assistant.domain.grouping import Shot
 from photo_assistant.domain.review import LOOKALIKE, clutter_reason, lookalikes
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.ports import Clock
@@ -17,8 +18,8 @@ from photo_assistant.ports.library import AssetView
 
 
 class ReviewStore(Protocol):
-    def library_phashes(self) -> dict[int, str]:
-        """Perceptual hash of every photo in the library (not trashed, not held)."""
+    def shots(self) -> list[Shot]:
+        """Every photo in the library (not trashed, not held), with its time and hash."""
         ...
 
     def hold_asset(self, asset_id: int, reason: str, like: int | None) -> bool:
@@ -40,9 +41,9 @@ class Review:
 
     def hold_lookalikes(self, new: set[int]) -> int:
         """Hold the just-imported photos that look like one already in the library."""
-        hashes = self._store.library_phashes()
-        fresh = {i: hashes.pop(i) for i in new if i in hashes}
-        found = lookalikes(fresh, hashes)
+        shots = self._store.shots()
+        fresh = [s for s in shots if s.asset_id in new]
+        found = lookalikes(fresh, [s for s in shots if s.asset_id not in new])
         return sum(self._store.hold_asset(i, LOOKALIKE, like) for i, like in found.items())
 
     def hold_clutter(self, asset_id: int, tags: Sequence[TagScore]) -> bool:

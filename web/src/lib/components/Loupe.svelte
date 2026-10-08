@@ -6,6 +6,7 @@
 	import { dateSourceLabel, formatTaken } from '$lib/dates';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
+	import { modal } from '$lib/modal';
 	import { describePhoto } from './PhotoGrid.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
 	import Editor from './Editor.svelte';
@@ -183,18 +184,16 @@
 		else if (dy > 80) onclose();
 	}
 
-	let previous: Element | null = null;
 	onMount(() => {
-		previous = document.activeElement;
-		root?.showModal();
+		// `use:modal` has opened it by now: the viewer itself takes the focus, not its first button.
 		root?.focus();
 		wake();
 	});
 	onDestroy(() => {
 		clearTimeout(idleTimer);
 		if (document.fullscreenElement) void document.exitFullscreen();
-		// The page then moves focus to the tile of the photo that was open (it knows where).
-		(previous as HTMLElement | null)?.focus?.({ preventScroll: true });
+		// `use:modal` hands the focus back to where it was; the page then moves it to the tile
+		// of the photo that was open (it knows where).
 	});
 </script>
 
@@ -211,11 +210,7 @@
 	onpointermove={(e) => e.pointerType === 'mouse' && wake()}
 	onpointerdown={onchromedown}
 	onclickcapture={() => (waking = false)}
-	oncancel={(e) => {
-		// Esc, and a phone's Back gesture: the page closes the loupe (and tidies the URL).
-		e.preventDefault();
-		onclose();
-	}}
+	use:modal={onclose}
 	onclose={() => onclose()}
 >
 	{#if asset}

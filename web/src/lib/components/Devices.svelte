@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Device, DevicePlatform } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
-	import { formatWhen } from '$lib/format';
+	import { errorMessage, formatWhen } from '$lib/format';
 	import Dialog from './Dialog.svelte';
 
 	let devices = $state<Device[] | null>(null);
@@ -39,7 +39,7 @@
 			token = created.token;
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not add the device.';
+			error = errorMessage(e, 'Could not add the device.');
 		} finally {
 			busy = false;
 		}

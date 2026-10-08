@@ -1,7 +1,10 @@
 """SqliteMlStore against real SQLite + sqlite-vec (in memory)."""
 
 import math
+import random
+import re
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -9,9 +12,12 @@ import pytest
 from photo_assistant.adapters.ml_store import SqliteMlStore, from_blob, to_blob
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
-from photo_assistant.domain.vectors import Vector
+from photo_assistant.domain.vectors import Vector, cosine_distance
+from photo_assistant.ports.ml import FaceMatches
+from tests.adapters.test_visibility_rule import ROLES, _random_library
 from tests.factories import NOW, new_asset
 
 M = "test-model"
@@ -118,9 +124,23 @@ def test_a_face_without_a_direction_matches_nobody_and_breaks_nothing(
 ) -> None:
     (a,) = assets(repo, 1)
     good, zero = store.replace_faces(a, M, [face(angle(0)), face((0.0, 0.0, 0.0))])
-    assert store.count_face_matches(good, 2.0, limit=10) == 0
-    assert store.count_face_matches(zero, 2.0, limit=10) == 0
-    assert store.nearest_person(zero, 2.0) is None
+    assert store.face_matches(good, 2.0) == FaceMatches(0, None)
+    assert store.face_matches(zero, 2.0) == FaceMatches(0, None)
+
+
+@pytest.mark.parametrize("broken", [(0.0, 0.0, 0.0), (math.nan, 1.0, 0.0), (math.inf, 0.0, 0.0)])
+def test_a_named_face_without_a_direction_is_nobodys_nearest_person(
+    repo: SqliteRepository, store: SqliteMlStore, broken: Vector
+) -> None:
+    """Its distance is NULL also where the nearest person is picked by ORDER BY distance."""
+    (a,) = assets(repo, 1)
+    good, bad, near = store.replace_faces(a, M, [face(angle(0)), face(broken), face(angle(5))])
+    nobody = store.create_person(bad)
+    assert store.face_matches(good, 2.0) == FaceMatches(1, None)
+    assert store.face_matches(bad, 2.0) == FaceMatches(0, None)
+    somebody = store.create_person(near)
+    assert store.face_matches(good, 2.0) == FaceMatches(1, somebody)
+    assert somebody != nobody
 
 
 def test_the_candidate_set_is_filled_in_one_transaction(
@@ -191,12 +211,163 @@ def test_face_matches_and_nearest_person(repo: SqliteRepository, store: SqliteMl
     f1, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(20))])
     (f3,) = store.replace_faces(b, M, [face(angle(80))])
     reach = 1 - math.cos(math.radians(30))
-    assert store.count_face_matches(f1, reach, limit=10) == 1
-    assert store.count_face_matches(f3, reach, limit=10) == 0
-    assert store.nearest_person(f1, reach) is None
+    assert store.face_matches(f1, reach) == FaceMatches(1, None)
+    assert store.face_matches(f3, reach) == FaceMatches(0, None)
     person = store.create_person(f2)
-    assert store.nearest_person(f1, reach) == person
+    assert store.face_matches(f1, reach) == FaceMatches(1, person)
     assert store.get_face(f2).person_id == person  # type: ignore[union-attr]
+
+
+# The two statements face_matches replaced: the oracle for the one that does both.
+_OLD_NEIGHBOURS = (
+    "FROM face f JOIN face me ON me.id = ? "
+    "WHERE f.model = me.model AND f.dim = me.dim AND f.id != me.id "
+    "AND vec_distance_cosine(f.embedding, me.embedding) <= ?"
+)
+_OLD_COUNT = f"SELECT count(*) FROM (SELECT 1 {_OLD_NEIGHBOURS})"
+_OLD_NEAREST = (
+    f"SELECT f.person_id {_OLD_NEIGHBOURS} AND f.person_id IS NOT NULL "
+    "ORDER BY vec_distance_cosine(f.embedding, me.embedding), f.id LIMIT 1"
+)
+
+
+def random_faces(rng: random.Random, n: int) -> list[Face]:
+    """Half of them in three tight bunches, the rest anywhere; a few without a direction."""
+    centres = [tuple(rng.gauss(0, 1) for _ in range(5)) for _ in range(3)]
+    vectors: list[Vector] = []
+    for _ in range(n):
+        centre = rng.choice(centres) if rng.random() < 0.5 else (0.0,) * 5
+        vectors.append(tuple(c + rng.gauss(0, 0.3 if any(centre) else 1) for c in centre))
+    vectors[rng.randrange(n)] = (0.0,) * 5
+    return [face(v) for v in vectors]
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_face_matches_agrees_with_the_two_scans_it_replaced(
+    conn: sqlite3.Connection, repo: SqliteRepository, store: SqliteMlStore, seed: int
+) -> None:
+    rng = random.Random(seed)
+    a, b, other_model = assets(repo, 3)
+    ids = store.replace_faces(a, M, random_faces(rng, 40))
+    ids += store.replace_faces(b, M, [face((1.0, 0.0, 0.0))])  # another dimension
+    store.replace_faces(other_model, "other", random_faces(rng, 10))
+    people = [store.create_empty_person(None) for _ in range(4)]
+    for face_id in rng.sample(ids, 20):
+        store.assign_face(face_id, rng.choice(people))
+    seen = set()
+    for reach in (0.05, 0.3, 0.9, 2.0):
+        for face_id in ids:
+            count = conn.execute(_OLD_COUNT, (face_id, reach)).fetchone()[0]
+            nearest = conn.execute(_OLD_NEAREST, (face_id, reach)).fetchone()
+            expected = FaceMatches(count, None if nearest is None else nearest[0])
+            assert store.face_matches(face_id, reach) == expected
+            seen.add(expected)
+    assert len(seen) > 20, "the inputs give many different answers"
+
+
+def test_face_matches_is_one_scan_with_one_distance_per_other_face(
+    conn: sqlite3.Connection, repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    """It was two scans, and the nearest person's distance was computed twice per match."""
+    (a,) = assets(repo, 1)
+    ids = store.replace_faces(a, M, [face(angle(d)) for d in (0, 5, 10, 15, 80, 90)])
+    person = store.create_person(ids[2])
+    store.assign_face(ids[1], person)
+    distances: list[int] = []
+    statements: list[str] = []
+
+    def cosine(x: bytes, y: bytes) -> float:
+        distances.append(1)
+        return cosine_distance(from_blob(x), from_blob(y))
+
+    conn.create_function("vec_distance_cosine", 2, cosine, deterministic=True)
+    conn.set_trace_callback(statements.append)
+    try:
+        found = store.face_matches(ids[0], 1 - math.cos(math.radians(30)))
+    finally:
+        conn.set_trace_callback(None)
+    assert found == FaceMatches(3, person)
+    assert len(distances) == len(ids) - 1
+    assert len([s for s in statements if "vec_distance_cosine" in s]) == 1
+
+
+def test_deferred_faces_near_are_the_waiting_faces_within_reach_of_the_given_ones(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    (a, b) = assets(repo, 2)
+    at = dict(
+        zip((0, 20, 40, 100, 120, 200), store.replace_faces(a, M, [
+            face(angle(d)) for d in (0, 20, 40, 100, 120, 200)
+        ]), strict=True)
+    )  # fmt: skip
+    (elsewhere,) = store.replace_faces(b, "other", [face(angle(0))])
+    for face_id in (*at.values(), elsewhere):
+        store.mark_deferred(face_id)
+    reach = 1 - math.cos(math.radians(30))
+    assert store.deferred_faces_near(M, [at[20]], reach) == [at[0], at[40]], "not itself"
+    assert store.deferred_faces_near(M, [at[20], at[120]], reach) == [at[0], at[40], at[100]]
+    assert store.deferred_faces_near(M, [at[0], at[20]], reach) == [at[0], at[20], at[40]]
+    assert store.deferred_faces_near(M, [at[200]], reach) == []
+    assert store.deferred_faces_near(M, [], reach) == []
+    assert store.deferred_faces_near(M, [elsewhere], reach) == [], "another model's face"
+    store.assign_face(at[0], store.create_empty_person(None))  # placed: waits no longer
+    store.mark_clustered(at[40])
+    assert store.deferred_faces_near(M, [at[20]], reach) == []
+    assert store.deferred_faces_near(M, [at[0]], reach) == [at[20]]
+
+
+def test_deferred_faces_near_agree_with_plain_python_on_random_faces(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    rng = random.Random(3)
+    (a,) = assets(repo, 1)
+    faces = random_faces(rng, 60)
+    ids = store.replace_faces(a, M, faces)
+    vector = {i: f.embedding for i, f in zip(ids, faces, strict=True)}
+    waiting = set(rng.sample(ids, 30))
+    for face_id in waiting:
+        store.mark_deferred(face_id)
+    for reach in (0.05, 0.3, 0.9):
+        given = rng.sample(ids, 8)
+        expected = sorted(
+            d for d in waiting
+            if any(vector[d]) and any(
+                g != d and any(vector[g]) and cosine_distance(vector[g], vector[d]) <= reach - 1e-6
+                for g in given
+            )
+        )  # fmt: skip
+        loose = sorted(
+            d for d in waiting
+            if any(vector[d]) and any(
+                g != d and any(vector[g]) and cosine_distance(vector[g], vector[d]) <= reach + 1e-6
+                for g in given
+            )
+        )  # fmt: skip
+        found = store.deferred_faces_near(M, given, reach)
+        assert set(expected) <= set(found) <= set(loose) and found == sorted(found)
+        assert expected, "the inputs find something"
+
+
+def test_face_marks_change_when_a_face_is_added_placed_deferred_or_detected_again(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    (a, b) = assets(repo, 2)
+    f1, f2, f3 = store.replace_faces(a, M, [face(angle(d)) for d in (0, 1, 2)])
+    store.replace_faces(b, "other", [face(angle(0))])
+    before = store.face_marks(M)
+    assert set(before) == {f1, f2, f3}
+    assert store.face_marks(M) == before
+
+    def changed() -> set[int]:
+        now = store.face_marks(M)
+        return {i for i in now if before.get(i) != now[i]}
+
+    store.mark_deferred(f1)
+    assert changed() == {f1}
+    store.assign_face(f2, store.create_empty_person(None))
+    assert changed() == {f1, f2}
+    (f4,) = store.replace_faces(b, M, [face(angle(3))])
+    assert changed() == {f1, f2, f4}
 
 
 def test_cluster_queue_by_state_and_asset(repo: SqliteRepository, store: SqliteMlStore) -> None:
@@ -302,6 +473,108 @@ def test_assets_with_a_tag_within_the_visible_set(
     assert store.asset_ids_with_tag("beach", visible={a, c}) == [a, c]
     assert store.asset_ids_with_tag("snow", visible={a, b, c}) == []
     assert store.screen_or_document_ids(visible={a, b, c}) == [c]
+
+
+# --- the viewer instead of the list of every photo they may see ------------------------------
+
+
+def indexed_random_library(seed: int) -> tuple[SqliteRepository, SqliteMlStore, list[int]]:
+    """60 photos with owners, access lists, albums, private marks and trash (the library of
+    the visibility rule's own test), plus hidden marks, photos held for review, and on every
+    photo: an embedding, faces of four people, tags."""
+    rng = random.Random(seed)
+    repo = _random_library(seed)
+    conn = repo._conn
+    store = SqliteMlStore(repo._db)
+    photos = list(range(1, 61))
+    for user in range(1, len(ROLES) + 1):
+        for asset in rng.sample(photos, 6):
+            conn.execute("INSERT INTO user_asset VALUES (?, ?, 0, 1)", (user, asset))
+    for asset in rng.sample(photos, 5):
+        conn.execute("UPDATE asset SET held_reason = 'lookalike' WHERE id = ?", (asset,))
+    people = [store.create_empty_person(name) for name in ("Lea", None, "Tom", None)]
+    for asset in photos:
+        store.save_clip(asset, M, tuple(rng.gauss(0, 1) for _ in range(4)))
+        vectors = [tuple(rng.gauss(0, 1) for _ in range(4)) for _ in range(rng.randint(0, 2))]
+        for face_id in store.replace_faces(asset, M, [face(v, rng.random()) for v in vectors]):
+            if rng.random() < 0.8:
+                store.assign_face(face_id, rng.choice(people))
+        tags = [TagScore(name, 0.2) for name in ("beach", "snow") if rng.random() < 0.4]
+        store.replace_model_tags(asset, M, tags, screen_or_document=rng.random() < 0.3)
+    return repo, store, people
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_a_viewer_gets_what_the_list_of_every_photo_they_may_see_gave(seed: int) -> None:
+    repo, store, people = indexed_random_library(seed)
+    rng = random.Random(seed)
+    seen_by_someone = 0
+    for user, role in enumerate(ROLES, start=1):
+        viewer = Viewer(user, role)
+        ids = repo.visible_asset_ids(viewer)  # what the routes handed over before
+        seen_by_someone += len(ids)
+        assert store.seen(range(1, 70), viewer) == set(ids)
+        assert store.list_persons(viewer) == store.list_persons(ids)
+        for person in people:
+            assert store.get_person(person, viewer) == store.get_person(person, ids)
+            theirs = set(store.person_asset_ids(person, ids))
+            assert store.person_asset_ids(person, viewer) == [i for i in ids if i in theirs]
+        query = tuple(rng.gauss(0, 1) for _ in range(4))
+        assert store.nearest_assets(query, M, viewer, 10) == store.nearest_assets(query, M, ids, 10)
+        for asset in ids[:5]:
+            others = set(ids) - {asset}
+            expected = store.nearest_assets(query, M, others, 10) if others else []
+            assert store.nearest_assets(query, M, viewer, 10, leave_out=asset) == expected
+        assert store.asset_ids_with_tag("Beach", viewer) == store.asset_ids_with_tag("Beach", ids)
+        assert store.screen_or_document_ids(viewer) == store.screen_or_document_ids(ids)
+    assert seen_by_someone > 60, "the viewers do see photos, and not all the same ones"
+
+
+def test_seen_with_a_list_of_photos_is_what_is_on_the_list(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    a, b, c = assets(repo, 3)
+    assert store.seen([a, b, 99], [b, c]) == {b}
+    assert store.seen([], [a]) == set()
+
+
+def test_a_persons_photos_come_newest_first_like_the_timeline(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    days = (3, 9, 9, 1)
+    ids = [repo.add_asset(new_asset(n, datetime(2020, 1, d)), NOW) for n, d in enumerate(days, 1)]
+    person = store.create_empty_person("Lea")
+    for asset in ids:
+        (face_id,) = store.replace_faces(asset, M, [face(angle(0))])
+        store.assign_face(face_id, person)
+    a, b, c, d = ids
+    assert store.person_asset_ids(person, ids) == [c, b, a, d]
+
+
+def test_one_persons_page_for_a_viewer_reads_that_persons_faces_not_the_library() -> None:
+    """It was: list every photo the viewer may see, copy the ids into a temp table, join."""
+    repo, store, people = indexed_random_library(1)
+    conn = repo._conn
+    statements: list[str] = []
+    viewers = (Viewer(1, Role.ADMIN), Viewer(2, Role.MEMBER), Viewer(5, Role.GUEST))
+    conn.set_trace_callback(statements.append)
+    try:
+        for viewer in viewers:
+            store.get_person(people[0], viewer)
+            store.person_asset_ids(people[0], viewer)
+        one_person = [s for s in statements if s.startswith(("SELECT", "WITH"))]
+        for viewer in viewers:
+            store.list_persons(viewer)
+    finally:
+        conn.set_trace_callback(None)
+    assert [s for s in statements if "ml_candidates" in s] == []
+    assert len(one_person) >= 6
+    for sql in one_person:
+        plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + sql))
+        by_person = "USING INDEX face_by_person (person_id=?)" in plan
+        assert by_person or plan == "SEARCH f USING INTEGER PRIMARY KEY (rowid=?)", plan
+        # no walk over a whole table, nor over every photo that is not in the trash
+        assert not re.search(r"SCAN (?!\(subquery)", plan) and "(trashed_at=?)" not in plan, plan
 
 
 def test_task_counts_summarise_the_status_of_every_task(

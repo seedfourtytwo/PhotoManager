@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { ImportRun, ProtonSource as AddedProton, Recheck, Source } from '$lib/api';
+	import type { ImportRun, Recheck, Source } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
 	import { formatWhen, nextCheckText } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
-	import Dialog from '../Dialog.svelte';
 	import AccessDialog from './AccessDialog.svelte';
-	import FolderPicker, { type Picked } from './FolderPicker.svelte';
+	import AddCloud from './AddCloud.svelte';
+	import AddFolder from './AddFolder.svelte';
 	import ProtonSource from './ProtonSource.svelte';
 	import ReportDialog from './ReportDialog.svelte';
 
@@ -15,21 +15,7 @@
 	let sources = $state<Source[]>([]);
 	let runs = $state<ImportRun[]>([]);
 	let adding = $state(false);
-	let label = $state('');
-	let picked = $state<Picked>({ path: '', sourceProblem: null, pending: true });
-	const path = $derived(picked.path);
-	let addError = $state('');
-	let suggested = ''; // the name we filled in: replaced as the folder changes, unless edited
-
-	$effect(() => {
-		const name = path.split('/').filter(Boolean).pop() ?? '';
-		if (label === suggested) label = name;
-		suggested = name;
-	});
-	let cloud = $state<{ label: string; remote: string; path: string } | null>(null);
-	let remotes = $state<string[] | null>(null);
-	let remotesError = $state('');
-	let cloudError = $state('');
+	let cloud = $state(false);
 	let proton = $state(false);
 	let accessFor = $state<Source | null>(null);
 	let reportFor = $state<{ run: ImportRun; label: string } | null>(null);
@@ -49,86 +35,27 @@
 
 	const lastRun = (id: number) => runs.find((r) => r.source_id === id);
 
-	/** One add at a time (folder or cloud folder): a second press while it runs is ignored. */
-	let saving = $state(false);
-
-	function openAdd() {
-		label = suggested = '';
-		picked = { path: '', sourceProblem: null, pending: true };
-		addError = '';
-		adding = true;
-	}
-
-	async function add() {
-		if (saving) return;
-		saving = true;
-		addError = '';
+	async function addedFolder(source: Source) {
+		adding = false;
+		// The folder exists now, whatever happens to its first import: show it, then start.
+		library.forget(); // filter labels come from this list
+		await load();
 		try {
-			const source = await api.addSource({ label: label.trim(), path });
-			adding = false;
-			// The folder exists now, whatever happens to its first import: show it, then start.
-			library.forget(); // filter labels come from this list
-			await load();
-			try {
-				await api.scanSource(source.id);
-				notice.show(`Added “${source.label}”. Importing now; the folder itself is only read.`);
-				onscan();
-			} catch (e) {
-				notice.error(e);
-			}
+			await api.scanSource(source.id);
+			notice.show(`Added “${source.label}”. Importing now; the folder itself is only read.`);
+			onscan();
 		} catch (e) {
-			addError = e instanceof Error ? e.message : 'Could not add the folder.';
-		} finally {
-			saving = false;
+			notice.error(e);
 		}
 	}
 
-	async function openCloud() {
-		cloud = { label: '', remote: '', path: '' };
-		cloudError = '';
-		remotesError = '';
-		try {
-			remotes = (await api.remotes()).remotes;
-			if (remotes.length && cloud) cloud.remote = remotes[0];
-		} catch (e) {
-			remotes = [];
-			remotesError = e instanceof Error ? e.message : 'rclone is not available on the server.';
-		}
-	}
-
-	async function addCloud() {
-		if (!cloud || saving) return;
-		saving = true;
-		cloudError = '';
-		try {
-			const added = await api.addRemoteSource({
-				label: cloud.label.trim(),
-				remote: cloud.remote,
-				path: cloud.path.trim()
-			});
-			// Added: close, so a failed pull cannot be answered by adding the folder again.
-			cloud = null;
-			try {
-				await api.pullRemoteSource(added.id);
-				notice.show(`Added “${added.label}”. Copying it read-only, then importing.`);
-				onscan();
-			} catch (e) {
-				notice.error(e);
-			}
-			library.forget(); // filter labels come from this list
-			await load();
-		} catch (e) {
-			cloudError = e instanceof Error ? e.message : 'Could not add the cloud folder.';
-		} finally {
-			saving = false;
-		}
-	}
-
-	async function addedProton(added: AddedProton) {
-		proton = false;
+	/** A cloud or Proton folder was added: start its first copy, then show it in the list. */
+	async function pullAdded(added: { id: number; label: string }, then: string) {
+		// Closed first, so a failed pull cannot be answered by adding the folder again.
+		cloud = proton = false;
 		try {
 			await api.pullRemoteSource(added.id);
-			notice.show(`Added “${added.label}”. Copying from Proton, then importing.`);
+			notice.show(`Added “${added.label}”. ${then}`);
 			onscan();
 		} catch (e) {
 			notice.error(e);
@@ -185,9 +112,9 @@
 <section aria-labelledby="a-sources">
 	<header>
 		<h2 id="a-sources">Folders</h2>
-		<button type="button" onclick={openAdd}>Add folder</button>
+		<button type="button" onclick={() => (adding = true)}>Add folder</button>
 		<button type="button" onclick={() => (proton = true)}>Add from Proton</button>
-		<button type="button" onclick={openCloud}>Add cloud folder</button>
+		<button type="button" onclick={() => (cloud = true)}>Add cloud folder</button>
 		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
 	</header>
 	<ul>
@@ -260,63 +187,17 @@
 </section>
 
 {#if adding}
-	<Dialog title="Add a folder" onclose={() => (adding = false)}>
-		<p class="quiet small">
-			Open the folder your photos are in. They are copied into the library; the folder is only ever
-			read, never changed.
-		</p>
-		<FolderPicker onpick={(p) => (picked = p)} />
-		<label class="field">Name <input bind:value={label} placeholder="Old hard disk" /></label>
-		{#if picked.sourceProblem}
-			<p role="alert">
-				{picked.sourceProblem.charAt(0).toUpperCase() + picked.sourceProblem.slice(1)}.
-			</p>
-		{/if}
-		{#if addError}<p role="alert">{addError}</p>{/if}
-		{#snippet actions()}
-			<button
-				class="primary"
-				type="button"
-				disabled={saving || !label.trim() || !path || picked.pending || !!picked.sourceProblem}
-				onclick={add}>Add and import</button
-			>
-		{/snippet}
-	</Dialog>
+	<AddFolder onclose={() => (adding = false)} onadded={addedFolder} />
 {:else if cloud}
-	<Dialog title="Add a cloud folder" onclose={() => (cloud = null)}>
-		<p class="quiet small">
-			A folder on a cloud drive or NAS that rclone on the server knows. It is copied read-only into
-			the library's staging area, then imported; nothing is ever written back.
-		</p>
-		{#if remotesError}
-			<p role="alert">{remotesError}</p>
-		{:else if remotes && remotes.length === 0}
-			<p class="quiet">
-				rclone has no remotes yet. Set one up on the server (rclone config) first.
-			</p>
-		{/if}
-		<label class="field">Name <input bind:value={cloud.label} placeholder="Drive photos" /></label>
-		<label class="field"
-			>Remote
-			<select bind:value={cloud.remote} disabled={!remotes?.length}>
-				{#each remotes ?? [] as remote (remote)}<option value={remote}>{remote}</option>{/each}
-			</select>
-		</label>
-		<label class="field"
-			>Folder on the remote <input bind:value={cloud.path} placeholder="Photos" /></label
-		>
-		{#if cloudError}<p role="alert">{cloudError}</p>{/if}
-		{#snippet actions()}
-			<button
-				class="primary"
-				type="button"
-				disabled={saving || !cloud?.label.trim() || !cloud?.remote}
-				onclick={addCloud}>Add and pull</button
-			>
-		{/snippet}
-	</Dialog>
+	<AddCloud
+		onclose={() => (cloud = false)}
+		onadded={(added) => pullAdded(added, 'Copying it read-only, then importing.')}
+	/>
 {:else if proton}
-	<ProtonSource onclose={() => (proton = false)} onadded={addedProton} />
+	<ProtonSource
+		onclose={() => (proton = false)}
+		onadded={(added) => pullAdded(added, 'Copying from Proton, then importing.')}
+	/>
 {:else if accessFor}
 	<AccessDialog
 		sourceId={accessFor.id}
@@ -387,8 +268,5 @@
 	.live,
 	.problem {
 		color: var(--ink);
-	}
-	p {
-		margin: 0 0 var(--s-3);
 	}
 </style>
