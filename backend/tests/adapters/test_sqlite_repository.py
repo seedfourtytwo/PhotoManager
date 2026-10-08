@@ -184,6 +184,18 @@ def test_import_report_round_trip(repo: SqliteRepository) -> None:
     assert repo.get_import_report(999) is None
 
 
+def test_a_saved_runs_message_can_be_replaced_without_touching_its_status(
+    repo: SqliteRepository,
+) -> None:
+    source = repo.add_source("a", "/a")
+    report = ImportReport(source_id=source.id, status=RunStatus.DONE)
+    run_id = repo.save_import_report(report, NOW, NOW)
+    other = repo.save_import_report(report, NOW, NOW)
+    repo.set_import_run_message(run_id, "2 files could not be downloaded")
+    runs = {r["id"]: (r["status"], r["message"]) for r in repo.list_import_runs(source.id)}
+    assert runs == {run_id: ("done", "2 files could not be downloaded"), other: ("done", None)}
+
+
 # --- job queue -----------------------------------------------------------------------------
 
 

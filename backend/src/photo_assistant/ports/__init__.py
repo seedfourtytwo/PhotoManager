@@ -242,6 +242,10 @@ class Repository(SourceRegistry, Protocol):
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int: ...
+    def set_import_run_message(self, run_id: int, message: str) -> None:
+        """Replace what a saved run says in the import history (its status stays)."""
+        ...
+
     def get_import_report(self, run_id: int) -> ImportReport | None: ...
     def list_import_runs(
         self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED

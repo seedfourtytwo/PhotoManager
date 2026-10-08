@@ -75,13 +75,18 @@ class FakeLibrary:
     sources: dict[int, Source] = field(default_factory=dict)
     imports: list[int] = field(default_factory=list)
     saved: list[ImportReport] = field(default_factory=list)
+    import_message: str | None = None  # what the import itself has to say
+    run_messages: dict[int, str] = field(default_factory=dict)
 
     def get_source(self, source_id: int) -> Source | None:
         return self.sources.get(source_id)
 
     def run(self, source_id: int) -> tuple[int, ImportReport]:
         self.imports.append(source_id)
-        return 42, ImportReport(source_id, RunStatus.DONE)
+        return 42, ImportReport(source_id, RunStatus.DONE, message=self.import_message)
+
+    def set_import_run_message(self, run_id: int, message: str) -> None:
+        self.run_messages[run_id] = message
 
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
@@ -239,23 +244,33 @@ def test_a_proton_source_is_only_added_for_a_place_that_exists(tmp_path: Path) -
 # --- a pull that brought only part of the remote --------------------------------------------------
 
 
-def test_a_partial_pull_is_imported_and_its_failures_go_to_the_import_history(
+def test_a_partial_pull_is_imported_and_its_failures_are_noted_on_that_import(
     world: World,
 ) -> None:
+    """Not as a failed entry of their own: the Sources list then said "last import failed"
+    above the import of everything that did arrive."""
     outcome = world.use_case.run(1)
     assert world.library.imports == [1] and outcome.run_id == 42, "what arrived is imported"
-    (note,) = world.library.saved
-    assert (note.source_id, note.status) == (1, RunStatus.FAILED)
-    assert note.message is not None
-    assert "1 file could not be downloaded from 'MEGA'" in note.message
-    assert "x.jpg: broken" in note.message
+    assert world.library.saved == [], "no second history entry"
+    note = world.library.run_messages[42]
+    assert "1 file could not be downloaded from 'MEGA'" in note
+    assert "x.jpg: broken" in note
+    assert outcome.report is not None
+    assert (outcome.report.status, outcome.report.message) == (RunStatus.DONE, note)
+
+
+def test_a_partial_pull_keeps_what_the_import_itself_had_to_say(world: World) -> None:
+    world.library.import_message = "Paused: the library disk is almost full."
+    world.use_case.run(1)
+    note = world.library.run_messages[42]
+    assert note.startswith("Paused: the library disk is almost full. 1 file could not be")
 
 
 def test_a_partial_pull_names_only_its_first_few_failures(world: World) -> None:
     messages = tuple(f"{n}.jpg: broken" for n in range(500))
     world.sync.report = SyncReport(copied=1500, errors=500, error_messages=messages)
     world.use_case.run(1)
-    message = world.library.saved[0].message or ""
+    message = world.library.run_messages[42]
     assert "500 files could not be downloaded" in message
     assert "0.jpg: broken; 1.jpg: broken; 2.jpg: broken" in message
     assert "3.jpg" not in message and "497 more" in message
@@ -265,3 +280,4 @@ def test_a_clean_pull_adds_nothing_to_the_import_history(world: World) -> None:
     world.sync.report = SyncReport(copied=2)
     world.use_case.run(1)
     assert world.library.imports == [1] and world.library.saved == []
+    assert world.library.run_messages == {}
