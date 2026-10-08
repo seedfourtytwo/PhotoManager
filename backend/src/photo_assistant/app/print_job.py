@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.print_layout import (
     COVER_LAYOUT,
     Layout,
@@ -34,11 +35,11 @@ from photo_assistant.ports.printing import (
 CAPTION_SEPARATOR = " · "
 
 
-class InvalidPagesError(ValueError):
+class InvalidPagesError(InvalidError):
     """Manual pages that don't fit their layouts or the album's photos."""
 
 
-class EmptyAlbumError(ValueError):
+class EmptyAlbumError(InvalidError):
     """No photos and no cover: there is nothing to print."""
 
 
@@ -76,7 +77,7 @@ class ResolutionIssue:
     level: Resolution
 
 
-class PrintBlockedError(ValueError):
+class PrintBlockedError(InvalidError):
     """At least one photo would print below the blocking resolution."""
 
     def __init__(self, issues: tuple[ResolutionIssue, ...]) -> None:
