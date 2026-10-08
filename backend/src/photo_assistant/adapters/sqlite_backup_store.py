@@ -66,28 +66,32 @@ class SqliteBackupStore(SqliteBase):
     # --- targets ---------------------------------------------------------------------------
 
     def add_target(self, target: NewBackupTarget, created_at: datetime) -> BackupTarget:
+        values = (
+            target.label,
+            target.kind.value,
+            target.repository,
+            target.password_file,
+            target.schedule,
+            target.quiet_window,
+            json.dumps(target.retention.as_dict()),
+            iso_text(created_at),
+            iso_text(created_at) if target.key_saved else None,
+        )
         try:
-            target_id = self._write(
-                """INSERT INTO backup_target (label, kind, repository, password_file, schedule,
-                       quiet_window, retention_json, created_at, key_saved_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    target.label,
-                    target.kind.value,
-                    target.repository,
-                    target.password_file,
-                    target.schedule,
-                    target.quiet_window,
-                    json.dumps(target.retention.as_dict()),
-                    iso_text(created_at),
-                    iso_text(created_at) if target.key_saved else None,
-                ),
-            )
+            # flushed to the disk: this row is the only link between a repository and the key
+            # file that opens it, and no rescan would write it again after a power cut
+            with self._db.durable() as conn:
+                target_id = conn.execute(
+                    """INSERT INTO backup_target (label, kind, repository, password_file,
+                           schedule, quiet_window, retention_json, created_at, key_saved_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    values,
+                ).lastrowid
         except sqlite3.IntegrityError as exc:
             raise BackupTargetExistsError(
                 f"a backup target named {target.label!r} already exists"
             ) from exc
-        found = self.get_target(target_id)
+        found = self.get_target(int(target_id or 0))
         assert found is not None
         return found
 
@@ -102,9 +106,11 @@ class SqliteBackupStore(SqliteBase):
         self._write("UPDATE backup_target SET enabled = ? WHERE id = ?", (int(enabled), target_id))
 
     def mark_key_saved(self, target_id: int, at: datetime) -> None:
-        self._write(
-            "UPDATE backup_target SET key_saved_at = ? WHERE id = ?", (iso_text(at), target_id)
-        )
+        with self._db.durable() as conn:  # the owner is told "noted": it must stay noted
+            conn.execute(
+                "UPDATE backup_target SET key_saved_at = ? WHERE id = ?",
+                (iso_text(at), target_id),
+            )
 
     def set_target_mirror(self, target_id: int, mirror_path: str | None) -> None:
         self._write(

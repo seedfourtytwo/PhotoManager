@@ -109,7 +109,20 @@ The SQLite adapter is one `SqliteRepository` composed of per-area mixins
 on the process's ONE `Database` (`adapters/sqlite_database.py`, B16/B26): a single writer
 connection behind a single lock for every write and transaction (transactions nest by joining
 the outer one), and a read-only WAL connection per thread for reads, so reads never wait for a
-write. A read inside a transaction uses the writer and sees its own rows. A source of any kind
+write. A read inside a transaction uses the writer and sees its own rows.
+
+**Commits are not flushed one by one.** The writer runs with `synchronous = NORMAL`: in WAL
+mode that cannot corrupt the database, and SQLite flushes the disk at checkpoints instead of
+at every commit (3.0 ms → 0.03 ms per commit, see `PERFORMANCE.md`). The price is that a power
+cut can take back the commits of the last seconds (until the operating system has written
+them out, about half a minute at most on Linux). What is lost that way comes back by itself:
+an import scans its folder again and finds the copied original by its hash, a queued job is
+queued again by its periodic task or the next scan, an upload's inbox is picked up by the
+hourly check. A change a person made in those seconds (a favourite, an album edit) has to be
+made again. Three writes that nothing would redo are flushed before they return
+(`Database.durable`): forgetting a purged photo, because its files are deleted right after;
+a new backup target, the only link between a repository and its key file; and the owner's
+confirmation that the key is kept. A source of any kind
 (folder, rclone, inbox) is created by one method, `SourceRegistry.add_source`, with the access
 the domain rule `default_source_access` gives its kind.
 

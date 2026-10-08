@@ -51,8 +51,11 @@ class TrashMixin(SqliteBase):
 
     def purge_asset(self, asset: Asset, now: datetime) -> bool:
         """One transaction: re-check the photo is still trashed, then remove its rows.
-        False when a restore got there first (nothing is changed)."""
-        with self._transaction():
+        False when a restore got there first (nothing is changed).
+
+        Flushed to the disk before it returns: the caller deletes the photo's files next, and
+        a power cut must not bring back the row of a photo whose original is gone."""
+        with self._db.durable():
             still_trashed = self._conn.execute(
                 "SELECT 1 FROM asset WHERE id = ? AND trashed_at IS NOT NULL", (asset.id,)
             ).fetchone()

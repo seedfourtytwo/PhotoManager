@@ -99,6 +99,22 @@ the look-alike row no longer scans `asset` (asserted by query plan, not re-timed
 here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
 (not measured: the synthetic library has no embeddings).
 
+## Commits without a disk flush each (`synchronous = NORMAL`)
+
+400 single-statement commits (`INSERT INTO job`) on a library database file, ext4 on NVMe,
+development machine, SQLite 3.45.1, two runs each:
+
+| ms per commit | median | mean |
+|---|---|---|
+| WAL + `synchronous = FULL` (before) | 3.00 / 3.02 | 2.86 / 3.16 |
+| WAL + `synchronous = NORMAL` (after) | **0.02 / 0.03** | 0.05 / 0.06 |
+
+An imported photo is at least 5 commits, each under the one write lock, so about 15 ms of
+waiting for the disk per photo is gone (2.5 min in 10k photos), and the other writers
+(previews recording their paths, the job queue) no longer queue behind those flushes. Not
+re-timed end to end. The trade-off and the three writes that still flush are in
+`ARCHITECTURE.md` §3.
+
 ## Import and previews (C28)
 
 209 synthetic 12 MP JPEGs (4000 × 3000; synthetic files are ~200 KB, real ones ~4 MB, so real
