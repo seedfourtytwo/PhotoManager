@@ -9,8 +9,8 @@ import json
 import math
 import sqlite3
 import struct
-from collections.abc import Collection, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Collection, Iterable, Iterator, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 
 import sqlite_vec  # type: ignore[import-untyped]
@@ -19,7 +19,7 @@ from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
-from photo_assistant.ports.ml import PersonSummary, ScoredAsset, StoredFace
+from photo_assistant.ports.ml import FaceMatches, PersonSummary, ScoredAsset, StoredFace
 
 _FACE_COLUMNS = "f.id, f.asset_id, f.box_x, f.box_y, f.box_w, f.box_h, f.score, f.person_id"
 
@@ -58,6 +58,10 @@ class SqliteMlStore:
             self._conn.execute(
                 "CREATE TEMP TABLE IF NOT EXISTS ml_candidates (asset_id INTEGER PRIMARY KEY)"
             )
+            self._conn.execute(
+                "CREATE TEMP TABLE IF NOT EXISTS ml_near_faces "
+                "(face_id INTEGER PRIMARY KEY, dim INTEGER, embedding BLOB)"
+            )
 
     def close(self) -> None:
         self._db.close()
@@ -86,9 +90,15 @@ class SqliteMlStore:
         with self._db.transaction() as conn:
             yield conn
 
-    @contextmanager
-    def _candidates(self, ids: Collection[int]) -> Iterator[None]:
+    def _candidates(self, ids: Collection[int]) -> AbstractContextManager[None]:
         """Fill the temp candidate table for one query (held under the lock)."""
+        fill = "INSERT OR IGNORE INTO temp.ml_candidates VALUES (?)"
+        return self._temp_rows("ml_candidates", fill, ((i,) for i in ids))
+
+    @contextmanager
+    def _temp_rows(
+        self, table: str, fill: str, rows: Iterable[tuple[object, ...]]
+    ) -> Iterator[None]:
         with self._lock:
             # one transaction for the fill: in autocommit every row is a transaction of its
             # own. Deferred (plain BEGIN): only the temp table is written, so a search never
@@ -97,10 +107,8 @@ class SqliteMlStore:
             if own:
                 self._conn.execute("BEGIN")
             try:
-                self._conn.execute("DELETE FROM temp.ml_candidates")
-                self._conn.executemany(
-                    "INSERT OR IGNORE INTO temp.ml_candidates VALUES (?)", ((i,) for i in ids)
-                )
+                self._conn.execute(f"DELETE FROM temp.{table}")
+                self._conn.executemany(fill, rows)
                 if own:
                     self._conn.execute("COMMIT")
             except BaseException:
@@ -110,7 +118,7 @@ class SqliteMlStore:
             try:
                 yield
             finally:
-                self._conn.execute("DELETE FROM temp.ml_candidates")
+                self._conn.execute(f"DELETE FROM temp.{table}")
 
     # --- task bookkeeping ------------------------------------------------------------------
 
@@ -217,23 +225,52 @@ class SqliteMlStore:
             params.append(asset_id)
         return [r[0] for r in self._all(sql + " ORDER BY id", params)]
 
-    _NEIGHBOURS = (
+    # LIMIT -1 keeps SQLite from merging the inner query into the outer one, which would
+    # compute the distance a second time for every match: one scan, one distance per face.
+    _MATCHES = (
+        "WITH near AS MATERIALIZED (SELECT id, person_id, d FROM ("
+        "SELECT f.id AS id, f.person_id AS person_id, "
+        "vec_distance_cosine(f.embedding, me.embedding) AS d "
         "FROM face f JOIN face me ON me.id = ? "
-        "WHERE f.model = me.model AND f.dim = me.dim AND f.id != me.id "
-        "AND vec_distance_cosine(f.embedding, me.embedding) <= ?"
+        "WHERE f.model = me.model AND f.dim = me.dim AND f.id != me.id LIMIT -1) "
+        "WHERE d <= ?) "
+        "SELECT (SELECT count(*) FROM near), (SELECT person_id FROM near "
+        "WHERE person_id IS NOT NULL ORDER BY d, id LIMIT 1)"
     )
 
-    def count_face_matches(self, face_id: int, max_distance: float, limit: int) -> int:
-        sql = f"SELECT count(*) FROM (SELECT 1 {self._NEIGHBOURS} LIMIT ?)"
-        return int(self._scalar(sql, (face_id, max_distance, limit)))
+    def face_matches(self, face_id: int, max_distance: float) -> FaceMatches:
+        (row,) = self._all(self._MATCHES, (face_id, max_distance))
+        return FaceMatches(int(row[0]), row[1])
 
-    def nearest_person(self, face_id: int, max_distance: float) -> int | None:
-        sql = (
-            f"SELECT f.person_id {self._NEIGHBOURS} AND f.person_id IS NOT NULL "
-            "ORDER BY vec_distance_cosine(f.embedding, me.embedding), f.id LIMIT 1"
+    def face_marks(self, model: str) -> dict[int, object]:
+        # created_at and the first numbers of the embedding: a face detected again can get
+        # the id of the face it replaced
+        rows = self._all(
+            "SELECT id, person_id, cluster_state, created_at, substr(embedding, 1, 16) "
+            "FROM face WHERE model = ?",
+            (model,),
         )
-        value = self._scalar(sql, (face_id, max_distance))
-        return None if value is None else int(value)
+        return {r[0]: tuple(r)[1:] for r in rows}
+
+    def deferred_faces_near(
+        self, model: str, face_ids: Collection[int], max_distance: float
+    ) -> list[int]:
+        if not face_ids:
+            return []
+        # The given faces' vectors are copied next to each other first: each deferred face
+        # is held against that small table, never against the whole face table.
+        sql = (
+            "SELECT d.id FROM face d WHERE d.model = ? AND d.cluster_state = 'deferred' "
+            "AND d.person_id IS NULL AND EXISTS (SELECT 1 FROM temp.ml_near_faces n "
+            "WHERE n.face_id != d.id AND n.dim = d.dim "
+            "AND vec_distance_cosine(n.embedding, d.embedding) <= ?) ORDER BY d.id"
+        )
+        fill = (
+            "INSERT OR IGNORE INTO temp.ml_near_faces "
+            "SELECT id, dim, embedding FROM face WHERE id = ? AND model = ?"
+        )
+        with self._temp_rows("ml_near_faces", fill, ((i, model) for i in face_ids)):
+            return [r[0] for r in self._all(sql, (model, max_distance))]
 
     def mark_deferred(self, face_id: int) -> None:
         self._write("UPDATE face SET cluster_state = 'deferred' WHERE id = ?", (face_id,))

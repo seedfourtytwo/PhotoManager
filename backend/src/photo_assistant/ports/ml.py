@@ -5,7 +5,7 @@ files are missing, calls raise ``ModelUnavailableError`` and the job handlers re
 "model missing" status instead of failing forever.
 """
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -19,6 +19,7 @@ __all__ = [
     "BoundingBox",
     "Face",
     "FaceAnalyzer",
+    "FaceMatches",
     "ImageEmbedder",
     "MlStore",
     "ModelFormatError",
@@ -99,6 +100,14 @@ class StoredFace:
 
 
 @dataclass(frozen=True, slots=True)
+class FaceMatches:
+    """What clustering asks about one face, within its reach."""
+
+    count: int  # other faces within reach
+    person_id: int | None  # the person of the nearest of them that has one
+
+
+@dataclass(frozen=True, slots=True)
 class PersonSummary:
     id: int
     name: str | None
@@ -133,8 +142,18 @@ class MlStore(Protocol):
     def faces_to_cluster(
         self, model: str, *, deferred: bool, asset_id: int | None = None
     ) -> list[int]: ...
-    def count_face_matches(self, face_id: int, max_distance: float, limit: int) -> int: ...
-    def nearest_person(self, face_id: int, max_distance: float) -> int | None: ...
+    def face_matches(self, face_id: int, max_distance: float) -> FaceMatches: ...
+    def face_marks(self, model: str) -> Mapping[int, object]:
+        """Per face of the model, a value that is different once the face was detected again,
+        placed with a person or moved on in clustering: two readings tell what changed."""
+        ...
+
+    def deferred_faces_near(
+        self, model: str, face_ids: Collection[int], max_distance: float
+    ) -> list[int]:
+        """The deferred faces with one of ``face_ids`` (other than itself) within reach."""
+        ...
+
     def mark_deferred(self, face_id: int) -> None: ...
     def mark_clustered(self, face_id: int) -> None: ...
     def assign_face(self, face_id: int, person_id: int, *, by_user: bool = False) -> None: ...
