@@ -93,7 +93,8 @@ just doctor
 ```
 
 The database is snapshotted automatically before any schema change
-(`data/db-backups/`), so an update can always be rolled back.
+(`data/db-backups/`), so an update can always be rolled back. The newest 5 of those
+copies are kept; older ones are deleted after an update that worked.
 
 ## 6. Next
 

@@ -7,6 +7,8 @@ photos in it) must upgrade in place without losing anything, after a snapshot.
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, _migrations, open_database
 from photo_assistant.domain.access import Level
 
@@ -118,6 +120,53 @@ def test_an_upgraded_library_reopens_without_a_second_snapshot(tmp_path: Path) -
     open_database(db, backup_dir=tmp_path / "backups").close()
     open_database(db, backup_dir=tmp_path / "backups").close()
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
+
+
+def _old_snapshots(folder: Path) -> list[str]:
+    """Seven pre-migration copies from earlier upgrades (oldest first), and a file of the
+    user's own in the same folder."""
+    folder.mkdir()
+    names = [f"library-v{v}-202501{v:02d}T120000000000.db" for v in range(8, 15)]
+    for name in names:
+        (folder / name).write_bytes(b"old copy")
+    (folder / "my-own-copy.db").write_bytes(b"not ours")
+    (folder / "library-v9-notes.txt").write_text("not a snapshot")
+    return names
+
+
+def test_only_the_newest_five_pre_migration_copies_are_kept(tmp_path: Path) -> None:
+    """Nothing ever deleted them: one copy of the whole database per upgrade, for ever."""
+    backups = tmp_path / "backups"
+    old = _old_snapshots(backups)
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+
+    open_database(db, backup_dir=backups).close()
+
+    (new,) = [p.name for p in backups.glob("library-v3-*.db")] or [""]
+    kept = sorted(p.name for p in backups.iterdir())
+    assert kept == sorted([*old[3:], new, "my-own-copy.db", "library-v9-notes.txt"])
+    # newest by when it was made: as text, v10 to v14 sort before v8 and v9
+    assert "library-v9-20250109T120000000000.db" not in kept
+
+
+def test_no_copy_is_deleted_when_the_migration_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from photo_assistant.adapters import sqlite_database
+
+    backups = tmp_path / "backups"
+    old = _old_snapshots(backups)
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+    broken = [*_migrations(), (_latest() + 1, "INSERT INTO no_such_table VALUES (1);")]
+    monkeypatch.setattr(sqlite_database, "migrations", lambda: broken)
+
+    with pytest.raises(sqlite3.OperationalError):
+        open_database(db, backup_dir=backups)
+
+    assert {p.name for p in backups.glob("library-v*.db")} >= set(old), "all still there"
+    assert len(list(backups.glob("library-v3-*.db"))) == 1, "and the copy made just before"
 
 
 def _make_v16_library(db: Path) -> None:
