@@ -35,8 +35,9 @@
 
 	/** No selection outgrows what one action may carry (the trash itself loads whole). */
 	function select(next: Selection) {
-		selection = limitSelection(next);
-		if (selection !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+		const kept = limitSelection(next);
+		if (kept !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+		selection = kept;
 	}
 
 	async function load() {

@@ -393,6 +393,13 @@ test('library: “select” says how many it takes while more photos are still t
 	await expect(page.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
 });
 
+test('selecting a few photos says nothing about the 10,000 limit', async ({ page }) => {
+	await signIn(page);
+	await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+	await expect(page.getByText(/\d+ selected/)).toBeVisible();
+	await expect(page.getByText(/the most one action can change/)).toHaveCount(0);
+});
+
 test('a link to an old photo opens it at once, not after paging through the library', async ({
 	page
 }) => {

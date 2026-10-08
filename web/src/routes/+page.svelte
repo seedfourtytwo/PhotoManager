@@ -113,8 +113,9 @@
 
 	/** Every way of selecting ends here, so no selection outgrows what one action may carry. */
 	function select(next: Selection) {
-		selection = limitSelection(next);
-		if (selection !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+		const kept = limitSelection(next);
+		if (kept !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
+		selection = kept;
 	}
 
 	function toggle(id: Id, range: boolean) {
