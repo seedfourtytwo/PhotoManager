@@ -1,12 +1,14 @@
 """Headless bootstrap: create the first admin from the command line."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from photo_assistant import __main__ as cli
 from photo_assistant.api.settings import get_settings
-from photo_assistant.domain.access import Role
+from photo_assistant.app.accounts import AccountLockedError
+from photo_assistant.domain.access import LOCK_AFTER_FAILED_PINS, Role
 
 PIN = "1234"
 
@@ -66,6 +68,33 @@ def test_set_pin_gives_an_account_a_new_pin_without_a_session(
     assert "4 digits" in capsys.readouterr().err
     assert cli.main(["set-pin", "nobody"]) == 2
     assert "no such user" in capsys.readouterr().err
+
+
+def test_set_pin_unlocks_an_account_locked_by_wrong_pins(
+    data_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The way back in for an only admin who is locked out: nobody else can unlock them."""
+    answers = iter([PIN, PIN, "5678", "5678"])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+    assert cli.main(["create-user", "c", "--role", "admin"]) == 0
+    services = cli.build_services(get_settings())
+    try:
+        clock = services.clock.now()
+        for n in range(LOCK_AFTER_FAILED_PINS):  # spread out: never ten in one 15-minute window
+            at = clock - timedelta(hours=LOCK_AFTER_FAILED_PINS - n)
+            assert services.repo.record_login_attempt("c", "10.0.0.1", at, at).allowed
+        with pytest.raises(AccountLockedError):
+            services.accounts.login("c", PIN, "127.0.0.1")
+    finally:
+        services.close()
+    assert cli.main(["set-pin", "c"]) == 0
+    assert "unlocked" in capsys.readouterr().out
+    services = cli.build_services(get_settings())
+    try:
+        user, _ = services.accounts.login("c", "5678", "127.0.0.1")
+        assert not user.locked
+    finally:
+        services.close()
 
 
 # --- ops commands are subcommands of the main CLI (docs/wiring/ops.md) -----------------------
@@ -141,6 +170,53 @@ def test_backup_settings_come_from_the_main_settings(
     monkeypatch.setenv("PA_RESTIC_BINARY", "/nowhere/restic")
     get_settings.cache_clear()
     assert get_settings().ops.restic_binary == "/nowhere/restic"
+
+
+def _source_owners() -> list[int | None]:
+    services = cli.build_services(get_settings())
+    try:
+        return [s.owner_id for s in services.repo.list_sources()]
+    finally:
+        services.close()
+
+
+def _admin_id(monkeypatch: pytest.MonkeyPatch, username: str = "c") -> int:
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": PIN)
+    assert cli.main(["create-user", username, "--role", "admin"]) == 0
+    services = cli.build_services(get_settings())
+    try:
+        found = services.repo.find_user_by_username(username)
+        assert found is not None
+        return found[0].id
+    finally:
+        services.close()
+
+
+def test_a_folder_imported_from_the_command_line_belongs_to_the_first_admin(
+    data_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nobody is logged in on the command line; an ownerless source would make "private"
+    hide nothing, so it goes to the first admin, as the upgrade does for old sources."""
+    from tests.synthetic import write_photo
+
+    admin = _admin_id(monkeypatch)
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics")]) == 0
+    assert _source_owners() == [admin]
+
+
+def test_folders_imported_before_the_first_admin_exists_go_to_that_admin(
+    data_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.synthetic import write_photo
+
+    write_photo(tmp_path / "pics" / "a.jpg", seed=1)
+    assert cli.main(["import", str(tmp_path / "pics")]) == 0
+    assert _source_owners() == [None], "no account yet: nobody to give it to"
+    admin = _admin_id(monkeypatch)
+    assert _source_owners() == [admin]
+    _admin_id(monkeypatch, "second")
+    assert _source_owners() == [admin], "a later admin takes nothing over"
 
 
 def test_ml_backfill_reports_missing_models(

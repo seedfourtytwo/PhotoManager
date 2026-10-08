@@ -10,8 +10,9 @@ from datetime import datetime, timedelta
 from enum import IntEnum, StrEnum
 
 PIN_LENGTH = 4
-MAX_FAILED_LOGINS = 10
+MAX_FAILED_LOGINS = 10  # wrong PINs for one account, from any address, within the window
 FAILED_LOGIN_WINDOW = timedelta(minutes=15)
+LOCK_AFTER_FAILED_PINS = 30  # wrong PINs since the account's last good sign-in, however slow
 SESSION_IDLE_LIMIT = timedelta(days=30)
 
 _USERNAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -56,6 +57,9 @@ class User:
     display_name: str
     role: Role
     disabled: bool = False
+    # Thirty wrong PINs: no sign-in until an admin or a new PIN lifts it. In the list an admin
+    # manages, also true during the 15-minute wait after ten (Unlock lifts both).
+    locked: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,3 +130,9 @@ def session_expired(last_seen: datetime, now: datetime) -> bool:
 
 def too_many_failures(recent_failures: int) -> bool:
     return recent_failures >= MAX_FAILED_LOGINS
+
+
+def locks_account(failures_since_last_login: int) -> bool:
+    """The hard stop: a 4-digit PIN has 10,000 values, and the 15-minute wait alone lets a
+    patient guesser through all of them in days. Thirty in a row ends the guessing."""
+    return failures_since_last_login >= LOCK_AFTER_FAILED_PINS

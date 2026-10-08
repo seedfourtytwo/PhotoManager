@@ -1,4 +1,4 @@
-"""Album → print (docs/wiring/print.md): options, page plan, PDF and one-page previews.
+"""Album → print (docs/contracts/api-v1.md): options, page plan, PDF and one-page previews.
 
 Printing puts full-resolution pixels into a file, so it needs ``download`` on every photo of
 the album you can see (the same rule as the ZIP export); photos hidden from you are left out,

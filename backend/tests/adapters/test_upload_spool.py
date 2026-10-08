@@ -1,3 +1,5 @@
+import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -69,3 +71,19 @@ def test_leftovers_from_a_crash_are_swept_by_the_library_store(tmp_path: Path) -
     writer.write(b"received, but the server stopped before moving it")
     writer.finish()
     assert DiskLibraryStore(tmp_path / "data").sweep_tmp() == 1
+
+
+def test_the_newest_arrival_is_when_a_file_got_there_not_the_date_it_carries(
+    tmp_path: Path,
+) -> None:
+    spool = DiskUploadSpool(tmp_path / "tmp")
+    inbox = tmp_path / "inbox"
+    assert spool.newest_arrival(inbox) is None, "no folder yet"
+    (inbox / "2026-10").mkdir(parents=True)
+    assert spool.newest_arrival(inbox) is None, "folders are not files"
+    before = datetime.now(UTC) - timedelta(seconds=2)
+    photo = inbox / "2026-10" / "old.jpg"
+    photo.write_bytes(b"x")
+    os.utime(photo, (0, 0))  # a photo from 1970, put here just now
+    arrived = spool.newest_arrival(inbox)
+    assert arrived is not None and before <= arrived <= datetime.now(UTC) + timedelta(seconds=2)

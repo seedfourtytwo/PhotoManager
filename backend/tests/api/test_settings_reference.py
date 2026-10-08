@@ -44,20 +44,29 @@ def test_defaults_are_written_the_same_on_every_machine() -> None:
     assert "| `PA_BACKUP_ENABLED` | `true` |" in text
 
 
-def test_a_setting_without_a_meaning_stops_the_script(monkeypatch: pytest.MonkeyPatch) -> None:
-    meanings = dict(ref.MEANINGS)
-    del meanings["PA_WORKER_ENABLED"]
-    monkeypatch.setattr(ref, "MEANINGS", meanings)
-    with pytest.raises(SystemExit, match="PA_WORKER_ENABLED"):
-        ref.rows()
-
-
-def test_a_meaning_for_a_setting_that_is_gone_stops_the_script(
+def test_a_setting_without_a_description_stops_the_script(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(ref, "MEANINGS", ref.MEANINGS | {"PA_REMOVED_LONG_AGO": "…"})
-    with pytest.raises(SystemExit, match="PA_REMOVED_LONG_AGO"):
-        ref.rows()
+    for model, field, name in (
+        (Settings, "worker_enabled", "PA_WORKER_ENABLED"),
+        (MlSettings, "clip_model", "PA_ML_CLIP_MODEL"),
+    ):
+        with monkeypatch.context() as patch:
+            patch.setattr(model.model_fields[field], "description", None)
+            with pytest.raises(SystemExit, match=name):
+                ref.rows()
+    with monkeypatch.context() as patch:
+        patch.setattr(OpsSettings.model_fields["restic_binary"], "description", "  ")
+        with pytest.raises(SystemExit, match="PA_RESTIC_BINARY"):
+            ref.rows()
+
+
+def test_the_meanings_live_on_the_fields_themselves() -> None:
+    """One place per setting: its type, its default and what it does."""
+    assert not hasattr(ref, "MEANINGS")
+    described = Settings.model_fields["port"].description
+    assert described == "Port the server listens on."
+    assert f"| `PA_PORT` | `8420` | {described} |" in ref.render()
 
 
 def test_check_mode_reports_a_stale_file(

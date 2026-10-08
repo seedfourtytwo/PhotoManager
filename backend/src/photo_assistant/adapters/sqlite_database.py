@@ -11,9 +11,11 @@
 Migrations are numbered ``.sql`` files in ``migrations/``; ``PRAGMA user_version`` records the
 last one applied. Before migrating an existing database, a consistent snapshot is written with
 SQLite's online backup API (FEATURES 11.6); after migrating, ``ANALYZE`` refreshes the query
-planner's statistics.
+planner's statistics and all but the newest few of those snapshots are deleted.
 """
 
+import logging
+import re
 import sqlite3
 import threading
 import weakref
@@ -23,6 +25,11 @@ from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from types import TracebackType
+
+log = logging.getLogger(__name__)
+
+SNAPSHOTS_KEPT = 5  # pre-migration copies of the database; each is as big as the database
+_SNAPSHOT_NAME = re.compile(r"library-v\d+-(\d{8}T\d{12})\.db")
 
 
 def migrations() -> list[tuple[int, str]]:
@@ -50,6 +57,22 @@ def _snapshot(conn: sqlite3.Connection, backup_dir: Path, version: int) -> None:
     target.close()
 
 
+def _prune_snapshots(backup_dir: Path) -> None:
+    """Delete all but the newest ``SNAPSHOTS_KEPT`` snapshots: only files named the way
+    ``_snapshot`` names them, newest by the time in the name (not by version: as text, v10
+    sorts before v9)."""
+    ours = sorted(
+        (found.group(1), entry)
+        for entry in backup_dir.iterdir()
+        if (found := _SNAPSHOT_NAME.fullmatch(entry.name))
+    )
+    for _, old in ours[:-SNAPSHOTS_KEPT]:
+        try:
+            old.unlink()
+        except OSError as exc:  # an old copy that stays is no reason not to start
+            log.warning("could not delete an old database snapshot: %s", exc)
+
+
 def open_database(path: str | Path, backup_dir: Path | None = None) -> sqlite3.Connection:
     """Open (creating if needed) and migrate. ``":memory:"`` is fine for tests."""
     is_file = str(path) != ":memory:"
@@ -71,12 +94,15 @@ def open_database(path: str | Path, backup_dir: Path | None = None) -> sqlite3.C
             "this library. Update Photo Assistant and start it again; nothing was changed."
         )
     pending = [(n, sql) for n, sql in known if n > current]
-    if pending and existed and backup_dir is not None:
-        _snapshot(conn, backup_dir, current)
+    snapshot_dir = backup_dir if pending and existed else None
+    if snapshot_dir is not None:
+        _snapshot(conn, snapshot_dir, current)
     for number, sql in pending:
         conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {number};\nCOMMIT;")
     if pending:
         conn.execute("ANALYZE")  # fresh statistics for the planner after schema changes
+    if snapshot_dir is not None:  # only once the migration it guards has worked
+        _prune_snapshots(snapshot_dir)
     return conn
 
 

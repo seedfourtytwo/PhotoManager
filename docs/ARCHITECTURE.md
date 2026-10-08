@@ -50,14 +50,16 @@ Built (numbered SQL migrations in `adapters/migrations/`; see TECH_DECISIONS). M
 faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, foreign keys on
 `inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
-`taken_at` and the removal of degenerate crops. `ANALYZE` runs after migrating, `PRAGMA
+`taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
+admin (see Visibility in §7). `ANALYZE` runs after migrating, `PRAGMA
 optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
-     disabled, created_at)
+     disabled, created_at,
+     failed_pins, locked_at)        -- wrong PINs since the last good sign-in; 30 → locked (0024)
 session(token_hash PK sha256, user_id, created_at, last_seen_at)      -- 30 days idle
-login_failure(username, ip, at)                                       -- 10 per 15 min → 429
+login_failure(username, ip, at)       -- 10 per account in 15 min → 429; pruned after a day
 
 source(id, kind, label, root, enabled, owner_id, created_at)
 source_access(source_id, user_id NULL=everyone, level 1 view|2 download|3 edit)
@@ -79,7 +81,8 @@ edit_recipe(asset_id PK, recipe_json, updated_by, updated_at)         -- one per
 date_change(id, asset_id, old_taken_at, old_tz_offset_min, old_date_source, new_taken_at,
             changed_by, changed_at)
 purged_hash(content_hash PK, purged_at)                               -- never re-imported
-import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …)
+import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …,
+    run_after, claimed_by, claimed_at)          -- 0022: retry time, owner and lease
 inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0014, FK 0017
 device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
        created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
@@ -121,7 +124,8 @@ the domain rule `default_source_access` gives its kind.
    → check free disk → copy (not move) into `originals/`, verify the hash, make it read-only →
    create the `asset`.
 4. Enqueue `preview` (M1); later `embed`, `faces`, `geocode`, `phash` jobs.
-5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun.
+5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun
+   ("Jobs and lanes" below: retries wait, running jobs have an owner).
 
 ### Multiple sources
 Each `source` row is scanned independently (local path, or an rclone remote pulled read-only
@@ -171,8 +175,11 @@ after a failed one; a failed proof or an unconfirmed key raises the banner.
 ### Phone inbox
 `data/inbox/<user id>/` is each user's inbox: a normal `source`, private to its owner by
 default. Files only arrive through the upload API below (there is no WebDAV share and no file
-watcher); each upload request queues one import of that inbox. Files stay in the inbox after
-import. Not built: clearing old inbox files.
+watcher); each upload request queues one import of that inbox. A safety net runs every hour
+for a file whose request died before that: it queues an import only for an inbox that got a
+file since its last import started (or whose last import did not finish), so an unchanged
+inbox adds nothing to the import history. Files stay in the inbox after import. Not built:
+clearing old inbox files.
 
 ### Phone upload
 The client asks `POST /api/upload/check {hashes}` which ones this user lacks, then sends them
@@ -218,8 +225,39 @@ claims only its kinds, atomically, so a backup or a big import never starves pre
 uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering,
 and a `scan_source` for each source whose automatic re-check is due: `app/recheck.py`, rule in
 `domain/recheck.py`) or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
-Domain errors (`domain/errors.py`) fail a job without retries; anything else is retried 3×.
 ML jobs are planned only when their model files are installed.
+
+**Retries wait (0022).** Domain errors (`domain/errors.py`) fail a job at once, without
+retries. Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
+minute after the first failure, 5 after the second (`domain/job_queue.RETRY_DELAYS`; a third
+entry, 25 minutes, applies if `max_attempts` is ever raised). A claim skips jobs whose time has
+not come, so a network blip, a locked backup repository or an unplugged disk has ~6 minutes to
+pass before the job fails for good, instead of ~3 seconds. "Retry" on the admin screen clears
+the wait and the attempts: the job runs at the next poll. `run_until_idle` (CLI import, tests)
+returns once nothing is *due*; a waiting retry stays queued for the server's worker.
+`GET /api/jobs` rows carry `run_after`; `GET /api/stats` counts those jobs as `waiting`, apart
+from `queued`, so screens that wait for "nothing queued or running" do not sit through it.
+
+**Every process owns what it runs (0022).** The server and CLI commands share the table. Each
+process claims under an owner id made at its start (`server-<pid>-<random>`, `cli-…`) and the
+claim records `claimed_by` and `claimed_at`. While a handler runs, a small thread renews
+`claimed_at` every 30 s (`HEARTBEAT_INTERVAL`) — independent of the job, so a backup of hours
+stays fresh as long as its process lives. A running job whose claim is older than 5 minutes
+(`CLAIM_STALE_AFTER`, ten missed heartbeats) belonged to a process that died:
+`app.worker.StaleJobSweep` queues it again at server start and every minute from the periodic
+thread. A fresh claim is never touched, whoever owns it, so a server start no longer restarts
+the previews a running `import` command is working on; and a killed CLI command's job is
+picked up after at most ~6 minutes without a server restart. The interrupted run stays counted
+in `attempts`: a job that kills every process running it is failed, not run, once its attempts
+are used up (the crash-loop guard). Two consequences to know: after a crash the server waits
+those ~5 minutes before rerunning what it was doing, and after the machine slept (every claim
+looks old, also live ones) the first sweep changes nothing — heartbeats come within 30 s and
+the next sweep decides.
+
+**Indexes (0022).** `job_waiting (kind, id) WHERE status = 'queued'` holds only waiting jobs:
+each lane's poll and `enqueue_once` seek to their own kinds instead of walking the 10k previews
+queued by an import. `asset_by_variant_of` serves the purge's variant lookup and the foreign-key
+check on every `DELETE FROM asset`.
 
 ## 5. Performance budget (10k photos on the laptop)
 
@@ -259,9 +297,16 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
 - One import at a time per library (OS file lock), each photo recorded in one transaction,
   jobs claimed atomically, so CLI + server can't corrupt each other.
 - Login: pick your account, type its 4-digit PIN (stored as an argon2id hash in
-  `user.password_hash`; the column keeps its old name). Ten wrong tries lock that account from
-  that address for 15 minutes. A PIN is only as strong as that lock, so the app stays on the
-  home network or Tailscale, never public. Sessions: HTTP-only, SameSite=strict cookies.
+  `user.password_hash`; the column keeps its old name). Wrong PINs are counted per account,
+  from all addresses together: ten within 15 minutes make that account wait out the window
+  (`429`), and thirty since its last good sign-in lock it (`423`) until an admin unlocks it or
+  it gets a new PIN (People → Reset PIN, or `just set-pin` on the server, which is the way back
+  for an only admin). The lock is on the user row, so a restart or the daily pruning of
+  `login_failure` does not lift it. A try is counted in one transaction before the PIN is
+  checked, so parallel guesses queue. A PIN is only as strong as these limits, so the app stays
+  on the home network or Tailscale, never public. Anyone who can reach the sign-in screen can
+  lock an account on purpose; that is the price of the limit. Sessions: HTTP-only,
+  SameSite=strict cookies.
 - Source credentials live in rclone's own encrypted config, never in `library.db`.
 - AI calls only go to the configured base URL; each request is logged in `ai_log`.
 - **Visibility is one function in the repository layer:** `visibility(viewer)` in
@@ -270,7 +315,12 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   user (or everyone) a level, a source the user owns (edit), or an album the user owns or is a
   member of (always `view`: download and edit only ever come from sources); admins have edit
   through every source. A private photo only counts grants through sources its marker
-  (`private_by`) does not own — the marker keeps all of theirs, albums never reach it. Guests
+  (`private_by`) does not own — the marker keeps all of theirs, albums never reach it. That
+  comparison needs an owner on the source, so every source has one: a folder or cloud (rclone,
+  Proton Drive) source belongs to the admin who adds it, an upload inbox to its user, a folder
+  imported from the command line to the first admin; migration `0023` gave the ownerless
+  cloud sources of older libraries to the first admin. Only a library with no account yet
+  has ownerless sources, and the first-run setup hands them to the first admin. Guests
   are capped at download. The condition is correlated `EXISTS` per photo (C25), so a timeline
   page stops at its `LIMIT` on the timeline index; admins get a cheaper check (only someone
   else's private photos need a look). Timeline, facets, calendar, map, albums, detail, images,

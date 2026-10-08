@@ -1,7 +1,8 @@
 # Wiring the ops branch (feat/ops) into main
 
 > **Historical integration record.** This page describes how a branch was wired in and is not
-> kept up to date: file, class and migration names in it may be stale. For the settings see
+> kept up to date: file, class and migration names in it may be stale, and `app.state.ops`
+> no longer exists (routes reach everything through `app.state.services`). For the settings see
 > [`docs/guides/settings.md`](../guides/settings.md); for how the app is built today see
 > [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
 
@@ -78,7 +79,7 @@ def build_services(settings: Settings) -> Services:
 ## 4. Startup (`api/main.py` lifespan)
 
 ```python
-services.repo.recover_interrupted_jobs()
+services.stale_jobs.run()   # requeues jobs whose process died (stale claim), see ARCHITECTURE
 if settings.worker_enabled:
     services.worker.start()
     services.ops.start()      # marks crashed backup runs failed, starts the periodic thread

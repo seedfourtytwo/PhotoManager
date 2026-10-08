@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -28,6 +28,15 @@ class FixedClock:
 class FakeLibrary:
     known: dict[str, int] = field(default_factory=dict)
     jobs: list[tuple[str, dict[str, object]]] = field(default_factory=list)
+    runs: dict[int, tuple[str, datetime]] = field(default_factory=dict)  # newest per source
+
+    def list_import_runs(
+        self, source_id: int | None = None, limit: int = 200
+    ) -> list[dict[str, object]]:
+        if source_id not in self.runs:
+            return []
+        status, started = self.runs[source_id]
+        return [{"status": status, "started_at": started.isoformat()}]
 
     def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
         return {h: self.known[h] for h in hashes if h in self.known}
@@ -158,9 +167,44 @@ def test_rescans_never_pile_up_and_only_touch_enabled_inboxes(world: World) -> N
         Source(2, "Phone", "/staging/2", kind="rclone", owner_id=7),
     ]
     world.inboxes.sources[7] = sources[0]
+    world.use_case.accept(ME, "stranded.jpg", _spooled(world, JPEG))
     assert world.use_case.rescan(sources, queue.enqueue_once) == 1
     assert world.use_case.rescan(sources, queue.enqueue_once) == 0, "one is already waiting"
     assert queue.waiting == [("scan_source", {"source_id": 107})]
+
+
+def _rescan(world: World) -> int:
+    return world.use_case.rescan(list(world.inboxes.sources.values()), OnceQueue().enqueue_once)
+
+
+def test_the_rescan_leaves_an_inbox_alone_once_an_import_has_looked_at_its_files(
+    world: World,
+) -> None:
+    """It runs every hour; a scan each time meant about 24 "nothing new" import reports per
+    inbox per day. Files stay in the inbox after import, so "not empty" is not the test."""
+    world.use_case.accept(ME, "a.jpg", _spooled(world, JPEG))
+    assert _rescan(world) == 1, "no import has run yet"
+    world.library.runs[107] = ("done", datetime.now(UTC) + timedelta(seconds=5))
+    assert _rescan(world) == 0, "the last import started after the newest file arrived"
+
+
+def test_the_rescan_picks_up_a_file_that_arrived_after_the_last_import_started(
+    world: World,
+) -> None:
+    world.library.runs[107] = ("done", datetime.now(UTC) - timedelta(hours=1))
+    world.inboxes.ensure_inbox_source(7, str(world.inbox_root / "7"))
+    assert _rescan(world) == 0, "an empty inbox has nothing waiting"
+    world.use_case.accept(ME, "stranded.jpg", _spooled(world, JPEG))
+    assert _rescan(world) == 1
+
+
+@pytest.mark.parametrize("status", ["failed", "paused_low_disk"])
+def test_the_rescan_tries_again_after_an_import_that_did_not_finish(
+    world: World, status: str
+) -> None:
+    world.use_case.accept(ME, "a.jpg", _spooled(world, JPEG))
+    world.library.runs[107] = (status, datetime.now(UTC) + timedelta(seconds=5))
+    assert _rescan(world) == 1
 
 
 def test_a_rescan_follows_a_moved_data_root(world: World) -> None:

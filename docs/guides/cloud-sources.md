@@ -1,8 +1,10 @@
 # Adding cloud and network folders as photo sources
 
 Photo Assistant can bring in photos from MEGA, Proton Drive, your home server (SFTP) or a NAS
-(SMB). It uses a free tool called **rclone** to *copy* photos from there onto the machine that
-runs Photo Assistant, then imports them like any local folder.
+(SMB). It *copies* photos from there onto the machine that runs Photo Assistant, then imports
+them like any local folder. For MEGA, SFTP and SMB it uses a free tool called **rclone**; for
+Proton Drive it uses Proton's own tool, `proton-drive` (see [Proton Drive](#proton-drive)
+below, which has its own, shorter steps).
 
 What it will and won't do:
 
@@ -12,10 +14,14 @@ What it will and won't do:
 - Copies land in `PhotoAssistant/data/staging/<number>/`. Photos you later delete in the cloud
   stay in Photo Assistant. Photos you edit in the cloud come in again as a new version; the
   old one is kept.
-- Your password is stored by rclone on this machine, never by Photo Assistant.
+- Your password is stored by rclone on this machine, never by Photo Assistant. For Proton
+  Drive no password is stored at all: you sign in once in a browser.
+- A cloud source belongs to the admin who adds it, exactly like a folder source: everyone can
+  see its photos unless you change who may see the source, and a photo you mark **private**
+  is hidden from the others.
 
-Every source follows the same three steps: **install rclone → connect the account in rclone →
-add it in Photo Assistant.**
+Every rclone source follows the same three steps: **install rclone → connect the account in
+rclone → add it in Photo Assistant.**
 
 ---
 
@@ -28,8 +34,7 @@ sudo -v ; curl https://rclone.org/install.sh | sudo bash
 rclone version
 ```
 
-The version must be **1.64 or newer** for Proton Drive (Ubuntu's own `apt install rclone`
-package is older and has no Proton support). Any recent version works for the others.
+Any recent version works. (Proton Drive does not use rclone: see its own section.)
 
 Optional but recommended: protect rclone's saved passwords with a password of their own.
 Run `rclone config`, choose `s) Set configuration password`, and put the same password in
@@ -53,34 +58,6 @@ Assistant is set up to go slowly (about 4 requests a second, 2 files at a time) 
 tell you, rather than retry, if MEGA says "slow down". Just try again an hour later. If your
 MEGA account uses two-factor login, check `rclone help backend mega` for your rclone
 version: older versions cannot log in to accounts with two-factor login switched on.
-
-### Proton Drive (beta — read this first)
-
-rclone's Proton Drive support is a **beta**. It can read your normal Proton Drive folders
-("My files"), but **it cannot see the Photos section** yet — the place where the Proton
-iPhone app's automatic photo backup puts pictures. So:
-
-- Photos you (or your partner) put in a normal Proton Drive folder: works, set up below.
-- Photos that only exist in Proton's **Photos** section: use one of these workarounds:
-  1. **Best for a phone:** set up the free iPhone Shortcut
-     ([iphone-shortcut.md](iphone-shortcut.md)) on that phone so new photos go straight to
-     Photo Assistant — no Proton step at all.
-  2. **For photos already in Proton Photos:** on a computer, open Proton Drive (web or desktop
-     app), select the photos in *Photos*, **Download** them to a folder, and add that folder to
-     Photo Assistant as an ordinary folder source. Repeat now and then.
-  We'll switch to reading Proton Photos directly once rclone or Proton supports it.
-
-Setup for normal folders:
-
-1. `rclone config` → `n` → name: `proton`
-2. Storage type: `protondrive`
-3. Enter your Proton username (email) and password. If you use two-factor login, enter the
-   6-digit code when asked. If you use Proton's "two-password mode", enter the mailbox
-   password too.
-4. Check: `rclone lsf proton: --max-depth 1`
-
-Proton sometimes asks you to log in again. If Photo Assistant says the login was refused,
-run `rclone config reconnect proton:` and enter a fresh code.
 
 ### Home server over SFTP (SSH)
 
@@ -126,9 +103,82 @@ the cloud folder, and photos removed there stay in the library.
 `POST /api/remote-sources {"label": "...", "remote": "mega", "path": "Camera Uploads"}` and
 then `POST /api/remote-sources/<id>/pull`.)
 
-## When something goes wrong
+## Proton Drive
+
+Proton Drive does not go through rclone. Photo Assistant uses Proton's own command-line
+tool, `proton-drive`, which can read both the **Photos** section (where the Proton phone
+app's automatic backup puts pictures) and your normal folders (**My files**).
+
+What it will and won't do, on top of the list at the top of this page:
+
+- **Your Proton password is never typed into Photo Assistant and never stored by it.** You
+  sign in once in a browser, on the machine that runs Photo Assistant; Proton's tool keeps
+  that sign-in in the system keyring of your user account.
+- To bring photos in, Photo Assistant only ever runs four commands of the tool: list the
+  Photos timeline, list a folder, download photos, download files. Nothing on Proton is
+  changed, moved or deleted.
+- Photos only. Videos are left out for now.
+- Proton has no "copy only what changed" command, so Photo Assistant keeps its own list of
+  what it already fetched (a small file, `data/staging/<number>.proton.json`). If that file is
+  lost, the photos are fetched again and recognised as already in the library; nothing is
+  doubled.
+- It does not work when Photo Assistant runs in Docker (a container has no keyring to hold
+  the sign-in): see [move-to-server.md](move-to-server.md).
+
+### 1. Install Proton's tool and sign in (once)
+
+On the laptop or server that runs Photo Assistant, as the user that runs it:
+
+1. Install Proton's `proton-drive` command-line tool, version 0.9.0 or newer, following
+   Proton's own instructions. Photo Assistant looks for it on the `PATH` and in
+   `~/.local/bin`; if it lives somewhere else, set `PA_PROTON_DRIVE_BINARY` to its full path
+   (see [settings.md](settings.md)).
+2. Sign in:
+
+   ```
+   proton-drive auth login
+   ```
+
+   A browser opens; sign in to Proton there (two-factor code included, if you use one).
+
+### 2. Add it in Photo Assistant
+
+**Admin → Sources → Add from Proton.** If the machine is not signed in yet, the dialog says so
+and shows the command above; press **Check again** after signing in. Then choose what to
+bring in:
+
+- **My Proton photos**: the Photos section.
+- **Everything in my Drive**: all of My files.
+- **One folder in my Drive**: pick it in the folder list.
+
+Give it a name and press **Add and import**. Later, **Check again** on the source (or
+**Check all**) fetches what is new.
+
+Copies land in `PhotoAssistant/data/staging/<number>/` like any cloud source. Each batch is
+downloaded into a working folder beside it first and only moved in when complete, so a
+half-downloaded photo is never imported and nothing already there is overwritten.
+
+### If a Proton pull goes wrong
 
 The message appears in the source's import history.
+
+| Message says | What to do |
+|---|---|
+| "is not signed in on this machine" | The sign-in is missing or has expired: run `proton-drive auth login` again, then **Check again**. |
+| "proton-drive) is not installed on this machine" | Do step 1, or set `PA_PROTON_DRIVE_BINARY`. |
+| "folder … not found on Proton Drive" | The folder was renamed or removed on Proton. Add the source again for the new place. |
+| "N files could not be downloaded … (what did arrive was imported)" | Some photos failed this time. **Check again**: only the missing ones are fetched. |
+| "took too long and was stopped" | Press **Check again**: photos already pulled are kept. |
+| "the disk holding … is full" | Free some space on this machine, then **Check again**. |
+
+### A copy of a backup on Proton Drive
+
+That is a different feature (it *writes* to a folder you choose on Proton): see
+[backups.md, section 7](backups.md#7-a-copy-on-proton-drive-off-site).
+
+## When something goes wrong
+
+For rclone sources (MEGA, SFTP, SMB). The message appears in the source's import history.
 
 | Message says | What to do |
 |---|---|

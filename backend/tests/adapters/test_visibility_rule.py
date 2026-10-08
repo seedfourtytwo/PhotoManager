@@ -55,6 +55,8 @@ def _people_and_sources(rng: random.Random, sql, users: list[int], sources: list
     for sid in sources:
         sql(
             "INSERT INTO source (id, label, root, owner_id) VALUES (?, ?, ?, ?)",
+            # None still exists: a library imported before its first account (0023 leaves
+            # those; the setup assigns them), so the rule must keep handling it
             (sid, f"s{sid}", f"/s{sid}", rng.choice([None, *users])),
         )
         if rng.random() < 0.5:

@@ -39,7 +39,8 @@ def choose_providers(preference: str, available: Sequence[str] | None = None) ->
     if preference == "cuda":
         raise ModelUnavailableError(
             "CUDA was requested but this onnxruntime has no CUDAExecutionProvider: "
-            "install onnxruntime-gpu (see docs/wiring/ml.md) or set PA_ML_PROVIDER=cpu"
+            "install onnxruntime-gpu, or set PA_ML_PROVIDER=cpu (docs/guides/settings.md; "
+            "installing the models: docs/guides/deploy-laptop.md)"
         )
     return [CPU]
 

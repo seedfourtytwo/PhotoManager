@@ -637,3 +637,15 @@ test('backups: keep a copy on Proton Drive in a folder made on the spot, then st
 	await dialog.getByRole('button', { name: 'Stop copying' }).click();
 	await expect(row.getByText(/Proton copy/)).toHaveCount(0);
 });
+
+test('a finished import that left files behind says so in the folder’s row', async ({ page }) => {
+	const note = '2 files could not be downloaded from “MEGA” (what did arrive was imported)';
+	await page.route('**/api/imports', async (route) => {
+		const response = await route.fetch();
+		const runs = await response.json();
+		runs[0] = { ...runs[0], status: 'done', message: note };
+		await route.fulfill({ response, json: runs });
+	});
+	await signIn(page, '/admin');
+	await expect(page.getByText(note)).toBeVisible();
+});

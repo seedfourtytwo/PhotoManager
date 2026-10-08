@@ -174,10 +174,28 @@ def test_names_proton_could_not_decrypt_are_counted_not_guessed(cloud: Cloud) ->
 
 
 def test_folder_names_cannot_escape_the_staging_folder(cloud: Cloud) -> None:
-    cloud.folder("/my-files/X", {"type": "folder", "uid": "s", "name": ".."})
-    cloud.folder("/my-files/X/..", cloud.image("f1", "a.jpg"))
-    cloud.pull(RemoteConfig.proton("/my-files/X"))
-    assert cloud.staged() == ["_/a.jpg"]
+    """A folder called ``..`` or ``.`` is not walked at all: as a part of the path handed to
+    the tool it would mean the parent (leaving the chosen folder, or walking in circles) or
+    the folder itself. It is counted as a problem. Any other odd name is walked and lands
+    under a safe name inside staging."""
+    cloud.folder(
+        "/my-files/X",
+        {"type": "folder", "uid": "up", "name": ".."},
+        {"type": "folder", "uid": "here", "name": "."},
+        {"type": "folder", "uid": "dots", "name": "..."},
+        cloud.image("f0", "top.jpg"),
+    )
+    cloud.folder("/my-files/X/..", cloud.image("f1", "outside.jpg"))
+    cloud.folder("/my-files/X/.", cloud.image("f2", "again.jpg"))
+    cloud.folder("/my-files/X/...", cloud.image("f3", "a.jpg"))
+    report = cloud.pull(RemoteConfig.proton("/my-files/X"))
+    assert (report.copied, report.errors) == (2, 2)
+    assert all("could not be read" in message for message in report.error_messages)
+    assert cloud.staged() == ["_/a.jpg", "top.jpg"]
+    everything = {p.name for p in cloud.staging.parent.rglob("*.jpg")}
+    assert everything == {"a.jpg", "top.jpg"}, "nothing landed beside staging either"
+    asked = [part for call in cloud.calls() for arg in call for part in arg.split("/")]
+    assert ".." not in asked and "." not in asked, "the tool is never handed such a path"
 
 
 # --- when it can't --------------------------------------------------------------------------------

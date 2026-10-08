@@ -217,6 +217,7 @@
 							{run.summary.skipped} skipped{/if}{#if run.finished_at}&nbsp;· checked {formatWhen(
 								run.finished_at
 							)}{/if}
+						{#if run.message}&nbsp;· <span class="problem">{run.message}</span>{/if}
 					{/if}
 				</div>
 				<div class="auto quiet small">

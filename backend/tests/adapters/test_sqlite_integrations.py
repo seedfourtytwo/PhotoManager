@@ -50,7 +50,7 @@ def test_remote_sources_live_in_staging_and_keep_only_the_remote_name(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     store = SqliteRemoteSources(conn)
-    source_id = store.add_remote_source("MEGA", RemoteConfig("mega", "Photos"), tmp_path)
+    source_id = store.add_remote_source("MEGA", RemoteConfig("mega", "Photos"), tmp_path, 1)
     source = SqliteRepository(conn).get_source(source_id)
     assert source is not None
     assert (source.kind, source.label, source.root) == ("rclone", "MEGA", str(tmp_path / "1"))
@@ -68,7 +68,7 @@ def test_remote_config_is_none_for_other_sources(conn: sqlite3.Connection) -> No
 
 def test_a_tampered_remote_config_is_refused(conn: sqlite3.Connection, tmp_path: Path) -> None:
     store = SqliteRemoteSources(conn)
-    source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path)
+    source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     conn.execute("UPDATE source SET config_json = ? WHERE id = ?", ('{"remote": "-x"}', source_id))
     with pytest.raises(RemoteConfigError):
         store.remote_config(source_id)
@@ -79,7 +79,7 @@ def test_a_tampered_remote_config_is_refused(conn: sqlite3.Connection, tmp_path:
 
 def test_set_root_moves_a_source(conn: sqlite3.Connection, tmp_path: Path) -> None:
     store = SqliteRemoteSources(conn)
-    source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path)
+    source_id = store.add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     store.set_root(source_id, "/new/staging/1")
     source = SqliteRepository(conn).get_source(source_id)
     assert source is not None and source.root == "/new/staging/1"
@@ -106,7 +106,7 @@ def test_a_new_inbox_is_owned_by_and_private_to_its_user(conn: sqlite3.Connectio
 def test_remote_sources_are_open_to_everyone_like_any_new_source(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    source_id = SqliteRemoteSources(conn).add_remote_source("x", RemoteConfig("mega"), tmp_path)
+    source_id = SqliteRemoteSources(conn).add_remote_source("x", RemoteConfig("mega"), tmp_path, 1)
     assert SqliteRepository(conn).get_access(source_id) == (Level.DOWNLOAD, [])
 
 
@@ -157,7 +157,7 @@ def test_every_kind_of_source_is_created_by_the_one_repository_method(
     repo.add_source = spy  # type: ignore[method-assign]
     folder = repo.add_source("Pictures", "/pictures", 1)
     remote = SqliteRemoteSources(conn, repo).add_remote_source(
-        "Mega", RemoteConfig("mega", "Camera"), tmp_path / "staging"
+        "Mega", RemoteConfig("mega", "Camera"), tmp_path / "staging", 1
     )
     inbox = SqliteInboxes(conn, repo).ensure_inbox_source(7, str(tmp_path / "inbox" / "7"))
     assert kinds == ["folder", "rclone", "inbox"]
@@ -171,7 +171,7 @@ def test_a_proton_source_is_its_own_kind_and_stores_only_the_place(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     store = SqliteRemoteSources(conn)
-    source_id = store.add_remote_source("Proton", RemoteConfig.proton("/photos"), tmp_path)
+    source_id = store.add_remote_source("Proton", RemoteConfig.proton("/photos"), tmp_path, 1)
     row = conn.execute("SELECT kind, config_json FROM source WHERE id = ?", (source_id,)).fetchone()
     assert (row[0], json.loads(row[1])) == ("proton", {"provider": "proton", "path": "/photos"})
     assert store.remote_config(source_id) == RemoteConfig.proton("/photos")
