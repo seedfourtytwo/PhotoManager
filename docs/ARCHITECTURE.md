@@ -51,7 +51,8 @@ Built (numbered SQL migrations in `adapters/migrations/`; see TECH_DECISIONS). M
 faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, foreign keys on
 `inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
-`taken_at` and the removal of degenerate crops. `ANALYZE` runs after migrating, `PRAGMA
+`taken_at` and the removal of degenerate crops; `0022` gives ownerless sources to the first
+admin (see Visibility in §7). `ANALYZE` runs after migrating, `PRAGMA
 optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
@@ -270,7 +271,12 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   user (or everyone) a level, a source the user owns (edit), or an album the user owns or is a
   member of (always `view`: download and edit only ever come from sources); admins have edit
   through every source. A private photo only counts grants through sources its marker
-  (`private_by`) does not own — the marker keeps all of theirs, albums never reach it. Guests
+  (`private_by`) does not own — the marker keeps all of theirs, albums never reach it. That
+  comparison needs an owner on the source, so every source has one: a folder or cloud (rclone,
+  Proton Drive) source belongs to the admin who adds it, an upload inbox to its user, a folder
+  imported from the command line to the first admin; migration `0022` gave the ownerless
+  cloud sources of older libraries to the first admin. Only a library with no account yet
+  has ownerless sources, and the first-run setup hands them to the first admin. Guests
   are capped at download. The condition is correlated `EXISTS` per photo (C25), so a timeline
   page stops at its `LIMIT` on the timeline index; admins get a cheaper check (only someone
   else's private photos need a look). Timeline, facets, calendar, map, albums, detail, images,

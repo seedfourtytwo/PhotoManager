@@ -13,6 +13,9 @@ What it will and won't do:
   stay in Photo Assistant. Photos you edit in the cloud come in again as a new version; the
   old one is kept.
 - Your password is stored by rclone on this machine, never by Photo Assistant.
+- A cloud source belongs to the admin who adds it, exactly like a folder source: everyone can
+  see its photos unless you change who may see the source, and a photo you mark **private**
+  is hidden from the others.
 
 Every source follows the same three steps: **install rclone → connect the account in rclone →
 add it in Photo Assistant.**

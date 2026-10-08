@@ -41,6 +41,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
     cloud.folder("/my-files/Trips", cloud.image("f1", "peak.jpg"))
     conn = open_database(":memory:")
     repo = SqliteRepository(conn)
+    repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
     app.include_router(proton.router)
     app.include_router(remote_sources.router)
@@ -102,6 +103,7 @@ def test_a_proton_source_is_added_with_a_staging_folder(world: World, path: str)
     source = world.repo.get_source(body["id"])
     assert source is not None
     assert (source.kind, source.root) == ("proton", str(world.data / "staging" / str(source.id)))
+    assert source.owner_id == 1, "the admin who added it"
 
 
 @pytest.mark.parametrize(("path", "code"), [("/my-files/Nope", 404), ("/trash", 422), ("", 422)])

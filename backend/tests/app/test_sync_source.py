@@ -30,10 +30,14 @@ class FixedClock:
 class FakeRemotes:
     configs: dict[int, RemoteConfig | Exception] = field(default_factory=dict)
     roots: dict[int, str] = field(default_factory=dict)
+    owners: dict[int, int] = field(default_factory=dict)
 
-    def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
+    def add_remote_source(
+        self, label: str, config: RemoteConfig, staging_root: Path, owner_id: int
+    ) -> int:
         new_id = len(self.configs) + 1
         self.configs[new_id] = config
+        self.owners[new_id] = owner_id
         self.roots[new_id] = str(staging_root / str(new_id))
         return new_id
 
@@ -171,13 +175,14 @@ def test_a_damaged_remote_config_is_recorded(world: World) -> None:
 
 def test_adding_a_remote_source_checks_the_remote_exists(world: World) -> None:
     source_id = add_remote_source(
-        world.remotes, world.sync, world.staging, "MEGA", {"remote": "mega", "path": "Camera"}
+        world.remotes, world.sync, world.staging, "MEGA", {"remote": "mega", "path": "Camera"}, 5
     )
     assert world.remotes.configs[source_id] == RemoteConfig("mega", "Camera")
+    assert world.remotes.owners[source_id] == 5, "the admin who adds it owns it"
     with pytest.raises(RemoteConfigError, match="rclone config"):
-        add_remote_source(world.remotes, world.sync, world.staging, "x", {"remote": "mgea"})
+        add_remote_source(world.remotes, world.sync, world.staging, "x", {"remote": "mgea"}, 5)
     with pytest.raises(RemoteConfigError):
-        add_remote_source(world.remotes, world.sync, world.staging, "x", {"remote": "-x"})
+        add_remote_source(world.remotes, world.sync, world.staging, "x", {"remote": "-x"}, 5)
 
 
 # --- more than one kind of remote (issue 8) -------------------------------------------------------
@@ -218,15 +223,16 @@ def test_a_proton_source_is_only_added_for_a_place_that_exists(tmp_path: Path) -
     from photo_assistant.app.sync_source import add_proton_source
 
     remotes, account = FakeRemotes(), FakeAccount()
-    first = add_proton_source(remotes, account, tmp_path, "Photos", "/photos")
-    second = add_proton_source(remotes, account, tmp_path, "Trips", "/my-files/Trips")
+    first = add_proton_source(remotes, account, tmp_path, "Photos", "/photos", 5)
+    second = add_proton_source(remotes, account, tmp_path, "Trips", "/my-files/Trips", 5)
     assert remotes.configs[first] == RemoteConfig.proton("/photos")
     assert remotes.configs[second] == RemoteConfig.proton("/my-files/Trips")
+    assert remotes.owners == {first: 5, second: 5}
     assert account.asked == ["check", "/my-files/Trips"]
     with pytest.raises(SyncNotFoundError):
-        add_proton_source(remotes, account, tmp_path, "x", "/my-files/Nope")
+        add_proton_source(remotes, account, tmp_path, "x", "/my-files/Nope", 5)
     with pytest.raises(RemoteConfigError):
-        add_proton_source(remotes, account, tmp_path, "x", "/trash")
+        add_proton_source(remotes, account, tmp_path, "x", "/trash", 5)
     assert len(remotes.configs) == 2
 
 

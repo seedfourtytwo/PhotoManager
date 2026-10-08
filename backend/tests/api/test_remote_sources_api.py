@@ -48,6 +48,7 @@ def world(tmp_path: Path) -> Iterator[World]:
     config.write_text("[mega]\ntype = local\n")
     conn = open_database(":memory:")
     repo = SqliteRepository(conn)
+    repo.add_first_admin("admin", "Admin", "x")  # user 1: new sources belong to who adds them
     app = FastAPI()
     app.include_router(remote_sources.router)
     integrations = build_integrations(

@@ -201,3 +201,56 @@ def test_backup_targets_from_before_0018_count_as_having_their_key_saved(tmp_pat
     conn = open_database(db, backup_dir=tmp_path / "backups")
     rows = conn.execute("SELECT created_at, key_saved_at FROM backup_target").fetchall()
     assert [tuple(r) for r in rows] == [("2026-09-01", "2026-09-01")]
+
+
+def _make_v20_library(db: Path, users: str) -> None:
+    """A library just before 0022: sources added from the cloud (and an M1 folder) have no
+    owner."""
+    conn = sqlite3.connect(db)
+    for number, sql in _migrations():
+        if number <= 20:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        users
+        + """
+        INSERT INTO source (id, kind, label, root, owner_id, config_json) VALUES
+            (1, 'rclone', 'MEGA', '/staging/1', NULL, '{"remote": "mega", "path": ""}'),
+            (2, 'proton', 'Proton', '/staging/2', NULL, '{"provider": "proton"}'),
+            (3, 'folder', 'Old', '/old', NULL, NULL);
+        """
+    )
+    conn.close()
+
+
+def _owners(conn: sqlite3.Connection) -> list[int | None]:
+    return [r[0] for r in conn.execute("SELECT owner_id FROM source ORDER BY id")]
+
+
+def test_ownerless_sources_go_to_the_first_enabled_admin(tmp_path: Path) -> None:
+    """0022: a private mark only works on a source with an owner, so every source gets one.
+    The first admin is the lowest id among admins who can still log in."""
+    db = tmp_path / "library.db"
+    _make_v20_library(
+        db,
+        """INSERT INTO user (id, username, display_name, password_hash, role, disabled) VALUES
+            (1, 'lea', 'Lea', 'x', 'member', 0), (2, 'old', 'Old', 'x', 'admin', 1),
+            (3, 'c', 'C', 'x', 'admin', 0), (4, 'p', 'P', 'x', 'admin', 0);
+        INSERT INTO source (id, label, root, owner_id) VALUES (4, 'Leas', '/lea', 1);""",
+    )
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert _owners(conn) == [3, 3, 3, 1], "sources that had an owner keep it"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    # access lists are not touched: who may see a source is a separate decision
+    assert conn.execute("SELECT COUNT(*) FROM source_access").fetchone()[0] == 0
+
+
+def test_ownerless_sources_wait_for_the_setup_when_there_is_no_admin(tmp_path: Path) -> None:
+    """0022 on a library nobody has set up yet: nothing to assign; the first-run setup gives
+    ownerless sources to the first admin, as it always did."""
+    db = tmp_path / "library.db"
+    _make_v20_library(db, "")
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert _owners(conn) == [None, None, None]
+    admin = SqliteRepository(conn).add_first_admin("c", "C", "x")
+    assert _owners(conn) == [admin.id] * 3

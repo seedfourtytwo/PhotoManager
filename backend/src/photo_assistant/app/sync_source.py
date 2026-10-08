@@ -88,15 +88,17 @@ def add_remote_source(
     staging_root: Path,
     label: str,
     settings: Mapping[str, object],
+    owner_id: int,
 ) -> int:
-    """Validate and register a remote source. Raises RemoteConfigError with a fix-it message."""
+    """Validate and register a remote source, owned by the admin adding it. Raises
+    RemoteConfigError with a fix-it message."""
     config = RemoteConfig.from_mapping(settings)
     if config.remote not in remotes.list_remotes():
         raise RemoteConfigError(
             f"no remote called '{config.remote}' on this machine: create it first with "
             "'rclone config' (see the cloud sources guide)"
         )
-    return store.add_remote_source(label, config, staging_root)
+    return store.add_remote_source(label, config, staging_root, owner_id)
 
 
 class ProtonAccount(Protocol):
@@ -108,16 +110,22 @@ class ProtonAccount(Protocol):
 
 
 def add_proton_source(
-    store: RemoteSourceStore, account: ProtonAccount, staging_root: Path, label: str, path: str
+    store: RemoteSourceStore,
+    account: ProtonAccount,
+    staging_root: Path,
+    label: str,
+    path: str,
+    owner_id: int,
 ) -> int:
-    """Register a Proton Drive source for a place that exists. Raises RemoteConfigError for a
-    place that may not be read, SyncError subclasses when Proton can't confirm it."""
+    """Register a Proton Drive source for a place that exists, owned by the admin adding it.
+    Raises RemoteConfigError for a place that may not be read, SyncError subclasses when
+    Proton can't confirm it."""
     config = RemoteConfig.proton(path)
     if path == PROTON_PHOTOS:
         account.check()
     else:
         account.folders(path)
-    return store.add_remote_source(label, config, staging_root)
+    return store.add_remote_source(label, config, staging_root, owner_id)
 
 
 def create_proton_folder(account: ProtonAccount, parent: str, name: str) -> str:
