@@ -5,14 +5,20 @@
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
-	import { clusterPoints, clusterRadius, dominantPlace, type Cluster } from '$lib/geo';
+	import {
+		clusterPoints,
+		clusterRadius,
+		clustersInView,
+		dominantPlace,
+		type Cluster
+	} from '$lib/geo';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import { LAND_PATH } from '$lib/world';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
-	let points = $state<MapPoint[]>([]);
+	let points = $state.raw<MapPoint[]>([]);
 	let loaded = $state(false);
 	let located = $state.raw<Map<Id, AssetOut>>(new Map());
 	let chosen = $state<Cluster | null>(null);
@@ -24,20 +30,19 @@
 	const aspectRatio = 2;
 	const vh = $derived(view.w / aspectRatio);
 	const pxPerUnit = $derived(width ? width / view.w : 1);
-	const clusters = $derived(
+	// Clustering depends on the points and the zoom only, so panning (x, y) never redoes it;
+	// what is on screen is a cheap filter over the result.
+	const allClusters = $derived(
 		clusterPoints(
 			points,
 			{ width: 360, height: 180 },
 			22 / pxPerUnit,
 			// the drawn dot plus a little air, so dots never overlap or hide each other
 			(n) => (Math.max(clusterRadius(n, 2), 3) + 2) / pxPerUnit
-		).filter(
-			(c) =>
-				c.x >= view.x - 5 &&
-				c.x <= view.x + view.w + 5 &&
-				c.y >= view.y - 5 &&
-				c.y <= view.y + vh + 5
 		)
+	);
+	const clusters = $derived(
+		clustersInView(allClusters, { x: view.x, y: view.y, w: view.w, h: vh }, 5)
 	);
 
 	$effect(() => {
