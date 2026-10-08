@@ -43,6 +43,13 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
+/** Opens the account menu (the button with the person's initial); returns the main nav. */
+export async function openAccountMenu(page: Page): Promise<Locator> {
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	await nav.getByRole('button', { name: /^Account/ }).click();
+	return nav;
+}
+
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 
 /** Touch pointer events, dispatched directly (Playwright has tap but no long-press/swipe). */

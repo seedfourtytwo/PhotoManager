@@ -33,6 +33,11 @@
 	/** Space taken by the sticky month label at the top of the screen. */
 	const LABEL = 48;
 	let width = $state(0);
+	/** Where the sticky month label stops: below the top bar on a laptop, at the edge on a phone. */
+	const stuckAt = () => {
+		const label = wrapper?.querySelector('h2');
+		return (label && parseFloat(getComputedStyle(label).top)) || 0;
+	};
 	const rowHeight = $derived(rowHeightFor(viewport.width, settings.density));
 	const groups = $derived(groupByMonth(loader.items));
 	// Pages only add photos at the end, so earlier months keep their layout: cache them by
@@ -102,7 +107,7 @@
 		// The month whose grid is under the sticky label.
 		let month: string | null = null;
 		for (let g = 0; g < groups.length; g++) {
-			if (gridTops[g] + layouts[g].height > -top + LABEL) {
+			if (gridTops[g] + layouts[g].height > -top + LABEL + stuckAt()) {
 				month = groups[g].key;
 				break;
 			}
@@ -155,8 +160,9 @@
 		const box = layouts[g].boxes[groups[g].items.findIndex((a) => a.id === id)];
 		if (!box) return;
 		const top = wrapper.getBoundingClientRect().top + gridTops[g] + box.y;
-		if (top < LABEL || top + box.h > window.innerHeight) {
-			const margin = Math.max(LABEL, (window.innerHeight - box.h) / 2);
+		const clear = LABEL + stuckAt();
+		if (top < clear || top + box.h > window.innerHeight) {
+			const margin = Math.max(clear, (window.innerHeight - box.h) / 2);
 			window.scrollTo({ top: window.scrollY + top - margin });
 		}
 		active = id;
@@ -184,7 +190,8 @@
 		const index = g < 0 ? groups.length - 1 : g;
 		// The section, not its sticky label: a stuck label sits at its section's end.
 		const section = wrapper?.querySelectorAll<HTMLElement>('section')[index];
-		if (section) window.scrollTo({ top: section.getBoundingClientRect().top + window.scrollY });
+		if (section)
+			window.scrollTo({ top: section.getBoundingClientRect().top + window.scrollY - stuckAt() });
 		update();
 	}
 
@@ -300,7 +307,7 @@
 	/* Month headings: a chapter title in the album's serif, sticky, the count beside it. */
 	h2 {
 		position: sticky;
-		top: 0;
+		top: var(--top);
 		z-index: 2;
 		margin: 0;
 		padding: var(--s-4) 0 var(--s-2);

@@ -300,9 +300,9 @@
 <style>
 	.panel {
 		position: sticky;
-		top: 0;
-		height: 100vh;
-		height: 100dvh;
+		top: var(--top);
+		height: calc(100vh - var(--top));
+		height: calc(100dvh - var(--top));
 		overflow-y: auto;
 		box-sizing: border-box;
 		padding: var(--s-5) var(--s-4) var(--s-6);

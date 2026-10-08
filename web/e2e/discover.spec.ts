@@ -3,7 +3,6 @@ import {
 	expect,
 	expectAccessible,
 	GUEST,
-	isPhone,
 	REAL_BACKEND,
 	resetMock,
 	signIn,
@@ -76,23 +75,4 @@ test('guests see people but cannot rename or merge', async ({ page }) => {
 		.click();
 	await expect(page.getByRole('button', { name: /^(Name|Rename)$/ })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Merge with…' })).toHaveCount(0);
-});
-
-test('navigation: the same five places everywhere; Trash and Settings under More on a phone', async ({
-	page
-}) => {
-	await resetMock();
-	await signIn(page);
-	const nav = page.getByRole('navigation', { name: 'Main' });
-	for (const name of ['Library', 'Map', 'People', 'Albums', 'Search'])
-		await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
-	if (isPhone(page)) {
-		await expect(nav.getByRole('link', { name: 'Trash' })).toBeHidden();
-		await nav.getByRole('button', { name: 'More' }).click();
-	}
-	await nav.getByRole('link', { name: 'Trash' }).click();
-	await expect(page).toHaveURL(/\/trash$/);
-	if (isPhone(page)) await nav.getByRole('button', { name: 'More' }).click();
-	await expect(nav.getByRole('link', { name: 'Admin' })).toBeVisible();
-	await expectAccessible(page);
 });

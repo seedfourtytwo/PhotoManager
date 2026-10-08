@@ -49,9 +49,11 @@
 
 	/* Layout */
 	--gutter: 2px;
-	--rail: 7.5rem;
 	--margin: 16rem; /* right-margin notes and filters on desktop */
-	--bar: 3.5rem; /* phone bottom bar */
+	--top: 3.5rem; /* the top bar on a laptop; 0 on a phone. Sticky things offset by it. */
+	--dock: 3.5rem; /* the floating dock on a phone */
+	--bar: calc(var(--dock) + var(--s-4)); /* room the dock takes at the bottom of a phone */
+	--blur: blur(18px) saturate(1.4); /* the frosted-glass look of bars over photos */
 	--target: 2.75rem; /* 44 px touch target */
 	--page-x: var(--s-5); /* page side padding on a laptop */
 	--measure: 36rem; /* line length for prose */
@@ -75,11 +77,15 @@
 @media (max-width: 1023px) {
 	:root {
 		--page-x: var(--s-3);
+		--top: 0px;
 	}
 }
 
 /* ——— Base ——— */
 
+html {
+	scroll-padding-top: var(--top); /* keyboard focus and scrollIntoView stop below the bar */
+}
 html,
 body {
 	margin: 0;
@@ -541,8 +547,8 @@ legend {
 	@media not (prefers-reduced-transparency: reduce) {
 		.glass {
 			background: var(--glass);
-			-webkit-backdrop-filter: blur(18px) saturate(1.4);
-			backdrop-filter: blur(18px) saturate(1.4);
+			-webkit-backdrop-filter: var(--blur);
+			backdrop-filter: var(--blur);
 		}
 	}
 }
