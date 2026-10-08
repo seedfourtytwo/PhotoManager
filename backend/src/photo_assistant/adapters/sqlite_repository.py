@@ -17,6 +17,7 @@ from photo_assistant.adapters.sqlite_base import (
     decode_cursor,
     encode_cursor,
 )
+from photo_assistant.adapters.sqlite_base import iso_text as _iso
 from photo_assistant.adapters.sqlite_database import Database, open_database
 from photo_assistant.adapters.sqlite_database import migrations as _migrations
 from photo_assistant.adapters.sqlite_edits import EditsMixin
@@ -43,10 +44,6 @@ from photo_assistant.ports import (
 )
 
 __all__ = ["Database", "DuplicateAssetError", "SqliteRepository", "_migrations", "open_database"]
-
-
-def _iso(value: datetime) -> str:
-    return value.isoformat()
 
 
 class SqliteRepository(
