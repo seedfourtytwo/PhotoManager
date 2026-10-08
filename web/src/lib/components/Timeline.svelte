@@ -175,9 +175,16 @@
 		if (to !== null) await reveal(loader.items[to].id);
 	}
 
+	let jumps = 0;
+
 	/** Load pages until `key` (YYYY-MM, or the nearest older month) exists, then scroll to it. */
 	export async function jumpTo(key: string) {
-		await loader.until((items) => items.some((a) => a.taken_at.slice(0, 7) <= key));
+		// The latest jump wins: an earlier one stops asking for pages and never scrolls.
+		const mine = ++jumps;
+		await loader.until(
+			(items) => mine !== jumps || items.some((a) => a.taken_at.slice(0, 7) <= key)
+		);
+		if (mine !== jumps) return;
 		await tick();
 		measure();
 		const g = groups.findIndex((gr) => gr.key <= key);
@@ -189,12 +196,14 @@
 	}
 
 	// --- lasso (desktop): drag across photos to select them -----------------------------
-	let start: { x: number; y: number; base: Selection } | null = null;
+	type Placed = Parameters<typeof idsInRect>[0];
+	let start: { x: number; y: number; base: Selection; placed: Placed | null } | null = null;
 	let lasso = $state<Rect | null>(null);
+	let lassoFrame = 0;
 
 	function onpointerdown(event: PointerEvent) {
 		if (event.pointerType !== 'mouse' || event.button !== 0) return;
-		start = { x: event.clientX, y: event.clientY + window.scrollY, base: selection };
+		start = { x: event.clientX, y: event.clientY + window.scrollY, base: selection, placed: null };
 	}
 
 	function onpointermove(event: PointerEvent) {
@@ -208,23 +217,41 @@
 		if (!lasso && Math.hypot(rect.x2 - rect.x1, rect.y2 - rect.y1) < 8) return;
 		if (!lasso) wrapper.setPointerCapture(event.pointerId);
 		lasso = rect;
-		// From the layout, not the DOM: photos outside the window are not rendered.
-		const origin = wrapper.getBoundingClientRect();
-		const boxes = globalBoxes();
-		const placed = loader.items.map((a, i) => ({
-			id: a.id,
-			x: origin.left + boxes[i].x,
-			y: origin.top + boxes[i].y,
-			w: boxes[i].w,
-			h: boxes[i].h
-		}));
-		onselect(selectMany(start.base, idsInRect(placed, rect), true));
+		// Many pointer events per frame: select once per frame.
+		cancelAnimationFrame(lassoFrame);
+		lassoFrame = requestAnimationFrame(selectLasso);
 	}
 
-	function onpointerup() {
+	function selectLasso() {
+		if (!start || !lasso || !wrapper) return;
+		// From the layout, not the DOM: photos outside the window are not rendered. Every loaded
+		// photo's box, in timeline coordinates, is worked out once per drag (again only if a page
+		// arrived meanwhile); each frame then only moves the rectangle into those coordinates.
+		if (start.placed?.length !== loader.items.length) {
+			const boxes = globalBoxes();
+			start.placed = loader.items.map((a, i) => ({ id: a.id, ...boxes[i] }));
+		}
+		const origin = wrapper.getBoundingClientRect();
+		const rect = {
+			x1: lasso.x1 - origin.left,
+			y1: lasso.y1 - origin.top,
+			x2: lasso.x2 - origin.left,
+			y2: lasso.y2 - origin.top
+		};
+		onselect(selectMany(start.base, idsInRect(start.placed, rect), true));
+	}
+
+	function endLasso(clickFollows: boolean) {
+		cancelAnimationFrame(lassoFrame);
 		if (lasso) {
-			// The click that ends a lasso must not open or toggle the photo under the pointer.
-			window.addEventListener('click', (e) => e.stopPropagation(), { capture: true, once: true });
+			selectLasso(); // where the drag ended, even if its frame had not come yet
+			if (clickFollows) {
+				// The click that ends a lasso must not open or toggle the photo under the pointer.
+				// It comes right after the pointerup, if at all: disarm so no later click is lost.
+				const swallow = (e: Event) => e.stopPropagation();
+				window.addEventListener('click', swallow, { capture: true, once: true });
+				setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
+			}
 		}
 		start = null;
 		lasso = null;
@@ -246,8 +273,8 @@
 	role="presentation"
 	{onpointerdown}
 	{onpointermove}
-	{onpointerup}
-	onpointercancel={onpointerup}
+	onpointerup={() => endLasso(true)}
+	onpointercancel={() => endLasso(false)}
 >
 	{#each groups as group, g (group.key)}
 		<section data-key={group.key} aria-labelledby={`m-${group.key}`}>

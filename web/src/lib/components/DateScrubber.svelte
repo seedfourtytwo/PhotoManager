@@ -32,6 +32,8 @@
 
 	let track: HTMLElement | undefined = $state();
 	let hover = $state<{ index: number; y: number } | null>(null);
+	// While dragging only the label follows the pointer; the jump (which may have to load
+	// many pages) happens once, where the drag ends.
 	let dragging = false;
 
 	function indexAt(clientY: number): number {
@@ -81,14 +83,15 @@
 			track?.setPointerCapture(e.pointerId);
 			point(e);
 		}}
-		onpointermove={(e) => {
-			const i = point(e);
-			if (dragging && stops[i]) onjump(stops[i].key);
-		}}
+		onpointermove={point}
 		onpointerup={(e) => {
 			const i = point(e);
 			dragging = false;
 			if (stops[i]) onjump(stops[i].key);
+		}}
+		onpointercancel={() => {
+			dragging = false;
+			hover = null;
 		}}
 		onpointerleave={() => !dragging && (hover = null)}
 		{onkeydown}

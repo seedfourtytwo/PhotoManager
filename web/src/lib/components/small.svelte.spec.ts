@@ -34,6 +34,57 @@ describe('DateScrubber', () => {
 	});
 });
 
+describe('DateScrubber: dragging', () => {
+	const months = [
+		{ key: '2020-05', count: 10 },
+		{ key: '2019-12', count: 5 },
+		{ key: '2018-01', count: 5 }
+	];
+
+	function tallSlider(onjump: (key: string) => void) {
+		render(DateScrubber, { months, current: '2020-05', onjump });
+		const slider = page.getByRole('slider').element() as HTMLElement;
+		slider.style.height = '400px'; // the page gives it its height; here nothing does
+		// A synthetic event has no live pointer to capture.
+		slider.setPointerCapture = () => {};
+		const rect = slider.getBoundingClientRect();
+		const at = (type: string, fraction: number) =>
+			slider.dispatchEvent(
+				new PointerEvent(type, {
+					pointerId: 1,
+					bubbles: true,
+					clientX: rect.left + 5,
+					clientY: rect.top + rect.height * fraction
+				})
+			);
+		return at;
+	}
+
+	it('shows the month under the pointer while dragging and jumps once, on release', async () => {
+		const onjump = vi.fn();
+		const at = tallSlider(onjump);
+		at('pointerdown', 0.1);
+		at('pointermove', 0.6);
+		await expect.element(page.getByText('December 2019')).toBeInTheDocument();
+		at('pointermove', 0.9);
+		await expect.element(page.getByText('January 2018')).toBeInTheDocument();
+		expect(onjump).not.toHaveBeenCalled();
+		at('pointerup', 0.9);
+		expect(onjump.mock.calls).toEqual([['2018-01']]);
+	});
+
+	it('a cancelled drag ends the drag: no jump, and the label goes away', async () => {
+		const onjump = vi.fn();
+		const at = tallSlider(onjump);
+		at('pointerdown', 0.1);
+		at('pointermove', 0.6);
+		await expect.element(page.getByText('December 2019')).toBeInTheDocument();
+		at('pointercancel', 0.6);
+		await expect.element(page.getByText('December 2019')).not.toBeInTheDocument();
+		expect(onjump).not.toHaveBeenCalled();
+	});
+});
+
 describe('CalendarHeatmap', () => {
 	it('links days with photos to the filtered library, with counts in words', async () => {
 		render(CalendarHeatmap, {
