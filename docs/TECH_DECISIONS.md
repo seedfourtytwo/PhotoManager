@@ -80,8 +80,9 @@ CLIP, SCRFD and ArcFace directly — no `insightface` package, which pulls in a 
 chain), `numpy`, `tokenizers` (CLIP tokenizer.json), `sqlite-vec` (pinned; vector distance
 in SQL), `opencv-python-headless` (resize/warp for preprocessing and alignment, and the
 YuNet/SFace fallback); `onnx` as a dev dependency to build tiny synthetic models in tests.
-Models are fetched by `just models` into `<data_root>/models/`, never committed. Wiring and
-model-format assumptions: `docs/wiring/ml.md`.
+Models are fetched by `just models` into `<data_root>/models/`, never committed. Settings:
+`docs/guides/settings.md` (Local ML). The model-format assumptions are written in
+`adapters/onnx_clip.py` and checked against real models by `tests/ml/test_real_models.py`.
 
 ## AI socket: Ollama adapter (optional)
 
@@ -138,7 +139,7 @@ LaTeX (heavy toolchain).
 consumer photo-book services accept sRGB PDFs. Confirm with the lab we pick (OPEN_QUESTIONS).
 **Fonts:** only the families compiled into Typst (Libertinus Serif, New Computer Modern,
 DejaVu Sans Mono), system fonts ignored: no downloads, identical output on laptop and server.
-Wiring: `docs/wiring/print.md`.
+Flow: `docs/ARCHITECTURE.md` (Album → print); routes: `docs/contracts/api-v1.md`.
 
 ## Download, convert and edit
 

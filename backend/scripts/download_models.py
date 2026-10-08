@@ -89,7 +89,8 @@ def clip_files(name: str, opener: Opener = open_url) -> list[RemoteFile]:
     missing = set(CLIP_REQUIRED) - {f.path for f in files}
     if missing:
         raise DownloadError(
-            f"immich-app/{name} lacks {sorted(missing)}: is the name right? See docs/wiring/ml.md"
+            f"immich-app/{name} lacks {sorted(missing)}: is the name right? "
+            "See PA_ML_CLIP_MODEL in docs/guides/settings.md"
         )
     return files
 

@@ -226,7 +226,7 @@ class Settings(BaseSettings):
     trash_purge_every_hours: float = 6.0  # how often the 30-day trash expiry runs
     argon2_time_cost: int = 3
     argon2_memory_kib: int = 65536
-    # Sections, filled from their flat names (see _FlatSections and docs/wiring/*.md):
+    # Sections, filled from their flat names (see _FlatSections and docs/guides/settings.md):
     # uploads, remote sources and AI (PA_*), local ML (PA_ML_*), backups (PA_*).
     integrations: IntegrationSettings = Field(default_factory=IntegrationSettings)
     ml: MlSettings = Field(default_factory=MlSettings)
