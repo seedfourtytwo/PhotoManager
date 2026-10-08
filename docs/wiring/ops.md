@@ -1,5 +1,10 @@
 # Wiring the ops branch (feat/ops) into main
 
+> **Historical integration record.** This page describes how a branch was wired in and is not
+> kept up to date: file, class and migration names in it may be stale. For the settings see
+> [`docs/guides/settings.md`](../guides/settings.md); for how the app is built today see
+> [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
+
 > **Status (2026-10-02, fix/backend): wired.** Everything here runs in the app: `api/services.py`
 > builds it from the one `Settings` and the one `Database`. This page stays as the record of how
 > the branch was integrated; where it differs from the code, the code and ARCHITECTURE.md win.

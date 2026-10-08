@@ -7,10 +7,13 @@
  */
 import { readFileSync } from 'node:fs';
 
+// A ring is a list of arc indices; a polygon is a list of rings.
+type Geometry =
+	{ type: 'Polygon'; arcs: number[][] } | { type: 'MultiPolygon'; arcs: number[][][] };
 type Topology = {
 	transform: { scale: [number, number]; translate: [number, number] };
 	arcs: [number, number][][];
-	objects: { land: { geometries: { type: string; arcs: number[][][] }[] } };
+	objects: { land: { geometries: Geometry[] } };
 };
 
 const topo = JSON.parse(readFileSync(process.argv[2], 'utf8')) as Topology;
@@ -42,8 +45,7 @@ const toPath = (points: [number, number][], shift: number) => {
 	return parts.length > 2 ? `M${parts.join('L')}Z` : '';
 };
 for (const geometry of topo.objects.land.geometries) {
-	const polygons =
-		geometry.type === 'Polygon' ? [geometry.arcs] : (geometry.arcs as unknown as number[][][][]);
+	const polygons = geometry.type === 'Polygon' ? [geometry.arcs] : geometry.arcs;
 	for (const polygon of polygons)
 		for (const ring of polygon) {
 			const lonLat = ring.flatMap((i, n) => arcPoints(i).slice(n === 0 ? 0 : 1));

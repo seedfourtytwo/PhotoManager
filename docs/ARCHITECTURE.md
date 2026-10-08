@@ -10,7 +10,7 @@ or an AI endpoint.
                 ┌────────────────────── laptop / home server ──────────────────────┐
  phone ─┐       │                                                                  │
  laptop ┼─HTTP─▶│  web (SvelteKit PWA, static build)                               │
- tablet ┘       │        │ JSON over HTTP (OpenAPI-typed client)                   │
+ tablet ┘       │        │ JSON over HTTP (hand-written typed client)              │
                 │        ▼                                                         │
                 │  api (FastAPI) ──────▶ domain (pure Python, no I/O)              │
                 │        │                    ▲                                    │
@@ -32,14 +32,17 @@ or an AI endpoint.
 | Layer | Contains | May import | Tested with |
 |---|---|---|---|
 | `domain/` | Entities, value objects, pure rules (date fallback, dedup decision, layout fitting, album plan validation) | stdlib only | fast unit tests, property tests |
-| `app/` | Use cases (`ImportFolder`, `BuildAlbum`, `ExportPdf`, `SearchPhotos`) orchestrating ports | `domain` | unit tests with in-memory fakes |
+| `app/` | Use cases (`ImportFolder`, `BuildAlbum`, `ExportPdf`, `SearchPhotos`) orchestrating ports | `domain` | unit tests, mostly on the real `SqliteRepository` over an in-memory database with small fakes for outside tools; only backups have a full in-memory fake store (`tests/fakes_backup.py`) |
 | `ports/` | `Protocol` interfaces: `MetadataReader`, `ImageRenderer`, `Embedder`, `FaceAnalyzer`, `SourceSync`, `PrintRenderer`, `AIProvider`, `Repository`, `Clock` | `domain` | — |
-| `adapters/` | Real implementations of ports | anything | contract tests + integration tests against real tools |
+| `adapters/` | Real implementations of ports | anything | integration tests against real tools; one contract test so far (`tests/adapters/test_backup_store.py`: fake and SQLite backup store, same checks) |
 | `api/` | HTTP routes, auth, DTOs, CLI; **composition root** (`services.py` picks the real adapters) | `app`, `adapters` (wiring only) | API tests (httpx) |
-| `web/` | UI | generated API client | component tests (Vitest), E2E (Playwright) |
+| `web/` | UI | hand-written API client and types (`web/src/lib/api/`, kept in step with `docs/contracts/api-v1.md` by hand) | component tests (Vitest), E2E (Playwright) |
 
 Rule: dependencies point inward. `domain` never imports FastAPI, SQL, or a file path.
-An import-linter check enforces this in CI.
+import-linter checks this (`uv run lint-imports`, part of `just check`): the layer order, and
+that `domain`, `app` and `ports` import no framework, SQL, subprocess, imaging or ML library.
+CI is defined in `ci/` but not switched on yet, so today the check runs on the developer's
+machine.
 
 ## 3. Data model
 
@@ -135,8 +138,10 @@ keep_metadata))` via libvips; location / all metadata are stripped by ExifTool o
 copy in `data/tmp` (never on the library file) → a **streamed, stored ZIP** (`zipstream-ng`),
 so a 2 GB year export needs no archive on disk. Skipped photos are counted in `X-Skipped`; a
 photo that fails while the ZIP streams is left out and listed in a final `manifest.txt`.
-Size estimates start from each photo's real bytes (calibrated factors, PERFORMANCE.md). Above a size threshold it becomes an `export_job` with
-progress. Naming and folder layout are pure domain functions (unit-tested).
+Size estimates start from each photo's real bytes (calibrated factors, PERFORMANCE.md).
+Every download is streamed in the request; a background `export_job` with progress for very
+large exports is not built (it is in the planned tables of §3). Naming and folder layout are
+pure domain functions (unit-tested).
 
 ### Edit recipe
 `Recipe` (domain/edit_recipe.py) is a validated value object: `{rotate, flip_horizontal,
@@ -150,9 +155,12 @@ libvips for loupe previews and downloads. Golden-image tests keep preview and ex
 `BackupPort` with a restic adapter. Per target: `restic backup data/originals data/recipes
 data/db-snapshot` where the DB snapshot is taken first with SQLite's online backup API (never
 copy a live `.db` file). restic stores deduplicated, encrypted, versioned snapshots; its rclone
-backend reaches SMB/SFTP/cloud targets. The scheduler (APScheduler in the worker) runs each
-target's schedule, then `restic forget --prune` with the retention policy. Results go to a
-`backup_run` table that feeds the status page and the overdue banner.
+backend reaches SMB/SFTP/cloud targets. There is no scheduler library: the periodic thread
+(`app/periodic.py`, one thread that runs each of its tasks every so many seconds) queues a
+`backup_due` job every `PA_BACKUP_POLL_SECONDS` (60 s); that job, on the worker's long lane,
+runs every target whose schedule says it is due and that is outside its quiet window, then
+`restic forget --prune` with the target's retention policy. Results go to a `backup_run` table
+that feeds the status page and the overdue banner.
 
 Guided setup (issue 3): `BackupPlaces` (mounted disks, rclone remotes, facts about one place)
 feeds the pure rule `plan_backup` (fits? writable? same disk? another backup there?); `KeyVault`
@@ -162,18 +170,22 @@ a copy (`backup_target.key_saved_at`, migration `0018`). The recovery guarantee 
 after a failed one; a failed proof or an unconfirmed key raises the banner.
 
 ### Phone inbox
-`data/inbox/<user>/` is served over WebDAV (per-user credentials, LAN/Tailscale only).
-It is registered as a normal `source`; a file watcher (plus a periodic rescan as safety net)
-imports new files. Files stay in the inbox after import (so the phone app's "already uploaded"
-state stays correct); a setting can clear inbox files older than N days once they are
-confirmed in the library *and* in a successful backup.
+`data/inbox/<user id>/` is each user's inbox: a normal `source`, private to its owner by
+default. Files only arrive through the upload API below (there is no WebDAV share and no file
+watcher); each upload request queues one import of that inbox. Files stay in the inbox after
+import. Not built: clearing old inbox files.
 
-### Phone upload (M4)
-The app asks `POST /sync/check {hashes}` → uploads only the missing ones (resumable, tus
-protocol) into the user's inbox source → normal import. Server → phone uses a per-device
-change cursor (`GET /sync/changes?since=…`) for the albums the device follows. Same REST API
-the web uses. Apple Shortcuts posts to the same upload API. If a phone app is ever built (parked), it is the web UI in a Capacitor shell; only `DeviceBridge` (photo
-library, background upload, save to Photos) has a native implementation.
+### Phone upload
+The client asks `POST /api/upload/check {hashes}` which ones this user lacks, then sends them
+with `POST /api/upload` as ordinary multipart. The body is parsed as it streams
+(`api/upload_stream.py`): each file goes straight to `data/tmp`, is hashed on the way and cut
+off at `PA_UPLOAD_MAX_MB`, then moved into the inbox, and one import is queued. An upload is
+not resumable (no tus): a broken request is sent again, and files that already arrived are
+kept. The caller is a browser session or a per-device token (`/api/devices`), which is what
+Apple Shortcuts uses. Not built: the server → phone change cursor (the `device.sync_cursor`
+column exists, no route uses it). If a phone app is ever built (parked), it is the web UI in
+a Capacitor shell; only `DeviceBridge` (photo library, background upload, save to Photos)
+would have a native implementation.
 
 ### Search
 Query → parser splits facets (`date:2023`, `person:Lea`, `place:France`) from free text →
@@ -188,13 +200,13 @@ fonts → resolution check runs *before* compile and returns warnings to the UI.
 ### AI socket
 ```
 class AIProvider(Protocol):
-    def capabilities(self) -> set[Capability]: ...
-    def caption(self, image: bytes, lang: str) -> Caption: ...
+    def capabilities(self) -> frozenset[Capability]: ...
+    def caption(self, image: bytes, lang: str) -> str: ...
     def plan_album(self, prompt: str, context: LibrarySummary) -> AlbumPlan: ...
 ```
 `NullAIProvider` returns "not available" and the UI hides AI affordances.
 `OllamaProvider` calls `/api/chat` with JSON-schema constrained output; the response is parsed
-into `AlbumPlan` (pydantic) and **validated by domain rules** (every asset exists, the user may
+into `AlbumPlan` (a frozen dataclass in `domain/album_plan.py`) and **validated by domain rules** (every asset exists, the user may
 see it, layouts exist) before it is shown as a proposal. Invalid output → one retry → error.
 The LLM never writes to the database directly.
 
@@ -230,12 +242,16 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   access. The laptop then becomes a browser client only.
 - **Portability rules (tested from M1):** every path in the database is *relative to the data
   root*; the data root is one setting; no machine-specific state lives outside `data/` except
-  secrets in `.env`. Moving = stop, copy `data/` (rsync), set the path, start. A CI test copies a
-  library to a new location and checks every asset still resolves.
+  secrets in `.env`. Moving = stop, copy `data/` (rsync), set the path, start. A test
+  (`tests/app/test_library_transfer.py`) copies a library to a new location and checks it
+  works there.
 
 ## 7. Security & privacy
 
-- Bound to 127.0.0.1 until login exists (M2); later LAN/Tailscale only, never public.
+- Bound to 127.0.0.1 by default (`PA_HOST`). Login exists, but the app still stays on
+  loopback: other devices come in through Tailscale (`tailscale serve` in front of the port;
+  the Docker image listens inside its container and compose publishes the port on the
+  server's loopback only). Never public.
 - Host allow-list (defeats DNS rebinding) and a cross-site guard (Sec-Fetch-Site / Origin)
   in front of every route; extra host names (Tailscale) are a setting.
 - File names with control characters never reach ExifTool (its argument protocol can't escape
@@ -269,6 +285,9 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
   of them and revokes the user's device tokens. First-run setup and the last-admin rule are
   atomic (one `BEGIN IMMEDIATE` transaction each).
-- Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`;
-  every error body, the cross-site guard's included, is `{"detail": sentence}`.
+- Errors, the target: one `DomainError` hierarchy (`domain/errors.py`) and one handler in
+  `api/main.py`. Current state (2026-10-08): the hierarchy and the handler exist, but most
+  exception classes (44 of 62) do not derive from `DomainError` yet, and the routes turn those
+  into HTTP errors by hand (`except … raise HTTPException`). What does hold: every error
+  body, the cross-site guard's included, is `{"detail": sentence}`.
 - Download and edit endpoints check the access *level*, not just visibility.
