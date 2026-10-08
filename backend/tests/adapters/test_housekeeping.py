@@ -29,14 +29,20 @@ def _count(conn: sqlite3.Connection, table: str) -> int:
 
 
 def test_old_login_failures_are_forgotten_and_recent_ones_still_count(
-    repo: SqliteRepository,
+    conn: sqlite3.Connection, repo: SqliteRepository
 ) -> None:
-    repo.add_login_failure("nobody", "10.0.0.1", NOW - timedelta(days=3))
-    repo.add_login_failure("nobody", "10.0.0.1", NOW - timedelta(hours=1))
-    repo.add_login_failure("Lea", "10.0.0.2", NOW - timedelta(minutes=1))
+    repo.record_login_attempt(
+        "nobody", "10.0.0.1", NOW - timedelta(days=3), NOW - timedelta(days=3)
+    )
+    repo.record_login_attempt(
+        "nobody", "10.0.0.1", NOW - timedelta(hours=1), NOW - timedelta(hours=1)
+    )
+    repo.record_login_attempt(
+        "Lea", "10.0.0.2", NOW - timedelta(minutes=1), NOW - timedelta(minutes=1)
+    )
     assert repo.prune_login_failures(NOW - timedelta(hours=1)) == 1
-    assert repo.count_login_failures("nobody", "10.0.0.1", NOW - timedelta(days=9)) == 1
-    assert repo.count_login_failures("lea", "10.0.0.2", NOW - timedelta(days=9)) == 1
+    kept = conn.execute("SELECT username FROM login_failure ORDER BY username").fetchall()
+    assert [row[0] for row in kept] == ["Lea", "nobody"]
     assert repo.prune_login_failures(NOW - timedelta(hours=1)) == 0
 
 

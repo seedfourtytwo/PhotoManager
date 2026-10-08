@@ -94,8 +94,11 @@ def test_housekeeping_prunes_the_tables_that_only_ever_grew(
     services = services_of(admin)
     repo, now = services.repo, services.clock.now()
     count = lambda table: services.db.writer.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: E731
-    repo.add_login_failure("nobody", "10.0.0.9", now - LOGIN_FAILURES_KEPT - timedelta(hours=1))
-    repo.add_login_failure("nobody", "10.0.0.9", now - FAILED_LOGIN_WINDOW)
+    old_failure = now - LOGIN_FAILURES_KEPT - timedelta(hours=1)
+    repo.record_login_attempt("nobody", "10.0.0.9", old_failure, old_failure)
+    repo.record_login_attempt(
+        "nobody", "10.0.0.9", now - FAILED_LOGIN_WINDOW, now - FAILED_LOGIN_WINDOW
+    )
     stale = now - SESSION_IDLE_LIMIT - timedelta(days=1)
     repo.add_session("stale", user_id_of(admin, "admin"), stale)
     for _ in range(2):
