@@ -3,13 +3,12 @@
  * Opening pushes a shallow history entry (Back closes the loupe); stepping replaces it.
  * SvelteKit keeps `page.url` at the last real navigation during shallow routing, so the id is
  * read from `page.state.photo` first (null = closed here) and from the URL after a reload.
+ * `page.state.pushed` says this history entry was made by `openPhoto`, so Back closes the
+ * loupe; it lives in the entry (not in a variable) so that leaving by a link forgets it.
  */
 import { pushState, replaceState } from '$app/navigation';
+import { page } from '$app/state';
 import type { Id } from './api/types';
-
-/** True while the loupe was opened by `openPhoto` and Back would close it. */
-let pushed = false;
-if (typeof window !== 'undefined') window.addEventListener('popstate', () => (pushed = false));
 
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
@@ -33,19 +32,17 @@ export function openPhotoId(page: { state: App.PageState; url: URL }): Id | unde
 }
 
 export function openPhoto(id: Id) {
-	pushState(withPhoto(location.href, id), { photo: id });
-	pushed = true;
+	pushState(withPhoto(location.href, id), { photo: id, pushed: true });
 }
 
 export function showPhoto(id: Id) {
-	replaceState(withPhoto(location.href, id), { photo: id });
+	const state: App.PageState = page.state.pushed ? { photo: id, pushed: true } : { photo: id };
+	replaceState(withPhoto(location.href, id), state);
 }
 
 export function closePhoto() {
-	if (pushed) {
-		pushed = false;
-		history.back();
-	} else replaceState(withPhoto(location.href, null), { photo: null });
+	if (page.state.pushed) history.back();
+	else replaceState(withPhoto(location.href, null), { photo: null });
 }
 
 /** After closing the loupe over a plain grid: show and focus the photo that was open. */
