@@ -11,6 +11,19 @@ function currentPath(): string {
 	return `${location.pathname}${location.search}`;
 }
 
+/**
+ * Where to go after signing in: `next` if it is a path on this site, else the library. The
+ * URL parser decides, because it reads `/\evil.example` as another site, like browsers do.
+ */
+function sameSitePath(next: string | null): string {
+	if (!next?.startsWith('/')) return '/';
+	try {
+		return new URL(next, location.origin).origin === location.origin ? next : '/';
+	} catch {
+		return '/';
+	}
+}
+
 class Session {
 	user = $state<User | null>(null);
 	/** True once we know whether someone is signed in. */
@@ -45,9 +58,7 @@ class Session {
 
 	signedIn(user: User, next: string | null) {
 		this.user = user;
-		// Only follow same-site paths, never an absolute URL from the query string.
-		const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
-		void goto(safe, { replaceState: true });
+		void goto(sameSitePath(next), { replaceState: true });
 	}
 
 	async signOut() {
