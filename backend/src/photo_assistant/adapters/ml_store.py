@@ -101,10 +101,23 @@ class SqliteMlStore:
     def _candidates(self, ids: Collection[int]) -> Iterator[None]:
         """Fill the temp candidate table for one query (held under the lock)."""
         with self._lock:
-            self._conn.execute("DELETE FROM temp.ml_candidates")
-            self._conn.executemany(
-                "INSERT OR IGNORE INTO temp.ml_candidates VALUES (?)", ((i,) for i in ids)
-            )
+            # one transaction for the fill: in autocommit every row is a transaction of its
+            # own. Deferred (plain BEGIN): only the temp table is written, so a search never
+            # waits for the library file's write lock.
+            own = not self._conn.in_transaction
+            if own:
+                self._conn.execute("BEGIN")
+            try:
+                self._conn.execute("DELETE FROM temp.ml_candidates")
+                self._conn.executemany(
+                    "INSERT OR IGNORE INTO temp.ml_candidates VALUES (?)", ((i,) for i in ids)
+                )
+                if own:
+                    self._conn.execute("COMMIT")
+            except BaseException:
+                if own and self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
+                raise
             try:
                 yield
             finally:

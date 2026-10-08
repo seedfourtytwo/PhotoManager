@@ -100,6 +100,36 @@ def test_nearest_assets_ranks_within_candidates_only(
     assert store.nearest_assets(angle(0), "other", candidates=set(ids), limit=5) == []
 
 
+def test_the_candidate_set_is_filled_in_one_transaction(
+    conn: sqlite3.Connection, repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    """In autocommit every candidate row is its own transaction (slow for a whole library)."""
+    ids = assets(repo, 3)
+    autocommit: list[str] = []
+
+    def note(statement: str) -> None:
+        if statement.startswith("INSERT OR IGNORE INTO temp.ml_candidates"):
+            autocommit.append("in a transaction" if conn.in_transaction else "on its own")
+
+    conn.set_trace_callback(note)
+    try:
+        assert store.nearest_assets(angle(0), M, candidates=ids, limit=5) == []
+    finally:
+        conn.set_trace_callback(None)
+    assert autocommit == ["in a transaction"] * 3
+    assert not conn.in_transaction, "the fill is committed before the query runs"
+
+
+def test_the_candidate_set_can_be_filled_inside_a_transaction(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    (a,) = assets(repo, 1)
+    store.replace_model_tags(a, M, [TagScore("beach", 0.9)], screen_or_document=False)
+    with repo._transaction():
+        assert store.asset_ids_with_tag("beach", visible=[a]) == [a]
+        assert repo._conn.in_transaction, "the caller's transaction stays open"
+
+
 # --- faces and clustering primitives ----------------------------------------------------------
 
 
