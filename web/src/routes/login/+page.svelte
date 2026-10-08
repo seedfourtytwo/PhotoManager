@@ -50,9 +50,9 @@
 <style>
 	/* The same italic wordmark as the rail: the front door of the album. */
 	h1 {
-		font-style: italic;
+		font-style: var(--voice-style);
 		font-size: var(--fs-40);
-		font-weight: 350;
+		font-weight: var(--title-weight);
 		letter-spacing: -0.015em;
 	}
 	.lede {

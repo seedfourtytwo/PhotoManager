@@ -208,7 +208,7 @@
 		letter-spacing: -0.015em;
 	}
 	h1.quiet {
-		font-style: italic;
+		font-style: var(--voice-style);
 	}
 	.tools {
 		display: flex;
