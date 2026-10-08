@@ -50,7 +50,11 @@ def _plan(conn: sqlite3.Connection, viewer: Viewer, f: AssetFilter) -> str:
 
 @pytest.mark.parametrize(
     "f",
-    [AssetFilter(hidden=True), AssetFilter(favourite=True), AssetFilter(favourite=True, hidden=True)],
+    [
+        AssetFilter(hidden=True),
+        AssetFilter(favourite=True),
+        AssetFilter(favourite=True, hidden=True),
+    ],
 )
 def test_my_hidden_and_favourite_photos_are_found_without_walking_the_timeline(
     conn: sqlite3.Connection, member: Viewer, ids: list[int], f: AssetFilter
