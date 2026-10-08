@@ -410,3 +410,11 @@ export type ProtonStatus = { ready: boolean; problem: string | null };
 /** `path`: `/photos` (the Photos section) or `/my-files[/folder...]`. */
 export type ProtonSourceIn = { label: string; path: string };
 export type ProtonSource = ProtonSourceIn & { id: Id };
+
+// --- to review (issue 8) ----------------------------------------------------------------------
+
+/** A photo held out of the library; `like`: for a look-alike, the library photo it resembles. */
+export type HeldItem = { asset: AssetOut; like: AssetOut | null };
+/** `reason`: "lookalike", or the kind of clutter ("screenshot", "document", "receipt", "meme"). */
+export type ReviewGroup = { reason: string; items: HeldItem[] };
+export type ReviewList = { count: number; groups: ReviewGroup[] };

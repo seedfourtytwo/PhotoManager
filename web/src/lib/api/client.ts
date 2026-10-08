@@ -61,6 +61,7 @@ import type {
 	ProtonStatus,
 	RemoteSource,
 	RemoteSourceIn,
+	ReviewList,
 	ScoredAsset,
 	SearchResult,
 	SetupBody,
@@ -297,6 +298,13 @@ export function createApi(options: ApiOptions = {}) {
 		albumMembers: (id: Id) => get<AlbumMember[]>(`/api/albums/${id}/members`),
 		setAlbumMembers: (id: Id, members: AlbumMember[]) =>
 			request<AlbumMember[]>('PUT', `/api/albums/${id}/members`, members),
+
+		// to review: photos held out of the library until someone decides
+		review: () => get<ReviewList>('/api/review'),
+		reviewCount: () => get<{ count: number }>('/api/review/count'),
+		keepHeld: (ids: Id[]) => request<{ kept: number }>('POST', '/api/review/keep', { ids }),
+		discardHeld: (ids: Id[]) =>
+			request<{ discarded: number }>('POST', '/api/review/discard', { ids }),
 
 		// trash
 		trashAssets: (ids: Id[]) => request<{ trashed: number }>('DELETE', '/api/assets', { ids }),

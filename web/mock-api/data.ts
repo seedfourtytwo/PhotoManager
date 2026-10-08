@@ -107,6 +107,8 @@ export type MockAsset = {
 	edit_version: number;
 	private_owner: number | null;
 	trashed_at: string | null;
+	/** Waiting for review: why, and for a look-alike the library photo it resembles. */
+	held: { reason: string; like: number | null } | null;
 	seed: number;
 };
 
@@ -315,6 +317,7 @@ export function makeAsset(
 		edit_version: 0,
 		private_owner: null,
 		trashed_at: null,
+		held: null,
 		seed: r.int(1, 1_000_000)
 	};
 }
