@@ -3,6 +3,7 @@
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -32,17 +33,24 @@ class Env:
             queue=self.repo,
         )
         self.keys = tmp_path / "keys"
-        self.password = tmp_path / "secret" / "pw"
-        self.password.parent.mkdir()
-        self.password.write_text("pw\n")
         self.disk = tmp_path / "disk"
         self.disk.mkdir()
         app = FastAPI()
         # core's admin check (session + role) is covered in test_wiring.py
         app.dependency_overrides[admin_user] = lambda: User(1, "c", "C", Role.ADMIN)
-        app.state.ops = self.ops
+        app.state.services = SimpleNamespace(ops=self.ops)
         app.include_router(backup.router)
         self.client = TestClient(app)
+
+    @property
+    def password(self) -> Path:
+        """A key file in the app's key folder (over HTTP no other path is accepted), made on
+        first use so that the folder stays absent until a test needs it."""
+        path = self.keys / "pw"
+        if not path.exists():
+            self.keys.mkdir(exist_ok=True)
+            path.write_text("pw\n")
+        return path
 
     def work(self) -> None:
         """What the worker does with queued backup jobs."""

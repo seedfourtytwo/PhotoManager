@@ -137,6 +137,9 @@ class SqliteRepository(
     def set_source_enabled(self, source_id: int, enabled: bool) -> None:
         self._write("UPDATE source SET enabled = ? WHERE id = ?", (int(enabled), source_id))
 
+    def rename_source(self, source_id: int, label: str) -> None:
+        self._write("UPDATE source SET label = ? WHERE id = ?", (label, source_id))
+
     # --- assets ----------------------------------------------------------------------------
 
     _asset = staticmethod(asset_from_row)

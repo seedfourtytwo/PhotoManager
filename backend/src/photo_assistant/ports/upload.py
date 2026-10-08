@@ -43,6 +43,10 @@ class UploadSpool(Protocol):
 
     def discard(self, upload: SpooledUpload) -> None: ...
 
+    def free_bytes(self) -> int:
+        """Free space on the disk uploads are stored on."""
+        ...
+
 
 class LibraryIndex(Protocol):
     """The two things uploads need from the library (the Repository satisfies it)."""

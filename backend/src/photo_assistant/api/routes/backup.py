@@ -1,17 +1,16 @@
 """Admin endpoints for backups (FEATURES 9b.7, 9b.8).
 
-Expects ``app.state.ops`` to be the ``OpsServices`` built with the repository as job queue,
-so runs go through the worker. Every route is admin-only (core's session auth and roles).
+The backup service is ``Services.ops.backup``, built with the repository as job queue, so
+runs go through the worker. Every route is admin-only (core's session auth and roles).
 """
 
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from photo_assistant.api.deps import ADMIN_ONLY
-from photo_assistant.api.ops_services import OpsServices
+from photo_assistant.api.deps import ADMIN_ONLY, ServicesDep
 from photo_assistant.app.backup import BackupService, RecoverySheet, UnknownTargetError
 from photo_assistant.domain.backup import (
     BackupPlan,
@@ -25,9 +24,8 @@ from photo_assistant.domain.schedule import InvalidScheduleError
 from photo_assistant.ports.backup import BackupError, Disk
 
 
-def get_backup_service(request: Request) -> BackupService:
-    ops: OpsServices = request.app.state.ops
-    return ops.backup
+def get_backup_service(services: ServicesDep) -> BackupService:
+    return services.ops.backup
 
 
 BackupDep = Annotated[BackupService, Depends(get_backup_service)]
@@ -305,7 +303,7 @@ def add_backup(service: BackupDep, body: TargetIn) -> TargetOut:
             body.quiet_window,
             retention,
         )
-        target = service.add_target(new)
+        target = service.add_target(new, own_key_only=True)
     except (ValueError, InvalidScheduleError) as exc:
         code = status.HTTP_409_CONFLICT if "already exists" in str(exc) else 422
         raise HTTPException(code, str(exc)) from exc

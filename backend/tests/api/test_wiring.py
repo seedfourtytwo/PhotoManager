@@ -49,6 +49,15 @@ def _upload(client: TestClient, name: str = "IMG_1002.JPG", **kw: object) -> dic
 # --- composition ------------------------------------------------------------------------------
 
 
+def test_the_app_keeps_its_services_in_one_place(admin: TestClient) -> None:
+    """One accessor (deps.get_services): no second and third name for parts of the same object."""
+    state = admin.app.state  # type: ignore[attr-defined]
+    assert state.services is services_of(admin)
+    assert not hasattr(state, "integrations") and not hasattr(state, "ops")
+    assert admin.get("/api/backups").status_code == 200
+    assert admin.get("/api/proton").status_code == 200
+
+
 def test_the_worker_handles_every_job_kind_of_every_branch(admin: TestClient) -> None:
     kinds = services_of(admin).worker.kinds
     core = {"scan_source", "preview", "geocode", "group", "purge_trash"}

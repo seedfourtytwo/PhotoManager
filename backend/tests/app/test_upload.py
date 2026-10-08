@@ -83,6 +83,37 @@ def test_a_photo_lands_in_the_users_inbox_under_the_month(world: World) -> None:
     assert list(world.tmp.iterdir()) == []
 
 
+class MeasuredSpool(DiskUploadSpool):
+    free = 0
+
+    def free_bytes(self) -> int:
+        return self.free
+
+
+def test_a_file_is_refused_while_the_disk_is_under_its_free_space_floor(tmp_path: Path) -> None:
+    gb = 1000**3
+    spool = MeasuredSpool(tmp_path / "tmp")
+    use_case = UploadInbox(
+        inbox=FakeInboxes(),
+        library=FakeLibrary(),
+        spool=spool,
+        clock=FixedClock(),
+        inbox_root=tmp_path / "inbox",
+        settings=UploadSettings(min_free_bytes=10 * gb),
+    )
+    spool.free = 10 * gb - 1
+    refused = use_case.no_room("IMG_1.JPG")
+    assert refused is not None and refused.outcome is UploadOutcome.REJECTED
+    assert refused.name == "IMG_1.JPG" and refused.reason is not None
+    assert "10.0 GB free" in refused.reason and "at least 10 GB" in refused.reason
+    spool.free = 10 * gb
+    assert use_case.no_room("IMG_1.JPG") is None, "exactly at the floor there is room"
+
+
+def test_without_a_floor_every_file_has_room(world: World) -> None:
+    assert world.use_case.no_room("IMG_1.JPG") is None
+
+
 def test_finishing_a_batch_enqueues_one_import_of_the_inbox(world: World) -> None:
     results = [
         world.use_case.accept(ME, f"{n}.jpg", _spooled(world, JPEG + bytes([n]))) for n in (1, 2)

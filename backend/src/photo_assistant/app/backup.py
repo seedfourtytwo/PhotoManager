@@ -50,6 +50,7 @@ from photo_assistant.ports.backup import (
     Disk,
     JobQueue,
     KeyVault,
+    PasswordFileError,
     RepositoryRef,
 )
 
@@ -141,7 +142,15 @@ class BackupService:
 
     # --- targets ---------------------------------------------------------------------------
 
-    def add_target(self, new: NewBackupTarget) -> BackupTarget:
+    def add_target(self, new: NewBackupTarget, *, own_key_only: bool = False) -> BackupTarget:
+        """``own_key_only`` (requests over HTTP): the password file must be one of the key
+        vault's own files. The recovery sheet shows that file, so a free path would let a
+        browser session read any file; the command line may still point anywhere."""
+        if own_key_only and not self._need_vault().holds(Path(new.password_file)):
+            raise ValueError(
+                "the password file must be a key file in this app's key folder; for a file "
+                "elsewhere on the server use the command line (just backup add)"
+            )
         self._validate_locations(new)
         return self._store.add_target(new, self._clock.now())
 
@@ -227,8 +236,13 @@ class BackupService:
 
     def recovery(self, target_id: int) -> RecoverySheet:
         target = self.target(target_id)
-        key = self._need_vault().read(Path(target.password_file))
-        return RecoverySheet(target.label, target.repository, key)
+        vault, key_file = self._need_vault(), Path(target.password_file)
+        if not vault.holds(key_file):  # never read a file the vault doesn't own
+            raise PasswordFileError(
+                "this backup's password file was chosen on the command line, so it is not "
+                f"shown here: read {key_file} on the server"
+            )
+        return RecoverySheet(target.label, target.repository, vault.read(key_file))
 
     def confirm_key_saved(self, target_id: int) -> None:
         """The owner says a copy of the key exists outside this machine. The first time counts."""

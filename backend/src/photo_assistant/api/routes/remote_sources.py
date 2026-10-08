@@ -7,8 +7,7 @@ is a source of kind "rclone"). Admin-only (core's admin check), like adding any 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from photo_assistant.api.deps import ADMIN_ONLY
-from photo_assistant.api.integrations import IntegrationsDep
+from photo_assistant.api.deps import ADMIN_ONLY, IntegrationsDep
 from photo_assistant.app.sync_source import SCAN_JOB_KIND, add_remote_source
 from photo_assistant.domain.remote_source import RemoteConfigError
 from photo_assistant.ports.sync import SyncError

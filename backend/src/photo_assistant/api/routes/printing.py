@@ -10,9 +10,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep
+from photo_assistant.api.schemas import Id
 from photo_assistant.api.services import Services
 from photo_assistant.app.album_printer import (
     AlbumPrintBlockedError,
@@ -69,18 +70,24 @@ class PrintOptionsOut(BaseModel):
     layouts: list[LayoutOut]
 
 
+MAX_PAGE_PHOTOS = max(lay.capacity for lay in LAYOUTS.values())  # no layout holds more
+MAX_PAGES = 10_000  # an album's own photo limit, at one photo a page
+MAX_PAGE_TEXT = 5000  # as an album's description, the other free text that is printed
+_NAME = Field(max_length=40)  # trim, theme and layout ids are short words
+
+
 class PageIn(BaseModel):
-    layout_id: str
-    asset_ids: list[int]
-    text: str = ""
+    layout_id: Annotated[str, _NAME]
+    asset_ids: list[Id] = Field(max_length=MAX_PAGE_PHOTOS)
+    text: str = Field(default="", max_length=MAX_PAGE_TEXT)
 
 
 class PrintRequestIn(BaseModel):
-    trim: str = "a4-landscape"
-    theme: str = "quiet"
+    trim: Annotated[str, _NAME] = "a4-landscape"
+    theme: Annotated[str, _NAME] = "quiet"
     cover: bool = True
     crop_marks: bool = False
-    pages: list[PageIn] | None = None
+    pages: list[PageIn] | None = Field(default=None, max_length=MAX_PAGES)
     allow_low_resolution: bool = False
 
     def to_request(self) -> PrintRequest:

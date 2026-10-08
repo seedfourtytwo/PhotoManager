@@ -4,7 +4,7 @@ import sqlite3
 from datetime import UTC, datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
-from photo_assistant.domain.access import Role, User
+from photo_assistant.domain.access import Role, User, too_many_failures
 from photo_assistant.ports.accounts import (
     NoActiveAdminError,
     NotFirstUserError,
@@ -81,16 +81,19 @@ class AccountsMixin(SqliteBase):
         display_name: str | None = None,
         role: Role | None = None,
         disabled: bool | None = None,
+        password_hash: str | None = None,
     ) -> None:
         with self._transaction():  # the last-admin rule is checked inside (QA A8)
             self._conn.execute(
                 """UPDATE user SET display_name = COALESCE(?, display_name),
-                       role = COALESCE(?, role), disabled = COALESCE(?, disabled)
+                       role = COALESCE(?, role), disabled = COALESCE(?, disabled),
+                       password_hash = COALESCE(?, password_hash)
                    WHERE id = ?""",
                 (
                     display_name,
                     role.value if role else None,
                     None if disabled is None else int(disabled),
+                    password_hash,
                     user_id,
                 ),
             )
@@ -153,17 +156,19 @@ class AccountsMixin(SqliteBase):
 
     # --- failed logins ---------------------------------------------------------------------
 
-    def add_login_failure(self, username: str, ip: str, at: datetime) -> None:
-        self._write(
-            "INSERT INTO login_failure (username, ip, at) VALUES (?, ?, ?)",
-            (username, ip, utc_text(at)),
-        )
-
-    def count_login_failures(self, username: str, ip: str, since: datetime) -> int:
-        return self._scalar(
-            "SELECT COUNT(*) FROM login_failure WHERE username = ? AND ip = ? AND at > ?",
-            (username, ip, utc_text(since)),
-        )
+    def record_login_attempt(self, username: str, ip: str, at: datetime, since: datetime) -> bool:
+        with self._transaction():  # count and insert as one step: parallel guesses queue here
+            recent = self._conn.execute(
+                "SELECT COUNT(*) FROM login_failure WHERE username = ? AND ip = ? AND at > ?",
+                (username, ip, utc_text(since)),
+            ).fetchone()[0]
+            if too_many_failures(recent):
+                return False
+            self._conn.execute(
+                "INSERT INTO login_failure (username, ip, at) VALUES (?, ?, ?)",
+                (username, ip, utc_text(at)),
+            )
+            return True
 
     def clear_login_failures(self, username: str, ip: str) -> None:
         self._write("DELETE FROM login_failure WHERE username = ? AND ip = ?", (username, ip))

@@ -48,5 +48,9 @@ class FileKeyVault:
             raise PasswordFileError(f"the key file is empty: {key_file}")
         return key
 
+    def holds(self, key_file: Path) -> bool:
+        folder, target = self._folder.resolve(), key_file.resolve()
+        return target != folder and target.is_relative_to(folder)
+
     def discard(self, key_file: Path) -> None:
         key_file.unlink(missing_ok=True)
