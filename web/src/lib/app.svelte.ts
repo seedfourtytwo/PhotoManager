@@ -26,8 +26,11 @@ function sameSitePath(next: string | null): string {
 
 class Session {
 	user = $state<User | null>(null);
-	/** True once we know whether someone is signed in. */
+	/** True once we asked who is signed in (whatever came of it). */
 	ready = $state(false);
+	/** Why we could not find out who is signed in (server down or unreachable), else null. */
+	error = $state<string | null>(null);
+	#loading: Promise<void> | null = null;
 
 	get isAdmin() {
 		return this.user?.role === 'admin';
@@ -44,14 +47,31 @@ class Session {
 		void goto(`/login?next=${encodeURIComponent(currentPath())}`, { replaceState: true });
 	}
 
-	/** Who is signed in? Sends a fresh install to setup and everyone else to sign-in. */
-	async load(): Promise<void> {
+	/**
+	 * Who is signed in? Sends a fresh install to setup and everyone else to sign-in. Never
+	 * rejects: when the server cannot say, the reason is kept in `error` for the layout to show.
+	 */
+	load(): Promise<void> {
+		this.#loading ??= this.#ask().finally(() => (this.#loading = null));
+		return this.#loading;
+	}
+
+	/** Ask again, but only after a failure (the network came back, the tab was reopened). */
+	retry(): Promise<void> {
+		return this.error === null ? Promise.resolve() : this.load();
+	}
+
+	async #ask(): Promise<void> {
 		try {
-			this.user = await api.me();
+			this.user = await api.me().catch(async (error: unknown) => {
+				if (!(error instanceof ApiError) || error.status !== 401) throw error;
+				const { needs_admin } = await api.setupState();
+				if (needs_admin) await goto('/setup', { replaceState: true });
+				return null;
+			});
+			this.error = null;
 		} catch (error) {
-			if (!(error instanceof ApiError) || error.status !== 401) throw error;
-			const { needs_admin } = await api.setupState();
-			if (needs_admin) await goto('/setup', { replaceState: true });
+			this.error = error instanceof Error ? error.message : 'Something went wrong.';
 		} finally {
 			this.ready = true;
 		}

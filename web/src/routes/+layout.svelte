@@ -14,9 +14,15 @@
 
 	onMount(() => {
 		applyTheme(settings.theme);
-		if (!bare) session.load().catch((e: unknown) => notice.error(e));
+		if (!bare) void session.load();
 	});
 </script>
+
+<!-- Could not reach the server on opening: try again when the network or the tab comes back. -->
+<svelte:window ononline={() => void session.retry()} />
+<svelte:document
+	onvisibilitychange={() => document.visibilityState === 'visible' && void session.retry()}
+/>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
@@ -36,6 +42,14 @@
 		<main id="main" tabindex="-1">{@render children()}</main>
 		{#if filterable}<FilterPanel />{/if}
 	</div>
+{:else if session.error}
+	<main id="main" class="bare">
+		<div class="empty-state" role="alert">
+			<p>Can't reach the library.</p>
+			<p>{session.error}</p>
+			<button type="button" class="primary" onclick={() => void session.load()}>Retry</button>
+		</div>
+	</main>
 {:else if session.ready}
 	<p class="quiet opening">Signing you in…</p>
 {:else}

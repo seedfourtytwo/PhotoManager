@@ -44,3 +44,35 @@ test('map: a failed page of located photos is reported, not swallowed', async ({
 	await signIn(page, '/map');
 	await expect(page.getByRole('status')).toContainText('The library is busy, try again');
 });
+
+test('opening the app while the server is down says so and recovers on Retry', async ({ page }) => {
+	await signIn(page);
+	await expect(page.locator('.tile').first()).toBeVisible();
+	await page.route('**/api/auth/me', (route) => route.abort('connectionrefused'));
+	await page.reload();
+	const failure = page.getByRole('alert');
+	await expect(failure).toContainText("Can't reach the library.");
+	await expect(failure).toContainText('The library server could not be reached.');
+	await expect(page.getByText('Signing you in…')).toHaveCount(0);
+
+	// Still down: Retry keeps the message. Back up: the library opens.
+	await failure.getByRole('button', { name: 'Retry' }).click();
+	await expect(failure).toBeVisible();
+	await page.unroute('**/api/auth/me');
+	await failure.getByRole('button', { name: 'Retry' }).click();
+	await expect(page.locator('.tile').first()).toBeVisible();
+});
+
+test('a server error on opening is shown, and the app retries when the network returns', async ({
+	page
+}) => {
+	await signIn(page);
+	await page.route('**/api/auth/me', (route) =>
+		route.fulfill({ status: 503, json: { detail: 'the library is starting' } })
+	);
+	await page.reload();
+	await expect(page.getByRole('alert')).toContainText('The library is starting');
+	await page.unroute('**/api/auth/me');
+	await page.evaluate(() => window.dispatchEvent(new Event('online')));
+	await expect(page.locator('.tile').first()).toBeVisible();
+});
