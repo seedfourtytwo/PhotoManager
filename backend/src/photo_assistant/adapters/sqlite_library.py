@@ -225,11 +225,13 @@ _FILTERS: list[Callable[[AssetFilter, Clauses, Bindings], None]] = [
 
 
 def from_sql(f: AssetFilter) -> str:
-    """``FROM asset a`` with the per-photo joins. "Only my favourites" starts from my
-    favourites (C25): a handful of rows instead of a walk over the whole timeline."""
-    if f.favourite:
+    """``FROM asset a`` with the per-photo joins. "Only my favourites" and "only my hidden
+    photos" start from my own marks (C25): a handful of rows instead of a walk over the whole
+    timeline."""
+    mine = [f"fav.{flag} = 1" for flag in ("favourite", "hidden") if getattr(f, flag)]
+    if mine:
         return f"""FROM user_asset fav JOIN asset a ON a.id = fav.asset_id
-            AND fav.user_id = :vis_uid AND fav.favourite = 1 {ASSET_JOINS}"""
+            AND fav.user_id = :vis_uid AND {" AND ".join(mine)} {ASSET_JOINS}"""
     return ASSET_FROM
 
 
