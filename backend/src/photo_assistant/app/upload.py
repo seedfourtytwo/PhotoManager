@@ -34,6 +34,7 @@ NOT_A_PHOTO = "not a photo (only JPEG, PNG, HEIC, WebP, TIFF, GIF, AVIF and RAW 
 @dataclass(frozen=True, slots=True)
 class UploadSettings:
     max_bytes: int = 200 * 1000**2
+    min_free_bytes: int = 0  # keep this much of the disk free, as the importer does
     max_check_hashes: int = 5000
     import_job_kind: str = SCAN_JOB_KIND
 
@@ -75,6 +76,18 @@ class UploadInbox:
     def start(self) -> SpoolWriter:
         """A writer for the next file; its ``write`` enforces the size limit."""
         return self._spool.open(self._settings.max_bytes)
+
+    def no_room(self, client_name: str) -> UploadResult | None:
+        """The refusal for a file arriving while the disk is under its free-space floor
+        (asked before a byte of it is stored), or None while there is room."""
+        free, floor = self._spool.free_bytes(), self._settings.min_free_bytes
+        if free >= floor:
+            return None
+        reason = (
+            f"the library disk is almost full ({free / 1000**3:.1f} GB free; uploads keep at "
+            f"least {floor / 1000**3:.0f} GB free): free up space on the server, then send it again"
+        )
+        return UploadResult(client_name, UploadOutcome.REJECTED, reason=reason)
 
     def accept(self, viewer: Viewer, client_name: str, spooled: SpooledUpload) -> UploadResult:
         """Store a received photo in the uploader's inbox, unless *they* already have it.

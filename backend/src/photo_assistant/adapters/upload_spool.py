@@ -6,6 +6,7 @@ overwritten) and then drops the temp name; ``data/tmp`` and ``data/inbox`` share
 """
 
 import os
+import shutil
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -84,3 +85,7 @@ class DiskUploadSpool:
 
     def discard(self, upload: SpooledUpload) -> None:
         upload.path.unlink(missing_ok=True)
+
+    def free_bytes(self) -> int:
+        self._tmp.mkdir(parents=True, exist_ok=True)
+        return shutil.disk_usage(self._tmp).free

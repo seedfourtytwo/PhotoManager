@@ -108,6 +108,22 @@ def test_upload_stores_photos_in_the_inbox_and_queues_an_import(world: World) ->
     assert list((world.data / "tmp").iterdir()) == []
 
 
+def test_uploads_are_refused_while_the_disk_is_under_its_free_space_floor(tmp_path: Path) -> None:
+    data = tmp_path / "full" / "data"
+    app = create_app(make_settings(data, min_free_gb=10**9))  # more than any disk has free
+    with TestClient(app, base_url=BASE) as admin:
+        admin.post("/api/setup", json={"username": "u1", "display_name": "U1", "pin": PIN})
+        files = [("file", ("a.jpg", JPEG, "image/jpeg")), ("file", ("b.png", PNG, "image/png"))]
+        response = admin.post("/api/upload", files=files)
+    assert response.status_code == 200
+    body = response.json()
+    assert [f["outcome"] for f in body["files"]] == ["rejected", "rejected"]
+    assert all("GB free" in f["reason"] for f in body["files"]), body
+    assert body["import_job_id"] is None
+    assert not (data / "inbox").exists()
+    assert list((data / "tmp").glob("*.partial")) == []
+
+
 def test_each_user_has_a_separate_inbox(world: World) -> None:
     _upload(world, [("a.jpg", JPEG)], _as(1))
     _upload(world, [("b.jpg", PNG)], _as(2))

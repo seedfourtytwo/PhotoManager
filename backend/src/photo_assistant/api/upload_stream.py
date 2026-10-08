@@ -81,6 +81,9 @@ class UploadReceiver:
             reason = f"too many files in one upload (at most {self._max_files}); send the rest"
             self.results.append(UploadResult(name, UploadOutcome.REJECTED, reason=reason))
             return
+        if (refusal := self._upload.no_room(name)) is not None:
+            self.results.append(refusal)
+            return
         self._files += 1
         self._name = name
         self._writer = self._upload.start()

@@ -87,6 +87,7 @@ def build_services(settings: Settings) -> Services:
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)
     exiftool = ExifToolReader()
     clock = SystemClock()
+    min_free_bytes = int(settings.min_free_gb * 1000**3)  # one floor: imports and uploads
     importer = ImportSource(
         repo=repo,
         reader=FolderSourceReader(),
@@ -95,9 +96,7 @@ def build_services(settings: Settings) -> Services:
         renderer=renderer,
         store=with_source_areas(store, root),  # staging/ and inbox/ live in the data root
         clock=clock,
-        settings=ImportSettings(
-            min_free_bytes=int(settings.min_free_gb * 1000**3), thumb_edge=settings.thumb_edge
-        ),
+        settings=ImportSettings(min_free_bytes=min_free_bytes, thumb_edge=settings.thumb_edge),
     )
     trash = Trash(repo, store, clock)
     integrations = build_integrations(
@@ -107,6 +106,7 @@ def build_services(settings: Settings) -> Services:
         repo=repo,
         importer=importer,
         clock=clock,
+        min_free_bytes=min_free_bytes,
     )
     ml = build_ml_services(root, settings.ml, repo, store, db)
 

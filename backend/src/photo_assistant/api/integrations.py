@@ -69,6 +69,7 @@ def build_integrations(
     repo: Repository,
     importer: Importer,
     clock: Clock | None = None,
+    min_free_bytes: int = 0,
 ) -> Integrations:
     clock = clock or SystemClock()
     remote_sources = SqliteRemoteSources(conn, repo)
@@ -81,7 +82,7 @@ def build_integrations(
         spool=DiskUploadSpool(data_root / "tmp"),
         clock=clock,
         inbox_root=inbox_root(data_root),
-        settings=UploadSettings(max_bytes=settings.upload_max_bytes),
+        settings=UploadSettings(max_bytes=settings.upload_max_bytes, min_free_bytes=min_free_bytes),
     )
     sync_source = SyncSource(
         sources=repo,
