@@ -17,6 +17,7 @@ from photo_assistant.domain.errors import DomainError
 from photo_assistant.domain.job_queue import (
     CLAIM_STALE_AFTER,
     HEARTBEAT_INTERVAL,
+    MAX_ATTEMPTS,
     STALE_SWEEP_INTERVAL,
     retry_delay,
 )
@@ -40,7 +41,7 @@ class Worker:
         handlers: Mapping[str, Handler],
         clock: Clock,
         *,
-        max_attempts: int = 3,
+        max_attempts: int = MAX_ATTEMPTS,
         poll_seconds: float = 1.0,
         only: Collection[str] | None = None,
         excluding: Collection[str] = (),

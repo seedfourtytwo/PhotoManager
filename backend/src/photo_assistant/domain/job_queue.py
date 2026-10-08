@@ -6,6 +6,9 @@ from datetime import timedelta
 # backup repository or an unplugged disk gets time to recover instead of using up every
 # attempt within seconds. Entry n is the wait after the n-th failed attempt.
 RETRY_DELAYS = (timedelta(minutes=1), timedelta(minutes=5), timedelta(minutes=25))
+# One first run plus one retry after each wait, so every entry above is used: an outage of
+# up to 31 minutes passes before a job fails for good. The crash-loop guard counts the same.
+MAX_ATTEMPTS = len(RETRY_DELAYS) + 1
 
 # The process running a job renews its claim this often, however long the job takes …
 HEARTBEAT_INTERVAL = timedelta(seconds=30)

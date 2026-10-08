@@ -232,10 +232,10 @@ retries: they say "the same job would fail the same way" (a folder that is gone,
 model that is not installed, a backup target deleted meanwhile). So an error that may pass by
 waiting must never be a `DomainError`: `SyncError`, `BackupError` and `AIUnavailableError`
 stay outside the hierarchy for that reason (`tests/app/test_job_failures.py` pins both lists).
-Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
-minute after the first failure, 5 after the second (`domain/job_queue.RETRY_DELAYS`; a third
-entry, 25 minutes, applies if `max_attempts` is ever raised). A claim skips jobs whose time has
-not come, so a network blip, a locked backup repository or an unplugged disk has ~6 minutes to
+Anything else gets 4 attempts (`domain/job_queue.MAX_ATTEMPTS`: one more than the schedule
+has waits), and a failed attempt sets the job's `run_after`: 1 minute after the first failure,
+5 after the second, 25 after the third (`RETRY_DELAYS`). A claim skips jobs whose time has
+not come, so a network blip, a locked backup repository or an unplugged disk has ~31 minutes to
 pass before the job fails for good, instead of ~3 seconds. "Retry" on the admin screen clears
 the wait and the attempts: the job runs at the next poll. `run_until_idle` (CLI import, tests)
 returns once nothing is *due*; a waiting retry stays queued for the server's worker.
