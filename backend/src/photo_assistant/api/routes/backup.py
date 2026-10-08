@@ -305,7 +305,7 @@ def add_backup(service: BackupDep, body: TargetIn) -> TargetOut:
             body.quiet_window,
             retention,
         )
-        target = service.add_target(new)
+        target = service.add_target(new, own_key_only=True)
     except (ValueError, InvalidScheduleError) as exc:
         code = status.HTTP_409_CONFLICT if "already exists" in str(exc) else 422
         raise HTTPException(code, str(exc)) from exc

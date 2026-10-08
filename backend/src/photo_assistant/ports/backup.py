@@ -127,6 +127,10 @@ class KeyVault(Protocol):
         """Raises PasswordFileError if the file is gone or unreadable."""
         ...
 
+    def holds(self, key_file: Path) -> bool:
+        """Is this path a file of the vault itself (symlinks and ``..`` resolved)?"""
+        ...
+
     def discard(self, key_file: Path) -> None: ...
 
 

@@ -32,9 +32,6 @@ class Env:
             queue=self.repo,
         )
         self.keys = tmp_path / "keys"
-        self.password = tmp_path / "secret" / "pw"
-        self.password.parent.mkdir()
-        self.password.write_text("pw\n")
         self.disk = tmp_path / "disk"
         self.disk.mkdir()
         app = FastAPI()
@@ -43,6 +40,16 @@ class Env:
         app.state.ops = self.ops
         app.include_router(backup.router)
         self.client = TestClient(app)
+
+    @property
+    def password(self) -> Path:
+        """A key file in the app's key folder (over HTTP no other path is accepted), made on
+        first use so that the folder stays absent until a test needs it."""
+        path = self.keys / "pw"
+        if not path.exists():
+            self.keys.mkdir(exist_ok=True)
+            path.write_text("pw\n")
+        return path
 
     def work(self) -> None:
         """What the worker does with queued backup jobs."""
