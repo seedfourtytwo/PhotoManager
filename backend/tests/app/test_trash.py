@@ -167,3 +167,52 @@ def test_concurrent_restores_and_purges_never_leave_a_photo_without_its_original
             assert repo.is_purged_hash(new_asset(n).content_hash)
             continue
         assert store.absolute(asset.library_path).is_file(), f"photo {n} lost its original"
+
+
+class CountedIds(list[int]):
+    iterations = 0
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        self.iterations += 1
+        return super().__iter__()
+
+
+def test_emptying_reads_the_wanted_ids_once_however_many_photos_are_in_the_trash(world) -> None:  # type: ignore[no-untyped-def]
+    repo, store, _, trash = world
+    ids = [library_photo(repo, store, n) for n in range(1, 6)]
+    trash.trash(ids, user_id=1)
+    wanted = CountedIds(ids[:2])
+    assert trash.empty(ADMIN, wanted) == 2
+    assert wanted.iterations == 1, "not once per photo in the trash"
+
+
+class OneStuckFile:
+    """The store, except that one photo's original cannot be deleted."""
+
+    def __init__(self, store: DiskLibraryStore, stuck: str) -> None:
+        self._store = store
+        self._stuck = stuck
+
+    def remove(self, relative_path: str) -> None:
+        if relative_path == self._stuck:
+            raise PermissionError(13, "Permission denied", relative_path)
+        self._store.remove(relative_path)
+
+    def remove_renditions(self, content_hash: str) -> None:
+        self._store.remove_renditions(content_hash)
+
+
+def test_one_file_that_cannot_be_deleted_does_not_stop_the_purge(world, caplog) -> None:  # type: ignore[no-untyped-def]
+    repo, store, clock, _ = world
+    stuck, fine = library_photo(repo, store, 1), library_photo(repo, store, 2)
+    stuck_asset, fine_asset = repo.get_asset(stuck), repo.get_asset(fine)
+    assert stuck_asset is not None and fine_asset is not None
+    trash = Trash(repo, OneStuckFile(store, stuck_asset.library_path), clock)
+    trash.trash([stuck, fine], user_id=1)
+    with caplog.at_level("WARNING"):
+        assert trash.empty(ADMIN, None) == 2
+    assert repo.get_asset(stuck) is None and repo.get_asset(fine) is None
+    assert not store.absolute(fine_asset.library_path).exists()
+    assert not store.absolute("derived/thumb/1.webp").exists(), "the rest of it still goes"
+    (warning,) = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert getattr(warning, "path", None) == stuck_asset.library_path

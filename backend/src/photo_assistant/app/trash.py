@@ -4,6 +4,7 @@ Sources are never touched: a purged photo that is still in a source is remembere
 content hash, so rescans report it as skipped instead of importing it again.
 """
 
+import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -12,6 +13,8 @@ from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.model import Asset
 from photo_assistant.ports import Clock
 from photo_assistant.ports.library import AssetView
+
+log = logging.getLogger(__name__)
 
 TRASH_DAYS = 30
 PURGE_JOB = "purge_trash"
@@ -55,7 +58,11 @@ class Trash:
         """Purge these photos from the trash (all of it when ``ids`` is None), but only those
         the viewer can see in the trash: an admin never purges someone's private photo."""
         mine = [v.id for v in self._repo.trashed_views(viewer)]
-        wanted = mine if ids is None else [i for i in mine if i in set(ids)]
+        if ids is None:
+            wanted = mine
+        else:
+            asked = set(ids)
+            wanted = [i for i in mine if i in asked]
         return self._purge(self._repo.purge_candidates(wanted, None))
 
     def purge_expired(self, payload: dict[str, object]) -> int:
@@ -71,9 +78,27 @@ class Trash:
             # originals/ (found by verify-library) — never a photo without its original.
             if not self._repo.purge_asset(asset, self._clock.now()):
                 continue
-            for relative in (asset.library_path, asset.thumb_path, asset.preview_path):
-                if relative:
-                    self._files.remove(relative)
-            self._files.remove_renditions(asset.content_hash)
+            self._remove_files(asset)
             purged += 1
         return purged
+
+    def _remove_files(self, asset: Asset) -> None:
+        """One file that cannot be deleted (permissions, a disk error) is logged and left as
+        an orphan: it never keeps the rest of the trash from being emptied."""
+        for relative in (asset.library_path, asset.thumb_path, asset.preview_path):
+            if relative:
+                try:
+                    self._files.remove(relative)
+                except OSError as exc:
+                    _left_behind(relative, exc)
+        try:
+            self._files.remove_renditions(asset.content_hash)
+        except OSError as exc:
+            _left_behind(f"renditions of {asset.content_hash}", exc)
+
+
+def _left_behind(path: str, exc: OSError) -> None:
+    log.warning(
+        "could not delete a purged photo's file",
+        extra={"path": path, "reason": exc.strerror or str(exc)},
+    )
