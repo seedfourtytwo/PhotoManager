@@ -38,7 +38,7 @@ from photo_assistant.api.routes import (
     upload,
     users,
 )
-from photo_assistant.api.security import CrossSiteGuard, RequestLimits
+from photo_assistant.api.security import CrossSiteGuard, RequestLimits, SessionCookieRenewal
 from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import Settings, get_settings, warn_about_unknown_settings
 from photo_assistant.domain.errors import DomainError
@@ -148,6 +148,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         GZipMiddleware, minimum_size=1024, compresslevel=6, exclude_content_types=_NOT_GZIPPED
     )
+    app.add_middleware(SessionCookieRenewal)
     app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     app.add_middleware(RequestLimits)  # outermost: also marks the refusals of those above

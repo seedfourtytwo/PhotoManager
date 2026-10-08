@@ -4,24 +4,16 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from photo_assistant.api.deps import SESSION_COOKIE, CurrentUser, ServicesDep
 from photo_assistant.api.schemas import AccountName, Credentials, NewPin, SetupIn, UserOut
+from photo_assistant.api.security import clear_session_cookies, set_session_cookies
 from photo_assistant.app.accounts import (
     InvalidCredentialsError,
 )
-from photo_assistant.domain.access import SESSION_IDLE_LIMIT
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
 def _set_session(request: Request, response: Response, token: str) -> None:
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        max_age=int(SESSION_IDLE_LIMIT.total_seconds()),
-        httponly=True,
-        samesite="strict",
-        secure=request.url.scheme == "https",
-        path="/",
-    )
+    set_session_cookies(response, token, secure=request.url.scheme == "https")
 
 
 def _address(request: Request) -> str:
@@ -68,7 +60,7 @@ def logout(services: ServicesDep, user: CurrentUser, request: Request) -> Respon
     response = Response(
         status_code=status.HTTP_204_NO_CONTENT, headers={"Clear-Site-Data": '"cache"'}
     )
-    response.delete_cookie(SESSION_COOKIE, path="/")
+    clear_session_cookies(response)
     return response
 
 

@@ -14,6 +14,9 @@ MAX_FAILED_LOGINS = 10  # wrong PINs for one account, from any address, within t
 FAILED_LOGIN_WINDOW = timedelta(minutes=15)
 LOCK_AFTER_FAILED_PINS = 30  # wrong PINs since the account's last good sign-in, however slow
 SESSION_IDLE_LIMIT = timedelta(days=30)
+# The browser keeps the session cookie for SESSION_IDLE_LIMIT from when it was *set*; a
+# session in use gets the cookie again once this much of that time is over.
+SESSION_COOKIE_RENEW_AFTER = timedelta(days=15)
 
 _USERNAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PIN = re.compile(rf"[0-9]{{{PIN_LENGTH}}}")  # ASCII digits only: what a phone keypad types

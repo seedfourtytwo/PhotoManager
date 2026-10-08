@@ -346,7 +346,11 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   roles × trash) and `tests/adapters/test_visibility_rule.py` (random libraries checked against
   the previous set-based rule).
 - Sessions: random 256-bit token in the `pa_session` cookie (HttpOnly, SameSite=Strict, Secure
-  over HTTPS); only its SHA-256 is stored. Every `/api` route except health, setup and login
+  over HTTPS); only its SHA-256 is stored. A session ends 30 days after its last use; the
+  browser counts the cookie's 30 days from when it was set, so a session in use gets the same
+  cookie again every 15 days (`api/security.SessionCookieRenewal`). The server cannot see a
+  cookie's age: a second cookie, `pa_session_fresh`, is set alongside for 15 days, and a
+  request without it is the sign that half the time is over. Every `/api` route except health, setup and login
   needs a session; source, scan, import, job, access-list and user routes are admin-only.
   Upload routes take the session **or** a device token through one fail-closed dependency
   (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all

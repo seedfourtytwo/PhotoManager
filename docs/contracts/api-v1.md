@@ -8,7 +8,10 @@ Conventions
 - JSON everywhere; errors are `{"detail": "human sentence"}` with 4xx/5xx.
 - Dates: `taken_at` is local wall-clock time, ISO without zone (`2019-07-04T18:30:00`);
   `tz_offset_minutes` may be null. Day filters use `YYYY-MM-DD`.
-- Auth: session cookie `pa_session` (HttpOnly, SameSite=Strict, Secure when served over HTTPS).
+- Auth: session cookie `pa_session` (HttpOnly, SameSite=Strict, Secure when served over HTTPS),
+  kept 30 days. Any authenticated response may set it again with the same value (the server
+  does so every 15 days of use, together with its marker cookie `pa_session_fresh`), so a
+  session that is used does not end; clients have nothing to do.
   Every `/api/*` route needs a session **except** `/api/health`, `/api/setup` (GET/POST),
   `/api/auth/accounts`, `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
 - Roles: `admin` (everything, manages users/sources/access), `member`, `guest`

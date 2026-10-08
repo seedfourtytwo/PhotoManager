@@ -34,6 +34,14 @@ _TOUCH_EVERY = timedelta(minutes=1)  # don't write to the database on every requ
 _VERIFIES_AT_ONCE = 2  # an argon2 check holds its whole memory cost (64 MiB) while it runs
 
 
+@dataclass(frozen=True, slots=True)
+class OpenSession:
+    user: User
+    # this use was written down (at most once per _TOUCH_EVERY): the moment the API may
+    # send the cookie again, so that never happens on every request
+    touched: bool
+
+
 class AccountError(InvalidError):
     """A request about accounts that can't be done; the message says why (422 by default)."""
 
@@ -254,6 +262,12 @@ class Accounts:
 
     def authenticate(self, token: str) -> User | None:
         """The user behind a session cookie, or None (unknown, expired, disabled)."""
+        found = self.session(token)
+        return found.user if found else None
+
+    def session(self, token: str) -> OpenSession | None:
+        """The session behind a cookie, or None (unknown, expired, disabled). Using it is
+        what keeps it alive: its last use is written down, at most once a minute."""
         key = _token_hash(token)
         found = self._store.session_user(key)
         if found is None:
@@ -263,9 +277,10 @@ class Accounts:
         if user.disabled or session_expired(last_seen, now):
             self._store.delete_session(key)
             return None
-        if now - last_seen > _TOUCH_EVERY:
+        touched = now - last_seen > _TOUCH_EVERY
+        if touched:
             self._store.touch_session(key, now)
-        return user
+        return OpenSession(user, touched)
 
     def logout(self, token: str) -> None:
         self._store.delete_session(_token_hash(token))
