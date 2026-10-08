@@ -11,6 +11,7 @@ import logging
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import tzinfo
 from pathlib import Path, PurePosixPath
 
 from photo_assistant.domain.capture_time import pick_capture_time
@@ -61,6 +62,9 @@ class ImportSettings:
     min_free_bytes: int = 10 * 1000**3  # FEATURES 11.4: stop before the disk fills up
     thumb_edge: int = 640
     metadata_batch: int = 50
+    # Where a timestamp in a file name (FB_IMG_<milliseconds>) becomes local time, with the
+    # zone's offset on the photo's own day. None = this machine's zone.
+    local_tz: tzinfo | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,7 +390,11 @@ class ImportSource:
     def _describe(self, c: _Candidate, meta: PhotoMetadata) -> NewAsset:
         name = PurePosixPath(c.file.relative_path)
         taken = pick_capture_time(
-            meta.dates, filename=name.name, file_mtime=c.file.mtime, now=self._clock.now()
+            meta.dates,
+            filename=name.name,
+            file_mtime=c.file.mtime,
+            now=self._clock.now(),
+            to_local=lambda moment: moment.astimezone(self._settings.local_tz),
         )
         width, height = meta.display_size or (None, None)
         return NewAsset(
