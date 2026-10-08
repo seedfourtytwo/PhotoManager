@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BackupTarget } from '$lib/api';
-import { placeState, protonCopyState } from './backups';
+import { copyPlaceState, placeState, protonCopyState } from './backups';
 
 const target = (over: Partial<BackupTarget> = {}): BackupTarget =>
 	({
@@ -53,10 +53,32 @@ describe('protonCopyState', () => {
 	it('waits when the backup is newer than the last copy', () => {
 		expect(protonCopyState(target({ last_success_at: '2026-10-02T02:30:00' }))).toBe('waiting');
 	});
-	it('waits when there is a backup but no copy yet', () => {
-		expect(protonCopyState(target({ last_mirror_at: null }))).toBe('waiting');
+	it('has not made the first copy yet when there is a backup but no copy', () => {
+		expect(protonCopyState(target({ last_mirror_at: null }))).toBe('not made');
+		expect(protonCopyState(target({ last_mirror_at: null, mirror_overdue: true }))).toBe(
+			'not made'
+		);
 	});
 	it('is first copy when there is neither backup nor copy', () => {
 		expect(protonCopyState(target({ last_mirror_at: null, last_success_at: null }))).toBe('first');
+	});
+});
+
+describe('copyPlaceState', () => {
+	it('is ok when up to date', () => {
+		expect(copyPlaceState(target())).toBe('ok');
+	});
+	it('needs attention when the copy failed or is overdue', () => {
+		expect(copyPlaceState(target({ mirror_error: 'offline' }))).toBe('needs attention');
+		expect(copyPlaceState(target({ mirror_overdue: true }))).toBe('needs attention');
+	});
+	it('is not connected while waiting to go online or not yet made', () => {
+		expect(copyPlaceState(target({ last_success_at: '2026-10-02T02:30:00' }))).toBe(
+			'not connected'
+		);
+		expect(copyPlaceState(target({ last_mirror_at: null }))).toBe('not connected');
+		expect(copyPlaceState(target({ last_mirror_at: null, last_success_at: null }))).toBe(
+			'not connected'
+		);
 	});
 });

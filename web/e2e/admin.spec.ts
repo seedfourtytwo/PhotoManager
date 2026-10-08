@@ -154,6 +154,8 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 	await expect(dialog.getByText(/full copy of the library \(38\.4 GB\)/)).toBeVisible();
 	await expect(dialog.getByLabel(/Tiny stick/)).toBeChecked();
 	await expect(dialog.getByLabel('Name')).toHaveValue('Tiny stick');
+	// Axe must not measure contrast while the dialog is still fading in.
+	await expect(dialog).toHaveCSS('opacity', '1');
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Check this place' }).click();
 	await expect(dialog.getByRole('alert')).toContainText('Not enough room');
@@ -173,6 +175,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 	await dialog.getByRole('button', { name: 'Check this place' }).click();
 	await expect(dialog.getByText(/It fits\. The library is 38\.4 GB, and\s+500 GB is free there/)).toBeVisible(); // prettier-ignore
 	await expect(dialog.getByLabel('How often')).toHaveValue('daily 02:30');
+	await expect(dialog).toHaveCSS('opacity', '1'); // the next step is a new dialog fading in
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Start the backup' }).click();
 
@@ -184,6 +187,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 		'photo-backup-recovery-USB disk.txt'
 	);
 	await expect(key.getByRole('button', { name: 'Done' })).toBeDisabled();
+	await expect(key).toHaveCSS('opacity', '1');
 	await expectAccessible(page);
 	await key.getByRole('button', { name: 'Later' }).click();
 
@@ -283,6 +287,8 @@ test('folder picker: a folder that is not there yet can be created on the spot',
 	await page.getByRole('button', { name: 'Add folder' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
 	const field = dialog.getByLabel('Folder', { exact: true });
+	// Wait for the first listing: it would otherwise land over what is typed.
+	await expect(field).toHaveValue('/home/c');
 	await field.fill('/home/c/missing drop box');
 	await field.press('Enter');
 	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);

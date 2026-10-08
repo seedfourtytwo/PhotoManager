@@ -108,20 +108,43 @@ export const library = new Library();
 // --- backup health -----------------------------------------------------------------------
 
 class BackupWatch {
-	/** The last answer, for the banner and the backup section; null until one arrives. */
+	/** The last answer, for the banner and the backup section; null when there is none to show. */
 	health = $state<BackupHealth | null>(null);
+	/** Counts asks: only the latest answer may land, however late an older one arrives. */
+	#latest = 0;
 
-	/** Ask again. A failed ask (offline, not an admin) leaves the last answer, never an error. */
+	/** Ask again. A failed ask (offline, session gone) leaves nothing to show, never an error. */
 	async load(): Promise<void> {
+		const mine = ++this.#latest;
+		let answer: BackupHealth | null = null;
 		try {
-			this.health = await api.backupHealth();
+			answer = await api.backupHealth();
 		} catch {
 			// the banner is a helper: it must never get in the way of the page
 		}
+		if (mine === this.#latest) this.health = answer;
+	}
+
+	/** Forget the answer, and any ask still on its way. */
+	clear() {
+		this.#latest++;
+		this.health = null;
+	}
+
+	/** Admins ask again; anyone else (signed out, or no longer an admin) shows nothing. */
+	async refresh(isAdmin: boolean): Promise<void> {
+		if (isAdmin) await this.load();
+		else this.clear();
 	}
 }
 
 export const backupWatch = new BackupWatch();
+
+// A page left open in a background tab: look again when the tab comes back.
+if (typeof document !== 'undefined')
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible' && session.isAdmin) void backupWatch.load();
+	});
 
 // --- viewer settings (per browser) -----------------------------------------------------
 

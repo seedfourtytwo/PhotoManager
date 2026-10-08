@@ -25,10 +25,11 @@
 		if (!bare) session.load().catch((e: unknown) => notice.error(e));
 	});
 
-	// Admins see the backup warning on every page: ask again on each navigation.
+	// Admins see the backup warning on every page: ask again on each navigation, and
+	// forget it for anyone who is not (or no longer) an admin.
 	$effect(() => {
 		void page.url.pathname;
-		if (session.isAdmin && !bare) void backupWatch.load();
+		if (!bare) void backupWatch.refresh(session.isAdmin);
 	});
 </script>
 

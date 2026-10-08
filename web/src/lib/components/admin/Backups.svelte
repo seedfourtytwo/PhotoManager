@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { BackupHealth, BackupRecovery, BackupRun, BackupTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
-	import { placeState, protonCopyState } from '$lib/backups';
+	import { copyPlaceState, placeState, protonCopyState } from '$lib/backups';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import BackupSetup from './BackupSetup.svelte';
@@ -43,6 +43,8 @@
 				return `failed: ${t.mirror_error}`;
 			case 'waiting':
 				return 'waiting to go online';
+			case 'not made':
+				return 'first copy not made yet';
 			case 'up to date':
 				return `up to date ${formatWhen(t.last_mirror_at)}`;
 			default:
@@ -133,6 +135,11 @@
 				</p>
 				{#if t.mirror_path}
 					<p class="small status copy" class:attention={!!t.mirror_error && t.enabled}>
+						<span
+							class="dot {copyPlaceState(t).replace(' ', '-')}"
+							role="img"
+							aria-label={copyPlaceState(t)}
+						></span>
 						Copy on Proton Drive · {protonPlaceName(t.mirror_path)} · {protonLine(t)}
 					</p>
 				{/if}
@@ -237,6 +244,7 @@
 	}
 	/* The place's state as a shape, so it reads without colour: filled, ring, or square. */
 	.dot {
+		display: inline-block;
 		flex: none;
 		align-self: center;
 		box-sizing: border-box;
@@ -255,6 +263,10 @@
 	}
 	.copy {
 		margin-left: var(--s-5);
+	}
+	.copy .dot {
+		margin-right: var(--s-2);
+		vertical-align: middle;
 	}
 	.name .small {
 		font-family: var(--font-mono);
