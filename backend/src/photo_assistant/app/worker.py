@@ -2,7 +2,6 @@
 
 import logging
 import threading
-import time
 from collections.abc import Callable, Collection, Mapping
 
 from photo_assistant.domain.errors import DomainError
@@ -22,7 +21,6 @@ class Worker:
         *,
         max_attempts: int = 3,
         poll_seconds: float = 1.0,
-        periodic: Mapping[str, float] | None = None,
         only: Collection[str] | None = None,
         excluding: Collection[str] = (),
         name: str = "pa-worker",
@@ -34,8 +32,6 @@ class Worker:
         self._poll = poll_seconds
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._periodic = dict(periodic or {})  # job kind -> seconds between runs
-        self._last_queued: dict[str, float] = {}
         self._only = None if only is None else frozenset(only)  # this lane's job kinds
         self._excluding = frozenset(excluding)
         self._name = name
@@ -44,14 +40,6 @@ class Worker:
     def kinds(self) -> set[str]:
         """The job kinds this worker can run."""
         return set(self._handlers)
-
-    def enqueue_due(self, now: float) -> None:
-        """Queue each periodic job whose interval has passed (``now``: monotonic seconds)."""
-        for kind, every in self._periodic.items():
-            last = self._last_queued.get(kind)
-            if last is None or now - last >= every:
-                self._repo.enqueue_once(kind)
-                self._last_queued[kind] = now
 
     def run_once(self) -> bool:
         """Process one job. Returns False when the queue is empty."""
@@ -117,7 +105,6 @@ class Worker:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                self.enqueue_due(time.monotonic())
                 busy = self.run_once()
             except Exception:
                 log.exception("worker loop error")
