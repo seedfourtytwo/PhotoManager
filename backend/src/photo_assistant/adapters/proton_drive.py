@@ -70,12 +70,14 @@ class _Item:
 
 @dataclass(frozen=True, slots=True)
 class _Run:
-    """One pull: how to download, where to, until when, and its running count."""
+    """One pull: how to download, where to, until when, what it has, and its running count."""
 
     verb: list[str]
     staging: Path
     prefix: str  # of the working folders beside staging
     deadline: float
+    manifest: Path
+    fetched: set[str]  # node uids already in staging
     tally: "_Tally"
 
 
@@ -166,14 +168,12 @@ class ProtonDrive:
         prefix = f".{staging.name}.fetching-"
         for stale in staging.parent.glob(f"{prefix}*"):  # left by a pull that was killed
             shutil.rmtree(stale, ignore_errors=True)
-        run = _Run(verb, staging, prefix, deadline, tally)
+        run = _Run(verb, staging, prefix, deadline, manifest, fetched, tally)
         listing_problems, failed_in_a_row = len(tally.errors), 0
         for batch in _batches(wanted, self._batch):
-            done = self._fetch(run, batch, split=failed_in_a_row < _SPLIT_LIMIT)
-            failed_in_a_row = 0 if done else failed_in_a_row + 1
-            if done:
-                fetched.update(done)
-                _write_fetched(manifest, fetched)
+            before = tally.copied
+            self._fetch(run, batch, split=failed_in_a_row < _SPLIT_LIMIT)
+            failed_in_a_row = 0 if tally.copied > before else failed_in_a_row + 1
         if wanted and not tally.copied:
             raise SyncError(
                 f"none of the {len(wanted)} new photos could be downloaded from Proton Drive "
@@ -227,22 +227,20 @@ class ProtonDrive:
 
     # --- fetching ---------------------------------------------------------------------------
 
-    def _fetch(self, run: _Run, batch: Sequence[_Item], split: bool) -> list[str]:
-        """Download one batch and move it into staging; the uids that arrived."""
+    def _fetch(self, run: _Run, batch: Sequence[_Item], split: bool) -> None:
+        """Download one batch into staging; what could not be fetched goes to the tally."""
         problem = self._download(run, batch)
         if problem is None:
-            return [item.uid for item in batch]
+            return
         if len(batch) == 1 or not split:
             run.tally.errors.extend(f"{item.folder / item.name}: {problem}" for item in batch)
-            return []
-        done: list[str] = []  # which one failed? ask one at a time
-        for item in batch:
-            done += self._fetch(run, [item], split=False)
-        return done
+            return
+        for item in batch:  # which one failed? ask one at a time
+            self._fetch(run, [item], split=False)
 
     def _download(self, run: _Run, batch: Sequence[_Item]) -> str | None:
-        """None when every file of the batch is now in staging, else what went wrong (and
-        nothing of the batch was kept)."""
+        """None when every file of the batch is now in staging and remembered as fetched, else
+        what went wrong (and nothing of the batch was kept)."""
         staging, tally = run.staging, run.tally
         work = Path(tempfile.mkdtemp(prefix=run.prefix, dir=staging.parent))
         try:
@@ -266,6 +264,9 @@ class ProtonDrive:
                 tally.size += path.stat().st_size
                 path.replace(_free_name(target, path.name))
             tally.copied += len(batch)
+            # remembered as it lands: a pull cut off later must not fetch it a second time
+            run.fetched.update(item.uid for item in batch)
+            _write_fetched(run.manifest, run.fetched)
             return None
         finally:
             shutil.rmtree(work, ignore_errors=True)

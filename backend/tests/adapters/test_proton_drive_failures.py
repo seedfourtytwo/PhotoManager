@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from photo_assistant.ports.sync import SyncError
+from photo_assistant.ports.sync import SyncAuthError, SyncError
 from tests.proton_cloud import Cloud
 
 
@@ -83,3 +83,37 @@ def test_a_download_that_takes_too_long_stops_the_pull_at_once(
     with pytest.raises(SyncError, match="took too long"):
         cloud.pull()
     assert len(attempts) == 1
+
+
+# --- a pull that is cut off -----------------------------------------------------------------------
+
+
+def test_photos_that_landed_before_the_pull_was_cut_off_are_not_fetched_twice(
+    cloud: Cloud, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The batch fails, the photos are asked for one by one, and the session ends after the
+    first of them arrived: that one is remembered."""
+    _photos(cloud, 3)
+    cloud.state["crash_on_batch"] = True
+    cloud.save()
+    real, downloads = subprocess.run, 0
+
+    def run(args: list[str], **kwargs: Any) -> Any:
+        nonlocal downloads
+        downloads += "download" in args
+        if downloads == 3:
+            cloud.state["signed_in"] = False
+            cloud.save()
+        return real(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(SyncAuthError):
+        cloud.pull()
+    assert cloud.staged() == ["0.jpg"]
+    monkeypatch.undo()
+    monkeypatch.setenv("PA_FAKE_PROTON", str(cloud.state_file))
+    cloud.state["signed_in"] = True
+    cloud.save()
+    report = cloud.pull()
+    assert (report.copied, report.unchanged) == (2, 1)
+    assert cloud.staged() == ["0.jpg", "1.jpg", "2.jpg"]
