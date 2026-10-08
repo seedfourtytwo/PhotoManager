@@ -138,6 +138,21 @@ def test_a_face_without_a_direction_matches_nobody_and_breaks_nothing(
     assert store.nearest_person(zero, 2.0) is None
 
 
+@pytest.mark.parametrize("broken", [(0.0, 0.0, 0.0), (math.nan, 1.0, 0.0), (math.inf, 0.0, 0.0)])
+def test_a_named_face_without_a_direction_is_nobodys_nearest_person(
+    repo: SqliteRepository, store: SqliteMlStore, broken: Vector
+) -> None:
+    """Its distance is NULL also where the nearest person is picked by ORDER BY distance."""
+    (a,) = assets(repo, 1)
+    good, bad, near = store.replace_faces(a, M, [face(angle(0)), face(broken), face(angle(5))])
+    nobody = store.create_person(bad)
+    assert store.nearest_person(good, 2.0) is None
+    assert store.count_face_matches(good, 2.0, limit=10) == 1
+    assert store.nearest_person(bad, 2.0) is None
+    somebody = store.create_person(near)
+    assert store.nearest_person(good, 2.0) == somebody != nobody
+
+
 def test_the_candidate_set_is_filled_in_one_transaction(
     conn: sqlite3.Connection, repo: SqliteRepository, store: SqliteMlStore
 ) -> None:
