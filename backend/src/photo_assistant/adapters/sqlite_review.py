@@ -20,13 +20,6 @@ def _in(ids: Sequence[int]) -> str:
 
 
 class ReviewMixin(SqliteBase):
-    def library_phashes(self) -> dict[int, str]:
-        rows = self._all(
-            """SELECT id, phash FROM asset
-               WHERE phash IS NOT NULL AND trashed_at IS NULL AND held_reason IS NULL"""
-        )
-        return {int(r["id"]): str(r["phash"]) for r in rows}
-
     def hold_asset(self, asset_id: int, reason: str, like: int | None) -> bool:
         changed = self._count(
             """UPDATE asset SET held_reason = ?, held_like = ?
