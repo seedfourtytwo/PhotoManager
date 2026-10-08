@@ -9,7 +9,7 @@ from typing import Protocol
 
 from photo_assistant.domain.access import SourceAccess, Viewer
 from photo_assistant.domain.edit_recipe import Recipe
-from photo_assistant.domain.errors import ConflictError
+from photo_assistant.domain.errors import ConflictError, InvalidError
 from photo_assistant.domain.model import (
     Asset,
     ImportReport,
@@ -34,6 +34,10 @@ class DuplicateAssetError(ValueError):
 class SourceExistsError(ConflictError, ValueError):
     """The folder is a source already. (Still a ValueError, as it was before it joined the
     hierarchy: code that catches ValueError keeps working.)"""
+
+
+class InvalidAlbumOrderError(InvalidError, ValueError):
+    """An album order that lists a photo twice, or one that is not in the album."""
 
 
 class Clock(Protocol):

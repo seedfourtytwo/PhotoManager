@@ -132,10 +132,7 @@ def reorder(services: ServicesDep, viewer: ViewerDep, album_id: int, body: Album
     _editable(services, viewer, album_id)
     if set(_visible_ids(services, viewer, body.asset_ids)) != set(body.asset_ids):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown photos in the order")
-    try:
-        services.repo.reorder_album(album_id, body.asset_ids, services.clock.now())
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    services.repo.reorder_album(album_id, body.asset_ids, services.clock.now())
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

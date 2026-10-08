@@ -19,6 +19,7 @@ from photo_assistant.adapters.sqlite_library import (
     visibility,
 )
 from photo_assistant.domain.access import AlbumRole, Viewer
+from photo_assistant.ports import InvalidAlbumOrderError
 from photo_assistant.ports.library import AlbumInfo, AssetView
 
 
@@ -169,12 +170,12 @@ class AlbumsMixin(SqliteBase):
 
     def reorder_album(self, album_id: int, asset_ids: Sequence[int], now: datetime) -> None:
         """``asset_ids`` first, in that order; photos not listed keep their order after them.
-        Raises ValueError for ids that are not in the album."""
+        Raises InvalidAlbumOrderError for ids that are not in the album."""
         with self._transaction():
             current = self.album_asset_ids(album_id)
             listed = set(asset_ids)
             if listed - set(current) or len(listed) != len(asset_ids):
-                raise ValueError("the order must list photos of this album, each once")
+                raise InvalidAlbumOrderError("the order must list photos of this album, each once")
             rest = [i for i in current if i not in listed]
             self._write_order(album_id, [*asset_ids, *rest])
             self._touch(album_id, now)
