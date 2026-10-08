@@ -10,10 +10,10 @@ blocks you, raise it in the PR; don't quietly break it.
    folders are byte-identical before and after every import test.
 2. **Test first.** Red → green → refactor. The PR shows the failing test commit before the fix
    commit (or the test is clearly written against the spec, not the implementation).
-3. **Main is always releasable.** `just check` green, app starts, migrations apply. (CI is
-   defined in `ci/` but not switched on yet: until it is, the checks run locally through
-   `just check` and pre-commit.)
-4. **No secrets in the repo.** gitleaks runs in pre-commit (and is a job in the CI file).
+3. **Main is always releasable.** `just check` green, app starts, migrations apply. CI
+   (`.github/workflows/ci.yml`) runs the same checks on every pull request; the browser
+   tests (`just e2e`, `just e2e-mock`) run locally.
+4. **No secrets in the repo.** gitleaks runs in pre-commit and in CI.
 5. **Real photos stay home.** They never go to a cloud workspace, GitHub or any other service;
    development and CI use synthetic fixtures only. Real-data dry runs (QA step 2) run on the
    laptop itself and report only counts, timings and reasons.

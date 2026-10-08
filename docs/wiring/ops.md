@@ -130,7 +130,7 @@ Then the justfile recipes can call `python -m photo_assistant <cmd>` instead of
 - FEATURES §9b: 9b.1–9b.8 built (status); 9.4 Docker Compose written, untested; 9.5
   partially covered by `verify-library`.
 - README: link `docs/guides/`.
-- CI (`ci/github-ci.yml`): `apt install restic rclone` so the restic integration tests run
+- CI (`.github/workflows/ci.yml`): `apt install restic rclone` so the restic integration tests run
   instead of being skipped.
 
 ## Known limits

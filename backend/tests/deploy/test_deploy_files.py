@@ -254,3 +254,10 @@ def test_justfile_has_the_ops_recipes() -> None:
     ):
         assert recipe in justfile
     assert "systemctl --user" in justfile and "enable-linger" in justfile
+
+
+def test_the_ci_workflow_is_valid_yaml_with_all_three_jobs() -> None:
+    """GitHub rejects a workflow file it cannot parse without running anything."""
+    workflow = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
+    assert set(workflow["jobs"]) == {"backend", "web", "secrets"}
+    assert all(job["steps"] for job in workflow["jobs"].values())

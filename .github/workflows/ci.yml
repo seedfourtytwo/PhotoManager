@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read  # the secret scan lists the pull request's commits
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -34,7 +38,7 @@ jobs:
         run: uv run pytest --cov
         env:
           PA_REQUIRE_TOOLS: "1"
-      - name: Import smoke test (fixtures, twice: second run must import nothing)
+      - name: "Import smoke test (fixtures, twice: second run must import nothing)"
         run: |
           export PA_DATA_ROOT="$RUNNER_TEMP/pa-import" PA_MIN_FREE_GB=0
           uv run python -m photo_assistant import tests/fixtures/photos | tee first.txt
@@ -44,6 +48,7 @@ jobs:
       - name: Smoke run
         run: |
           PA_DATA_ROOT="$RUNNER_TEMP/pa-data" uv run python -m photo_assistant &
+          trap 'kill %1' EXIT  # a server left running holds uv's cache lock and fails the cleanup
           for i in $(seq 1 20); do curl -fs http://127.0.0.1:8420/api/health && exit 0; sleep 0.5; done
           exit 1
 
@@ -55,6 +60,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22
