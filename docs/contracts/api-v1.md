@@ -62,6 +62,9 @@ Since v1.2 `SourceOut.path` (the folder on the server) is `null` for everyone bu
 `SourceOut.problem` is `"folder not found"` when the folder is gone (else `null`). A scan of
 such a source fails visibly: its import run is `failed` with that message, and the scan job
 is `failed` without retries.
+A job that failed and will be tried again stays `queued` with `run_after` (UTC ISO time, else
+`null`) and its last `error`; `GET /api/stats` counts such jobs under `jobs.waiting`, not
+under `jobs.queued`.
 
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
