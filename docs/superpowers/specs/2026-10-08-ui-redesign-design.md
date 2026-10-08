@@ -48,7 +48,7 @@ A darkroom, with camera data on the readouts.
 | `--ink-2` | #A3A9B3 | #565D68 | secondary text |
 | `--ink-3` | #6B717C | #8A909A | decoration, disabled |
 | `--hairline` | #262A31 | #DCDFE4 | dividers, placeholders |
-| `--accent` | oklch(0.82 0.14 H) | oklch(0.56 0.15 H) | selection, focus, "now" on the ruler; H = 72 (amber) |
+| `--accent` | oklch(0.82 0.14 H) | oklch(0.50 0.15 H) | selection, focus, "now" on the ruler; H = 72 (amber) |
 | `--on-accent` | #17110A | #FFFFFF | text on accent |
 | `--glass` (new) | `--raised` at 74 % + blur | same | floating bars |
 | `--ok` / `--fail` (new) | #7BD3A0 / #FF7A6B | darker pair, AA on `--bg` | System page status only |
@@ -216,7 +216,7 @@ regrouping goes last.
 
 1. Tokens, fonts, shared control styles, icon set, primitives; `DESIGN_PRINCIPLES.md` and
    `TECH_DECISIONS.md` updated. Pure restyle. **Acceptance: every existing end-to-end test
-   passes without being edited.**
+   passes without being edited** (one exception: the page colour hard-coded in `web/e2e/fixes.spec.ts`).
 2. Shell: dock and top bar replace `Nav`, account menu. Old pages stay reachable (People,
    Map, Albums, Calendar listed under a temporary plain Collections page).
 3. Photo view, selection pill, time ruler.
