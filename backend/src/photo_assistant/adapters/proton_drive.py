@@ -37,7 +37,8 @@ SIGN_IN = "proton-drive auth login"
 # "failed to load session" is what v0.9.0 prints without a stored session; the others are
 # guesses at how an expired one reads, so that it still lands on the sign-in hint.
 _AUTH_HINTS = ("failed to load session", "auth login", "not logged in", "session expired")
-_LIST_TIMEOUT = 600.0
+_LIST_TIMEOUT = 600.0  # inside a pull (a long job): a big Drive takes minutes to list
+_ASK_TIMEOUT = 30.0  # questions asked while a web request waits
 _SLOW_ANSWER = "Proton Drive took too long to answer; try again later"
 _OUT_OF_TIME = (
     "the pull took too long and was stopped; run it again to continue "
@@ -177,13 +178,13 @@ class ProtonDrive:
 
     def check(self) -> None:
         """Raises SyncAuthError when not signed in, SyncError when the tool is missing."""
-        self._call(["filesystem", "list", "/"], _LIST_TIMEOUT)
+        self._call(["filesystem", "list", "/"], _ASK_TIMEOUT)
 
     def folders(self, path: str) -> list[str]:
         """Names of the folders directly inside ``path``, for the folder picker."""
         names = [
             name
-            for node in self._list(["filesystem", "list", path], path)
+            for node in self._list(["filesystem", "list", path], path, _ASK_TIMEOUT)
             if node.get("type") == "folder" and (name := _name(node)) is not None
         ]
         return sorted(names, key=str.casefold)
@@ -259,8 +260,10 @@ class ProtonDrive:
                     items.append(_Item(uid, name, f"{path}/{name}", local))
         return items
 
-    def _list(self, args: list[str], path: str) -> list[dict[str, object]]:
-        out = self._call([*args, "--json"], _LIST_TIMEOUT, path)
+    def _list(
+        self, args: list[str], path: str, timeout: float = _LIST_TIMEOUT
+    ) -> list[dict[str, object]]:
+        out = self._call([*args, "--json"], timeout, path)
         try:
             nodes = json.loads(out)
         except json.JSONDecodeError as exc:
@@ -327,6 +330,7 @@ class ProtonDrive:
                 text=True,
                 timeout=timeout,
                 check=False,
+                stdin=subprocess.DEVNULL,
                 env=os.environ | {"PROTON_DRIVE_LOG_LEVEL": "ERROR"},
             )
         except FileNotFoundError as exc:

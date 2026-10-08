@@ -60,7 +60,8 @@ def build_command(
     options: SyncOptions,
     config_path: Path | None = None,
 ) -> list[str]:
-    args = [binary, "copy", remote.target, str(staging)]
+    # never wait at a keyboard for a config password: fail with rclone's own explanation
+    args = [binary, "copy", remote.target, str(staging), "--ask-password=false"]
     args += ["--filter-from", str(filter_file), "--ignore-case"]
     args += ["--transfers", str(options.transfers), "--checkers", str(options.checkers)]
     args += ["--retries", str(options.retries)]
@@ -177,7 +178,7 @@ class RcloneSync:
 
     def list_remotes(self) -> list[str]:
         """Names of the remotes set up in rclone's config (to catch typos early)."""
-        args = [self._binary, "listremotes"]
+        args = [self._binary, "listremotes", "--ask-password=false"]
         if self._config is not None:
             args += ["--config", str(self._config)]
         result = self._run(args, 30)
@@ -186,7 +187,12 @@ class RcloneSync:
     def _run(self, args: list[str], timeout: float) -> "subprocess.CompletedProcess[str]":
         try:
             return subprocess.run(  # an argument list, never a shell
-                args, capture_output=True, text=True, timeout=timeout, check=False
+                args,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+                stdin=subprocess.DEVNULL,
             )
         except FileNotFoundError as exc:
             raise SyncError(
