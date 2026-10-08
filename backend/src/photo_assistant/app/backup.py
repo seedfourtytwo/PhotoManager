@@ -207,12 +207,12 @@ class BackupService:
         label = label.strip()
         if any(t.label.casefold() == label.casefold() for t in self._store.list_targets()):
             raise ValueError(f"a backup target named {label!r} already exists")
-        NewBackupTarget(label, repository, "/unset", schedule, None, retention or Retention())
+        keep = retention or Retention()
+        # checks the name and the schedule before a key exists: a refused setup leaves no key
+        NewBackupTarget(label, repository, "/unset", schedule, None, keep)
         key_file, key = vault.create()
         try:
-            new = NewBackupTarget(
-                label, repository, str(key_file), schedule, None, retention or Retention(), False
-            )
+            new = NewBackupTarget(label, repository, str(key_file), schedule, None, keep, False)
             target = self.add_target(new)
         except BaseException:
             vault.discard(key_file)

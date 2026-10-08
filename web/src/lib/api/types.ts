@@ -337,9 +337,29 @@ export type BackupTarget = {
 	repo_bytes: number | null;
 	next_run_at: string | null;
 	overdue: boolean;
+	/** The last restore test that matched every hash: the proof the backup can be read. */
+	last_proven_at: string | null;
+	restore_failing: boolean;
+	/** Someone confirmed a copy of the recovery key exists outside this machine. */
+	key_saved: boolean;
 	/** Drives the warning banner. */
 	needs_attention: boolean;
 };
+export type BackupDisk = { path: string; label: string; free_bytes: number };
+export type BackupPlaces = { library_bytes: number; disks: BackupDisk[]; remotes: string[] };
+/** `place`: a folder path, or `rclone:<remote>:<folder>`. */
+export type BackupPlan = {
+	repository: string;
+	library_bytes: number;
+	free_bytes: number | null;
+	ok: boolean;
+	problem: string | null;
+	warnings: string[];
+};
+export type BackupSetupIn = { label: string; place: string; schedule?: string };
+/** Opens the backup without this machine: to be kept somewhere else. */
+export type BackupRecovery = { label: string; repository: string; key: string };
+export type BackupSetup = { target: BackupTarget; recovery: BackupRecovery };
 export type BackupIn = {
 	label: string;
 	repository: string;

@@ -154,6 +154,13 @@ backend reaches SMB/SFTP/cloud targets. The scheduler (APScheduler in the worker
 target's schedule, then `restic forget --prune` with the retention policy. Results go to a
 `backup_run` table that feeds the status page and the overdue banner.
 
+Guided setup (issue 3): `BackupPlaces` (mounted disks, rclone remotes, facts about one place)
+feeds the pure rule `plan_backup` (fits? writable? same disk? another backup there?); `KeyVault`
+makes the encryption key in a 0600 file outside the library and the owner must confirm keeping
+a copy (`backup_target.key_saved_at`, migration `0018`). The recovery guarantee is the rule
+`restore_proof_due`: a restore test after the first successful backup, then weekly, a day
+after a failed one; a failed proof or an unconfirmed key raises the banner.
+
 ### Phone inbox
 `data/inbox/<user>/` is served over WebDAV (per-user credentials, LAN/Tailscale only).
 It is registered as a normal `source`; a file watcher (plus a periodic rescan as safety net)
