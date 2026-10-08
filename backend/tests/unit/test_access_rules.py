@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from photo_assistant.domain.access import (
+    LOCK_AFTER_FAILED_PINS,
     MAX_FAILED_LOGINS,
     SESSION_IDLE_LIMIT,
     AlbumRole,
@@ -13,6 +14,7 @@ from photo_assistant.domain.access import (
     Viewer,
     can_edit_album,
     leaves_no_admin,
+    locks_account,
     pin_problem,
     session_expired,
     too_many_failures,
@@ -107,3 +109,10 @@ def test_ten_failures_lock_the_door() -> None:
     assert MAX_FAILED_LOGINS == 10
     assert not too_many_failures(9)
     assert too_many_failures(10)
+
+
+def test_thirty_failures_since_the_last_good_sign_in_lock_the_account() -> None:
+    assert LOCK_AFTER_FAILED_PINS == 30
+    assert not locks_account(29)
+    assert locks_account(30)
+    assert locks_account(31)

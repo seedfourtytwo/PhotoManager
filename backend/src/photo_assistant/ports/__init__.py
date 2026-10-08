@@ -242,6 +242,10 @@ class Repository(SourceRegistry, Protocol):
     def save_import_report(
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int: ...
+    def set_import_run_message(self, run_id: int, message: str) -> None:
+        """Replace what a saved run says in the import history (its status stays)."""
+        ...
+
     def get_import_report(self, run_id: int) -> ImportReport | None: ...
     def list_import_runs(
         self, source_id: int | None = None, limit: int = IMPORT_RUNS_LISTED
@@ -259,15 +263,31 @@ class Repository(SourceRegistry, Protocol):
         self,
         now: datetime,
         *,
+        owner: str | None = None,
         only: Collection[str] | None = None,
         excluding: Collection[str] = (),
     ) -> Job | None:
-        """Atomically mark the oldest queued job running: only of the kinds in ``only`` (if
-        given), never of a kind in ``excluding`` (job lanes, B24)."""
+        """Atomically mark the oldest queued job whose time has come running, claimed by
+        ``owner`` at ``now``: only of the kinds in ``only`` (if given), never of a kind in
+        ``excluding`` (job lanes, B24)."""
         ...
 
     def complete_job(self, job_id: int) -> None: ...
-    def fail_job(self, job_id: int, error: str, retry: bool) -> None: ...
+    def fail_job(
+        self, job_id: int, error: str, retry: bool, run_after: datetime | None = None
+    ) -> None:
+        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once)."""
+        ...
+
+    def renew_claim(self, job_id: int, owner: str, now: datetime) -> None:
+        """Heartbeat: the job is still running in the process that claimed it."""
+        ...
+
+    def requeue_stale_jobs(self, stale_before: datetime) -> int:
+        """Queue running jobs again whose claim was not renewed since ``stale_before``; the
+        interrupted run stays counted as an attempt."""
+        ...
+
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]: ...
     def retry_job(self, job_id: int) -> bool: ...
     def release_job(self, job_id: int) -> None:

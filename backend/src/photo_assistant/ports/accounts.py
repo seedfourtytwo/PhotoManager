@@ -1,5 +1,6 @@
 """Ports for accounts: password hashing and the account/session store."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -24,6 +25,18 @@ class NotFirstUserError(ValueError):
 
 class NoActiveAdminError(ValueError):
     """The change would leave the library without an active admin (nothing was changed)."""
+
+
+@dataclass(frozen=True, slots=True)
+class PinTry:
+    """The store's answer to one try at a PIN: go ahead and check it, or why not."""
+
+    locked: bool = False  # the account is locked until an admin or a new PIN lifts it
+    retry_at: datetime | None = None  # too many recent failures: when the next try is taken
+
+    @property
+    def allowed(self) -> bool:
+        return not self.locked and self.retry_at is None
 
 
 class AccountStore(Protocol):
@@ -76,13 +89,19 @@ class AccountStore(Protocol):
         """Revoke every device token of the user (they must create new ones)."""
         ...
 
-    # failed logins (rate limit)
-    def record_login_attempt(self, username: str, ip: str, at: datetime, since: datetime) -> bool:
-        """Atomically: False (and nothing recorded) if this name already has too many failures
-        from this address after ``since``; otherwise count one more, at ``at``, and True."""
+    # wrong PINs (rate limit and account lock)
+    def record_login_attempt(self, username: str, ip: str, at: datetime, since: datetime) -> PinTry:
+        """Atomically: refuse (and record nothing) if the account is locked, or if this name
+        already has too many failures after ``since`` from all addresses together. Otherwise
+        count one more, at ``at``, both in the window and on the account's running count
+        since its last good sign-in, locking the account when that count is used up."""
         ...
 
-    def clear_login_failures(self, username: str, ip: str) -> None: ...
-    def clear_all_login_failures(self, username: str) -> None:
-        """Every address's failures for this username, in any letter case."""
+    def users_waiting(self, since: datetime) -> set[int]:
+        """Ids of the accounts with too many failures after ``since``: their next try waits."""
+        ...
+
+    def forgive_wrong_pins(self, username: str) -> None:
+        """Forget every counted try at this account's PIN (the name in any letter case) and
+        lift its lock: after a right PIN, an admin's unlock, or a new PIN."""
         ...

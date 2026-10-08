@@ -28,6 +28,9 @@ Conventions
 - Pagination: `limit` (1–500, default 200) + opaque `cursor`; response `next_cursor|null`.
 - Ids are positive 64-bit integers (v1.2): a larger id in a path is `404`, in a body `422`,
   in `source_id` `400`. `to=9999-12-31` is a valid (open) upper bound.
+- A request body over 1 MB (1,000,000 bytes) is refused with `413 {"detail": "request body too
+  large"}` before it is parsed (v1.4). `POST /api/upload` is the one exception: it has its own
+  per-file limit.
 
 ## Setup & auth
 
@@ -36,21 +39,42 @@ Conventions
 | GET | `/api/setup` | – | `{needs_admin: bool}` |
 | POST | `/api/setup` | `{username, display_name, pin}` | `201 User` + session; `409` if users exist |
 | GET | `/api/auth/accounts` | – | `[{username, display_name}]`: the active accounts, for the login screen to offer (open; names only) |
-| POST | `/api/auth/login` | `{username, pin}` | `200 User` + session; `401`; `429` after 10 fails/15 min per username+IP |
+| POST | `/api/auth/login` | `{username, pin}` | `200 User` + session; `401` wrong PIN or unknown name; `429` wait; `423` account locked (see *Wrong PINs* below) |
 | POST | `/api/auth/logout` | – | `204` |
 | GET | `/api/auth/me` | – | `User` |
-| POST | `/api/auth/pin` | `{current_pin, new_pin}` | `204`; `400` if current wrong. Ends every **other** session of the user; this one stays (v1.2) |
+| POST | `/api/auth/pin` | `{current_pin, new_pin}` | `204`; `400` if current wrong (counted like a wrong PIN at login: then `429`, `423`). Ends every **other** session of the user; this one stays (v1.2) |
 
 `User = {id, username, display_name, role: "admin"|"member"|"guest", disabled: bool}`.
 A PIN is exactly 4 digits (`422` otherwise). Sessions expire after 30 days idle.
 
+**Wrong PINs** (v1.4) are counted per account, whatever address they come from, at login and
+at the PIN change alike. A try is counted before the PIN is checked, so tries sent together
+cannot get past a limit.
+
+- **Wait.** After 10 wrong PINs within 15 minutes, every further try on that account, the
+  right PIN included, is `429` until the oldest of the ten is 15 minutes old. `detail`:
+  `too many wrong PINs; wait N minutes and try again, or ask an admin to unlock this account`.
+- **Lock.** After 30 wrong PINs since the account's last good sign-in (no time limit), the
+  account is locked: every try, the right PIN included, is `423` until an admin unlocks it
+  (`POST /api/users/{id}/unlock`), an admin sets a new PIN (`PATCH /api/users/{id}`), or
+  `just set-pin NAME` is run on the server. `detail`: `this account is locked after too many
+  wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'`.
+  A restart does not lift it. Sessions that are already open keep working.
+- A right PIN starts both counts again. A user name nobody has is `401` at once and is not
+  counted.
+
 ## Users (admin)
 
-| GET | `/api/users` | – | `User[]` |
+| GET | `/api/users` | – | `ManagedUser[]` |
 |---|---|---|---|
-| POST | `/api/users` | `{username, display_name, pin, role}` | `201 User` |
-| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, pin?}` | `User`; cannot remove the last admin (`409`). A `pin` reset ends **all** the user's sessions and revokes their device tokens (v1.2) |
-| POST | `/api/users/{id}/unlock` | – | `204`; clears the failed-login block (`429`) for that username from every address (v1.3); `404` unknown id |
+| POST | `/api/users` | `{username, display_name, pin, role}` | `201 ManagedUser` |
+| PATCH | `/api/users/{id}` | `{display_name?, role?, disabled?, pin?}` | `ManagedUser`; cannot remove the last admin (`409`). A `pin` reset ends **all** the user's sessions and revokes their device tokens (v1.2), and lifts the wait and the lock (v1.4) |
+| POST | `/api/users/{id}/unlock` | – | `204`; lifts the wait (`429`) and the lock (`423`) on that account and starts its count of wrong PINs again (v1.3, v1.4); also for the admin's own account; `404` unknown id |
+
+`ManagedUser = User + {locked: bool}` (v1.4). `locked` is true while wrong PINs keep the account
+from signing in: locked after 30, or waiting out the 15 minutes after 10. Only these admin
+routes carry it: `User` (login, `/api/auth/me`), `/api/auth/accounts` and
+`/api/users/directory` never say whether an account is locked.
 
 ## Sources (existing, plus access)
 
@@ -62,6 +86,16 @@ Since v1.2 `SourceOut.path` (the folder on the server) is `null` for everyone bu
 `SourceOut.problem` is `"folder not found"` when the folder is gone (else `null`). A scan of
 such a source fails visibly: its import run is `failed` with that message, and the scan job
 is `failed` without retries.
+A job that failed and will be tried again stays `queued` with `run_after` (UTC ISO time, else
+`null`) and its last `error`; `GET /api/stats` counts such jobs under `jobs.waiting`, not
+under `jobs.queued`.
+
+`PATCH /api/sources/{id}` (admin) takes `{enabled?, label?, owner_id?}` and answers the
+`SourceOut`; only the fields sent change. `label` (1–100 characters) renames the source
+(v1.4). An unknown `owner_id` is `422`.
+
+`GET /api/imports` (admin; `?source_id=` for one source) lists the newest 200 runs, newest
+first (v1.4): older runs are not returned.
 
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
@@ -214,6 +248,12 @@ access `{everyone: null, users: [{owner, edit}]}`: **private to the uploader** u
 Limits: `PA_UPLOAD_MAX_MB` per file (default 200), `PA_UPLOAD_MAX_FILES` per request (500).
 Photos only (sniffed by their bytes); videos are refused for now.
 
+While the library disk has less free space than `PA_MIN_FREE_GB`, files are refused before a
+byte of them is stored (v1.4). The answer is still `200`: each such file comes back with
+`outcome: "rejected"` and a `reason` that says so ("the library disk is almost full (… GB
+free; uploads keep at least … GB free): free up space on the server, then send it again"),
+and `import_job_id` is `null` when nothing was stored.
+
 ## Remote sources (admin)
 
 | Method | Path | Body | Response |
@@ -224,6 +264,8 @@ Photos only (sniffed by their bytes); videos are refused for now.
 
 A remote source is an ordinary source of kind `rclone` (default access, like any new source);
 `POST /api/sources/{id}/scan` pulls it read-only (`rclone copy`) into `staging/` and imports.
+Its `owner_id` is the admin who added it (v1.4), as for a folder source; the same holds for a
+Proton Drive source (`POST /api/proton/sources`, kind `proton`).
 
 ## Local ML (search, similar photos, people)
 
@@ -263,6 +305,9 @@ PrintRequest = {trim: "a4-landscape", theme: "quiet", cover: true, crop_marks: f
                 allow_low_resolution?: false}
 ```
 Unknown trim, theme or layout, or a page whose photo count doesn't fit its layout: `422`.
+Caps (v1.4, `422` beyond them): at most 10,000 `pages`; at most 4 `asset_ids` on a page (the
+largest layout); `text` up to 5,000 characters; `trim`, `theme` and `layout_id` up to 40
+characters.
 Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop marks).
 
 ## Folders of the server (admin)
@@ -279,9 +324,9 @@ Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop mar
 | GET | `/api/backups/places` | – | `{library_bytes, disks: [{path, label, free_bytes}], remotes: [name]}`: plugged-in disks and rclone remotes |
 | POST | `/api/backups/plan` | `{place}` (a folder path, or `rclone:<remote>:<folder>`) | `{repository, library_bytes, free_bytes?, ok, problem?, warnings}`. Creates nothing. Refused (`ok: false`): not enough room, not writable, inside the library or a source folder, another backup already there |
 | POST | `/api/backups/setup` | `{label, place, schedule?, retention?}` | `201 {target: Target, recovery: {label, repository, key}}`. Makes the key, queues the first backup (followed by a restore test). `422` with the plan's problem, `409` for a taken name |
-| GET | `/api/backups/{id}/recovery` | – | `{label, repository, key}`; `409` if the key file is gone |
+| GET | `/api/backups/{id}/recovery` | – | `{label, repository, key}`; `409` if the key file is gone, or lies outside the app's key folder (v1.4: such a target was added on the command line, and its key is only shown there) |
 | POST | `/api/backups/{id}/key-saved` | – | `Target`: the admin confirms a copy of the key exists elsewhere |
-| POST | `/api/backups` | `{label, repository, password_file, schedule?, quiet_window?, retention?: {daily, weekly, monthly}}` | `201 Target` |
+| POST | `/api/backups` | `{label, repository, password_file, schedule?, quiet_window?, retention?: {daily, weekly, monthly}}` | `201 Target`; `422` when `password_file` is not a key file in the app's key folder (`PA_BACKUP_KEY_DIR`), whether or not the file exists (v1.4; a password file elsewhere on the server can only be used from the command line, `just backup add`) |
 | PATCH | `/api/backups/{id}` | `{enabled?, schedule?, quiet_window?, retention?: {daily?, weekly?, monthly?}}` | `Target`. Only the fields sent change (v1.3); `quiet_window: null` = any time; retention counts merge into the current ones. Bad schedule/window/retention or an unknown field: `422`, nothing changed |
 | POST | `/api/backups/{id}/run` · `/restore-test` | – | `202 {job_id, target_id}` |
 | GET | `/api/backups/{id}/runs` | `limit` | `[Run]` |
@@ -319,3 +364,24 @@ Backwards compatible. Each change is also written next to its route above.
 | Downloads | The ZIP is named after its scope: `<album title>.zip`, `photos-<filter words>.zip`, `photos-<n>.zip`; `filename*` (UTF-8) plus a sanitised ASCII `filename`. | Read the name from `Content-Disposition` (`filename*` first) if the app ever saves the blob itself; a form post already gets the right name. |
 | Backups | `PATCH /api/backups/{id}` also takes `schedule`, `quiet_window` (null clears) and partial `retention`; `enabled` is optional. | Edit form for an existing target (`api.updateBackup`). |
 | Users | `POST /api/users/{id}/unlock` (admin) clears the 10-fails/15-min login block for that account; `204`. | "Unlock" action on the users page (`api.unlockUser`). |
+
+---
+
+# v1.4 changes (QA follow-ups, PIN guessing)
+
+`429` at login no longer depends on the address, and there is a new status, `423`. Each change
+is also written next to its route above.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Auth | Wrong PINs are counted per account, from all addresses together (was: per user name and address). The `429` `detail` says how many minutes to wait. | Show the `detail`. |
+| Auth | New: `423` from `POST /api/auth/login` and `POST /api/auth/pin` once an account has 30 wrong PINs since its last good sign-in. The right PIN is refused too, until an admin unlocks the account or it gets a new PIN. | Show the `detail` on the sign-in screen and in Settings. |
+| Users | `GET/POST /api/users` and `PATCH /api/users/{id}` answer `ManagedUser` (`User` plus `locked`). Unlock and a PIN reset lift the wait and the lock. | People shows "Locked" and offers Unlock on locked accounts only (`ManagedUser` in `api/types.ts`). |
+| Transport | A request body over 1 MB is `413` (`/api/upload` excepted). | None: no request of the web app comes near it. |
+| Sources | `PATCH /api/sources/{id}` applies `label`. | Rename a source in place. |
+| Sources | A cloud source (rclone, Proton Drive) has the admin who added it as `owner_id`; older ones were given to the first admin. | None (`owner_id` was `null` before). |
+| Imports | `GET /api/imports` returns the newest 200 runs. | None. |
+| Imports | After a cloud pull where some files failed, the note ("N files could not be downloaded …") is the `message` of the import's own run, whose `status` stays what the import made it; there is no separate `failed` run for it. | The report dialog shows it ("Finished: …"). The Sources list shows a run's `message` only for a `failed` run: not shown there yet. |
+| Upload | Files arriving while the disk is under its free-space floor are `rejected` with a reason (status stays `200`). | Show each file's `reason`. |
+| Print | Caps on `PrintRequest`: pages, photos a page, text and id lengths (`422`). | None: the editor cannot build a larger request. |
+| Backups | `POST /api/backups` refuses a `password_file` outside the key folder (`422`); the recovery sheet answers `409` for a key outside it. | None: guided setup makes its keys in that folder. |

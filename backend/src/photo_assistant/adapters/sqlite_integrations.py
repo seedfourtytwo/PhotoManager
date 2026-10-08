@@ -112,11 +112,17 @@ class _SourceCreator(_Store):
 
 
 class SqliteRemoteSources(_SourceCreator):
-    def add_remote_source(self, label: str, config: RemoteConfig, staging_root: Path) -> int:
-        """A source of its provider's kind, pulled into ``staging/<its id>`` (default access)."""
+    def add_remote_source(
+        self, label: str, config: RemoteConfig, staging_root: Path, owner_id: int
+    ) -> int:
+        """A source of its provider's kind, pulled into ``staging/<its id>`` (default access).
+
+        It has an owner like a folder source: "private" compares the marker with the owner,
+        so on an ownerless source the mark would hide the photo from nobody."""
         return self._sources.add_source(
             label,
             lambda source_id: str(staging_root / str(source_id)),
+            owner_id,
             kind=config.provider,
             config=config.to_mapping(),
         ).id

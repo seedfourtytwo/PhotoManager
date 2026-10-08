@@ -40,6 +40,17 @@ class UserOut(BaseModel):
         )
 
 
+class ManagedUserOut(UserOut):
+    """An account as an admin manages it. Whether wrong PINs have locked an account is told to
+    admins only: never on the open list of names, nor to other accounts."""
+
+    locked: bool
+
+    @classmethod
+    def of(cls, u: User) -> "ManagedUserOut":
+        return cls(**UserOut.of(u).model_dump(), locked=u.locked)
+
+
 class AccountName(BaseModel):
     """What the login screen shows before anyone is signed in: names, nothing else."""
 

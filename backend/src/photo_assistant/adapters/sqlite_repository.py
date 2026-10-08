@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from photo_assistant.adapters.sqlite_access import AccessMixin, UnknownUserError
-from photo_assistant.adapters.sqlite_accounts import AccountsMixin
+from photo_assistant.adapters.sqlite_accounts import AccountsMixin, utc_text
 from photo_assistant.adapters.sqlite_albums import AlbumsMixin
 from photo_assistant.adapters.sqlite_base import (
     SqliteBase,
@@ -329,6 +329,9 @@ class SqliteRepository(
             )
         return run_id
 
+    def set_import_run_message(self, run_id: int, message: str) -> None:
+        self._write("UPDATE import_run SET message = ? WHERE id = ?", (message, run_id))
+
     def get_import_report(self, run_id: int) -> ImportReport | None:
         run = self._one("SELECT * FROM import_run WHERE id = ?", (run_id,))
         if run is None:
@@ -408,23 +411,40 @@ class SqliteRepository(
         self,
         now: datetime,
         *,
+        owner: str | None = None,
         only: Collection[str] | None = None,
         excluding: Collection[str] = (),
     ) -> Job | None:
-        """Atomic across processes: one statement picks and marks the job (of a lane's kinds)."""
-        where, params = "status = 'queued'", [_iso(now)]
+        """Atomic across processes: one statement picks and marks the job (of a lane's kinds).
+
+        The oldest queued job whose time has come. ``waiting`` lists the kinds that have queued
+        jobs with one index seek each, so a lane never walks the jobs of the others."""
+        lane, kinds = "", list[str]()
         if only is not None:
-            where += f" AND kind IN ({', '.join('?' for _ in only)})"
-            params += list(only)
+            lane += f" AND kind IN ({', '.join('?' for _ in only)})"
+            kinds += list(only)
         if excluding:
-            where += f" AND kind NOT IN ({', '.join('?' for _ in excluding)})"
-            params += list(excluding)
+            lane += f" AND kind NOT IN ({', '.join('?' for _ in excluding)})"
+            kinds += list(excluding)
+        at = utc_text(now)
         with self._lock:  # a write (UPDATE … RETURNING): on the writer
             row = self._conn.execute(
-                f"""UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?
-                    WHERE id = (SELECT id FROM job WHERE {where} ORDER BY id LIMIT 1)
+                f"""WITH RECURSIVE waiting(kind) AS (
+                        SELECT MIN(kind) FROM job WHERE status = 'queued'
+                        UNION ALL
+                        SELECT (SELECT MIN(kind) FROM job
+                                WHERE status = 'queued' AND kind > waiting.kind)
+                        FROM waiting WHERE waiting.kind IS NOT NULL)
+                    UPDATE job SET status = 'running', attempts = attempts + 1, updated_at = ?,
+                        run_after = NULL, claimed_by = ?, claimed_at = ?
+                    WHERE id = (
+                        SELECT MIN((SELECT id FROM job
+                                    WHERE status = 'queued' AND kind = waiting.kind
+                                      AND (run_after IS NULL OR run_after <= ?)
+                                    ORDER BY id LIMIT 1))
+                        FROM waiting WHERE kind IS NOT NULL{lane})
                     RETURNING id, kind, payload_json, attempts""",
-                params,
+                [_iso(now), owner, at, at, *kinds],
             ).fetchone()
         if row is None:
             return None
@@ -439,11 +459,19 @@ class SqliteRepository(
     def complete_job(self, job_id: int) -> None:
         self._write("UPDATE job SET status = 'done', error = NULL WHERE id = ?", (job_id,))
 
-    def fail_job(self, job_id: int, error: str, retry: bool) -> None:
+    def fail_job(
+        self, job_id: int, error: str, retry: bool, run_after: datetime | None = None
+    ) -> None:
+        """``retry``: queue it again, not to be claimed before ``run_after`` (None = at once)."""
         status = "queued" if retry else "failed"
-        self._write("UPDATE job SET status = ?, error = ? WHERE id = ?", (status, error, job_id))
+        wait = utc_text(run_after) if retry and run_after is not None else None
+        self._write(
+            "UPDATE job SET status = ?, error = ?, run_after = ? WHERE id = ?",
+            (status, error, wait, job_id),
+        )
 
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]:
+        """``run_after`` is set on a queued job that waits for its next attempt."""
         sql = "SELECT * FROM job"
         params: tuple[object, ...] = ()
         if status is not None:
@@ -457,14 +485,17 @@ class SqliteRepository(
                 "status": r["status"],
                 "attempts": r["attempts"],
                 "error": r["error"],
+                "run_after": r["run_after"],
             }
             for r in self._all(sql + " ORDER BY id", params)
         ]
 
     def retry_job(self, job_id: int) -> bool:
+        """By hand, from the admin screen: a fresh set of attempts, starting now."""
         with self._lock:
             cur = self._conn.execute(
-                """UPDATE job SET status = 'queued', error = NULL, attempts = 0
+                """UPDATE job SET status = 'queued', error = NULL, attempts = 0,
+                       run_after = NULL, claimed_by = NULL, claimed_at = NULL
                    WHERE id = ? AND status = 'failed'""",
                 (job_id,),
             )
@@ -472,19 +503,40 @@ class SqliteRepository(
 
     def release_job(self, job_id: int) -> None:
         self._write(
-            """UPDATE job SET status = 'queued', attempts = MAX(attempts - 1, 0)
+            """UPDATE job SET status = 'queued', attempts = MAX(attempts - 1, 0),
+                   claimed_by = NULL, claimed_at = NULL
                WHERE id = ? AND status = 'running'""",
             (job_id,),
         )
 
-    def recover_interrupted_jobs(self) -> int:
-        """Jobs still 'running' at startup were cut off by a crash; queue them again."""
-        with self._lock:
-            cur = self._conn.execute("UPDATE job SET status = 'queued' WHERE status = 'running'")
-            return cur.rowcount
+    def renew_claim(self, job_id: int, owner: str, now: datetime) -> None:
+        """The heartbeat of a running job. Only its owner's: a job that was given up on and
+        taken over by another process is not kept fresh by the first one."""
+        self._write(
+            "UPDATE job SET claimed_at = ? WHERE id = ? AND status = 'running' AND claimed_by = ?",
+            (utc_text(now), job_id, owner),
+        )
+
+    def requeue_stale_jobs(self, stale_before: datetime) -> int:
+        """Queue running jobs again whose claim was last renewed before ``stale_before`` (or
+        never: rows from before leases existed): their process died. The interrupted run
+        keeps counting as an attempt. A job with a fresh claim is another live process's."""
+        return self._count(
+            """UPDATE job SET status = 'queued', claimed_by = NULL, claimed_at = NULL
+               WHERE status = 'running' AND (claimed_at IS NULL OR claimed_at < ?)""",
+            (utc_text(stale_before),),
+        )
 
     def job_counts(self) -> dict[str, int]:
-        rows = self._all("SELECT status, COUNT(*) AS n FROM job GROUP BY status")
-        counts = {"queued": 0, "running": 0, "done": 0, "failed": 0}
+        """By status; ``waiting`` are the queued jobs that wait for a retry time, counted
+        apart so "queued" stays "work that is due"."""
+        rows = self._all(  # one statement: both counts from the same moment
+            """SELECT status, COUNT(*) AS n FROM job GROUP BY status
+               UNION ALL
+               SELECT 'waiting', COUNT(*) FROM job
+               WHERE status = 'queued' AND run_after IS NOT NULL"""
+        )
+        counts = {"queued": 0, "waiting": 0, "running": 0, "done": 0, "failed": 0}
         counts.update({r["status"]: int(r["n"]) for r in rows})
+        counts["queued"] -= counts["waiting"]
         return counts

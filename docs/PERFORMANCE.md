@@ -65,6 +65,40 @@ Times and perceptual hashes are converted to ints once; new photos only regroup 
 time they land in (no group spans a gap longer than the 10-minute window). Date fixes, trash and
 restore queue one full regroup (≈ 0.8 s).
 
+## Job queue and purge indexes (migration 0021)
+
+Synthetic rows on the development machine (SQLite 3.45.1, median of 200, disk flush excluded
+with `synchronous = OFF`): 40,000 finished jobs, 10,000 queued previews, 50,000 photos. "Before"
+is `f7898a4`.
+
+| ms | before | after |
+|---|---|---|
+| poll of the long lane (nothing of its kinds waiting) | 1.84 | **0.035** |
+| poll of the quick lane (nothing of its kinds waiting) | 2.51 | **0.034** |
+| quick lane claims a job queued behind the 10k previews | 2.71 | 0.19 |
+| preview pool claims the next preview | 0.04 | 0.13 |
+| `enqueue_once("geocode")` while one is waiting | 1.29 | **0.033** |
+| `enqueue_once` of a kind with 10k waiting jobs of that same kind | 1.62 | 2.82 |
+| `GET /api/stats` job counts (50k job rows) | 2.67 | 4.43 |
+| purge one trashed photo (`purge_asset`) | 19.8 | **8.7** |
+| … of which: clear variants (`variant_of = ?`) | 6.3 | 0.008 |
+| … of which: foreign-key check of `DELETE FROM asset` | 6.0 | 0.04 |
+| … of which: clear look-alikes (`held_like = ?`, no index) | 7.4 | 7.8 |
+
+What changed: the partial index `job_waiting (kind, id) WHERE status = 'queued'` and a claim
+statement that lists the kinds with waiting jobs by index seeks, then takes the oldest due job
+of the lane's kinds — a poll no longer walks the other lanes' queue. `asset_by_variant_of`
+removes two of the purge's three scans of `asset`. Slower, on purpose or tolerated: a claim
+writes three more columns (owner, lease, retry time) and maintains one more index; the stats
+count reads the retry time of queued jobs; `enqueue_once` among thousands of waiting jobs of
+its *own* kind still reads each (no caller does that: the ML backfill reads the queue once).
+A heartbeat thread per running job costs 0.08 ms to start and stop.
+
+The table was measured before `asset_by_held_like` was added to the same migration: with it
+the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Not fixed
+here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
+(not measured: the synthetic library has no embeddings).
+
 ## Import and previews (C28)
 
 209 synthetic 12 MP JPEGs (4000 × 3000; synthetic files are ~200 KB, real ones ~4 MB, so real

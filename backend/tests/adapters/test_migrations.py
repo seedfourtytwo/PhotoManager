@@ -7,8 +7,11 @@ photos in it) must upgrade in place without losing anything, after a snapshot.
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from photo_assistant.adapters.sqlite_repository import SqliteRepository, _migrations, open_database
 from photo_assistant.domain.access import Level
+from tests.factories import NOW
 
 EXPECTED_TABLES = {
     # M1
@@ -71,7 +74,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 20
+    assert _latest() == 23
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -118,6 +121,53 @@ def test_an_upgraded_library_reopens_without_a_second_snapshot(tmp_path: Path) -
     open_database(db, backup_dir=tmp_path / "backups").close()
     open_database(db, backup_dir=tmp_path / "backups").close()
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
+
+
+def _old_snapshots(folder: Path) -> list[str]:
+    """Seven pre-migration copies from earlier upgrades (oldest first), and a file of the
+    user's own in the same folder."""
+    folder.mkdir()
+    names = [f"library-v{v}-202501{v:02d}T120000000000.db" for v in range(8, 15)]
+    for name in names:
+        (folder / name).write_bytes(b"old copy")
+    (folder / "my-own-copy.db").write_bytes(b"not ours")
+    (folder / "library-v9-notes.txt").write_text("not a snapshot")
+    return names
+
+
+def test_only_the_newest_five_pre_migration_copies_are_kept(tmp_path: Path) -> None:
+    """Nothing ever deleted them: one copy of the whole database per upgrade, for ever."""
+    backups = tmp_path / "backups"
+    old = _old_snapshots(backups)
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+
+    open_database(db, backup_dir=backups).close()
+
+    (new,) = [p.name for p in backups.glob("library-v3-*.db")] or [""]
+    kept = sorted(p.name for p in backups.iterdir())
+    assert kept == sorted([*old[3:], new, "my-own-copy.db", "library-v9-notes.txt"])
+    # newest by when it was made: as text, v10 to v14 sort before v8 and v9
+    assert "library-v9-20250109T120000000000.db" not in kept
+
+
+def test_no_copy_is_deleted_when_the_migration_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from photo_assistant.adapters import sqlite_database
+
+    backups = tmp_path / "backups"
+    old = _old_snapshots(backups)
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+    broken = [*_migrations(), (_latest() + 1, "INSERT INTO no_such_table VALUES (1);")]
+    monkeypatch.setattr(sqlite_database, "migrations", lambda: broken)
+
+    with pytest.raises(sqlite3.OperationalError):
+        open_database(db, backup_dir=backups)
+
+    assert {p.name for p in backups.glob("library-v*.db")} >= set(old), "all still there"
+    assert len(list(backups.glob("library-v3-*.db"))) == 1, "and the copy made just before"
 
 
 def _make_v16_library(db: Path) -> None:
@@ -201,3 +251,133 @@ def test_backup_targets_from_before_0018_count_as_having_their_key_saved(tmp_pat
     conn = open_database(db, backup_dir=tmp_path / "backups")
     rows = conn.execute("SELECT created_at, key_saved_at FROM backup_target").fetchall()
     assert [tuple(r) for r in rows] == [("2026-09-01", "2026-09-01")]
+
+
+def _make_v20_library(db: Path, users: str) -> None:
+    """A library just before 0022: sources added from the cloud (and an M1 folder) have no
+    owner."""
+    conn = sqlite3.connect(db)
+    for number, sql in _migrations():
+        if number <= 20:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        users
+        + """
+        INSERT INTO source (id, kind, label, root, owner_id, config_json) VALUES
+            (1, 'rclone', 'MEGA', '/staging/1', NULL, '{"remote": "mega", "path": ""}'),
+            (2, 'proton', 'Proton', '/staging/2', NULL, '{"provider": "proton"}'),
+            (3, 'folder', 'Old', '/old', NULL, NULL);
+        """
+    )
+    conn.close()
+
+
+def _owners(conn: sqlite3.Connection) -> list[int | None]:
+    return [r[0] for r in conn.execute("SELECT owner_id FROM source ORDER BY id")]
+
+
+def test_ownerless_sources_go_to_the_first_enabled_admin(tmp_path: Path) -> None:
+    """0022: a private mark only works on a source with an owner, so every source gets one.
+    The first admin is the lowest id among admins who can still log in."""
+    db = tmp_path / "library.db"
+    _make_v20_library(
+        db,
+        """INSERT INTO user (id, username, display_name, password_hash, role, disabled) VALUES
+            (1, 'lea', 'Lea', 'x', 'member', 0), (2, 'old', 'Old', 'x', 'admin', 1),
+            (3, 'c', 'C', 'x', 'admin', 0), (4, 'p', 'P', 'x', 'admin', 0);
+        INSERT INTO source (id, label, root, owner_id) VALUES (4, 'Leas', '/lea', 1);""",
+    )
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert _owners(conn) == [3, 3, 3, 1], "sources that had an owner keep it"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    # access lists are not touched: who may see a source is a separate decision
+    assert conn.execute("SELECT COUNT(*) FROM source_access").fetchone()[0] == 0
+
+
+def test_ownerless_sources_wait_for_the_setup_when_there_is_no_admin(tmp_path: Path) -> None:
+    """0022 on a library nobody has set up yet: nothing to assign; the first-run setup gives
+    ownerless sources to the first admin, as it always did."""
+    db = tmp_path / "library.db"
+    _make_v20_library(db, "")
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert _owners(conn) == [None, None, None]
+    admin = SqliteRepository(conn).add_first_admin("c", "C", "x")
+    assert _owners(conn) == [admin.id] * 3
+
+
+def _make_v20_library_with_jobs(db: Path) -> None:
+    """A library just before 0021, stopped in the middle of its work: jobs waiting, one cut
+    off while running, one failed for good, one finished."""
+    conn = sqlite3.connect(db)
+    for number, sql in _migrations():
+        if number <= 20:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO job (id, kind, payload_json, status, attempts, error) VALUES
+            (1, 'preview', '{"asset_id": 1}', 'done', 1, NULL),
+            (2, 'backup_run', '{}', 'running', 1, NULL),
+            (3, 'preview', '{"asset_id": 2}', 'queued', 0, NULL),
+            (4, 'scan_source', '{"source_id": 1}', 'failed', 3, 'ConnectionError: offline');
+        """
+    )
+    conn.close()
+
+
+def test_a_v20_library_keeps_its_jobs_claimable_after_0021(tmp_path: Path) -> None:
+    """0021: not-before time, owner and lease on jobs; old rows need none of them."""
+    db = tmp_path / "library.db"
+    _make_v20_library_with_jobs(db)
+    conn = open_database(db, backup_dir=tmp_path / "backups")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert {"job_queue", "job_waiting", "asset_by_variant_of", "ai_log_recent"} <= indexes
+    repo = SqliteRepository(conn)
+    assert [(j["id"], j["status"], j["attempts"]) for j in repo.list_jobs()] == [
+        (1, "done", 1),
+        (2, "running", 1),
+        (3, "queued", 0),
+        (4, "failed", 3),
+    ]
+    assert all(j["run_after"] is None for j in repo.list_jobs())
+    # the job cut off under the old version has no lease: the server start queues it again
+    assert repo.requeue_stale_jobs(stale_before=NOW) == 1
+    assert repo.retry_job(4) is True
+    claimed = [repo.claim_next_job(NOW, owner="server-1") for _ in range(4)]
+    assert [(j.id, j.attempts) for j in claimed if j is not None] == [(2, 2), (3, 1), (4, 1)]
+    assert claimed[-1] is None
+
+
+def test_accounts_from_before_0023_come_through_unlocked_with_no_wrong_pins(tmp_path: Path) -> None:
+    """0023: the account lock lives on the user row; existing accounts start clean."""
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 23)
+    for number, sql in _migrations():
+        if number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO user (id, username, display_name, password_hash, role, disabled)
+            VALUES (1, 'c', 'C', 'x', 'admin', 0), (2, 'lea', 'Lea', 'y', 'member', 1);
+        INSERT INTO login_failure (username, ip, at) VALUES ('lea', '10.0.0.1', '2026-09-01');
+        """
+    )
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    rows = upgraded.execute("SELECT username, failed_pins, locked_at FROM user ORDER BY id")
+    assert [tuple(r) for r in rows] == [("c", 0, None), ("lea", 0, None)]
+    users = SqliteRepository(upgraded).list_users()
+    assert [(u.username, u.disabled, u.locked) for u in users] == [
+        ("c", False, False),
+        ("lea", True, False),
+    ]
+    found = SqliteRepository(upgraded).find_user_by_username("LEA")
+    assert found is not None and found[1] == "y", "the PIN hash is untouched"
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1

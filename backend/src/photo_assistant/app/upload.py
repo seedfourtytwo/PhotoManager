@@ -9,12 +9,13 @@ rescan picks up a file whose request died before that (ARCHITECTURE, "Phone inbo
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import INBOX_KIND, Viewer
-from photo_assistant.domain.model import Source
+from photo_assistant.domain.model import RunStatus, Source
 from photo_assistant.domain.uploads import (
     is_content_hash,
     numbered_names,
@@ -140,17 +141,36 @@ class UploadInbox:
         sources: Iterable[Source],
         enqueue_once: Callable[[str, dict[str, object]], int | None],
     ) -> int:
-        """Queue an import of every enabled inbox among ``sources`` unless one is already
-        waiting (so they never pile up); how many were queued."""
+        """Queue an import of every enabled inbox among ``sources`` that has a file waiting,
+        unless one is already queued (so they never pile up); how many were queued."""
         queued = 0
         for source in sources:
             if source.kind != INBOX_KIND or not source.enabled or source.owner_id is None:
                 continue
             folder = self._user_folder(source.owner_id)
             current = self._inbox.ensure_inbox_source(source.owner_id, str(folder))
+            if not self._has_a_file_waiting(current.id, folder):
+                continue
             job = enqueue_once(self._settings.import_job_kind, {"source_id": current.id})
             queued += job is not None
         return queued
+
+    def _has_a_file_waiting(self, source_id: int, folder: Path) -> bool:
+        """Whether an import of this inbox could find something the last one did not: a file
+        that arrived since that import started, or an import that did not finish. Every
+        import saves a report, so scanning an unchanged inbox every hour filled the import
+        history with "nothing new" rows.
+
+        Limits: a file the last finished import reported as failed is not tried again until
+        something else arrives (it is in that report; a rescan by hand retries it); and it
+        trusts this machine's clock not to jump back past an import."""
+        newest = self._spool.newest_arrival(folder)
+        if newest is None:
+            return False
+        runs = self._library.list_import_runs(source_id, 1)
+        if not runs or runs[0]["status"] != RunStatus.DONE:
+            return True
+        return newest >= datetime.fromisoformat(str(runs[0]["started_at"]))
 
     def missing(self, viewer: Viewer, hashes: Sequence[str]) -> list[str]:
         """Of these content hashes, the ones this viewer doesn't have (in order, no repeats).

@@ -51,15 +51,21 @@ _EXIF = re.compile(
 )
 _OFFSET = re.compile(r"^\s*(Z|([+\-])(\d{2}):?(\d{2}))\s*$")
 
-# A date in a file name is only believed inside these years, whatever its spelling: digits in
-# names are too often something else (1080-1920-01-02 is a picture size, not 2 January 1920).
+# Digits in a file name are too often something else, so a date written without separators
+# (20190704) is only believed inside these years. A dashed date (1975-06-01) is deliberate
+# enough to be believed back to the first photograph: scanned family photos are named that
+# way. The exception is a dashed date glued to a number group before it, which gets the strict
+# years again: 1080-1920-01-02 is a picture size, not 2 January 1920.
 FILENAME_EARLIEST = datetime(1990, 1, 1)
 FILENAME_LATEST = datetime(2100, 1, 1)
+_GLUED = re.compile(r"\d-$")
 
 # Tried in order; within a pattern every match is tried until one is a plausible date.
-_FILENAME_DATETIMES = [
+_COMPACT_DATETIMES = [
     # 20251108_100559 · IMG_20190704_183000 · PXL_20230101_120000123 · Screenshot_20200101-123456
     re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})[_\-](\d{2})(\d{2})(\d{2})(?!\d{0,2}\d{4})"),
+]
+_DASHED_DATETIMES = [
     # 2015-02-02 15.53.11 · Screenshot from 2026-07-03 15-21-27 · signal-2021-05-01-12-34-56-789
     # WhatsApp Image 2020-10-26 at 12.34.56 · Screenshot 2024-03-10 at 9.15.22 AM (12-hour clock)
     re.compile(
@@ -71,8 +77,8 @@ _FILENAME_DATETIMES = [
 ]
 # FB_IMG_1591234567890 · mmexport1591234567890 (milliseconds since 1970, UTC)
 _FILENAME_EPOCH_MS = re.compile(r"(?:FB_IMG_|mmexport)(\d{13})(?!\d)")
-_FILENAME_DATES = [
-    re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"),  # scan_2019-07-04
+_DASHED_DATES = [re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")]  # scan_2019-07-04
+_COMPACT_DATES = [
     # DSC_20190704 · VID-20200101-WA0001. A following long number is ruled out, so Facebook
     # ids like 20151012_903634589713690_n are not read as dates.
     re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)(?![_\-]\d{6})"),
@@ -126,12 +132,14 @@ def _in_name(match: re.Match[str]) -> datetime | None:
 
 
 def _first_plausible(
-    patterns: list[re.Pattern[str]], text: str, latest: datetime
+    patterns: list[re.Pattern[str]], text: str, latest: datetime, *, dashed: bool
 ) -> datetime | None:
     for pattern in patterns:
         for match in pattern.finditer(text):
             value = _in_name(match)
-            if value is not None and FILENAME_EARLIEST <= value < latest:
+            alone = dashed and not _GLUED.search(text, 0, match.start())
+            earliest = EARLIEST_PLAUSIBLE if alone else FILENAME_EARLIEST
+            if value is not None and earliest <= value < latest:
                 return value
     return None
 
@@ -147,15 +155,20 @@ def _epoch_from_filename(name: str) -> datetime | None:
 
 def date_from_filename(filename: str, latest: datetime = FILENAME_LATEST) -> datetime | None:
     """Local wall-clock date from a file name (timestamps in names are given as UTC): the
-    first one from ``FILENAME_EARLIEST`` up to (not including) ``latest``."""
+    first believable one before ``latest``. Believable is from ``EARLIEST_PLAUSIBLE`` for a
+    dashed date standing alone, from ``FILENAME_EARLIEST`` for every other spelling."""
     name = PurePath(filename).stem
-    found = _first_plausible(_FILENAME_DATETIMES, name, latest)
+    found = _first_plausible(_COMPACT_DATETIMES, name, latest, dashed=False)
+    if found is None:
+        found = _first_plausible(_DASHED_DATETIMES, name, latest, dashed=True)
     if found is not None:
         return found
     epoch = _epoch_from_filename(name)
     if epoch is not None:
         return epoch.replace(tzinfo=None)
-    return _first_plausible(_FILENAME_DATES, name, latest)
+    return _first_plausible(_DASHED_DATES, name, latest, dashed=True) or _first_plausible(
+        _COMPACT_DATES, name, latest, dashed=False
+    )
 
 
 def _plausible(value: datetime, now: datetime) -> bool:

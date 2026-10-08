@@ -3,7 +3,7 @@
 from fastapi import APIRouter, status
 
 from photo_assistant.api.deps import ADMIN_ONLY, MemberUser, ServicesDep
-from photo_assistant.api.schemas import DirectoryEntry, NewUser, UserOut, UserPatchIn
+from photo_assistant.api.schemas import DirectoryEntry, ManagedUserOut, NewUser, UserPatchIn
 from photo_assistant.app.accounts import (
     UserPatch,
 )
@@ -22,29 +22,30 @@ def directory(services: ServicesDep, user: MemberUser) -> list[DirectoryEntry]:
 
 
 @router.get("", dependencies=ADMIN_ONLY)
-def list_users(services: ServicesDep) -> list[UserOut]:
-    return [UserOut.of(u) for u in services.accounts.list_users()]
+def list_users(services: ServicesDep) -> list[ManagedUserOut]:
+    return [ManagedUserOut.of(u) for u in services.accounts.list_users()]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, dependencies=ADMIN_ONLY)
-def create_user(services: ServicesDep, body: NewUser) -> UserOut:
+def create_user(services: ServicesDep, body: NewUser) -> ManagedUserOut:
     """409 for a taken name, 422 for a bad one (account errors carry their status)."""
     user = services.accounts.create_user(body.username, body.display_name, body.pin, body.role)
-    return UserOut.of(user)
+    return ManagedUserOut.of(user)
 
 
 @router.patch("/{user_id}", dependencies=ADMIN_ONLY)
-def update_user(services: ServicesDep, user_id: int, body: UserPatchIn) -> UserOut:
+def update_user(services: ServicesDep, user_id: int, body: UserPatchIn) -> ManagedUserOut:
     patch = UserPatch(
         display_name=body.display_name,
         role=body.role,
         disabled=body.disabled,
         pin=body.pin,
     )
-    return UserOut.of(services.accounts.update_user(user_id, patch))
+    return ManagedUserOut.of(services.accounts.update_user(user_id, patch))
 
 
 @router.post("/{user_id}/unlock", status_code=status.HTTP_204_NO_CONTENT, dependencies=ADMIN_ONLY)
 def unlock_user(services: ServicesDep, user_id: int) -> None:
-    """Clear the login rate limit for this account (v1.3); 404 for an unknown id."""
+    """Lift the wait and the lock that wrong PINs put on this account; 404 for an unknown
+    id."""
     services.accounts.unlock(user_id)

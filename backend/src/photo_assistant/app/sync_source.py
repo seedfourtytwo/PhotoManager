@@ -39,11 +39,11 @@ SCAN_JOB_KIND = "scan_source"  # the job kind api.services registers for every s
 # Retrying these at once can't help (and hammering a throttling provider makes it worse):
 # record them for the user and finish the job.
 _FINAL = (SyncAuthError, SyncNotFoundError, SyncRateLimitedError)
-_SHOWN_ERRORS = 3  # of a partial pull, in the import history; the log has the count
+_SHOWN_ERRORS = 3  # of a partial pull, in the import's message; the log has the count
 
 
 def partial_pull_message(label: str, pulled: SyncReport) -> str:
-    """What the import history says about a pull that brought only part of the remote."""
+    """What the import's entry says when the pull before it brought only part of the remote."""
     count = pulled.errors
     text = (
         f"{count} file{'' if count == 1 else 's'} could not be downloaded from '{label}' "
@@ -70,6 +70,8 @@ class ReportSink(Protocol):
         self, report: ImportReport, started_at: datetime, finished_at: datetime
     ) -> int: ...
 
+    def set_import_run_message(self, run_id: int, message: str) -> None: ...
+
 
 class RemoteLister(Protocol):
     def list_remotes(self) -> list[str]: ...
@@ -88,15 +90,17 @@ def add_remote_source(
     staging_root: Path,
     label: str,
     settings: Mapping[str, object],
+    owner_id: int,
 ) -> int:
-    """Validate and register a remote source. Raises RemoteConfigError with a fix-it message."""
+    """Validate and register a remote source, owned by the admin adding it. Raises
+    RemoteConfigError with a fix-it message."""
     config = RemoteConfig.from_mapping(settings)
     if config.remote not in remotes.list_remotes():
         raise RemoteConfigError(
             f"no remote called '{config.remote}' on this machine: create it first with "
             "'rclone config' (see the cloud sources guide)"
         )
-    return store.add_remote_source(label, config, staging_root)
+    return store.add_remote_source(label, config, staging_root, owner_id)
 
 
 class ProtonAccount(Protocol):
@@ -108,16 +112,22 @@ class ProtonAccount(Protocol):
 
 
 def add_proton_source(
-    store: RemoteSourceStore, account: ProtonAccount, staging_root: Path, label: str, path: str
+    store: RemoteSourceStore,
+    account: ProtonAccount,
+    staging_root: Path,
+    label: str,
+    path: str,
+    owner_id: int,
 ) -> int:
-    """Register a Proton Drive source for a place that exists. Raises RemoteConfigError for a
-    place that may not be read, SyncError subclasses when Proton can't confirm it."""
+    """Register a Proton Drive source for a place that exists, owned by the admin adding it.
+    Raises RemoteConfigError for a place that may not be read, SyncError subclasses when
+    Proton can't confirm it."""
     config = RemoteConfig.proton(path)
     if path == PROTON_PHOTOS:
         account.check()
     else:
         account.folders(path)
-    return store.add_remote_source(label, config, staging_root)
+    return store.add_remote_source(label, config, staging_root, owner_id)
 
 
 def create_proton_folder(account: ProtonAccount, parent: str, name: str) -> str:
@@ -189,16 +199,17 @@ class SyncSource:
             self._record_failure(source, started, exc)
             raise
         outcome = self._import(source_id, pulled)
-        if pulled.partial:
+        if pulled.partial and outcome.report is not None:
             log.warning(
                 "remote pull incomplete",
                 extra={"source_id": source_id, "errors": pulled.errors},
             )
-            # after the import, so it is the first thing the source's history shows
-            note = ImportReport(
-                source.id, RunStatus.FAILED, message=partial_pull_message(source.label, pulled)
-            )
-            self._reports.save_import_report(note, started, self._clock.now())
+            # on the import's own entry, whose status stays what the import made it: an entry
+            # of its own read as "last import failed" above the import of what did arrive
+            note = partial_pull_message(source.label, pulled)
+            report = outcome.report
+            report.message = f"{report.message} {note}" if report.message else note
+            self._reports.set_import_run_message(outcome.run_id, report.message)
         return outcome
 
     def _import(self, source_id: int, pulled: SyncReport | None) -> SyncOutcome:

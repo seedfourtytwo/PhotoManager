@@ -69,8 +69,14 @@ def test_pull_then_import_leaves_the_remote_untouched(
         staging_root=data / "staging",
         options=SyncOptions(tpslimit=0),
     )
+    owner = repo.add_first_admin("c", "C", "x")
     source_id = add_remote_source(
-        remotes, sync, data / "staging", "Cloud", {"remote": "cloud", "path": str(source_guard)}
+        remotes,
+        sync,
+        data / "staging",
+        "Cloud",
+        {"remote": "cloud", "path": str(source_guard)},
+        owner.id,
     )
     before = snapshot_tree(source_guard)
 
