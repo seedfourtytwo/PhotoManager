@@ -20,7 +20,13 @@ from photo_assistant.api.settings import Settings, get_settings
 from photo_assistant.app.backup import BackupService, UnknownTargetError
 from photo_assistant.app.doctor import exit_code, render, run_doctor
 from photo_assistant.app.library_transfer import ExportSummary, LibraryTransferError
-from photo_assistant.domain.backup import BackupRun, NewBackupTarget, Retention, TargetStatus
+from photo_assistant.domain.backup import (
+    BackupRun,
+    BackupRunStatus,
+    NewBackupTarget,
+    Retention,
+    TargetStatus,
+)
 from photo_assistant.domain.schedule import InvalidScheduleError
 from photo_assistant.ports.library_files import CopyVerificationError, LibraryUnreadableError
 
@@ -198,7 +204,10 @@ def _backup_run_due(service: BackupService, args: argparse.Namespace) -> int:
     runs = service.run_due()
     if not runs:
         print("Nothing is due.")
-    return max((_print_run(r) for r in runs), default=0)
+    for run in runs:
+        _print_run(run)
+    # a place that is not connected is skipped, not a failure: only a real fault exits 1
+    return int(any(run.status is BackupRunStatus.FAILED for run in runs))
 
 
 _BACKUP: dict[str, Callable[[BackupService, argparse.Namespace], int]] = {

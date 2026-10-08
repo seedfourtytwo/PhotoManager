@@ -15,6 +15,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
 from pathlib import Path
+from typing import Literal
 
 from photo_assistant.domain.backup import (
     BACKUP_FOLDERS,
@@ -26,6 +27,7 @@ from photo_assistant.domain.backup import (
     BackupTarget,
     NewBackupTarget,
     PlaceFacts,
+    Protection,
     RestoreCheck,
     RestoreTestReport,
     Retention,
@@ -34,13 +36,16 @@ from photo_assistant.domain.backup import (
     TargetKind,
     TargetSettings,
     TargetStatus,
+    backup_due,
     plan_backup,
+    probe_allowed,
+    protection,
     restore_proof_due,
     size_text,
 )
 from photo_assistant.domain.library_paths import nested_or_same
 from photo_assistant.domain.remote_source import PROTON_PHOTOS, RemoteConfig, RemoteConfigError
-from photo_assistant.domain.schedule import is_due, is_overdue, next_run, parse_window
+from photo_assistant.domain.schedule import is_overdue, next_run, parse_window
 from photo_assistant.ports import Clock, Hasher
 from photo_assistant.ports.backup import (
     AssetFile,
@@ -54,6 +59,7 @@ from photo_assistant.ports.backup import (
     KeyVault,
     MirrorReport,
     RepositoryMirror,
+    RepositoryNotFoundError,
     RepositoryRef,
 )
 
@@ -68,8 +74,13 @@ MIRROR_STATE_DIR = "mirror"  # in the data root, outside what a backup contains
 DB_SNAPSHOT_PATH = f"{DB_SNAPSHOT_DIR}/{DB_SNAPSHOT_FILE}"
 REPOSITORY_FOLDER = "photo-assistant-backup"  # a guided setup always makes its own folder
 RCLONE_PREFIX = "rclone:"
+ALL_RUNS = 100_000  # list_runs limit meaning "every run"
 
 Handler = Callable[[dict[str, object]], object]
+Waiting = Literal["waiting"]  # a place that was probed in a round and is still out of reach
+MIRROR_WAIT = (
+    "the copy on Proton Drive waits until this computer is online and the backup disk is connected"
+)
 
 
 class UnknownTargetError(LookupError):
@@ -124,6 +135,10 @@ def _mirror_summary(report: MirrorReport) -> str:
     return f"{sent}, {_files(report.removed, 'old')} removed"
 
 
+def _result(outcome: BackupRun | Waiting) -> str:
+    return outcome.status.value if isinstance(outcome, BackupRun) else outcome
+
+
 def _message(exc: BaseException) -> str:
     return str(exc) or type(exc).__name__
 
@@ -154,6 +169,9 @@ class BackupService:
         self._places = places
         self._vault = vault
         self._mirror = mirror
+        # when each place was last looked for after being skipped; in memory on purpose: after
+        # a restart one extra look happens and nothing is written
+        self._probed: dict[tuple[str, int], datetime] = {}
         self._lock = threading.Lock()  # one run at a time per process; restic locks the repo
 
     # --- targets ---------------------------------------------------------------------------
@@ -339,6 +357,9 @@ class BackupService:
         state = self._config.data_root / MIRROR_STATE_DIR / f"{target.id}.json"
 
         def work() -> RunOutcome:
+            reason = mirror.probe(Path(target.repository), remote)
+            if reason is not None:
+                return RunOutcome(BackupRunStatus.SKIPPED, error=MIRROR_WAIT, details=reason)
             report = mirror.mirror(Path(target.repository), remote, state)
             return RunOutcome(BackupRunStatus.SUCCEEDED, details=_mirror_summary(report))
 
@@ -369,20 +390,86 @@ class BackupService:
         return self._record(target, RunKind.RESTORE_TEST, work)
 
     def run_due(self) -> list[BackupRun]:
-        """Called periodically: run every enabled target whose schedule says so, then prove
-        the backups whose restore test is due. Returns the backup runs."""
-        now = self._local(self._clock.now())
-        done = []
-        for target in self._store.list_targets():
-            if target.enabled and self._is_due(target, now):
-                done.append(self.run_now(target.id))
-        for target in self._store.list_targets():
-            if target.enabled:
-                self._prove_if_due(target)
+        """Called periodically: run every enabled target whose schedule says so, catch up the
+        places that were not connected, then prove the backups whose restore test is due.
+        Returns the backup runs."""
+        clock_now = self._clock.now()
+        now = self._local(clock_now)
+        enabled = [t for t in self._store.list_targets() if t.enabled]
+        done: list[BackupRun] = []
+        results: list[dict[str, str]] = []
+        for target in enabled:
+            backup = self._catch_up_backup(target, now, clock_now)
+            if isinstance(backup, BackupRun):
+                done.append(backup)
+            if backup is not None:
+                results.append({"target": target.label, "result": _result(backup)})
+        for target in enabled:
+            copy = self._catch_up_copy(target, clock_now)
+            if copy is not None:
+                results.append({"target": f"{target.label} (copy)", "result": _result(copy)})
+        for target in enabled:
+            self._prove_if_due(target)
+        if results:
+            log.info("backup round", extra={"results": results})
         return done
 
+    def _catch_up_backup(
+        self, target: BackupTarget, now: datetime, clock_now: datetime
+    ) -> BackupRun | Waiting | None:
+        """Run the target when its schedule says so. One that was not connected is looked for
+        at most every SKIP_RETRY and, while it stays away, adds nothing to the history."""
+        latest = self._store.last_run(target.id, RunKind.BACKUP)
+        waiting = latest is not None and latest.status is BackupRunStatus.SKIPPED
+        window = parse_window(target.quiet_window)
+        catching_up = waiting and self._overdue(target, now)
+        if not backup_due(
+            target.parsed_schedule, self._last_attempt(target), now, window, catching_up=catching_up
+        ):
+            return None
+        if waiting and not self._still_here(target, clock_now):
+            return "waiting"
+        return self.run_now(target.id)
+
+    def _still_here(self, target: BackupTarget, clock_now: datetime) -> bool:
+        """After a skip: has the place come back? A fault that waiting will not fix counts as
+        here, so the run that follows records it."""
+        key = ("backup", target.id)
+        if not probe_allowed(self._probed.get(key), clock_now):
+            return False
+        self._probed[key] = clock_now
+        try:
+            return self._engine.probe(self._repo(target)) is None
+        except (BackupError, OSError):
+            return True
+
+    def _catch_up_copy(
+        self, target: BackupTarget, clock_now: datetime
+    ) -> BackupRun | Waiting | None:
+        """Bring a Proton copy that was skipped up to date once it is reachable again."""
+        mirror, remote = self._mirror, target.mirror_path
+        latest = self._store.last_run(target.id, RunKind.MIRROR)
+        if mirror is None or remote is None:
+            return None
+        if latest is None or latest.status is not BackupRunStatus.SKIPPED:
+            return None
+        key = ("mirror", target.id)
+        if not probe_allowed(self._probed.get(key), clock_now):
+            return None
+        self._probed[key] = clock_now
+        try:
+            if mirror.probe(Path(target.repository), remote) is not None:
+                return "waiting"
+        except (BackupError, OSError):
+            pass  # mirror_now records what is wrong
+        return self.mirror_now(target.id)
+
     def _prove_if_due(self, target: BackupTarget) -> None:
-        """The recovery guarantee: restore a sample after the first backup, then weekly."""
+        """The recovery guarantee: restore a sample after the first backup, then weekly. Not
+        while the place is away: there is nothing to restore from until it is back."""
+        latest = self._store.last_run(target.id, RunKind.BACKUP)
+        if latest is not None and latest.status is BackupRunStatus.SKIPPED:
+            return
         success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
         last_test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven_from = (success.finished_at or success.started_at) if success else None
@@ -395,13 +482,22 @@ class BackupService:
             self._prove_if_due(self.target(target_id))
         return run
 
-    def _is_due(self, target: BackupTarget, now: datetime) -> bool:
-        window = parse_window(target.quiet_window)
-        return is_due(target.parsed_schedule, self._last_attempt(target), now, window)
-
     def _last_attempt(self, target: BackupTarget) -> datetime:
-        last = self._store.last_run(target.id, RunKind.BACKUP)
-        return self._local(last.started_at if last else target.created_at)
+        """When the schedule last tried this target; a skipped run did not try anything."""
+        for run in self._store.list_runs(target.id, ALL_RUNS):
+            if run.kind is RunKind.BACKUP and run.status is not BackupRunStatus.SKIPPED:
+                return self._local(run.started_at)
+        return self._local(target.created_at)
+
+    def _overdue(self, target: BackupTarget, now: datetime) -> bool:
+        success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
+        success_at = (success.finished_at or success.started_at) if success else None
+        return is_overdue(
+            target.parsed_schedule,
+            self._local(success_at) if success_at else None,
+            self._local(target.created_at),
+            now,
+        )
 
     def _record(
         self, target: BackupTarget, kind: RunKind, work: Callable[[], RunOutcome]
@@ -428,7 +524,17 @@ class BackupService:
     def _backup(self, target: BackupTarget) -> RunOutcome:
         repo = self._repo(target)
         root = self._config.data_root
-        self._engine.ensure_repository(repo)
+        if self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True) is not None:
+            # a repository that was there before is never created again: a disk that is not
+            # connected must not get a fresh, empty one in its place
+            reason = self._engine.probe(repo)
+            if reason is not None:
+                return self._skipped(target, reason)
+        else:
+            try:
+                self._engine.ensure_repository(repo)
+            except RepositoryNotFoundError as exc:
+                return self._skipped(target, _message(exc))
         self._snapshotter.snapshot(root / DB_SNAPSHOT_DIR / DB_SNAPSHOT_FILE)
         summary = self._engine.backup(repo, root, BACKUP_FOLDERS)
         self._engine.forget(repo, target.retention)
@@ -440,6 +546,17 @@ class BackupService:
             files_changed=summary.files_changed,
             repo_bytes=self._engine.repository_size(repo),
         )
+
+    def _skipped(self, target: BackupTarget, reason: str) -> RunOutcome:
+        if target.kind is TargetKind.LOCAL:
+            friendly = (
+                f"{target.label} is not connected: plug it in and the backup starts by itself"
+            )
+        else:
+            friendly = (
+                f"{target.label} cannot be reached right now: it is backed up as soon as it can be"
+            )
+        return RunOutcome(BackupRunStatus.SKIPPED, error=friendly, details=reason)
 
     # --- restore test (FEATURES 9b.8) ------------------------------------------------------
 
@@ -481,19 +598,14 @@ class BackupService:
     def _status(self, target: BackupTarget, now: datetime) -> TargetStatus:
         last = self._store.last_run(target.id, RunKind.BACKUP)
         success = self._store.last_run(target.id, RunKind.BACKUP, succeeded_only=True)
-        schedule = target.parsed_schedule
         upcoming = None
         if target.enabled:
             upcoming = next_run(
-                schedule, self._last_attempt(target), parse_window(target.quiet_window)
+                target.parsed_schedule,
+                self._last_attempt(target),
+                parse_window(target.quiet_window),
             )
         success_at = (success.finished_at or success.started_at) if success else None
-        overdue = is_overdue(
-            schedule,
-            self._local(success_at) if success_at else None,
-            self._local(target.created_at),
-            now,
-        )
         test = self._store.last_run(target.id, RunKind.RESTORE_TEST)
         proven = self._store.last_run(target.id, RunKind.RESTORE_TEST, succeeded_only=True)
         copy = self._store.last_run(target.id, RunKind.MIRROR) if target.mirror_path else None
@@ -509,12 +621,30 @@ class BackupService:
             last_run=last,
             repo_bytes=success.repo_bytes if success else None,
             next_run_at=self._aware(upcoming) if upcoming else None,
-            overdue=overdue,
+            overdue=self._overdue(target, now),
             last_proven_at=(proven.finished_at or proven.started_at) if proven else None,
             restore_failing=test is not None and test.status is BackupRunStatus.FAILED,
             last_mirror_at=(copied.finished_at or copied.started_at) if copied else None,
             mirror_error=(copy.error or "the copy failed") if copy and copy_failed else None,
+            skipped_since=last.started_at
+            if last and last.status is BackupRunStatus.SKIPPED
+            else None,
+            mirror_overdue=bool(target.mirror_path) and self._mirror_overdue(target, copied, now),
         )
+
+    def _mirror_overdue(
+        self, target: BackupTarget, copied: BackupRun | None, now: datetime
+    ) -> bool:
+        copied_at = (copied.finished_at or copied.started_at) if copied else None
+        return is_overdue(
+            target.parsed_schedule,
+            self._local(copied_at) if copied_at else None,
+            self._local(target.created_at),
+            now,
+        )
+
+    def protection(self) -> Protection:
+        return protection(self.status())
 
     def _local(self, moment: datetime) -> datetime:
         return moment.astimezone(self._config.local_tz).replace(tzinfo=None)

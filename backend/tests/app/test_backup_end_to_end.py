@@ -94,12 +94,6 @@ def test_failed_backups_leave_the_library_untouched(
     before = _library_files(library)
     ops = build_ops_services(library, _ops(tmp_path, library))
     try:
-        unplugged = ops.backup.add_target(
-            NewBackupTarget("Unplugged disk", "/media/nobody/NoDisk/photos", str(password))
-        )
-        run = ops.backup.run_now(unplugged.id)
-        assert run.status is BackupRunStatus.FAILED and "plug in" in (run.error or "")
-
         disk = tmp_path / "disk"
         disk.mkdir()
         good = ops.backup.add_target(NewBackupTarget("Disk", str(disk / "repo"), str(password)))
@@ -107,6 +101,24 @@ def test_failed_backups_leave_the_library_untouched(
         password.write_text("someone changed it\n")
         wrong = ops.backup.run_now(good.id)
         assert wrong.status is BackupRunStatus.FAILED and "wrong password" in (wrong.error or "")
+    finally:
+        ops.close()
+    assert _library_files(library) == before
+
+
+def test_a_backup_to_a_disk_that_is_not_there_is_skipped_and_creates_nothing(
+    library: Path, password: Path, tmp_path: Path
+) -> None:
+    before = _library_files(library)
+    ops = build_ops_services(library, _ops(tmp_path, library))
+    try:
+        gone = tmp_path / "unplugged"
+        target = ops.backup.add_target(
+            NewBackupTarget("Unplugged disk", str(gone / "photos"), str(password))
+        )
+        run = ops.backup.run_now(target.id)
+        assert run.status is BackupRunStatus.SKIPPED and "plug it in" in (run.error or "")
+        assert not gone.exists(), "no repository is made where the disk should be"
     finally:
         ops.close()
     assert _library_files(library) == before

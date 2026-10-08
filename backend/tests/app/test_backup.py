@@ -28,7 +28,10 @@ from photo_assistant.ports.backup import (
     AssetFile,
     BackupError,
     Disk,
+    IncompleteBackupError,
     MirrorSignInError,
+    RepositoryLockedError,
+    RepositoryNotFoundError,
     WrongPasswordError,
 )
 from tests.fakes_backup import (
@@ -666,3 +669,227 @@ def test_without_proton_set_up_on_the_server_the_copy_cannot_be_switched_on(
     world.service._mirror = None
     with pytest.raises(ValueError, match="not available"):
         world.service.set_mirror(world.target(), PROTON)
+
+
+# --- a place that is not connected: skip it, keep going, catch up (reachability) ----------------
+
+
+def repository_of(world: World, target_id: int) -> str:
+    return world.service.target(target_id).repository
+
+
+def at(day: int, hour: int, minute: int = 0) -> datetime:
+    return datetime(2026, 9, 29, hour, minute, tzinfo=UTC) + timedelta(days=day)
+
+
+def test_an_established_backup_whose_disk_is_gone_is_skipped_and_never_created_again(
+    world: World,
+) -> None:
+    target_id = mirrored(world)
+    assert world.service.run_now(target_id).status is BackupRunStatus.SUCCEEDED
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.engine.calls.clear()
+    world.mirror.calls.clear()
+    run = world.service.run_now(target_id)
+    assert run.status is BackupRunStatus.SKIPPED
+    assert "ensure" not in world.engine.calls and "backup" not in world.engine.calls
+    assert "plug it in" in (run.error or "") and run.details == "no repository"
+    assert world.mirror.calls == [], "nothing new to copy from a disk that is not there"
+
+
+def test_a_cloud_place_that_cannot_be_reached_says_it_is_backed_up_when_it_can_be(
+    world: World,
+) -> None:
+    target_id = world.target(label="Server", repository="rclone:server:photos")
+    world.service.run_now(target_id)
+    world.engine.absent["rclone:server:photos"] = "network is down"
+    run = world.service.run_now(target_id)
+    assert run.status is BackupRunStatus.SKIPPED
+    assert run.error == "Server cannot be reached right now: it is backed up as soon as it can be"
+
+
+def test_a_new_target_still_gets_its_repository_created(world: World) -> None:
+    world.service.run_now(world.target())
+    assert "ensure" in world.engine.calls and "probe" not in world.engine.calls
+
+
+def test_a_first_backup_to_an_unplugged_disk_is_skipped_not_failed(world: World) -> None:
+    world.engine.fail["ensure"] = RepositoryNotFoundError("/media/disk/photos does not exist")
+    run = world.service.run_now(world.target())
+    assert run.status is BackupRunStatus.SKIPPED
+    assert run.error == "External disk is not connected: plug it in and the backup starts by itself"
+    assert run.details == "/media/disk/photos does not exist"
+
+
+def test_one_absent_place_does_not_stop_the_next(world: World) -> None:
+    first = world.target(label="Disk 1", repository=str(world.root.parent / "disk1" / "photos"))
+    second = world.target(label="Disk 2", repository=str(world.root.parent / "disk2" / "photos"))
+    world.service.run_now(first)
+    world.service.run_now(second)
+    world.engine.absent[repository_of(world, first)] = "no repository"
+    world.clock.current = at(1, 2, 31)
+    runs = world.service.run_due()
+    assert [(r.target_id, r.status) for r in runs] == [
+        (first, BackupRunStatus.SKIPPED),
+        (second, BackupRunStatus.SUCCEEDED),
+    ]
+
+
+def test_while_a_place_stays_away_history_keeps_one_skipped_line(world: World) -> None:
+    target_id = world.target()
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.clock.current = at(1, 2, 31)
+    world.service.run_due()
+    world.engine.calls.clear()
+    world.clock.current = at(1, 2, 36)
+    world.service.run_due()
+    assert world.engine.calls.count("probe") == 1, "looked once, straight after the skip"
+    world.clock.current = at(1, 2, 41)
+    world.service.run_due()
+    assert world.engine.calls.count("probe") == 1, "not again within 15 minutes"
+    for minutes in (16, 32, 48, 64):
+        world.clock.current = at(1, 2, 36) + timedelta(minutes=minutes)
+        world.service.run_due()
+    assert world.engine.calls.count("probe") == 5
+    assert [r.status for r in world.service.runs(target_id)] == [
+        BackupRunStatus.SKIPPED,
+        BackupRunStatus.SUCCEEDED,
+    ]
+    (status,) = world.service.status()
+    assert status.skipped_since == at(1, 2, 31)
+
+
+def test_a_place_that_comes_back_is_backed_up_within_the_retry_time(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.clock.current = at(1, 2, 31)
+    world.service.run_due()
+    world.engine.absent.clear()
+    world.clock.current = at(1, 2, 50)
+    (run,) = world.service.run_due()
+    assert run.status is BackupRunStatus.SUCCEEDED
+    history = kinds(world, target_id)
+    assert history[-4:-1] == [
+        (RunKind.BACKUP, BackupRunStatus.SKIPPED),
+        (RunKind.BACKUP, BackupRunStatus.SUCCEEDED),
+        (RunKind.MIRROR, BackupRunStatus.SUCCEEDED),
+    ]
+    (status,) = world.service.status()
+    assert status.skipped_since is None
+
+
+def test_catch_up_waits_for_the_quiet_window_unless_overdue(world: World) -> None:
+    target_id = world.target(quiet_window="22:00-06:00")
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.clock.current = at(1, 2, 31)
+    world.service.run_due()
+    world.engine.absent.clear()
+    world.clock.current = at(1, 12)
+    assert world.service.run_due() == [], "back at noon, one day late: wait for the night"
+    world.clock.current = at(4, 12)
+    (run,) = world.service.run_due()
+    assert run.status is BackupRunStatus.SUCCEEDED, "days overdue: no waiting for the night"
+
+
+@pytest.mark.parametrize(
+    ("step", "error"),
+    [
+        ("probe", WrongPasswordError("wrong password for the backup")),
+        ("probe", RepositoryLockedError("the repository is locked")),
+        ("backup", IncompleteBackupError("some files could not be read")),
+    ],
+)
+def test_a_real_fault_is_still_a_failure(world: World, step: str, error: BackupError) -> None:
+    target_id = world.target()
+    world.service.run_now(target_id)
+    world.engine.fail[step] = error
+    world.engine.calls.clear()
+    run = world.service.run_now(target_id)
+    assert run.status is BackupRunStatus.FAILED and run.error == str(error)
+    assert "ensure" not in world.engine.calls
+
+
+def test_a_wrong_password_on_a_new_target_is_a_failure(world: World) -> None:
+    world.engine.fail["ensure"] = WrongPasswordError("wrong password for the backup")
+    assert world.service.run_now(world.target()).status is BackupRunStatus.FAILED
+
+
+def test_a_probe_that_finds_a_real_fault_while_waiting_is_recorded_as_a_failure(
+    world: World,
+) -> None:
+    target_id = world.target()
+    world.service.run_now(target_id)
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.clock.current = at(1, 2, 31)
+    world.service.run_due()
+    world.engine.absent.clear()
+    world.engine.fail["probe"] = WrongPasswordError("wrong password for the backup")
+    world.clock.current = at(1, 2, 50)
+    (run,) = world.service.run_due()
+    assert run.status is BackupRunStatus.FAILED and run.error == "wrong password for the backup"
+
+
+def test_no_restore_test_is_run_against_a_place_that_is_away(world: World) -> None:
+    target_id = world.target()
+    world.clock.current = at(0, 2, 31)
+    world.service.run_due()
+    world.engine.absent[repository_of(world, target_id)] = "no repository"
+    world.engine.calls.clear()
+    world.clock.current = at(8, 2, 31)
+    world.service.run_due()
+    assert "restore" not in world.engine.calls and "latest" not in world.engine.calls
+    (status,) = world.service.status()
+    assert not status.restore_failing
+
+
+def test_the_copy_waits_when_proton_is_out_of_reach_and_catches_up(world: World) -> None:
+    target_id = mirrored(world)
+    world.mirror.absent = "offline"
+    backup = world.service.run_now(target_id)
+    assert backup.status is BackupRunStatus.SUCCEEDED
+    assert kinds(world, target_id)[-1] == (RunKind.MIRROR, BackupRunStatus.SKIPPED)
+    assert world.mirror.calls == []
+    (status,) = world.service.status()
+    assert status.mirror_error is None and status.last_mirror_at is None
+    world.mirror.absent = None
+    world.clock.current = T0 + timedelta(minutes=16)
+    world.service.run_due()
+    assert (RunKind.MIRROR, BackupRunStatus.SUCCEEDED) in kinds(world, target_id)
+    (status,) = world.service.status()
+    assert status.last_mirror_at is not None
+
+
+def test_a_copy_that_stays_away_is_not_asked_for_again_within_15_minutes(world: World) -> None:
+    target_id = mirrored(world)
+    world.mirror.absent = "offline"
+    world.service.run_now(target_id)
+    world.clock.current = T0 + timedelta(minutes=1)
+    world.service.run_due()
+    world.mirror.absent = None
+    world.clock.current = T0 + timedelta(minutes=5)
+    world.service.run_due()
+    assert world.mirror.calls == [], "still inside the 15 minutes since the last look"
+    world.clock.current = T0 + timedelta(minutes=17)
+    world.service.run_due()
+    assert len(world.mirror.calls) == 1
+
+
+def test_a_copy_that_is_long_overdue_is_flagged(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.run_now(target_id)
+    world.clock.current = at(4, 12)
+    (status,) = world.service.status()
+    assert status.mirror_overdue
+    world.service.run_now(target_id)
+    (status,) = world.service.status()
+    assert not status.mirror_overdue
+
+
+def test_protection_counts_the_disk_and_its_copy(world: World) -> None:
+    target_id = mirrored(world)
+    world.service.confirm_key_saved(target_id)
+    world.service.run_now(target_id)
+    assert world.service.protection().protected

@@ -99,13 +99,27 @@ def test_add_run_and_watch_a_backup(env: Env) -> None:
 
 
 def test_failures_show_up_in_status(env: Env) -> None:
+    target = _add(env)
+    env.client.post(f"/api/backups/{target['id']}/run")
+    env.work()
+    env.password.write_text("someone changed it\n")
+    env.client.post(f"/api/backups/{target['id']}/run")
+    env.work()
+    (listed,) = env.client.get("/api/backups").json()
+    assert listed["needs_attention"] and listed["last_run"]["status"] == "failed"
+    assert "wrong password" in listed["last_run"]["error"]
+    patched = env.client.patch(f"/api/backups/{target['id']}", json={"enabled": False})
+    assert patched.json()["enabled"] is False and not patched.json()["needs_attention"]
+
+
+def test_a_disk_that_is_not_there_shows_as_skipped_not_as_trouble(env: Env) -> None:
     target = _add(env, repository="/media/nobody/NoDisk/photos")
     env.client.post(f"/api/backups/{target['id']}/run")
     env.work()
     (listed,) = env.client.get("/api/backups").json()
-    assert listed["needs_attention"] and "plug in" in listed["last_run"]["error"]
-    patched = env.client.patch(f"/api/backups/{target['id']}", json={"enabled": False})
-    assert patched.json()["enabled"] is False and not patched.json()["needs_attention"]
+    assert listed["last_run"]["status"] == "skipped"
+    assert "plug it in" in listed["last_run"]["error"]
+    assert not listed["needs_attention"]
 
 
 def test_validation_and_unknown_targets(env: Env) -> None:

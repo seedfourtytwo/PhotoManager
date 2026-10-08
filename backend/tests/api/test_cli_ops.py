@@ -142,18 +142,39 @@ def test_backup_without_a_library(capsys: pytest.CaptureFixture[str], tmp_path: 
     assert code == 2 and "No library" in out
 
 
-def test_backup_run_due_prints_each_run(
-    capsys: pytest.CaptureFixture[str], settings: Settings, tmp_path: Path
-) -> None:
+def _hourly_target_due(
+    capsys: pytest.CaptureFixture[str], settings: Settings, tmp_path: Path, repository: str
+) -> Path:
     password = tmp_path / "pw"
     password.write_text("pw\n")
-    run(capsys, settings, "backup", "add", "Gone", "/media/none/Disk/photos",
+    run(capsys, settings, "backup", "add", "Gone", repository,
         "--password-file", str(password), "--schedule", "hourly")  # fmt: skip
     two_hours_ago = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     with sqlite3.connect(settings.data_root / "library.db") as conn:
         conn.execute("UPDATE backup_target SET created_at = ?", (two_hours_ago,))
+    return password
+
+
+def test_a_backup_run_due_that_hits_a_real_fault_prints_it_and_exits_1(
+    capsys: pytest.CaptureFixture[str], settings: Settings, tmp_path: Path
+) -> None:
+    disk = tmp_path / "disk"
+    disk.mkdir()
+    password = _hourly_target_due(capsys, settings, tmp_path, str(disk / "photos"))
+    assert run(capsys, settings, "backup", "run-due")[0] == 0
+    password.write_text("someone changed it\n")
+    with sqlite3.connect(settings.data_root / "library.db") as conn:
+        conn.execute("UPDATE backup_run SET started_at = '2000-01-01T00:00:00+00:00'")
     code, out = run(capsys, settings, "backup", "run-due")
-    assert code == 1 and "backup failed" in out and "plug in" in out
+    assert code == 1 and "backup failed" in out and "wrong password" in out
+
+
+def test_a_backup_run_due_that_only_skips_a_place_exits_0(
+    capsys: pytest.CaptureFixture[str], settings: Settings, tmp_path: Path
+) -> None:
+    _hourly_target_due(capsys, settings, tmp_path, "/media/none/Disk/photos")
+    code, out = run(capsys, settings, "backup", "run-due")
+    assert code == 0 and "backup skipped" in out and "plug it in" in out
 
 
 def test_register_into_the_main_parser_and_dispatch() -> None:
