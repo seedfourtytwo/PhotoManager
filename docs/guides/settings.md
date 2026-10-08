@@ -27,6 +27,7 @@ Write lists (`PA_ALLOWED_HOSTS`) comma-separated, without quotes, brackets or sp
 | General | `PA_TRUSTED_PROXIES` | `127.0.0.1` | Addresses or networks of the https proxy in front of the server, comma-separated. Only these may say a request arrived over https and from which device. In Docker: the Docker networks (server.env.example). |
 | General | `PA_WEB_DIR` | not set | Folder with the built web app, served at `/`. `just run`, the systemd unit and the Docker image set it; not set = API only. |
 | General | `PA_TRASH_PURGE_EVERY_HOURS` | `6` | How often the server deletes photos that have been in the trash for 30 days. |
+| General | `PA_SOURCE_RECHECK_POLL_SECONDS` | `300` | How often the server looks for folders whose automatic re-check is due. |
 | General | `PA_ARGON2_TIME_COST` | `3` | Work factor of the PIN hash. Tests lower it; never lower it in use. |
 | General | `PA_ARGON2_MEMORY_KIB` | `65536` | Memory used by one PIN hash, in KiB. Tests lower it; never lower it in use. |
 | General | `PA_FACE_CLUSTER_EVERY_HOURS` | `24` | How often faces are regrouped into people. |

@@ -28,6 +28,16 @@ export function formatWhen(iso: string | null | undefined): string {
 	return Number.isNaN(ms) ? '' : WHEN.format(ms);
 }
 
+/**
+ * When a folder next checks itself: "next check 9 Oct 2026, 14:00". The server looks for due
+ * folders every few minutes, so a moment that has come says that instead; '' when it never does.
+ */
+export function nextCheckText(iso: string | null | undefined, now: number = Date.now()): string {
+	const when = formatWhen(iso);
+	if (!when) return '';
+	return `next check ${Date.parse(iso!) > now ? when : 'within a few minutes'}`;
+}
+
 /** What to tell the user about a failure: the error's own sentence, else `fallback`. */
 export function errorMessage(error: unknown, fallback: string): string {
 	return (error instanceof Error && error.message) || fallback;

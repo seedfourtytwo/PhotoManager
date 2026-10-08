@@ -74,7 +74,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 23
+    assert _latest() == 24
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -216,6 +216,8 @@ def test_a_v16_library_upgrades_with_foreign_keys_and_its_data(tmp_path: Path) -
     assert [tuple(r) for r in conn.execute("SELECT user_id, source_id FROM inbox")] == [(2, 2)]
     assert conn.execute("SELECT COUNT(*) FROM device").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM backup_run").fetchone()[0] == 2
+    # 0021: sources that were there before do not start checking themselves
+    assert {r[0] for r in conn.execute("SELECT recheck FROM source")} == {"off"}
     # private photos keep their meaning: private to the owner of their first source (lea)
     assert conn.execute("SELECT private_by FROM asset WHERE id = 1").fetchone()[0] == 2
     assert conn.execute("SELECT taken_at FROM asset WHERE id = 1").fetchone()[0] == (
@@ -253,12 +255,12 @@ def test_backup_targets_from_before_0018_count_as_having_their_key_saved(tmp_pat
     assert [tuple(r) for r in rows] == [("2026-09-01", "2026-09-01")]
 
 
-def _make_v20_library(db: Path, users: str) -> None:
-    """A library just before 0022: sources added from the cloud (and an M1 folder) have no
+def _make_v21_library(db: Path, users: str) -> None:
+    """A library just before 0023: sources added from the cloud (and an M1 folder) have no
     owner."""
     conn = sqlite3.connect(db)
     for number, sql in _migrations():
-        if number <= 20:
+        if number <= 21:
             conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
     conn.executescript(
         users
@@ -277,10 +279,10 @@ def _owners(conn: sqlite3.Connection) -> list[int | None]:
 
 
 def test_ownerless_sources_go_to_the_first_enabled_admin(tmp_path: Path) -> None:
-    """0022: a private mark only works on a source with an owner, so every source gets one.
+    """0023: a private mark only works on a source with an owner, so every source gets one.
     The first admin is the lowest id among admins who can still log in."""
     db = tmp_path / "library.db"
-    _make_v20_library(
+    _make_v21_library(
         db,
         """INSERT INTO user (id, username, display_name, password_hash, role, disabled) VALUES
             (1, 'lea', 'Lea', 'x', 'member', 0), (2, 'old', 'Old', 'x', 'admin', 1),
@@ -296,22 +298,22 @@ def test_ownerless_sources_go_to_the_first_enabled_admin(tmp_path: Path) -> None
 
 
 def test_ownerless_sources_wait_for_the_setup_when_there_is_no_admin(tmp_path: Path) -> None:
-    """0022 on a library nobody has set up yet: nothing to assign; the first-run setup gives
+    """0023 on a library nobody has set up yet: nothing to assign; the first-run setup gives
     ownerless sources to the first admin, as it always did."""
     db = tmp_path / "library.db"
-    _make_v20_library(db, "")
+    _make_v21_library(db, "")
     conn = open_database(db, backup_dir=tmp_path / "backups")
     assert _owners(conn) == [None, None, None]
     admin = SqliteRepository(conn).add_first_admin("c", "C", "x")
     assert _owners(conn) == [admin.id] * 3
 
 
-def _make_v20_library_with_jobs(db: Path) -> None:
-    """A library just before 0021, stopped in the middle of its work: jobs waiting, one cut
+def _make_v21_library_with_jobs(db: Path) -> None:
+    """A library just before 0022, stopped in the middle of its work: jobs waiting, one cut
     off while running, one failed for good, one finished."""
     conn = sqlite3.connect(db)
     for number, sql in _migrations():
-        if number <= 20:
+        if number <= 21:
             conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
     conn.executescript(
         """
@@ -325,10 +327,10 @@ def _make_v20_library_with_jobs(db: Path) -> None:
     conn.close()
 
 
-def test_a_v20_library_keeps_its_jobs_claimable_after_0021(tmp_path: Path) -> None:
-    """0021: not-before time, owner and lease on jobs; old rows need none of them."""
+def test_a_v21_library_keeps_its_jobs_claimable_after_0022(tmp_path: Path) -> None:
+    """0022: not-before time, owner and lease on jobs; old rows need none of them."""
     db = tmp_path / "library.db"
-    _make_v20_library_with_jobs(db)
+    _make_v21_library_with_jobs(db)
     conn = open_database(db, backup_dir=tmp_path / "backups")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == _latest()
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -351,10 +353,10 @@ def test_a_v20_library_keeps_its_jobs_claimable_after_0021(tmp_path: Path) -> No
 
 
 def test_accounts_from_before_0023_come_through_unlocked_with_no_wrong_pins(tmp_path: Path) -> None:
-    """0023: the account lock lives on the user row; existing accounts start clean."""
+    """0024: the account lock lives on the user row; existing accounts start clean."""
     db = tmp_path / "library.db"
     conn = sqlite3.connect(db)
-    previous = max(n for n, _ in _migrations() if n < 23)
+    previous = max(n for n, _ in _migrations() if n < 24)
     for number, sql in _migrations():
         if number <= previous:
             conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")

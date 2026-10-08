@@ -459,6 +459,10 @@ class Settings(BaseSettings):
             "How often the server deletes photos that have been in the trash for 30 days."
         ),
     )
+    source_recheck_poll_seconds: float = Field(
+        default=300.0,
+        description=("How often the server looks for folders whose automatic re-check is due."),
+    )
     argon2_time_cost: int = Field(
         default=3,
         description="Work factor of the PIN hash. Tests lower it; never lower it in use.",

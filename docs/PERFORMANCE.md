@@ -65,7 +65,7 @@ Times and perceptual hashes are converted to ints once; new photos only regroup 
 time they land in (no group spans a gap longer than the 10-minute window). Date fixes, trash and
 restore queue one full regroup (≈ 0.8 s).
 
-## Job queue and purge indexes (migration 0021)
+## Job queue and purge indexes (migration 0022)
 
 Synthetic rows on the development machine (SQLite 3.45.1, median of 200, disk flush excluded
 with `synchronous = OFF`): 40,000 finished jobs, 10,000 queued previews, 50,000 photos. "Before"

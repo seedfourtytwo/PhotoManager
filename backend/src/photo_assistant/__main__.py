@@ -90,7 +90,7 @@ def _print_report(run_id: int, report: ImportReport, show: int) -> None:
 def _give_ownerless_sources_to_the_first_admin(services: Services) -> None:
     """Nobody is logged in on the command line, and a source without an owner makes "private"
     hide nothing (the rule compares the marker with the owner). Same choice as migration
-    0022: the first admin who can log in; with no admin yet, the sources wait for one."""
+    0023: the first admin who can log in; with no admin yet, the sources wait for one."""
     admins = (u for u in services.repo.list_users() if u.role is Role.ADMIN and not u.disabled)
     admin = next(admins, None)
     if admin is None:

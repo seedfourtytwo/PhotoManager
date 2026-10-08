@@ -50,14 +50,14 @@ Built (numbered SQL migrations in `adapters/migrations/`; see TECH_DECISIONS). M
 faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, foreign keys on
 `inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
-`taken_at` and the removal of degenerate crops; `0022` gives ownerless sources to the first
+`taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
 admin (see Visibility in §7). `ANALYZE` runs after migrating, `PRAGMA
 optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
      disabled, created_at,
-     failed_pins, locked_at)        -- wrong PINs since the last good sign-in; 30 → locked (0023)
+     failed_pins, locked_at)        -- wrong PINs since the last good sign-in; 30 → locked (0024)
 session(token_hash PK sha256, user_id, created_at, last_seen_at)      -- 30 days idle
 login_failure(username, ip, at)       -- 10 per account in 15 min → 429; pruned after a day
 
@@ -82,7 +82,7 @@ date_change(id, asset_id, old_taken_at, old_tz_offset_min, old_date_source, new_
             changed_by, changed_at)
 purged_hash(content_hash PK, purged_at)                               -- never re-imported
 import_run(...), import_item(...), job(id, kind, payload_json, status, attempts, error, …,
-    run_after, claimed_by, claimed_at)          -- 0021: retry time, owner and lease
+    run_after, claimed_by, claimed_at)          -- 0022: retry time, owner and lease
 inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0014, FK 0017
 device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
        created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
@@ -222,11 +222,12 @@ the **quick lane** (one thread: geocode, group, purge, ML, edited renders), the 
 (one thread: `scan_source` — rclone pulls and folder imports —, `backup_run`,
 `backup_restore_test`, `backup_due`) and a **preview pool** (max(1, cores − 2) threads). Each
 claims only its kinds, atomically, so a backup or a big import never starves previews and
-uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering)
-or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
+uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering,
+and a `scan_source` for each source whose automatic re-check is due: `app/recheck.py`, rule in
+`domain/recheck.py`) or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
 ML jobs are planned only when their model files are installed.
 
-**Retries wait (0021).** Domain errors (`domain/errors.py`) fail a job at once, without
+**Retries wait (0022).** Domain errors (`domain/errors.py`) fail a job at once, without
 retries. Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
 minute after the first failure, 5 after the second (`domain/job_queue.RETRY_DELAYS`; a third
 entry, 25 minutes, applies if `max_attempts` is ever raised). A claim skips jobs whose time has
@@ -237,7 +238,7 @@ returns once nothing is *due*; a waiting retry stays queued for the server's wor
 `GET /api/jobs` rows carry `run_after`; `GET /api/stats` counts those jobs as `waiting`, apart
 from `queued`, so screens that wait for "nothing queued or running" do not sit through it.
 
-**Every process owns what it runs (0021).** The server and CLI commands share the table. Each
+**Every process owns what it runs (0022).** The server and CLI commands share the table. Each
 process claims under an owner id made at its start (`server-<pid>-<random>`, `cli-…`) and the
 claim records `claimed_by` and `claimed_at`. While a handler runs, a small thread renews
 `claimed_at` every 30 s (`HEARTBEAT_INTERVAL`) — independent of the job, so a backup of hours
@@ -253,7 +254,7 @@ those ~5 minutes before rerunning what it was doing, and after the machine slept
 looks old, also live ones) the first sweep changes nothing — heartbeats come within 30 s and
 the next sweep decides.
 
-**Indexes (0021).** `job_waiting (kind, id) WHERE status = 'queued'` holds only waiting jobs:
+**Indexes (0022).** `job_waiting (kind, id) WHERE status = 'queued'` holds only waiting jobs:
 each lane's poll and `enqueue_once` seek to their own kinds instead of walking the 10k previews
 queued by an import. `asset_by_variant_of` serves the purge's variant lookup and the foreign-key
 check on every `DELETE FROM asset`.
@@ -317,7 +318,7 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   (`private_by`) does not own — the marker keeps all of theirs, albums never reach it. That
   comparison needs an owner on the source, so every source has one: a folder or cloud (rclone,
   Proton Drive) source belongs to the admin who adds it, an upload inbox to its user, a folder
-  imported from the command line to the first admin; migration `0022` gave the ownerless
+  imported from the command line to the first admin; migration `0023` gave the ownerless
   cloud sources of older libraries to the first admin. Only a library with no account yet
   has ownerless sources, and the first-run setup hands them to the first admin. Guests
   are capped at download. The condition is correlated `EXISTS` per photo (C25), so a timeline

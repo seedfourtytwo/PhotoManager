@@ -10,6 +10,7 @@ from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.model import MAX_ID, Source
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports.library import AlbumInfo, AssetView
 
 # Contract: capture times are local wall-clock to the second (`2019-07-04T18:30:00`); a date
@@ -95,6 +96,7 @@ class SourcePatch(BaseModel):
     enabled: bool | None = None
     label: str | None = Field(default=None, min_length=1, max_length=100)
     owner_id: Id | None = None  # admin: hand a source (and its photos) to another account
+    recheck: Recheck | None = None  # check it again by itself: off, hourly, daily or weekly
 
 
 class SourceOut(BaseModel):
@@ -106,6 +108,8 @@ class SourceOut(BaseModel):
     owner_id: int | None
     asset_count: int
     problem: str | None = None  # v1.2: "folder not found" when its folder is gone
+    recheck: Recheck = Recheck.OFF
+    next_check_at: datetime | None = None  # null: it never checks itself (off, or disabled)
 
     @classmethod
     def of(
@@ -115,6 +119,7 @@ class SourceOut(BaseModel):
         show_path: bool,
         problem: str | None = None,
         place: str | None = None,
+        next_check_at: datetime | None = None,
     ) -> "SourceOut":
         """``place``: what a remote source reads, shown instead of its staging folder."""
         return cls(
@@ -126,6 +131,8 @@ class SourceOut(BaseModel):
             owner_id=s.owner_id,
             asset_count=asset_count,
             problem=problem,
+            recheck=s.recheck,
+            next_check_at=next_check_at,
         )
 
 

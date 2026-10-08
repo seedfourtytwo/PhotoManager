@@ -15,7 +15,8 @@ from datetime import datetime
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.media_types import MediaKind
-from photo_assistant.domain.model import Asset
+from photo_assistant.domain.model import Asset, Source
+from photo_assistant.domain.recheck import Recheck
 
 Params = Sequence[object] | Mapping[str, object]
 
@@ -49,6 +50,18 @@ def asset_from_row(row: sqlite3.Row) -> Asset:
         preview_path=row["preview_path"],
         variant_of=row["variant_of"],
         thumb_size=(row["thumb_w"], row["thumb_h"]) if row["thumb_w"] else None,
+    )
+
+
+def source_from_row(row: sqlite3.Row) -> Source:
+    return Source(
+        row["id"],
+        row["label"],
+        row["root"],
+        bool(row["enabled"]),
+        row["kind"],
+        row["owner_id"],
+        Recheck(row["recheck"]),
     )
 
 

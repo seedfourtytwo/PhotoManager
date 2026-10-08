@@ -1,5 +1,5 @@
 """The job table as a queue: retries that wait their turn, claims with an owner and a lease,
-and the indexes the polling statements rely on (migration 0021)."""
+and the indexes the polling statements rely on (migration 0022)."""
 
 import sqlite3
 from collections.abc import Callable

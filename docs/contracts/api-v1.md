@@ -97,6 +97,13 @@ under `jobs.queued`.
 `GET /api/imports` (admin; `?source_id=` for one source) lists the newest 200 runs, newest
 first (v1.4): older runs are not returned.
 
+**Automatic re-checks.** `SourceOut.recheck` is `off` (default), `hourly`, `daily` or `weekly`;
+`PATCH /api/sources/{id}` takes `{recheck}` (admin; any other value `422`). Every few minutes
+the server queues the ordinary scan job for each enabled source whose last check *started* at
+least that long ago (a failed check counts, so it is not retried at once), unless one is
+already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
+off or disabled, possibly a moment already past (it runs at the server's next look).
+
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
 | PUT | `/api/sources/{id}/access` | `Access` | `Access` (admin) |

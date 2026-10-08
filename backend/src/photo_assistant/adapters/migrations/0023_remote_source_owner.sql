@@ -1,4 +1,4 @@
--- 0022: every source has an owner (owner decision, 2026-10).
+-- 0023: every source has an owner (owner decision, 2026-10).
 --
 -- Sources added from a cloud remote (rclone, Proton Drive) were created without an owner.
 -- "Private" hides a photo from people who reach it only through sources its marker owns, so

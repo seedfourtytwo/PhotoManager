@@ -1,4 +1,4 @@
--- 0023: wrong PINs are counted per account, and too many lock it (owner decision, security).
+-- 0024: wrong PINs are counted per account, and too many lock it (owner decision, security).
 --
 -- The 15-minute limit still reads login_failure, but those rows are pruned daily, so the
 -- running count since the last good sign-in lives on the account. At 30 the account is locked

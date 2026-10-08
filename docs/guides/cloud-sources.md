@@ -95,6 +95,10 @@ the whole account), and give it a label such as "MEGA camera uploads". Then pres
 The first pull can take hours for a large account; you can keep using the app. Afterwards,
 "Rescan all" also pulls every cloud source, and only new or changed photos are copied.
 
+To have it pulled without asking, set **Check automatically** on its row (Admin → Folders) to
+every hour, day or week. The row then says when the next check is. Nothing is ever written to
+the cloud folder, and photos removed there stay in the library.
+
 (Until that screen exists, whoever runs the server can do the same with the API:
 `POST /api/remote-sources {"label": "...", "remote": "mega", "path": "Camera Uploads"}` and
 then `POST /api/remote-sources/<id>/pull`.)
