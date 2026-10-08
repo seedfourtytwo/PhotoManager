@@ -16,6 +16,7 @@ from photo_assistant.app.accounts import (
     TooManyAttemptsError,
     UserPatch,
 )
+from photo_assistant.domain import errors
 from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, Role
 from tests.factories import NOW
 
@@ -535,3 +536,19 @@ def test_a_refused_patch_changes_neither_the_pin_nor_the_sessions(
     accounts.login("c", GOOD, IP)
     with pytest.raises(InvalidCredentialsError):
         accounts.login("c", "5678", IP)
+
+
+def test_an_unknown_user_is_the_one_not_found_error_and_still_an_account_error(
+    accounts: Accounts,
+) -> None:
+    """One NotFoundError in the code base (domain/errors.py), with its own 404; the command
+    line catches AccountError to print 'no such user' (just set-pin nobody)."""
+    for refused in (
+        lambda: accounts.unlock(999),
+        lambda: accounts.update_user(999, UserPatch(disabled=True)),
+        lambda: accounts.set_pin("nobody", GOOD),
+    ):
+        with pytest.raises(errors.NotFoundError, match="no such user") as missing:
+            refused()
+        assert isinstance(missing.value, AccountError) and missing.value.status == 404
+    assert NotFoundError is errors.NotFoundError
