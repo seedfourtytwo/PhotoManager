@@ -77,16 +77,25 @@ _ADMIN_VISIBLE = f"""(a.private = 0 OR a.private_by = :vis_uid
     OR NOT EXISTS (SELECT 1 FROM asset_source x WHERE x.asset_id = a.id))"""
 
 
-def visibility(viewer: Viewer, *, trashed: bool = False) -> tuple[str, str, Bindings]:
-    """THE access rule for one viewer: (condition "``a`` is visible and in / out of the trash",
-    expression "the viewer's level on ``a``", bindings). Every query that lists, counts,
-    searches or serves photos uses it; nothing is filtered in Python afterwards."""
+# Where a photo is: in the library, held for review (issue 8), or in the trash.
+_LIVE = "a.trashed_at IS NULL AND a.held_reason IS NULL"
+_HELD = "a.trashed_at IS NULL AND a.held_reason IS NOT NULL"
+_TRASHED = "a.trashed_at IS NOT NULL"
+
+
+def visibility(
+    viewer: Viewer, *, trashed: bool = False, held: bool = False
+) -> tuple[str, str, Bindings]:
+    """THE access rule for one viewer: (condition "``a`` is visible and in the library" — or
+    in the trash, or held for review —, expression "the viewer's level on ``a``", bindings).
+    Every query that lists, counts, searches or serves photos uses it; nothing is filtered in
+    Python afterwards."""
     params: Bindings = {
         "vis_uid": viewer.user_id,
         "vis_admin": int(viewer.is_admin),
         "vis_cap": int(viewer.level_cap),
     }
-    trash = "a.trashed_at IS NOT NULL" if trashed else "a.trashed_at IS NULL"
+    trash = _TRASHED if trashed else _HELD if held else _LIVE
     if viewer.is_admin:
         return f"({trash} AND {_ADMIN_VISIBLE})", ":vis_cap", params
     return f"({trash} AND {_MEMBER_VISIBLE})", _MEMBER_LEVEL, params
@@ -129,6 +138,8 @@ def view_from_row(row: sqlite3.Row) -> AssetView:
         edited=row["vis_recipe"] is not None,
         group_id=row["group_id"],
         trashed_at=datetime.fromisoformat(trashed) if trashed else None,
+        held_reason=row["held_reason"],
+        held_like=row["held_like"],
         recipe=Recipe.from_dict(json.loads(row["vis_recipe"])) if row["vis_recipe"] else None,
     )
 
@@ -290,11 +301,11 @@ class LibraryMixin(SqliteBase):
         return [view_from_row(r) for r in self._filtered(viewer, f, ORDER)]
 
     def views_by_ids(
-        self, viewer: Viewer, ids: Sequence[int], *, trashed: bool = False
+        self, viewer: Viewer, ids: Sequence[int], *, trashed: bool = False, held: bool = False
     ) -> list[AssetView]:
         if not ids:
             return []
-        visible, level, params = visibility(viewer, trashed=trashed)
+        visible, level, params = visibility(viewer, trashed=trashed, held=held)
         wanted = list(dict.fromkeys(ids))
         names = ", ".join(f":id{i}" for i in range(len(wanted)))
         params |= {f"id{i}": v for i, v in enumerate(wanted)}
@@ -306,8 +317,10 @@ class LibraryMixin(SqliteBase):
         by_id = {r["id"]: view_from_row(r) for r in rows}
         return [by_id[i] for i in wanted if i in by_id]
 
-    def get_view(self, viewer: Viewer, asset_id: int, *, trashed: bool = False) -> AssetView | None:
-        found = self.views_by_ids(viewer, [asset_id], trashed=trashed)
+    def get_view(
+        self, viewer: Viewer, asset_id: int, *, trashed: bool = False, held: bool = False
+    ) -> AssetView | None:
+        found = self.views_by_ids(viewer, [asset_id], trashed=trashed, held=held)
         return found[0] if found else None
 
     def group_views(self, viewer: Viewer, group_id: int) -> list[AssetView]:
@@ -468,7 +481,8 @@ class LibraryMixin(SqliteBase):
         return len(asset_ids)
 
     def hashes_present(self, viewer: Viewer, hashes: Sequence[str]) -> dict[str, int | None]:
-        """Uploads (QA A7): visible photos by id (trash included), purged hashes as None."""
+        """Uploads (QA A7): visible photos by id (trash and review included), purged hashes
+        as None."""
         if not hashes:
             return {}
         marks = ", ".join("?" for _ in hashes)
@@ -485,6 +499,7 @@ class LibraryMixin(SqliteBase):
         ids = [int(r["id"]) for r in rows]
         seen = {v.id for v in self.views_by_ids(viewer, ids)}
         seen |= {v.id for v in self.views_by_ids(viewer, ids, trashed=True)}
+        seen |= {v.id for v in self.views_by_ids(viewer, ids, held=True)}
         present |= {r["content_hash"]: int(r["id"]) for r in rows if r["id"] in seen}
         return present
 

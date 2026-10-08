@@ -105,12 +105,28 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		return level;
 	}
 
+	/** In the library: not in the trash, not held for review. */
+	const live = (a: MockAsset) => a.trashed_at === null && a.held === null;
+
 	function visible(user: MockUser): MockAsset[] {
-		return state.assets.filter((a) => a.trashed_at === null && assetLevel(user, a) !== null);
+		return state.assets.filter((a) => live(a) && assetLevel(user, a) !== null);
+	}
+
+	const heldFor = (user: MockUser) =>
+		state.assets.filter(
+			(a) => a.trashed_at === null && a.held !== null && assetLevel(user, a) !== null
+		);
+
+	/** `/__mock/reset` with `review`: one look-alike, two screenshots and a receipt wait. */
+	function holdSome() {
+		const [alike, original, ...rest] = state.assets;
+		alike.held = { reason: 'lookalike', like: original.id };
+		rest[0].held = rest[1].held = { reason: 'screenshot', like: null };
+		rest[2].held = { reason: 'receipt', like: null };
 	}
 
 	function findAsset(user: MockUser, id: number): MockAsset {
-		const asset = state.assets.find((a) => a.id === id && a.trashed_at === null);
+		const asset = state.assets.find((a) => a.id === id && live(a));
 		if (!asset || assetLevel(user, asset) === null) throw new HttpError(404, 'Photo not found.');
 		return asset;
 	}
@@ -173,7 +189,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 
 	function albumSummary(user: MockUser, album: MockAlbum): AlbumSummary {
 		const items = album.items
-			.map((id) => state.assets.find((a) => a.id === id && a.trashed_at === null))
+			.map((id) => state.assets.find((a) => a.id === id && live(a)))
 			.filter((a): a is MockAsset => !!a && assetLevel(user, a) !== null);
 		const cover = items.find((a) => a.id === album.cover_asset_id) ?? items[0];
 		return {
@@ -458,13 +474,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		let candidates: MockAsset[];
 		if ('ids' in request && request.ids)
 			candidates = request.ids
-				.map((id) => state.assets.find((a) => a.id === id && a.trashed_at === null))
+				.map((id) => state.assets.find((a) => a.id === id && live(a)))
 				.filter((a): a is MockAsset => !!a && assetLevel(user, a) !== null);
 		else if ('album_id' in request && request.album_id !== undefined) {
 			const album = state.albums.find((a) => a.id === request.album_id);
 			if (!album || !albumRole(user, album)) throw new HttpError(404, 'Album not found.');
 			candidates = album.items
-				.map((id) => state.assets.find((a) => a.id === id && a.trashed_at === null))
+				.map((id) => state.assets.find((a) => a.id === id && live(a)))
 				.filter((a): a is MockAsset => !!a);
 		} else if ('filters' in request && request.filters)
 			candidates = filtered(user, request.filters);
@@ -808,7 +824,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 						path: ctx.user?.role === 'admin' ? s.path : null,
 						problem: s.path.includes('gone') ? 'folder not found' : null,
 						asset_count: state.assets.filter(
-							(a) => a.trashed_at === null && a.sources.some((o) => o.source_id === s.id)
+							(a) => live(a) && a.sources.some((o) => o.source_id === s.id)
 						).length
 					}))
 				)
@@ -1065,7 +1081,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/assets\/(\d+)\/(thumb|preview)$/,
 			(ctx) => {
-				// Trashed photos keep their images, so the trash can show them.
+				// Trashed and held photos keep their images, so their pages can show them.
 				const asset = state.assets.find((a) => a.id === idParam(ctx));
 				if (!asset || assetLevel(me(ctx), asset) === null)
 					throw new HttpError(404, 'Photo not found.');
@@ -1257,7 +1273,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			(ctx) => {
 				const album = findAlbum(ctx);
 				const items = album.items
-					.map((id) => state.assets.find((a) => a.id === id && a.trashed_at === null))
+					.map((id) => state.assets.find((a) => a.id === id && live(a)))
 					.filter((a): a is MockAsset => !!a && assetLevel(me(ctx), a) !== null)
 					.map((a) => toOut(me(ctx), a));
 				return ok({ ...albumSummary(me(ctx), album), items });
@@ -1346,6 +1362,52 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					state.users.some((u) => u.id === m.user_id && u.id !== album.owner_id)
 				);
 				return ok(album.members);
+			}
+		],
+
+		// to review: photos held out of the library until someone decides
+		[
+			'GET',
+			/^\/api\/review$/,
+			(ctx) => {
+				const user = me(ctx);
+				const groups = new Map<string, unknown[]>();
+				for (const a of heldFor(user)) {
+					const like = state.assets.find((o) => o.id === a.held!.like && live(o));
+					const items = groups.get(a.held!.reason) ?? [];
+					items.push({
+						asset: toOut(user, a),
+						like: like && assetLevel(user, like) !== null ? toOut(user, like) : null
+					});
+					groups.set(a.held!.reason, items);
+				}
+				const order = [...groups.keys()].sort(
+					(a, b) => Number(a !== 'lookalike') - Number(b !== 'lookalike') || a.localeCompare(b)
+				);
+				return ok({
+					count: heldFor(user).length,
+					groups: order.map((reason) => ({ reason, items: groups.get(reason) }))
+				});
+			}
+		],
+		['GET', /^\/api\/review\/count$/, (ctx) => ok({ count: heldFor(me(ctx)).length })],
+		[
+			'POST',
+			/^\/api\/review\/(keep|discard)$/,
+			(ctx) => {
+				const user = me(ctx);
+				const wanted = [...new Set(ids(ctx.body))];
+				const found = heldFor(user).filter((a) => wanted.includes(a.id));
+				if (found.length !== wanted.length)
+					throw new HttpError(404, 'some of these photos were not found');
+				if (found.some((a) => assetLevel(user, a) !== 'edit'))
+					throw new HttpError(403, "you need 'edit' access for this");
+				const keep = ctx.params[0] === 'keep';
+				for (const a of found) {
+					a.held = null;
+					if (!keep) a.trashed_at = nowIso();
+				}
+				return ok(keep ? { kept: found.length } : { discarded: found.length });
 			}
 		],
 
@@ -1444,9 +1506,11 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				users?: 'none' | 'seed';
 				count?: number;
 				models?: boolean;
+				review?: boolean;
 			};
 			state = makeState({ users: body.users ?? 'seed', count: body.count ?? initialCount });
 			state.ml.installed = body.models ?? false;
+			if (body.review) holdSome();
 			return noContent;
 		}
 		if (url.pathname.startsWith('/__mock/icon-')) {

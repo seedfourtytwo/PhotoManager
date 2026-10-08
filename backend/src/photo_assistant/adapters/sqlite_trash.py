@@ -66,6 +66,7 @@ class TrashMixin(SqliteBase):
             self._conn.execute(
                 "UPDATE asset SET variant_of = NULL WHERE variant_of = ?", (asset.id,)
             )
+            self._conn.execute("UPDATE asset SET held_like = NULL WHERE held_like = ?", (asset.id,))
             self._conn.execute(
                 "INSERT OR IGNORE INTO purged_hash (content_hash, purged_at) VALUES (?, ?)",
                 (asset.content_hash, utc_text(now)),

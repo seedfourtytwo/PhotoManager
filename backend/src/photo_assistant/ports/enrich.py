@@ -31,7 +31,7 @@ class EnrichmentStore(Protocol):
 
     def set_phash(self, asset_id: int, phash: str) -> None: ...
     def shots(self) -> list[Shot]:
-        """Every photo in the library (not trashed), for grouping."""
+        """Every photo in the library (not trashed, not held for review), for grouping."""
         ...
 
     def shot_times(self) -> list[tuple[int, datetime]]:

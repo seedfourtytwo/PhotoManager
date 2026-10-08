@@ -22,6 +22,7 @@ from photo_assistant.adapters.sqlite_database import migrations as _migrations
 from photo_assistant.adapters.sqlite_edits import EditsMixin
 from photo_assistant.adapters.sqlite_enrich import EnrichMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
+from photo_assistant.adapters.sqlite_review import ReviewMixin
 from photo_assistant.adapters.sqlite_trash import TrashMixin
 from photo_assistant.domain.access import SourceAccess, default_source_access
 from photo_assistant.domain.model import (
@@ -50,6 +51,7 @@ class SqliteRepository(
     EditsMixin,
     EnrichMixin,
     TrashMixin,
+    ReviewMixin,
     SqliteBase,
 ):
     """Thread-safe: writes share the process's one writer and lock, reads use per-thread

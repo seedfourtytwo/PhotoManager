@@ -27,6 +27,8 @@ class AssetView:
     edited: bool = False
     group_id: int | None = None
     trashed_at: datetime | None = None
+    held_reason: str | None = None  # waiting for review (issue 8): why
+    held_like: int | None = None  # a look-alike: the library photo it resembles
     recipe: Recipe | None = None
 
     @property
