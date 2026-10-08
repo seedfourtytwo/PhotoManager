@@ -236,7 +236,7 @@ describe('backups, devices and remote sources', () => {
 		const runs = await api.backupRuns(target.id);
 		expect(runs[0].status).toBe('succeeded');
 		await api.restoreTest(target.id);
-		expect((await api.setBackupEnabled(target.id, false)).enabled).toBe(false);
+		expect((await api.updateBackup(target.id, { enabled: false })).enabled).toBe(false);
 		const changed = await api.updateBackup(target.id, {
 			schedule: 'weekly sun 03:00',
 			quiet_window: '22:00-06:00',

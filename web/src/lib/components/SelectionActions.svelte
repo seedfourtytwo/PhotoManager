@@ -44,11 +44,13 @@
 		once(async () => {
 			const favourite = !allFavourite;
 			const these = new Set(ids);
+			// Some may already be favourites: undoing puts back what each one was.
+			const changed = new Set(selected.filter((a) => a.favourite !== favourite).map((a) => a.id));
 			onpatch(these, { favourite }); // optimistic; undone below if the server says no
 			try {
 				await api.setStates({ ids: [...these], favourite });
 			} catch (e) {
-				onpatch(these, { favourite: !favourite });
+				onpatch(changed, { favourite: !favourite });
 				throw e;
 			}
 			notice.show(favourite ? 'Marked as favourites.' : 'Removed from favourites.');

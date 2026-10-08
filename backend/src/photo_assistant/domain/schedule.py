@@ -160,10 +160,18 @@ def is_due(
 
 
 def is_overdue(
-    schedule: Schedule, last_success: datetime | None, since: datetime, now: datetime
+    schedule: Schedule,
+    last_success: datetime | None,
+    since: datetime,
+    now: datetime,
+    window: QuietWindow | None = None,
 ) -> bool:
-    """No success within two intervals (counting from ``since`` if there never was one)."""
+    """No success within two intervals (counting from ``since`` if there never was one), and
+    the first run the quiet window allowed after it is more than one interval ago: hours in
+    which nothing may run never make a backup late."""
     interval = schedule.interval
-    if interval is None:
+    last = last_success or since
+    allowed = next_run(schedule, last, window)
+    if interval is None or allowed is None:
         return False
-    return now - (last_success or since) > 2 * interval
+    return now > max(last + 2 * interval, allowed + interval)

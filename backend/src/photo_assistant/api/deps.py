@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
+from photo_assistant.api.integrations import Integrations
 from photo_assistant.api.services import Services
 from photo_assistant.domain.access import Level, Role, User, Viewer
 from photo_assistant.domain.model import MAX_ID, Source
@@ -28,6 +29,13 @@ def get_services(request: Request) -> Services:
 
 
 ServicesDep = Annotated[Services, Depends(get_services)]
+
+
+def get_integrations(services: ServicesDep) -> Integrations:
+    return services.integrations
+
+
+IntegrationsDep = Annotated[Integrations, Depends(get_integrations)]
 
 
 def current_user(request: Request, services: ServicesDep) -> User:
@@ -80,12 +88,13 @@ SessionOrDeviceUser = Annotated[User, Depends(session_or_device_user)]
 
 
 def session_only_user(request: Request, user: CurrentUser) -> User:
-    """Managing devices needs a signed-in browser; a device token can't mint more tokens."""
+    """Managing devices needs a signed-in browser; a device token can't mint more tokens.
+    Not for guests: a device token only uploads, which they may not."""
     if request.headers.get("authorization") is not None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "sign in to manage devices (device tokens can't)"
         )
-    return user
+    return require_not_guest(user)
 
 
 SessionOnlyUser = Annotated[User, Depends(session_only_user)]

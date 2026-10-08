@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
@@ -14,9 +15,17 @@
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let facets = $state<Facets | null>(null);
 	let search: HTMLInputElement | undefined = $state();
-	// Follows the URL, and is overwritten while typing (debounced back into the URL).
-	let q = $derived(filters.q ?? '');
+	// What is typed. It follows the URL (links, Clear, back), but not the echo of its own
+	// debounced write: that one is trimmed and would eat the space before the next word.
+	let q = $state('');
 	let typing: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		const fromUrl = filters.q ?? '';
+		const echo = fromUrl === untrack(() => q).trim();
+		if (!echo || document.activeElement !== search) q = fromUrl;
+	});
+	// A search still waiting to be applied must not land on the page you went to instead.
+	onDestroy(() => clearTimeout(typing));
 	const count = new Intl.NumberFormat('en-GB');
 	const MONTHS = [
 		'Jan',
@@ -95,12 +104,45 @@
 		set('source_id', on ? [...others, id] : others);
 	}
 
+	// Phone and tablet: the sheet is modal. Focus moves in; the rest of the app is inert, so Tab
+	// stays in and a screen reader sees only the sheet; Escape closes; focus goes back.
+	let panel: HTMLElement | undefined = $state();
+	let backdrop: HTMLElement | undefined = $state();
+	$effect(() => {
+		if (!ui.sheet || viewport.desktop || !panel) return;
+		const opener = document.activeElement as HTMLElement | null;
+		// Everything beside the sheet, at every level up to the body, except its own backdrop
+		// and the live notice (a toast must still be heard, and its Undo reached).
+		const behind: HTMLElement[] = [];
+		for (
+			let at: HTMLElement = panel;
+			at.parentElement && at !== document.body;
+			at = at.parentElement
+		)
+			for (const el of at.parentElement.children)
+				if (el instanceof HTMLElement && el !== at && el !== backdrop && !el.ariaLive)
+					behind.push(el);
+		for (const el of behind) el.inert = true;
+		if (!panel.contains(document.activeElement)) panel.focus();
+		return () => {
+			for (const el of behind) el.inert = false;
+			opener?.focus?.({ preventScroll: true });
+		};
+	});
+
 	const maxYear = $derived(Math.max(1, ...(facets?.years.map((y) => y.count) ?? [1])));
 	const active = $derived(activeFilterCount(filters));
 </script>
 
+<svelte:window
+	onkeydown={(e) => {
+		if (ui.sheet && e.key === 'Escape' && !e.defaultPrevented) ui.sheet = false;
+	}}
+/>
+
 {#if ui.sheet}
 	<button
+		bind:this={backdrop}
 		class="backdrop"
 		type="button"
 		aria-label="Close filters"
@@ -114,6 +156,8 @@
 	class:sheet={ui.sheet}
 	aria-label="Filters"
 	id="filters"
+	tabindex="-1"
+	bind:this={panel}
 >
 	<header>
 		<h2>

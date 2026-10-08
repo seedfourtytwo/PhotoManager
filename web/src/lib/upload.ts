@@ -2,13 +2,15 @@
  * Hand-picked upload (FEATURES 10.2): POST /api/upload as multipart, with upload progress.
  * fetch() can't report upload progress yet, so this one request uses XMLHttpRequest.
  */
-import { ApiError, type UploadResult } from './api';
+import { ApiError, unreachable, type UploadResult } from './api';
 
 /** The parts of XMLHttpRequest we use (a fake in tests). */
 export type UploadRequest = {
 	upload: { onprogress: ((event: ProgressEvent) => void) | null };
 	onload: (() => void) | null;
 	onerror: (() => void) | null;
+	onabort: (() => void) | null;
+	ontimeout: (() => void) | null;
 	status: number;
 	responseText: string;
 	withCredentials: boolean;
@@ -20,6 +22,8 @@ export type UploadOptions = {
 	url: string;
 	/** 0..1 of the bytes sent. */
 	onprogress?: (fraction: number) => void;
+	/** Called when the upload answers 401, like every other request of the client. */
+	onUnauthorized?: () => void;
 	request?: () => UploadRequest;
 };
 
@@ -44,11 +48,22 @@ export function uploadFiles(files: File[], options: UploadOptions): Promise<Uplo
 				options.onprogress?.(event.loaded / event.total);
 		};
 		xhr.onload = () => {
-			if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
-			else reject(new ApiError(xhr.status, detailOf(xhr.responseText, xhr.status)));
+			if (xhr.status >= 200 && xhr.status < 300) {
+				try {
+					resolve(JSON.parse(xhr.responseText));
+				} catch {
+					reject(unreachable());
+				}
+				return;
+			}
+			if (xhr.status === 401) options.onUnauthorized?.();
+			reject(new ApiError(xhr.status, detailOf(xhr.responseText, xhr.status)));
 		};
-		xhr.onerror = () =>
+		const interrupted = () =>
 			reject(new ApiError(0, 'The upload was interrupted. Check the connection and try again.'));
+		xhr.onerror = interrupted;
+		xhr.onabort = interrupted;
+		xhr.ontimeout = interrupted;
 		xhr.open('POST', options.url);
 		xhr.withCredentials = true;
 		xhr.send(form);

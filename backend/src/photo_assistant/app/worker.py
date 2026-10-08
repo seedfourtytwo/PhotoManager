@@ -2,7 +2,6 @@
 
 import logging
 import threading
-import time
 from collections.abc import Callable, Collection, Mapping
 
 from photo_assistant.domain.errors import DomainError
@@ -22,7 +21,6 @@ class Worker:
         *,
         max_attempts: int = 3,
         poll_seconds: float = 1.0,
-        periodic: Mapping[str, float] | None = None,
         only: Collection[str] | None = None,
         excluding: Collection[str] = (),
         name: str = "pa-worker",
@@ -34,8 +32,6 @@ class Worker:
         self._poll = poll_seconds
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._periodic = dict(periodic or {})  # job kind -> seconds between runs
-        self._last_queued: dict[str, float] = {}
         self._only = None if only is None else frozenset(only)  # this lane's job kinds
         self._excluding = frozenset(excluding)
         self._name = name
@@ -44,14 +40,6 @@ class Worker:
     def kinds(self) -> set[str]:
         """The job kinds this worker can run."""
         return set(self._handlers)
-
-    def enqueue_due(self, now: float) -> None:
-        """Queue each periodic job whose interval has passed (``now``: monotonic seconds)."""
-        for kind, every in self._periodic.items():
-            last = self._last_queued.get(kind)
-            if last is None or now - last >= every:
-                self._repo.enqueue_once(kind)
-                self._last_queued[kind] = now
 
     def run_once(self) -> bool:
         """Process one job. Returns False when the queue is empty."""
@@ -63,6 +51,13 @@ class Worker:
         handler = self._handlers.get(job.kind)
         if handler is None:
             self._repo.fail_job(job.id, f"no handler for job kind '{job.kind}'", retry=False)
+            return True
+        if job.attempts > self._max_attempts:
+            # Only reachable when earlier runs never came back (the process was killed by a
+            # crash or the OOM killer and the next start requeued the job): stop the loop.
+            log.warning("job given up on", extra={"job_id": job.id, "kind": job.kind})
+            reason = f"never finished (did it crash the server?): gave up after {job.attempts - 1}"
+            self._repo.fail_job(job.id, f"{reason} attempts", retry=False)
             return True
         try:
             handler(job.payload)
@@ -110,7 +105,6 @@ class Worker:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                self.enqueue_due(time.monotonic())
                 busy = self.run_once()
             except Exception:
                 log.exception("worker loop error")
@@ -135,6 +129,7 @@ class Lanes:
     ) -> None:
         """``pooled``: job kinds that get a pool of threads of their own, e.g. previews with
         max(1, cores - 2) threads (C28)."""
+        self._repo, self._handlers, self._clock = repo, dict(handlers), clock
         self.long_kinds = frozenset(long_kinds)
         pools = dict(pooled or {})
         own = self.long_kinds | set(pools)
@@ -166,8 +161,12 @@ class Lanes:
     def kinds(self) -> set[str]:
         return set().union(*(w.kinds for w in self._workers))
 
-    def run_until_idle(self) -> int:
-        """Every lane, until none finds a job (follow-ups may cross lanes)."""
+    def run_until_idle(self, only: Collection[str] | None = None) -> int:
+        """Every lane, until none finds a job (follow-ups may cross lanes). ``only``: just
+        these job kinds, for a caller that must leave the rest of the queue to the server."""
+        if only is not None:
+            mine = {kind: h for kind, h in self._handlers.items() if kind in only}
+            return Worker(self._repo, mine, self._clock, only=only).run_until_idle()
         total = 0
         while ran := sum(w.run_until_idle() for w in self._workers):
             total += ran

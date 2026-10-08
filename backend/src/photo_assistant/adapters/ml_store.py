@@ -6,6 +6,7 @@ the process's one ``Database`` (writer and lock) with every other store.
 """
 
 import json
+import math
 import sqlite3
 import struct
 from collections.abc import Collection, Iterator, Sequence
@@ -88,23 +89,30 @@ class SqliteMlStore:
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            self._conn.execute("BEGIN")
-            try:
-                yield self._conn
-            except BaseException:
-                self._conn.execute("ROLLBACK")
-                raise
-            self._conn.execute("COMMIT")
+        with self._db.transaction() as conn:
+            yield conn
 
     @contextmanager
     def _candidates(self, ids: Collection[int]) -> Iterator[None]:
         """Fill the temp candidate table for one query (held under the lock)."""
         with self._lock:
-            self._conn.execute("DELETE FROM temp.ml_candidates")
-            self._conn.executemany(
-                "INSERT OR IGNORE INTO temp.ml_candidates VALUES (?)", ((i,) for i in ids)
-            )
+            # one transaction for the fill: in autocommit every row is a transaction of its
+            # own. Deferred (plain BEGIN): only the temp table is written, so a search never
+            # waits for the library file's write lock.
+            own = not self._conn.in_transaction
+            if own:
+                self._conn.execute("BEGIN")
+            try:
+                self._conn.execute("DELETE FROM temp.ml_candidates")
+                self._conn.executemany(
+                    "INSERT OR IGNORE INTO temp.ml_candidates VALUES (?)", ((i,) for i in ids)
+                )
+                if own:
+                    self._conn.execute("COMMIT")
+            except BaseException:
+                if own and self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
+                raise
             try:
                 yield
             finally:
@@ -150,6 +158,8 @@ class SqliteMlStore:
     # --- CLIP ------------------------------------------------------------------------------
 
     def save_clip(self, asset_id: int, model: str, vector: Vector) -> None:
+        if not any(vector) or not all(math.isfinite(x) for x in vector):
+            raise ValueError("an embedding needs a direction: not all zeros, no NaN or infinity")
         self._write(
             "INSERT OR REPLACE INTO clip_embedding (model, asset_id, dim, embedding) "
             "VALUES (?, ?, ?, ?)",
@@ -168,10 +178,14 @@ class SqliteMlStore:
     ) -> list[ScoredAsset]:
         if not candidates:
             return []
+        # A zero vector has no angle to anything: its distance is NULL and it is left out.
+        # MATERIALIZED: the distance is computed once per photo, not again for the filter.
         sql = (
-            "SELECT e.asset_id, vec_distance_cosine(e.embedding, ?) AS d "
+            "WITH scored AS MATERIALIZED ("
+            "SELECT e.asset_id AS asset_id, vec_distance_cosine(e.embedding, ?) AS d "
             "FROM clip_embedding e JOIN temp.ml_candidates c ON c.asset_id = e.asset_id "
-            "WHERE e.model = ? AND e.dim = ? ORDER BY d, e.asset_id LIMIT ?"
+            "WHERE e.model = ? AND e.dim = ?) "
+            "SELECT asset_id, d FROM scored WHERE d IS NOT NULL ORDER BY d, asset_id LIMIT ?"
         )
         with self._candidates(candidates):
             rows = self._all(sql, (to_blob(query), model, len(query), limit))

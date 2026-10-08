@@ -17,6 +17,7 @@ from photo_assistant.ports.library import AlbumInfo, AssetView
 WallClock = Annotated[
     datetime, PlainSerializer(lambda d: d.isoformat(timespec="seconds"), return_type=str)
 ]
+Id = Annotated[int, Field(ge=1, le=MAX_ID)]  # a SQLite rowid (QA A11)
 
 # --- accounts --------------------------------------------------------------------------------
 
@@ -82,7 +83,7 @@ class SourceIn(BaseModel):
 class SourcePatch(BaseModel):
     enabled: bool | None = None
     label: str | None = Field(default=None, min_length=1, max_length=100)
-    owner_id: int | None = None  # admin: hand a source (and its photos) to another account
+    owner_id: Id | None = None  # admin: hand a source (and its photos) to another account
 
 
 class SourceOut(BaseModel):
@@ -121,7 +122,7 @@ LevelName = Literal["view", "download", "edit"]
 
 
 class UserAccess(BaseModel):
-    user_id: int
+    user_id: Id
     level: LevelName
 
 
@@ -230,7 +231,6 @@ class StatePatch(BaseModel):
     private: bool | None = None
 
 
-Id = Annotated[int, Field(ge=1, le=MAX_ID)]  # a SQLite rowid (QA A11)
 Ids = Annotated[list[Id], Field(min_length=1, max_length=10_000)]
 
 
@@ -355,7 +355,7 @@ class AlbumOrder(BaseModel):
 
 
 class Member(BaseModel):
-    user_id: int
+    user_id: Id
     role: Literal["viewer", "editor"]
 
 
@@ -391,7 +391,7 @@ class FiltersIn(BaseModel):
 
 class DownloadRequest(BaseModel):
     ids: list[Id] | None = Field(default=None, max_length=100_000)
-    album_id: int | None = None
+    album_id: Id | None = None
     filters: FiltersIn | None = None
     format: Literal["original", "jpeg", "png", "webp"] = "original"
     quality: int = Field(default=90, ge=1, le=100)

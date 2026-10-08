@@ -37,7 +37,14 @@ from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.review import Review
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
+from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
 from photo_assistant.app.worker import Lanes
+from photo_assistant.domain.access import SESSION_IDLE_LIMIT
+
+# What the daily "prune old records" task keeps (these tables otherwise only grow):
+LOGIN_FAILURES_KEPT = timedelta(days=1)  # the lockout itself looks back 15 minutes
+AI_LOG_KEPT = timedelta(days=90)  # requests and answers of AI calls, for looking into problems
+IMPORT_RUNS_KEPT_IN_DETAIL = 10  # per source: older runs keep their counts, not every file
 
 
 @dataclass
@@ -86,10 +93,10 @@ def build_services(settings: Settings) -> Services:
     db = Database.open(root / "library.db", backup_dir=root / "db-backups")
     repo = SqliteRepository(db)
     store = DiskLibraryStore(root)
-    store.sweep_tmp()
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)
     exiftool = ExifToolReader()
     clock = SystemClock()
+    min_free_bytes = int(settings.min_free_gb * 1000**3)  # one floor: imports and uploads
     importer = ImportSource(
         repo=repo,
         reader=FolderSourceReader(),
@@ -98,9 +105,7 @@ def build_services(settings: Settings) -> Services:
         renderer=renderer,
         store=with_source_areas(store, root),  # staging/ and inbox/ live in the data root
         clock=clock,
-        settings=ImportSettings(
-            min_free_bytes=int(settings.min_free_gb * 1000**3), thumb_edge=settings.thumb_edge
-        ),
+        settings=ImportSettings(min_free_bytes=min_free_bytes, thumb_edge=settings.thumb_edge),
     )
     trash = Trash(repo, store, clock)
     review = Review(repo, clock)
@@ -111,6 +116,7 @@ def build_services(settings: Settings) -> Services:
         repo=repo,
         importer=importer,
         clock=clock,
+        min_free_bytes=min_free_bytes,
     )
     ml = build_ml_services(root, settings.ml, repo, store, db, on_tags=review.hold_clutter)
 
@@ -120,6 +126,13 @@ def build_services(settings: Settings) -> Services:
         repo.enqueue_once(GEOCODE_JOB)
         repo.enqueue_once(GROUP_JOB)
         return outcome
+
+    def prune_old_records() -> None:
+        now = clock.now()
+        repo.prune_login_failures(now - LOGIN_FAILURES_KEPT)
+        repo.prune_sessions(now - SESSION_IDLE_LIMIT)  # exactly the expired ones
+        integrations.ai_log.prune(now - AI_LOG_KEPT)
+        repo.prune_import_items(IMPORT_RUNS_KEPT_IN_DETAIL)
 
     housekeeping = [
         PeriodicTask(
@@ -137,6 +150,12 @@ def build_services(settings: Settings) -> Services:
             "prune finished jobs",
             24 * 3600,
             lambda: repo.prune_done_jobs(clock.now() - timedelta(days=7)),
+        ),
+        PeriodicTask("prune old records", 24 * 3600, prune_old_records),
+        PeriodicTask(
+            "inbox rescan",
+            INBOX_RESCAN_SECONDS,
+            lambda: integrations.upload.rescan(repo.list_sources(), repo.enqueue_once),
         ),
     ]
     ops = build_ops_services(

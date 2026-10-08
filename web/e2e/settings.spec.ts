@@ -21,6 +21,10 @@ test('devices: create a token shown once with Copy, then revoke it', async ({ pa
 	const row = devices.getByRole('listitem').filter({ hasText: 'Léa’s iPhone' });
 	await expect(row).toContainText('never used');
 	await row.getByRole('button', { name: 'Revoke' }).click();
+	// It asks first: a revoked token cannot be shown or used again.
+	const confirm = page.getByRole('dialog', { name: 'Revoke “Léa’s iPhone”?' });
+	await expect(confirm.getByText(/cannot be shown again/)).toBeVisible();
+	await confirm.getByRole('button', { name: 'Revoke' }).click();
 	await expect(row).toContainText('revoked');
 	await expect(page.getByText(/pa_dev_/)).toHaveCount(0);
 });

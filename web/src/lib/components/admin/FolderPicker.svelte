@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { FolderListing } from '$lib/api';
 	import { ApiError } from '$lib/api';
 	import { api } from '$lib/app.svelte';
@@ -13,8 +14,12 @@
 		 *  hold the main button until Enter or leaving the field has settled it. */
 		pending: boolean;
 	};
-	type Props = { onpick: (picked: Picked) => void };
-	let { onpick }: Props = $props();
+	type Props = {
+		onpick: (picked: Picked) => void;
+		/** The folder to open first (the server's start folder when left out). */
+		initial?: string;
+	};
+	let { onpick, initial }: Props = $props();
 
 	let listing = $state<FolderListing | null>(null);
 	let shown = $state(''); // the folder the list belongs to; '' after a failed read
@@ -57,7 +62,9 @@
 			if (mine === asked) loading = false;
 		}
 	}
-	$effect(() => void open());
+	// Read once, now: the first report below ('' while loading) may change what the parent passes.
+	const first = untrack(() => initial) || undefined;
+	$effect(() => void open(first));
 
 	function go(event: KeyboardEvent) {
 		if (event.key !== 'Enter') return;
@@ -107,7 +114,7 @@
 			{#if listing.truncated}<li class="quiet small">Only the first 1,000 are shown.</li>{/if}
 		</ul>
 	{:else if !error}
-		<p class="quiet">Looking…</p>
+		<p class="quiet" role="status">Looking…</p>
 	{/if}
 </div>
 

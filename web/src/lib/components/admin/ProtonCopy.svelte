@@ -3,13 +3,13 @@
 	import { api } from '$lib/app.svelte';
 	import { PROTON_FILES, protonPlaceName } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
-	import ProtonFolders from './ProtonFolders.svelte';
+	import ProtonFolders, { type PickedFolder } from './ProtonFolders.svelte';
 
 	type Props = { target: BackupTarget; onclose: () => void; onchange: () => void };
 	let { target, onclose, onchange }: Props = $props();
 
 	let status = $state<ProtonStatus | null>(null);
-	let folder = $state(PROTON_FILES);
+	let picked = $state<PickedFolder>({ path: PROTON_FILES, pending: true });
 	let error = $state('');
 	let saving = $state(false);
 
@@ -58,7 +58,7 @@
 		<button type="button" onclick={check}>Check again</button>
 	{:else}
 		<p class="quiet small">Open the folder the copy should go in, or make a new one.</p>
-		<ProtonFolders creatable onpick={(p) => (folder = p)} />
+		<ProtonFolders creatable onpick={(p) => (picked = p)} />
 	{/if}
 	{#if error}<p role="alert">{error}</p>{/if}
 	{#snippet actions()}
@@ -68,8 +68,8 @@
 		<button
 			class="primary"
 			type="button"
-			disabled={!status?.ready || saving}
-			onclick={() => save(folder)}>Keep a copy here</button
+			disabled={!status?.ready || saving || picked.pending}
+			onclick={() => save(picked.path)}>Keep a copy here</button
 		>
 	{/snippet}
 </Dialog>

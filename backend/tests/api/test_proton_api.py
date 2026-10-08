@@ -5,6 +5,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -50,7 +51,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         repo=repo,
         importer=StubImporter(),
     )
-    app.state.integrations = integrations
+    app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
     client = TestClient(app, base_url="http://127.0.0.1")
     yield World(client, repo, tmp_path / "data", cloud, integrations)

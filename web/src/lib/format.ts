@@ -27,3 +27,8 @@ export function formatWhen(iso: string | null | undefined): string {
 	const ms = Date.parse(iso);
 	return Number.isNaN(ms) ? '' : WHEN.format(ms);
 }
+
+/** What to tell the user about a failure: the error's own sentence, else `fallback`. */
+export function errorMessage(error: unknown, fallback: string): string {
+	return (error instanceof Error && error.message) || fallback;
+}

@@ -88,6 +88,84 @@ test.describe('as admin', () => {
 		await expect(page.locator(`.tile[data-id="${id}"]`)).toBeFocused();
 	});
 
+	test('a close request from the browser (Back gesture on a phone) closes the loupe', async ({
+		page
+	}) => {
+		await page.locator('.tile').first().click();
+		await expect(page).toHaveURL(/photo=\d+/);
+		// What the browser sends for a close request it lets the page handle.
+		await loupe(page).evaluate((d) => d.dispatchEvent(new Event('cancel', { cancelable: true })));
+		await expect(loupe(page)).toHaveCount(0);
+		await expect(page).not.toHaveURL(/photo=/);
+	});
+
+	test('if the browser closes the viewer itself, the page follows', async ({ page }) => {
+		await page.locator('.tile').first().click();
+		await expect(page).toHaveURL(/photo=\d+/);
+		// A repeated close request closes a modal dialog without asking the page.
+		await loupe(page).evaluate((d) => (d as HTMLDialogElement).close());
+		await expect(page.locator('dialog.loupe')).toHaveCount(0);
+		await expect(page).not.toHaveURL(/photo=/);
+	});
+
+	test('Escape closes the loupe once: it does not also leave the page', async ({ page }) => {
+		await page.goto('/albums');
+		await page.goto('/');
+		await page.locator('.tile').first().click();
+		await expect(loupe(page)).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(loupe(page)).toHaveCount(0);
+		await page.waitForTimeout(300);
+		await expect(page).toHaveURL(/\/$/);
+		await expect(page.locator('.tile').first()).toBeVisible();
+	});
+
+	test('phone: a tap where a hidden action sits only brings the actions back', async ({ page }) => {
+		test.skip(!isPhone(page), 'touch only');
+		let patches = 0;
+		page.on('request', (r) => {
+			if (r.method() === 'PATCH' && r.url().endsWith('/state')) patches++;
+		});
+		await page.locator('.tile').first().click();
+		const toolbar = loupe(page).getByRole('toolbar', {
+			name: 'Photo actions',
+			includeHidden: true
+		});
+		const favourite = loupe(page).locator('.top button', { hasText: 'Favourite' });
+		const at = await centre(favourite);
+		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
+		await page.touchscreen.tap(at.x, at.y);
+		await expect(toolbar).toHaveCSS('opacity', '1');
+		await page.waitForTimeout(300);
+		expect(patches).toBe(0);
+		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
+		// Now that it can be seen, it works.
+		await page.touchscreen.tap(at.x, at.y);
+		await expect(favourite).toHaveAttribute('aria-pressed', 'true');
+		expect(patches).toBe(1);
+	});
+
+	test('two folders whose id and path run together both show under Sources', async ({ page }) => {
+		test.skip(isPhone(page), 'the sidenote is open by default on a laptop');
+		const errors: string[] = [];
+		page.on('pageerror', (e) => errors.push(e.message));
+		await page.route(/\/api\/assets\/\d+$/, async (route) => {
+			const response = await route.fetch();
+			const detail = await response.json();
+			const origin = detail.origins[0];
+			detail.origins = [
+				{ ...origin, source_id: 1, relative_path: '23.jpg' },
+				{ ...origin, source_id: 12, relative_path: '3.jpg' }
+			];
+			await route.fulfill({ response, json: detail });
+		});
+		await page.locator('.tile').first().click();
+		const sources = loupe(page).getByRole('complementary', { name: 'About this photo' });
+		await expect(sources.getByText('23.jpg', { exact: true })).toBeVisible();
+		await expect(sources.getByText('3.jpg', { exact: true })).toBeVisible();
+		expect(errors).toEqual([]);
+	});
+
 	test('favourite: a double click sends one request and ends favourited', async ({ page }) => {
 		let patches = 0;
 		await page.route(/\/api\/assets\/\d+\/state$/, async (route) => {

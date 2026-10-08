@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ImportRun, ProtonSource as AddedProton, Source } from '$lib/api';
-	import { api, notice } from '$lib/app.svelte';
+	import { api, library, notice } from '$lib/app.svelte';
 	import { formatWhen } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
@@ -49,18 +49,37 @@
 
 	const lastRun = (id: number) => runs.find((r) => r.source_id === id);
 
+	/** One add at a time (folder or cloud folder): a second press while it runs is ignored. */
+	let saving = $state(false);
+
+	function openAdd() {
+		label = suggested = '';
+		picked = { path: '', sourceProblem: null, pending: true };
+		addError = '';
+		adding = true;
+	}
+
 	async function add() {
+		if (saving) return;
+		saving = true;
 		addError = '';
 		try {
 			const source = await api.addSource({ label: label.trim(), path });
 			adding = false;
-			label = suggested = '';
-			await api.scanSource(source.id);
-			notice.show(`Added “${source.label}”. Importing now; the folder itself is only read.`);
-			onscan();
+			// The folder exists now, whatever happens to its first import: show it, then start.
+			library.forget(); // filter labels come from this list
 			await load();
+			try {
+				await api.scanSource(source.id);
+				notice.show(`Added “${source.label}”. Importing now; the folder itself is only read.`);
+				onscan();
+			} catch (e) {
+				notice.error(e);
+			}
 		} catch (e) {
 			addError = e instanceof Error ? e.message : 'Could not add the folder.';
+		} finally {
+			saving = false;
 		}
 	}
 
@@ -78,7 +97,8 @@
 	}
 
 	async function addCloud() {
-		if (!cloud) return;
+		if (!cloud || saving) return;
+		saving = true;
 		cloudError = '';
 		try {
 			const added = await api.addRemoteSource({
@@ -86,13 +106,21 @@
 				remote: cloud.remote,
 				path: cloud.path.trim()
 			});
-			await api.pullRemoteSource(added.id);
-			notice.show(`Added “${added.label}”. Copying it read-only, then importing.`);
+			// Added: close, so a failed pull cannot be answered by adding the folder again.
 			cloud = null;
-			onscan();
+			try {
+				await api.pullRemoteSource(added.id);
+				notice.show(`Added “${added.label}”. Copying it read-only, then importing.`);
+				onscan();
+			} catch (e) {
+				notice.error(e);
+			}
+			library.forget(); // filter labels come from this list
 			await load();
 		} catch (e) {
 			cloudError = e instanceof Error ? e.message : 'Could not add the cloud folder.';
+		} finally {
+			saving = false;
 		}
 	}
 
@@ -105,6 +133,7 @@
 		} catch (e) {
 			notice.error(e);
 		}
+		library.forget(); // filter labels come from this list
 		await load();
 	}
 
@@ -146,7 +175,7 @@
 <section aria-labelledby="a-sources">
 	<header>
 		<h2 id="a-sources">Folders</h2>
-		<button type="button" onclick={() => (adding = true)}>Add folder</button>
+		<button type="button" onclick={openAdd}>Add folder</button>
 		<button type="button" onclick={() => (proton = true)}>Add from Proton</button>
 		<button type="button" onclick={openCloud}>Add cloud folder</button>
 		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
@@ -221,7 +250,7 @@
 			<button
 				class="primary"
 				type="button"
-				disabled={!label.trim() || !path || picked.pending || !!picked.sourceProblem}
+				disabled={saving || !label.trim() || !path || picked.pending || !!picked.sourceProblem}
 				onclick={add}>Add and import</button
 			>
 		{/snippet}
@@ -254,7 +283,7 @@
 			<button
 				class="primary"
 				type="button"
-				disabled={!cloud?.label.trim() || !cloud?.remote}
+				disabled={saving || !cloud?.label.trim() || !cloud?.remote}
 				onclick={addCloud}>Add and pull</button
 			>
 		{/snippet}

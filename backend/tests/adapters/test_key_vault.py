@@ -33,6 +33,18 @@ def test_reading_a_missing_empty_or_unreadable_key_says_so(tmp_path: Path) -> No
         vault.read(tmp_path)  # a folder
 
 
+def test_the_vault_only_holds_files_that_really_are_inside_its_folder(tmp_path: Path) -> None:
+    folder = tmp_path / "keys"
+    vault = FileKeyVault(folder)
+    key_file, _ = vault.create()
+    outside = tmp_path / "secret"
+    outside.write_text("x\n")
+    (folder / "link.key").symlink_to(outside)
+    assert vault.holds(key_file) and vault.holds(folder / "not-made-yet.key")
+    for path in (outside, folder / ".." / "secret", folder / "link.key", folder, tmp_path):
+        assert not vault.holds(path), path
+
+
 def test_discard_removes_the_file_and_is_quiet_when_it_is_gone(tmp_path: Path) -> None:
     vault = FileKeyVault(tmp_path)
     key_file, _ = vault.create()

@@ -17,6 +17,7 @@ from photo_assistant.adapters.restic_backup import ResticBackup
 from photo_assistant.adapters.sqlite_backup_store import SqliteBackupStore
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
+from photo_assistant.adapters.system_probe import LocalSystemProbe
 from photo_assistant.api.settings import OpsSettings
 from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupService
 from photo_assistant.app.doctor import DoctorConfig
@@ -76,7 +77,12 @@ def build_backup_service(
     store = SqliteBackupStore(db or Database.open(database, backup_dir=data_root / "db-backups"))
     service = BackupService(
         store=store,
-        engine=ResticBackup(binary=ops.restic_binary, cache_dir=ops.restic_cache_dir),
+        engine=ResticBackup(
+            binary=ops.restic_binary,
+            cache_dir=ops.restic_cache_dir,
+            rclone_binary=rclone.binary,
+            rclone_config=rclone.config,
+        ),
         snapshotter=SqliteSnapshotter(database),
         hasher=Blake3Hasher(),
         clock=SystemClock(),
@@ -89,6 +95,7 @@ def build_backup_service(
         queue=queue,
         places=LocalBackupPlaces(rclone.binary, rclone.config),
         vault=FileKeyVault(key_dir),
+        database_integrity=LocalSystemProbe().database_integrity,
         mirror=mirror,
     )
     return service, store

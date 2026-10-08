@@ -1,6 +1,12 @@
 import pytest
 
-from photo_assistant.domain.media_types import MediaKind, classify, edited_original_name
+from photo_assistant.domain.media_types import (
+    MediaKind,
+    classify,
+    edited_original_name,
+    edited_original_stem,
+    is_picture,
+)
 
 
 @pytest.mark.parametrize(
@@ -48,3 +54,36 @@ def test_iphone_edited_copies_point_to_their_original(name: str, original: str) 
 @pytest.mark.parametrize("name", ["IMG_1234.JPG", "IMAGE_E1.JPG", "IMG_EXTRA.JPG"])
 def test_non_edited_names_have_no_original(name: str) -> None:
     assert edited_original_name(name) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "stem"),
+    [
+        ("IMG_E1234.JPG", "IMG_1234"),
+        ("IMG_E0001.HEIC", "IMG_0001"),
+        ("a/b/IMG_E0042.jpg", "IMG_0042"),
+    ],
+)
+def test_an_edit_names_its_original_whatever_the_extension(name: str, stem: str) -> None:
+    """The edit of IMG_1234.HEIC is IMG_E1234.JPG: only the stem is shared."""
+    assert edited_original_stem(name) == stem
+
+
+@pytest.mark.parametrize("name", ["IMG_1234.JPG", "IMAGE_E1.JPG", "IMG_EXTRA.JPG", "IMG_E1234"])
+def test_non_edited_names_have_no_original_stem(name: str) -> None:
+    assert edited_original_stem(name) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "picture"),
+    [
+        ("IMG_1234.HEIC", True),
+        ("IMG_1234.jpg", True),
+        ("IMG_1234.DNG", True),
+        ("IMG_1234.MOV", False),
+        ("IMG_1234.AAE", False),
+        ("IMG_1234.pdf", False),
+    ],
+)
+def test_only_photos_and_raw_files_can_be_the_original_of_an_edit(name: str, picture: bool) -> None:
+    assert is_picture(name) is picture

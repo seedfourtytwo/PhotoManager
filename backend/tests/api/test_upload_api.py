@@ -108,6 +108,22 @@ def test_upload_stores_photos_in_the_inbox_and_queues_an_import(world: World) ->
     assert list((world.data / "tmp").iterdir()) == []
 
 
+def test_uploads_are_refused_while_the_disk_is_under_its_free_space_floor(tmp_path: Path) -> None:
+    data = tmp_path / "full" / "data"
+    app = create_app(make_settings(data, min_free_gb=10**9))  # more than any disk has free
+    with TestClient(app, base_url=BASE) as admin:
+        admin.post("/api/setup", json={"username": "u1", "display_name": "U1", "pin": PIN})
+        files = [("file", ("a.jpg", JPEG, "image/jpeg")), ("file", ("b.png", PNG, "image/png"))]
+        response = admin.post("/api/upload", files=files)
+    assert response.status_code == 200
+    body = response.json()
+    assert [f["outcome"] for f in body["files"]] == ["rejected", "rejected"]
+    assert all("GB free" in f["reason"] for f in body["files"]), body
+    assert body["import_job_id"] is None
+    assert not (data / "inbox").exists()
+    assert list((data / "tmp").glob("*.partial")) == []
+
+
 def test_each_user_has_a_separate_inbox(world: World) -> None:
     _upload(world, [("a.jpg", JPEG)], _as(1))
     _upload(world, [("b.jpg", PNG)], _as(2))
@@ -212,6 +228,21 @@ def test_broken_multipart_is_a_bad_request_and_leaves_nothing(world: World) -> N
         headers={**_as(1), "Content-Type": "multipart/form-data; boundary=x"},
     )
     assert response.status_code == 400
+    assert not (world.data / "inbox").exists()
+    assert list((world.data / "tmp").glob("*")) == []
+
+
+def test_a_part_with_endless_headers_is_cut_off(world: World) -> None:
+    """Part headers are kept in memory until the part starts. python-multipart caps them (8
+    headers of about 4 KiB a part); this pins that, as nothing of ours limits them."""
+    start = b'--x\r\nContent-Disposition: form-data; name="f"; filename="a.jpg"\r\n'
+    for junk in (b"X-Junk: " + b"a" * 200_000 + b"\r\n", b"X-J: a\r\n" * 20_000):
+        response = world.client.post(
+            "/api/upload",
+            content=start + junk + b"\r\n" + JPEG + b"\r\n--x--\r\n",
+            headers={**_as(1), "Content-Type": "multipart/form-data; boundary=x"},
+        )
+        assert response.status_code == 400 and "header" in response.json()["detail"]
     assert not (world.data / "inbox").exists()
     assert list((world.data / "tmp").glob("*")) == []
 
@@ -339,6 +370,14 @@ def test_photos_stored_before_a_failure_are_still_queued_for_import(
         world.client.post("/api/upload", files=files, headers=_as(1))
     assert _inbox_files(world, 1) == {f"{MONTH}/a.jpg"}
     assert len(world.repo.list_jobs()) == 1
+
+
+def test_guests_cannot_make_device_tokens_they_could_never_use(world: World) -> None:
+    assert world.client.patch("/api/users/3", json={"role": "guest"}, headers=_as(1)).is_success
+    made = world.client.post("/api/devices", json={"name": "Phone"}, headers=_as(3))
+    assert made.status_code == 403 and "guests" in made.json()["detail"]
+    assert world.client.get("/api/devices", headers=_as(3)).status_code == 403
+    assert world.integrations.devices.list(3) == []
 
 
 def test_guests_are_refused_and_a_disabled_accounts_token_stops_working(world: World) -> None:

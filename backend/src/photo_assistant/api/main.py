@@ -38,9 +38,9 @@ from photo_assistant.api.routes import (
     upload,
     users,
 )
-from photo_assistant.api.security import CrossSiteGuard
+from photo_assistant.api.security import CrossSiteGuard, RequestLimits
 from photo_assistant.api.services import Services, build_services
-from photo_assistant.api.settings import Settings, get_settings
+from photo_assistant.api.settings import Settings, get_settings, warn_about_unknown_settings
 from photo_assistant.domain.errors import DomainError
 
 IMMUTABLE_BUILD = "public, max-age=31536000, immutable"
@@ -71,9 +71,7 @@ def _mount_web(app: FastAPI, web_dir: Path | None) -> None:
 
 
 def _install_services(app: FastAPI, services: Services) -> None:
-    app.state.services = services
-    app.state.integrations = services.integrations
-    app.state.ops = services.ops
+    app.state.services = services  # read in one place: deps.get_services
 
 
 async def _domain_error(request: Request, exc: Exception) -> JSONResponse:
@@ -100,9 +98,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings.data_root.expanduser(), settings.log_level)
+        warn_about_unknown_settings()
         services = build_services(settings)
         _install_services(app, services)
         services.repo.recover_interrupted_jobs()  # only the server owns the job queue
+        services.store.sweep_tmp()  # never from a CLI command: it would cut a running upload
         if settings.worker_enabled:
             services.start_background()
         try:
@@ -149,4 +149,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+    app.add_middleware(RequestLimits)  # outermost: also marks the refusals of those above
     return app

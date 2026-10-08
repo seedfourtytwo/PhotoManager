@@ -9,6 +9,13 @@ const BOOLEAN_KEYS = ['favourite', 'hidden', 'guessed_date', 'has_location'] as 
 const TEXT_KEYS = ['camera', 'place', 'q'] as const;
 const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
+/** A day that exists (not 31 February): the server refuses the others. */
+function isDay(value: string): boolean {
+	if (!DAY.test(value)) return false;
+	const [y, m, d] = value.split('-').map(Number);
+	return new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) === value;
+}
+
 /** Order in which parameters are written, so URLs are stable and readable. */
 const ORDER: Key[] = [
 	'from',
@@ -58,8 +65,9 @@ export function filtersFromParams(params: URLSearchParams): AssetFilters {
 	const filters: AssetFilters = {};
 	for (const key of ['from', 'to'] as const) {
 		const value = params.get(key);
-		if (value && DAY.test(value)) filters[key] = value;
+		if (value && isDay(value)) filters[key] = value;
 	}
+	if (filters.from && filters.to && filters.to < filters.from) delete filters.to;
 	const year = int(params.get('year'), 1800, 2200);
 	if (year !== undefined) {
 		filters.year = year;

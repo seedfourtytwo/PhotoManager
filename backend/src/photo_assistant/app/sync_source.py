@@ -39,6 +39,22 @@ SCAN_JOB_KIND = "scan_source"  # the job kind api.services registers for every s
 # Retrying these at once can't help (and hammering a throttling provider makes it worse):
 # record them for the user and finish the job.
 _FINAL = (SyncAuthError, SyncNotFoundError, SyncRateLimitedError)
+_SHOWN_ERRORS = 3  # of a partial pull, in the import history; the log has the count
+
+
+def partial_pull_message(label: str, pulled: SyncReport) -> str:
+    """What the import history says about a pull that brought only part of the remote."""
+    count = pulled.errors
+    text = (
+        f"{count} file{'' if count == 1 else 's'} could not be downloaded from '{label}' "
+        "(what did arrive was imported)"
+    )
+    shown = pulled.error_messages[:_SHOWN_ERRORS]
+    if shown:
+        text += ": " + "; ".join(shown)
+    if shown and count > len(shown):
+        text += f"; and {count - len(shown)} more"
+    return text
 
 
 class SourceLookup(Protocol):
@@ -172,12 +188,18 @@ class SyncSource:
         except SyncError as exc:
             self._record_failure(source, started, exc)
             raise
+        outcome = self._import(source_id, pulled)
         if pulled.partial:
             log.warning(
                 "remote pull incomplete",
                 extra={"source_id": source_id, "errors": pulled.errors},
             )
-        return self._import(source_id, pulled)
+            # after the import, so it is the first thing the source's history shows
+            note = ImportReport(
+                source.id, RunStatus.FAILED, message=partial_pull_message(source.label, pulled)
+            )
+            self._reports.save_import_report(note, started, self._clock.now())
+        return outcome
 
     def _import(self, source_id: int, pulled: SyncReport | None) -> SyncOutcome:
         run_id, report = self._importer.run(source_id)
