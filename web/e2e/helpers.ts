@@ -119,6 +119,22 @@ export async function selectTiles(page: Page, indexes: number[]) {
 	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
 }
 
+/**
+ * Scroll the library until a photo's tile is on screen. The grid only draws the rows near
+ * the screen, so a photo further down has no tile to scroll to until the page has moved.
+ */
+export async function scrollToTile(page: Page, id: number): Promise<Locator> {
+	const tile = page.locator(`.tile[data-id="${id}"]`);
+	await expect(async () => {
+		if ((await tile.count()) === 0) {
+			await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+		}
+		await expect(tile).toBeAttached({ timeout: 500 });
+	}).toPass();
+	await tile.scrollIntoViewIfNeeded();
+	return tile;
+}
+
 /** A photo the signed-in user may only view (not download), found through the API. */
 export async function viewOnlyPhoto(page: Page): Promise<number> {
 	const list = await (await page.request.get('/api/assets?source_id=2&limit=200')).json();

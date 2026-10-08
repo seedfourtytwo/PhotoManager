@@ -9,6 +9,7 @@ import {
 	test,
 	GUEST,
 	longPress,
+	scrollToTile,
 	viewOnlyPhoto
 } from './helpers.ts';
 
@@ -210,8 +211,7 @@ test('download: a guest with view-only photos is told why nothing can be downloa
 	await signIn(page, '/', GUEST);
 	const id = await viewOnlyPhoto(page);
 	await page.goto('/?source_id=2');
-	const tile = page.locator(`.tile[data-id="${id}"]`);
-	await tile.scrollIntoViewIfNeeded();
+	const tile = await scrollToTile(page, id);
 	if (isPhone(page)) await longPress(tile);
 	else await tile.locator('.check').click({ force: true });
 	await expect(page.getByText('1 selected')).toBeVisible();
