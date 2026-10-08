@@ -199,6 +199,7 @@ fixed now so nothing in M1–M5 makes it harder (data folder layout, DB snapshot
 | 9b.9 | Full restore guide (new machine → working library) — tested once per milestone | Should | M6 |
 | 9b.10 | **Guided setup in the web app**: pick a disk, folder or cloud remote; space check; the app makes the key and insists on a saved copy; first backup starts at once | Must | ✅ |
 | 9b.11 | **Proven restores**: an automatic restore test after the first backup and every week; a failed proof raises the banner | Must | ✅ |
+| 9b.12 | **Off-site copy on Proton Drive** (issue 14): a local backup is also copied, encrypted, to a Proton Drive folder after every run, through Proton's own CLI (no Proton password in the app); a failed copy raises the banner; restore steps in the backup guide | Should | ✅ |
 
 ## 10. Web and phone app
 

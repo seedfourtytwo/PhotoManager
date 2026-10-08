@@ -222,15 +222,6 @@ export function v11Routes(h: Helpers): Route[] {
 		};
 	}
 
-	/** The mock Proton Drive: "My files" with a few folders. */
-	const PROTON_TREE: Record<string, string[]> = {
-		'/my-files': ['Family', 'Scans', 'Trips'],
-		'/my-files/Trips': ['2019 Alps'],
-		'/my-files/Trips/2019 Alps': [],
-		'/my-files/Family': [],
-		'/my-files/Scans': []
-	};
-
 	/** Same answers as the real routes: 422 for a place that may not be read, 404 when gone. */
 	function protonPlace(path: string, photosToo: boolean) {
 		const inFiles = path === '/my-files' || path.startsWith('/my-files/');
@@ -239,7 +230,7 @@ export function v11Routes(h: Helpers): Route[] {
 				422,
 				'choose the Photos section (/photos) or a folder in My files (/my-files/...)'
 			);
-		if (inFiles && !(path in PROTON_TREE))
+		if (inFiles && !(path in h.state().protonTree))
 			throw new HttpError(404, `folder '${path}' not found on Proton Drive`);
 	}
 
@@ -279,11 +270,14 @@ export function v11Routes(h: Helpers): Route[] {
 		const overdue = target.enabled && !lastSuccess;
 		const lastTest = runs.find((r) => r.kind === 'restore_test');
 		const proven = runs.find((r) => r.kind === 'restore_test' && r.status === 'succeeded');
-		const { key: _k, key_saved, ...shown } = rest;
+		const { key: _k, key_saved, mirror_path = null, mirrored_at = null, ...shown } = rest;
 		const failing = lastRun?.status === 'failed' || lastTest?.status === 'failed';
 		return {
 			...shown,
 			key_saved,
+			mirror_path,
+			last_mirror_at: mirror_path ? mirrored_at : null,
+			mirror_error: null,
 			last_proven_at: proven?.finished_at ?? null,
 			restore_failing: lastTest?.status === 'failed',
 			last_success_at: lastSuccess?.finished_at ?? null,
@@ -681,6 +675,24 @@ export function v11Routes(h: Helpers): Route[] {
 			}
 		],
 		[
+			'PUT',
+			/^\/api\/backups\/(\d+)\/proton-copy$/,
+			(ctx) => {
+				const target = findBackup(ctx);
+				const { path } = (ctx.body ?? {}) as { path?: string | null };
+				if (path) {
+					if (target.kind !== 'local')
+						throw new HttpError(422, 'only a backup in a folder or disk of this machine can be copied'); // prettier-ignore
+					protonPlace(path, false);
+				}
+				target.mirror_path = path ?? null;
+				// as the real one: the first copy follows at once when there is a backup to copy
+				const backedUp = target.runs.some((r) => r.kind === 'backup' && r.status === 'succeeded');
+				target.mirrored_at = path && backedUp ? new Date().toISOString() : null;
+				return ok(targetOut(target));
+			}
+		],
+		[
 			'PATCH',
 			/^\/api\/backups\/(\d+)$/,
 			(ctx) => {
@@ -820,7 +832,23 @@ export function v11Routes(h: Helpers): Route[] {
 				admin(ctx);
 				const path = ctx.url.searchParams.get('path') ?? '';
 				protonPlace(path, false);
-				return ok({ path, folders: PROTON_TREE[path] ?? [] });
+				return ok({ path, folders: h.state().protonTree[path] ?? [] });
+			}
+		],
+		[
+			'POST',
+			/^\/api\/proton\/folders$/,
+			(ctx) => {
+				admin(ctx);
+				const { parent, name } = requireFields<{ parent: string; name: string }>(ctx.body, ['parent', 'name']); // prettier-ignore
+				protonPlace(parent, false);
+				const tree = h.state().protonTree;
+				if (!name.trim() || /[/\\]/.test(name) || name.startsWith('-'))
+					throw new HttpError(422, "a folder name can't contain / or \\ or line breaks");
+				if (tree[parent].includes(name)) throw new HttpError(422, `'${name}' already exists there`);
+				tree[parent] = [...tree[parent], name].sort((a, b) => a.localeCompare(b));
+				tree[`${parent}/${name}`] = [];
+				return ok({ path: `${parent}/${name}`, folders: [] }, 201);
 			}
 		],
 		[
