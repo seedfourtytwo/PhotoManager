@@ -658,7 +658,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			/^\/api\/stats$/,
 			(ctx) => {
 				const counts = { queued: 0, waiting: 0, running: 0, done: 0, failed: 0 };
-				for (const j of state.jobs) counts[j.status]++;
+				for (const j of state.jobs)
+					counts[j.status === 'queued' && j.run_after !== null ? 'waiting' : j.status]++;
 				return ok({
 					assets: visible(me(ctx)).length,
 					sources: state.sources.length,
@@ -675,7 +676,11 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const status = ctx.url.searchParams.get('status');
 				return ok(
 					state.jobs
-						.filter((j) => !status || j.status === status)
+						.filter((j) =>
+							status === 'waiting'
+								? j.status === 'queued' && j.run_after !== null
+								: !status || j.status === status
+						)
 						.map(({ run_at: _runAt, ...job }) => job)
 				);
 			}

@@ -250,7 +250,8 @@ export function createApi(options: ApiOptions = {}) {
 		imports: (sourceId?: Id) => get<ImportRun[]>(query('/api/imports', { source_id: sourceId })),
 		importReport: (id: Id, page: ImportReportPage = {}) =>
 			get<ImportReport>(query(`/api/imports/${id}`, page)),
-		jobs: (status?: JobStatus) => get<Job[]>(query('/api/jobs', { status })),
+		/** `waiting`: the queued jobs that wait for their next attempt (`run_after` set). */
+		jobs: (status?: JobStatus | 'waiting') => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),
 

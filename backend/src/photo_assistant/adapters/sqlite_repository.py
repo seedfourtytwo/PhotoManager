@@ -562,10 +562,13 @@ class SqliteRepository(
         )
 
     def list_jobs(self, status: str | None = None) -> list[dict[str, object]]:
-        """``run_after`` is set on a queued job that waits for its next attempt."""
+        """``run_after`` is set on a queued job that waits for its next attempt; the status
+        ``waiting`` lists just those (what ``job_counts`` counts as waiting)."""
         sql = "SELECT * FROM job"
         params: tuple[object, ...] = ()
-        if status is not None:
+        if status == "waiting":
+            sql += " WHERE status = 'queued' AND run_after IS NOT NULL"
+        elif status is not None:
             sql += " WHERE status = ?"
             params = (status,)
         return [_job_row(r) for r in self._all(sql + " ORDER BY id", params)]
