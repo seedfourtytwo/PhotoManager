@@ -139,4 +139,4 @@ Then the justfile recipes can call `python -m photo_assistant <cmd>` instead of
 - A manual backup queued from the API runs on the single job worker: a long first backup
   delays preview jobs until it finishes. Do the first (full) run from the CLI
   (`just backup run ID`), or give backups their own worker later.
-- The Docker image has never been built (no daemon in the dev environment).
+- The Docker image was first built and smoke-tested on 2026-10-08; the compose stack is still unrun.

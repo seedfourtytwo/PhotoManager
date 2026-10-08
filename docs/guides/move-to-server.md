@@ -55,8 +55,10 @@ curl http://127.0.0.1:8420/api/health
 docker compose -f deploy/compose.yml exec photo-assistant python -m photo_assistant doctor
 ```
 
-> **The Docker image has not been built yet** (it was written without a Docker daemon). The
-> first build on the server is its test: if a step fails, the error names the line. Base image
+> **The image has been built and smoke-tested once by hand** (it starts, imports the test
+> photos including an iPhone HEIC, and passes `doctor`). The compose setup around it (the
+> mounted folders, `server.env`, Tailscale) has not been run yet: the first start on the
+> server is its test, and if a step fails the error names the line. Base image
 > tags are pinned in `deploy/Dockerfile` (`ARG …_IMAGE`); if one no longer exists, pick the
 > nearest newer patch tag.
 

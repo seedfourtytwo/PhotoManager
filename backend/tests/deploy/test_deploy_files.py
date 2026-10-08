@@ -1,9 +1,9 @@
 """Static checks of the deployment files (deploy/).
 
-The Docker image can't be built where CI runs without a daemon, so these tests catch what can
-be caught by reading: pinned versions, non-root user, health check, safe port publishing, the
-files the build copies actually exist and survive the .dockerignore. The image itself is
-UNTESTED until built on the server (docs/guides/move-to-server.md).
+No automatic check builds the Docker image, so these tests catch what can be caught by
+reading: pinned versions, non-root user, health check, safe port publishing, the files the
+build copies actually exist and survive the .dockerignore. The image was built and run once
+by hand; the compose stack is untested until run on the server (docs/guides/move-to-server.md).
 """
 
 import re
@@ -90,7 +90,7 @@ def test_runtime_has_every_tool_and_runs_as_a_normal_user() -> None:
     for package in (
         "libvips42",
         "libimage-exiftool-perl",
-        "libheif-plugin-libde265",
+        "libheif1",  # Debian 12: the HEVC decoder is built in, there is no plugin package
         "restic",
         "rclone",
     ):
