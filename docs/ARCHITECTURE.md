@@ -179,7 +179,7 @@ libvips for loupe previews and downloads. Golden-image tests keep preview and ex
 ### Backup
 `BackupPort` with a restic adapter. Per target: `restic backup data/originals data/recipes
 data/db-snapshot` where the DB snapshot is taken first with SQLite's online backup API (never
-copy a live `.db` file). restic stores deduplicated, encrypted, versioned snapshots; its rclone
+copy a live `.db` file); what a crash left half-written (`*.partial`) is excluded. restic stores deduplicated, encrypted, versioned snapshots; its rclone
 backend reaches SMB/SFTP/cloud targets. There is no scheduler library: the periodic thread
 (`app/periodic.py`, one thread that runs each of its tasks every so many seconds) queues a
 `backup_due` job every `PA_BACKUP_POLL_SECONDS` (60 s); that job, on the worker's long lane,
