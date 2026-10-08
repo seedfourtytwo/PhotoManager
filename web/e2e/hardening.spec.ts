@@ -392,3 +392,55 @@ test('library: “select” says how many it takes while more photos are still t
 	await expect(page.getByText(`${n} selected`)).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
 });
+
+test('a link to an old photo opens it at once, not after paging through the library', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'needs a library larger than one page');
+	await resetMock('seed', { count: 450 });
+	await signIn(page, '/settings');
+	// The oldest photo: the last one of the last page.
+	let cursor: string | null = null;
+	let oldest = 0;
+	do {
+		const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+		const list = await (await page.request.get(`/api/assets?limit=200${query}`)).json();
+		oldest = list.items.at(-1).id;
+		cursor = list.next_cursor;
+	} while (cursor);
+	// Every further page of the timeline is slow: the photo must not wait for them.
+	await page.route(/\/api\/assets\?.*cursor=/, async (route) => {
+		await new Promise((r) => setTimeout(r, 1500));
+		await route.continue().catch(() => undefined);
+	});
+	await page.goto(`/?photo=${oldest}`);
+	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
+	await expect(loupe).toBeVisible({ timeout: 1200 });
+	// Once the timeline reaches it, the loupe has its neighbours: Previous works.
+	await expect(loupe.getByRole('button', { name: /Previous/ })).toBeEnabled({ timeout: 10_000 });
+});
+
+test('a person’s photos: a link to a photo beyond the loaded ones still opens it', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
+	await signIn(page, '/people');
+	await page
+		.getByRole('link', { name: /^Someone/ })
+		.first()
+		.click();
+	await expect(page.locator('.tile').nth(1)).toBeVisible();
+	const second = await page.locator('.tile').nth(1).getAttribute('data-id');
+	const person = page.url();
+	// As if the photo were on a later page: the list only ever holds the first one.
+	await page.route('**/api/people/*/assets*', async (route) => {
+		const answer = await route.fetch();
+		const list = await answer.json();
+		await route.fulfill({
+			response: answer,
+			json: { items: list.items.slice(0, 1), next_cursor: null }
+		});
+	});
+	await page.goto(`${person}?photo=${second}`);
+	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+});

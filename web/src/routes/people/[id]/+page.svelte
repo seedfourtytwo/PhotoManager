@@ -4,13 +4,23 @@
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { TimelineLoader } from '$lib/loader.svelte';
-	import { closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
+	import {
+		LinkedPhoto,
+		LoupeTracker,
+		closePhoto,
+		openPhoto,
+		openPhotoId,
+		showPhoto
+	} from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
+
+	/** A linked photo is looked for among at most this many of the person's photos. */
+	const DEEP_LINK_LIMIT = 2000;
 
 	const id = $derived(Number(page.params.id));
 	let person = $state<Person | null>(null);
@@ -90,14 +100,26 @@
 	const loupeIndex = $derived(
 		loupeId === undefined ? -1 : loader.items.findIndex((a) => a.id === loupeId)
 	);
-	let lastOpen: number | undefined;
-	$effect(() => {
-		if (loupeId !== undefined) lastOpen = loupeId;
-		else if (lastOpen !== undefined) {
-			void timeline?.reveal(lastOpen);
-			lastOpen = undefined;
-		}
+	// Same as the library: a linked photo shows on its own until the list holds it.
+	const linked = new LinkedPhoto({
+		fetch: (photo) => api.asset(photo),
+		find: (photo) =>
+			void loader.until(
+				(items) => items.some((a) => a.id === photo) || items.length >= DEEP_LINK_LIMIT
+			)
 	});
+	const tracker = new LoupeTracker((photo) => void timeline?.reveal(photo));
+	$effect(() => {
+		tracker.seen(loupeId);
+		linked.seen(loupeId, loupeIndex >= 0);
+	});
+	const shown = $derived(
+		loupeIndex >= 0
+			? { items: loader.items, index: loupeIndex }
+			: linked.single && linked.single.id === loupeId
+				? { items: [linked.single], index: 0 }
+				: null
+	);
 </script>
 
 <svelte:window {onkeydown} />
@@ -161,14 +183,14 @@
 	/>
 </div>
 
-{#if loupeIndex >= 0}
+{#if shown}
 	<Loupe
-		items={loader.items}
-		index={loupeIndex}
-		onindex={(i) => showPhoto(loader.items[i].id)}
+		items={shown.items}
+		index={shown.index}
+		onindex={(i) => showPhoto(shown.items[i].id)}
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
-		onchanged={(a) => loader.update(a.id, a)}
+		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
 	/>
 {/if}
 

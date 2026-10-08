@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
 import {
+	LinkedPhoto,
 	closePhoto,
 	openPhoto,
 	openPhotoId,
@@ -9,6 +10,7 @@ import {
 	showPhoto,
 	withPhoto
 } from './loupe.svelte';
+import { makeAsset } from './testing/fixtures';
 
 vi.mock('$app/navigation', () => ({ pushState: vi.fn(), replaceState: vi.fn() }));
 vi.mock('$app/state', () => ({ page: { state: {}, url: new URL('http://x/') } }));
@@ -77,5 +79,82 @@ describe('closing the loupe', () => {
 		closePhoto();
 		expect(back).not.toHaveBeenCalled();
 		expect(replaceState).toHaveBeenCalledWith('/', { photo: null });
+	});
+});
+
+describe('a photo opened by its link', () => {
+	const settled = () => new Promise((resolve) => setTimeout(resolve));
+
+	it('shows it on its own at once, and lets the list go on looking for it', async () => {
+		const find = vi.fn();
+		const linked = new LinkedPhoto({ fetch: async (id) => makeAsset(id), find });
+		linked.seen(7, false);
+		await settled();
+		expect(linked.single?.id).toBe(7);
+		expect(find).toHaveBeenCalledExactlyOnceWith(7);
+	});
+
+	it('asks once per photo, however often the page looks', async () => {
+		const fetch = vi.fn(async (id: number) => makeAsset(id));
+		const linked = new LinkedPhoto({ fetch });
+		linked.seen(7, false);
+		linked.seen(7, false);
+		await settled();
+		linked.seen(7, false);
+		expect(fetch).toHaveBeenCalledTimes(1);
+	});
+
+	it('steps aside once the list holds the photo, and when the loupe closes', async () => {
+		const linked = new LinkedPhoto({ fetch: async (id) => makeAsset(id) });
+		linked.seen(7, false);
+		await settled();
+		linked.seen(7, true);
+		expect(linked.single).toBeNull();
+		linked.seen(8, false);
+		await settled();
+		linked.seen(undefined, false);
+		expect(linked.single).toBeNull();
+	});
+
+	it('does not need the photo on its own when the list already has it', async () => {
+		const fetch = vi.fn(async (id: number) => makeAsset(id));
+		const linked = new LinkedPhoto({ fetch });
+		linked.seen(7, true);
+		await settled();
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('ignores an answer that arrives after the loupe moved on', async () => {
+		let release: () => void = () => undefined;
+		const linked = new LinkedPhoto({
+			fetch: (id) => new Promise((resolve) => (release = () => resolve(makeAsset(id))))
+		});
+		linked.seen(7, false);
+		linked.seen(undefined, false);
+		release();
+		await settled();
+		expect(linked.single).toBeNull();
+	});
+
+	it('says so when the photo does not exist (or is not yours to see)', async () => {
+		const onmissing = vi.fn();
+		const linked = new LinkedPhoto({
+			fetch: async () => {
+				throw new Error('Photo not found');
+			},
+			onmissing
+		});
+		linked.seen(7, false);
+		await settled();
+		expect(onmissing).toHaveBeenCalledOnce();
+		expect(linked.single).toBeNull();
+	});
+
+	it('takes changes made in the loupe', async () => {
+		const linked = new LinkedPhoto({ fetch: async (id) => makeAsset(id) });
+		linked.seen(7, false);
+		await settled();
+		linked.patch({ favourite: true });
+		expect(linked.single).toMatchObject({ id: 7, favourite: true });
 	});
 });

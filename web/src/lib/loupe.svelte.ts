@@ -8,7 +8,7 @@
  */
 import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
-import type { Id } from './api/types';
+import type { AssetOut, Id } from './api/types';
 
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
@@ -71,5 +71,60 @@ export class LoupeTracker {
 			this.#last = undefined;
 			this.#onclosed(was);
 		}
+	}
+}
+
+/**
+ * A photo opened by its link (`?photo=<id>`) may not be among the photos the page has loaded.
+ * It is fetched on its own and shown at once; `find` may go on looking for it in the list, and
+ * once the list holds it the page shows it from there, with its neighbours.
+ */
+export class LinkedPhoto {
+	/** The linked photo on its own, while the list does not hold it. */
+	single = $state.raw<AssetOut | null>(null);
+	#options: {
+		fetch: (id: Id) => Promise<AssetOut>;
+		find?: (id: Id) => void;
+		onmissing: () => void;
+	};
+	/** What `single` is being fetched for; kept apart so `seen` reads no state in an effect. */
+	#wanted: Id | undefined;
+
+	constructor(options: {
+		fetch: (id: Id) => Promise<AssetOut>;
+		/** Start looking for the photo in the page's own list (load more of it). */
+		find?: (id: Id) => void;
+		/** The photo does not exist or may not be seen: by default the loupe closes. */
+		onmissing?: () => void;
+	}) {
+		this.#options = { onmissing: closePhoto, ...options };
+	}
+
+	/** Call from an effect with the open photo and whether the page's list holds it. */
+	seen(id: Id | undefined, inList: boolean) {
+		if (id === undefined || inList) {
+			this.#wanted = undefined;
+			this.single = null;
+			return;
+		}
+		if (this.#wanted === id) return;
+		this.#wanted = id;
+		this.single = null;
+		this.#options.fetch(id).then(
+			(asset) => {
+				if (this.#wanted === id) this.single = asset;
+			},
+			() => {
+				if (this.#wanted !== id) return;
+				this.#wanted = undefined;
+				this.#options.onmissing();
+			}
+		);
+		this.#options.find?.(id);
+	}
+
+	/** A change made in the loupe while the photo is shown on its own. */
+	patch(change: Partial<AssetOut>) {
+		if (this.single) this.single = { ...this.single, ...change };
 	}
 }
