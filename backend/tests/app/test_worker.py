@@ -109,10 +109,13 @@ def test_a_preview_job_also_repairs_a_missing_thumbnail_from_the_same_decode(
     assert store.absolute(asset.thumb_path).is_file()
 
 
-def test_preview_for_a_missing_asset_is_an_error(repo: SqliteRepository, tmp_path: Path) -> None:
+def test_a_preview_job_for_a_photo_purged_meanwhile_finishes_quietly(
+    repo: SqliteRepository, tmp_path: Path
+) -> None:
     job = GeneratePreview(repo, DiskLibraryStore(tmp_path), VipsRenderer())
-    with pytest.raises(LookupError, match="no asset"):
-        job({"asset_id": 42})
+    repo.enqueue("preview", {"asset_id": 42})
+    Worker(repo, {"preview": job}, FixedClock()).run_until_idle()
+    assert repo.list_jobs("failed") == [] and len(repo.list_jobs("done")) == 1
 
 
 def test_busy_library_requeues_without_using_up_attempts(repo: SqliteRepository) -> None:

@@ -27,7 +27,7 @@ class GeneratePreview:
         asset_id = int(str(payload["asset_id"]))
         asset = self._repo.get_asset(asset_id)
         if asset is None:
-            raise LookupError(f"no asset {asset_id}")
+            return  # purged since the job was queued: nothing to render
         original = self._store.absolute(asset.library_path)
         relative = str(derived_relpath("preview", asset.content_hash))
         thumb = asset.thumb_path
