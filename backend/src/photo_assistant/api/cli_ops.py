@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_database import open_library_database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.system_probe import LocalSystemProbe
 from photo_assistant.api.ops_services import (
@@ -22,6 +22,7 @@ from photo_assistant.app.backup import BackupService, UnknownTargetError
 from photo_assistant.app.doctor import exit_code, render, run_doctor
 from photo_assistant.app.library_transfer import ExportSummary, LibraryTransferError
 from photo_assistant.domain.backup import BackupRun, NewBackupTarget, Retention, TargetStatus
+from photo_assistant.domain.library_paths import DATABASE_FILE
 from photo_assistant.domain.schedule import InvalidScheduleError
 from photo_assistant.ports.library_files import CopyVerificationError, LibraryUnreadableError
 
@@ -216,10 +217,10 @@ _BACKUP: dict[str, Callable[[BackupService, argparse.Namespace], int]] = {
 
 def _backup(args: argparse.Namespace, settings: Settings) -> int:
     root = settings.data_root.expanduser()
-    if not (root / "library.db").is_file():
+    if not (root / DATABASE_FILE).is_file():
         print(f"No library at {root} yet: import some photos first.", file=sys.stderr)
         return 2
-    db = Database.open(root / "library.db", backup_dir=root / "db-backups")
+    db = open_library_database(root)
     repo = SqliteRepository(db)  # the same pieces as the server: one Database, every store
     service, _ = build_backup_service(
         root,

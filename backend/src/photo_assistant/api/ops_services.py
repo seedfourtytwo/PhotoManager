@@ -23,10 +23,8 @@ from photo_assistant.app.backup import BACKUP_DUE_JOB, BackupConfig, BackupServi
 from photo_assistant.app.doctor import DoctorConfig
 from photo_assistant.app.library_transfer import LibraryTransfer
 from photo_assistant.app.periodic import Periodic, PeriodicTask
-from photo_assistant.domain.library_paths import nested_or_same
+from photo_assistant.domain.library_paths import DATABASE_FILE, nested_or_same
 from photo_assistant.ports.backup import JobQueue, RepositoryMirror
-
-DATABASE = "library.db"
 
 
 def default_key_dir() -> Path:
@@ -69,7 +67,7 @@ def build_backup_service(
 ) -> tuple[BackupService, SqliteBackupStore]:
     """``db``: the process's one Database. ``queue``: the server's job queue; the command
     line has none and runs a backup itself, in the foreground."""
-    database = data_root / DATABASE
+    database = data_root / DATABASE_FILE
     key_dir = (ops.backup_key_dir or default_key_dir()).expanduser()
     if nested_or_same(key_dir.resolve(), data_root.expanduser().resolve()):
         raise ValueError(

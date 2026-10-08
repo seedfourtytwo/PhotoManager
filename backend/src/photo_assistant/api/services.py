@@ -15,7 +15,7 @@ from photo_assistant.adapters.geocoder import OfflineGeocoder
 from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
-from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_database import Database, open_library_database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
@@ -94,7 +94,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
     passes "server"; every command line run is "cli")."""
     root = settings.data_root.expanduser()
     root.mkdir(parents=True, exist_ok=True)
-    db = Database.open(root / "library.db", backup_dir=root / "db-backups")
+    db = open_library_database(root)
     repo = SqliteRepository(db)
     store = DiskLibraryStore(root)
     renderer = VipsRenderer(concurrency=settings.vips_concurrency)

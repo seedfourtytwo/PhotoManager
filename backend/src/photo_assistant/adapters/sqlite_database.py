@@ -26,7 +26,11 @@ from importlib import resources
 from pathlib import Path
 from types import TracebackType
 
+from photo_assistant.domain.library_paths import DATABASE_FILE
+
 log = logging.getLogger(__name__)
+
+SNAPSHOT_FOLDER = "db-backups"  # in the data root: the copies made before a migration
 
 SNAPSHOTS_KEPT = 5  # pre-migration copies of the database; each is as big as the database
 _SNAPSHOT_NAME = re.compile(r"library-v\d+-(\d{8}T\d{12})\.db")
@@ -223,3 +227,9 @@ class Database:
             conn.close()
         with self.lock:
             self.writer.close()
+
+
+def open_library_database(data_root: Path) -> Database:
+    """THE way to open a library: its database file, with the pre-migration snapshots kept
+    beside it in the data root."""
+    return Database.open(data_root / DATABASE_FILE, backup_dir=data_root / SNAPSHOT_FOLDER)
