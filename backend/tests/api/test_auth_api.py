@@ -118,6 +118,16 @@ def test_change_pin(admin: TestClient) -> None:
     login(admin.app, "admin", NEW_PIN)  # type: ignore[arg-type]
 
 
+def test_guessing_the_current_pin_is_rate_limited_like_login(admin: TestClient) -> None:
+    for _ in range(10):
+        wrong = admin.post("/api/auth/pin", json={"current_pin": "0000", "new_pin": NEW_PIN})
+        assert wrong.status_code == 400
+    for pin in ("0000", PIN):
+        blocked = admin.post("/api/auth/pin", json={"current_pin": pin, "new_pin": NEW_PIN})
+        assert blocked.status_code == 429 and "wait" in blocked.json()["detail"]
+    assert admin.get("/api/auth/me").status_code == 200, "the session itself is untouched"
+
+
 def test_admin_manages_users(admin: TestClient) -> None:
     lea = add_user(admin, "lea")
     users = admin.get("/api/users").json()

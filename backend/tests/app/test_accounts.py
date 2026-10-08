@@ -19,6 +19,7 @@ from photo_assistant.domain.access import Role
 from tests.factories import NOW
 
 GOOD = "1234"
+IP = "10.0.0.1"
 
 
 class FakeHasher:
@@ -137,11 +138,11 @@ def test_change_pin_checks_the_current_one(accounts: Accounts) -> None:
     user, token = accounts.setup("c", "C", GOOD)
     _, other = accounts.login("c", GOOD, "2.2.2.2")
     with pytest.raises(InvalidCredentialsError):
-        accounts.change_pin(user, "0000", "5678", token)
+        accounts.change_pin(user, "0000", "5678", token, IP)
     with pytest.raises(AccountError, match="4 digits"):
-        accounts.change_pin(user, GOOD, "12345", token)
+        accounts.change_pin(user, GOOD, "12345", token, IP)
     assert accounts.authenticate(other) is not None, "failed attempts change nothing"
-    accounts.change_pin(user, GOOD, "5678", token)
+    accounts.change_pin(user, GOOD, "5678", token, IP)
     accounts.login("c", "5678", "1.1.1.1")
     assert accounts.authenticate(token) is not None
     assert accounts.authenticate(other) is None
@@ -269,3 +270,83 @@ def test_two_admins_demoting_each_other_at_once_leave_one_admin(tmp_path) -> Non
     )
     assert repo.count_active_admins() == 1
     assert [type(o) for o in outcomes].count(LastAdminError) == 1
+
+
+# --- PIN guessing: change-PIN throttle, parallel guesses, unknown names ------------------------
+
+
+def test_wrong_current_pins_count_as_failed_logins_and_block_like_them(
+    accounts: Accounts, clock: MovableClock
+) -> None:
+    user, token = accounts.setup("c", "C", GOOD)
+    for _ in range(10):
+        with pytest.raises(InvalidCredentialsError):
+            accounts.change_pin(user, "0000", "5678", token, IP)
+    with pytest.raises(TooManyAttemptsError):
+        accounts.change_pin(user, GOOD, "5678", token, IP)
+    with pytest.raises(TooManyAttemptsError):
+        accounts.login("c", GOOD, IP)  # one limiter: the same count as the login screen
+    clock.at += timedelta(minutes=15, seconds=1)
+    accounts.change_pin(user, GOOD, "5678", token, IP)
+    accounts.login("c", "5678", IP)
+
+
+def test_a_right_current_pin_clears_the_earlier_wrong_ones(accounts: Accounts) -> None:
+    user, token = accounts.setup("c", "C", GOOD)
+    for _ in range(9):
+        with pytest.raises(InvalidCredentialsError):
+            accounts.change_pin(user, "0000", "5678", token, IP)
+    accounts.change_pin(user, GOOD, "5678", token, IP)
+    for _ in range(9):
+        with pytest.raises(InvalidCredentialsError):
+            accounts.change_pin(user, "0000", GOOD, token, IP)
+    accounts.change_pin(user, "5678", GOOD, token, IP)
+
+
+class SlowCountingHasher(FakeHasher):
+    """Verifying takes a moment (as argon2 does), and reports how many ran, and at once."""
+
+    def __init__(self) -> None:
+        import threading
+
+        self._guard = threading.Lock()
+        self.verified = 0
+        self._running = 0
+        self.most_at_once = 0
+
+    def verify(self, password_hash: str, password: str) -> bool:
+        import time
+
+        with self._guard:
+            self.verified += 1
+            self._running += 1
+            self.most_at_once = max(self.most_at_once, self._running)
+        time.sleep(0.02)
+        with self._guard:
+            self._running -= 1
+        return super().verify(password_hash, password)
+
+
+def test_parallel_wrong_pins_cannot_get_more_guesses_than_the_limit(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    repo = SqliteRepository(open_database(tmp_path / "library.db"))
+    hasher = SlowCountingHasher()
+    accounts = Accounts(repo, hasher, MovableClock())
+    accounts.setup("c", "C", GOOD)
+    outcomes = _race(*(lambda n=n: accounts.login("c", f"{n:04d}", IP) for n in range(40)))
+    assert hasher.verified == 10, "the limit is ten guesses, however they arrive"
+    assert [type(o) for o in outcomes].count(InvalidCredentialsError) == 10
+    assert [type(o) for o in outcomes].count(TooManyAttemptsError) == 30
+    assert hasher.most_at_once <= 2, "argon2 takes 64 MiB a go: never many at once"
+
+
+def test_an_unknown_user_name_is_refused_without_hashing_or_leaving_a_row(
+    repo: SqliteRepository, clock: MovableClock
+) -> None:
+    hasher = SlowCountingHasher()
+    accounts = Accounts(repo, hasher, clock)
+    accounts.setup("c", "C", GOOD)
+    for _ in range(25):
+        with pytest.raises(InvalidCredentialsError):
+            accounts.login("nobody", GOOD, IP)
+    assert hasher.verified == 0
+    assert repo._scalar("SELECT COUNT(*) FROM login_failure") == 0

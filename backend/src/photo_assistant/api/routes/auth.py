@@ -24,6 +24,10 @@ def _set_session(request: Request, response: Response, token: str) -> None:
     )
 
 
+def _address(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 @router.get("/setup")
 def setup_state(services: ServicesDep) -> dict[str, bool]:
     return {"needs_admin": services.accounts.needs_admin()}
@@ -49,8 +53,7 @@ def accounts(services: ServicesDep) -> list[AccountName]:
 def login(
     services: ServicesDep, body: Credentials, request: Request, response: Response
 ) -> UserOut:
-    ip = request.client.host if request.client else "unknown"
-    user, token = services.accounts.login(body.username, body.pin, ip)  # 401 / 429
+    user, token = services.accounts.login(body.username, body.pin, _address(request))  # 401 / 429
     _set_session(request, response, token)
     return UserOut.of(user)
 
@@ -70,9 +73,10 @@ def me(user: CurrentUser) -> UserOut:
 
 @router.post("/auth/pin", status_code=status.HTTP_204_NO_CONTENT)
 def change_pin(services: ServicesDep, user: CurrentUser, body: NewPin, request: Request) -> None:
-    """Ends every other session of this user; this one stays signed in."""
+    """Ends every other session of this user; this one stays signed in. Wrong current PINs
+    count as failed logins: 429 once there are too many."""
     token = request.cookies.get(SESSION_COOKIE, "")
     try:
-        services.accounts.change_pin(user, body.current_pin, body.new_pin, token)
+        services.accounts.change_pin(user, body.current_pin, body.new_pin, token, _address(request))
     except InvalidCredentialsError as exc:  # signed in already: a wrong field, not a 401
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "the current PIN is wrong") from exc
