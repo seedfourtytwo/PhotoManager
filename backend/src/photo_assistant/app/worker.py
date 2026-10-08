@@ -64,6 +64,13 @@ class Worker:
         if handler is None:
             self._repo.fail_job(job.id, f"no handler for job kind '{job.kind}'", retry=False)
             return True
+        if job.attempts > self._max_attempts:
+            # Only reachable when earlier runs never came back (the process was killed by a
+            # crash or the OOM killer and the next start requeued the job): stop the loop.
+            log.warning("job given up on", extra={"job_id": job.id, "kind": job.kind})
+            reason = f"never finished (did it crash the server?): gave up after {job.attempts - 1}"
+            self._repo.fail_job(job.id, f"{reason} attempts", retry=False)
+            return True
         try:
             handler(job.payload)
         except ImportBusyError:
