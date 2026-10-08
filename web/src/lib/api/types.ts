@@ -96,12 +96,15 @@ export type Job = {
 	status: JobStatus;
 	attempts: number;
 	error: string | null;
+	/** Set on a queued job that waits for its next attempt after a failure (UTC ISO time). */
+	run_after: string | null;
 };
 
 export type Stats = {
 	assets: number;
 	sources: number;
-	jobs: Record<JobStatus, number>;
+	/** `waiting`: queued jobs that wait for a retry time; not part of `queued`. */
+	jobs: Record<JobStatus, number> & { waiting: number };
 	free_bytes: number;
 };
 

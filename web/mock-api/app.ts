@@ -426,6 +426,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			status: 'queued' as const,
 			attempts: 0,
 			error: null,
+			run_after: null,
 			run_at: now()
 		};
 		state.jobs.push(job);
@@ -581,7 +582,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			'GET',
 			/^\/api\/stats$/,
 			(ctx) => {
-				const counts = { queued: 0, running: 0, done: 0, failed: 0 };
+				const counts = { queued: 0, waiting: 0, running: 0, done: 0, failed: 0 };
 				for (const j of state.jobs) counts[j.status]++;
 				return ok({
 					assets: visible(me(ctx)).length,
@@ -747,7 +748,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 						content_hash: null, asset_id: null, reason: null }; // prettier-ignore
 				});
 				const job = { id: state.nextId.job++, kind: 'import', payload: { source_id: inbox.id },
-					status: 'done' as const, attempts: 1, error: null, run_at: 0 }; // prettier-ignore
+					status: 'done' as const, attempts: 1, error: null, run_after: null, run_at: 0 }; // prettier-ignore
 				state.jobs.push(job);
 				return ok({ files, import_job_id: job.id });
 			}

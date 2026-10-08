@@ -490,6 +490,7 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 				status: 'failed',
 				attempts: 3,
 				error: 'libvips could not decode the file (truncated JPEG)',
+				run_after: null,
 				run_at: 0
 			},
 			{
@@ -499,6 +500,7 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 				status: 'done',
 				attempts: 1,
 				error: null,
+				run_after: null,
 				run_at: 0
 			}
 		],
