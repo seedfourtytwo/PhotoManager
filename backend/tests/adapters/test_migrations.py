@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "ai_log", "inbox", "device",
     # ml
     "ml_task", "clip_embedding", "face", "person", "tag", "asset_tag", "asset_ml_flag",
+    "face_cluster_pass", "face_cluster_mark",
     # ops
     "backup_target", "backup_run",
 }  # fmt: skip
@@ -79,7 +80,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 24
+    assert _latest() == 26
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -387,4 +388,46 @@ def test_accounts_from_before_0023_come_through_unlocked_with_no_wrong_pins(tmp_
     ]
     found = SqliteRepository(Database(upgraded, db)).find_user_by_username("LEA")
     assert found is not None and found[1] == "y", "the PIN hash is untouched"
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
+
+
+def test_faces_from_before_0026_come_through_with_no_clustering_pass_kept(tmp_path: Path) -> None:
+    """0026: what the last global clustering pass saw is kept per face. An upgraded library
+    has nothing kept, so its first pass steps every waiting face; a mark goes with its face."""
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 26)
+    for number, sql in _migrations():
+        if number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO asset (id, content_hash, kind, mime_type, byte_size, width, height, taken_at,
+                date_source, library_path, imported_at)
+            VALUES (1, 'a', 'photo', 'image/jpeg', 1, 4, 3, '2020-01-01T10:00:00', 'exif',
+                    'originals/a.jpg', '2026-09-01');
+        INSERT INTO person (id, name) VALUES (1, 'Lea');
+        INSERT INTO face (id, asset_id, model, box_x, box_y, box_w, box_h, score,
+                landmarks_json, dim, embedding, person_id, assigned_by, cluster_state)
+            VALUES (1, 1, 'm', 0, 0, 1, 1, 0.9, '[]', 1, x'0000803f', 1, 'user', 'done'),
+                   (2, 1, 'm', 0, 0, 1, 1, 0.9, '[]', 1, x'000080bf', NULL, NULL, 'deferred');
+        """
+    )
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert upgraded.execute("PRAGMA foreign_key_check").fetchall() == []
+    faces = upgraded.execute("SELECT id, person_id, cluster_state FROM face ORDER BY id")
+    assert [tuple(r) for r in faces] == [(1, 1, "done"), (2, None, "deferred")]
+    for table in ("face_cluster_pass", "face_cluster_mark"):
+        assert upgraded.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+    upgraded.execute(
+        "INSERT INTO face_cluster_mark (face_id, person_id, cluster_state, created_at, "
+        "fingerprint) SELECT id, person_id, cluster_state, created_at, embedding FROM face"
+    )
+    upgraded.execute("DELETE FROM asset WHERE id = 1")
+    assert upgraded.execute("SELECT COUNT(*) FROM face_cluster_mark").fetchone()[0] == 0
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1

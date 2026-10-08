@@ -16,7 +16,7 @@ from photo_assistant.domain.access import Role, Viewer
 from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector, cosine_distance
-from photo_assistant.ports.ml import FaceMatches
+from photo_assistant.ports.ml import FaceChanges, FaceMatches
 from tests.adapters.test_visibility_rule import ROLES, _random_library
 from tests.factories import NOW, new_asset
 
@@ -348,19 +348,23 @@ def test_deferred_faces_near_agree_with_plain_python_on_random_faces(
         assert expected, "the inputs find something"
 
 
-def test_face_marks_change_when_a_face_is_added_placed_deferred_or_detected_again(
+def test_face_changes_are_the_faces_added_placed_deferred_or_detected_again_since_the_marks_kept(
     repo: SqliteRepository, store: SqliteMlStore
 ) -> None:
     (a, b) = assets(repo, 2)
     f1, f2, f3 = store.replace_faces(a, M, [face(angle(d)) for d in (0, 1, 2)])
-    store.replace_faces(b, "other", [face(angle(0))])
-    before = store.face_marks(M)
-    assert set(before) == {f1, f2, f3}
-    assert store.face_marks(M) == before
+    (elsewhere,) = store.replace_faces(b, "other", [face(angle(0))])
+    first = store.face_changes(M)
+    assert first.rule is None, "no pass has finished"
+    assert set(first.marks) == {f1, f2, f3}
+    assert store.face_changes(M) == first, "looking keeps nothing"
+    store.keep_face_marks(M, "reach 0.5", first.marks)
+    assert store.face_changes(M) == FaceChanges("reach 0.5", {})
+    assert set(store.face_changes("other").marks) == {elsewhere}
+    assert store.face_changes("other").rule is None
 
     def changed() -> set[int]:
-        now = store.face_marks(M)
-        return {i for i in now if before.get(i) != now[i]}
+        return set(store.face_changes(M).marks)
 
     store.mark_deferred(f1)
     assert changed() == {f1}
@@ -368,6 +372,67 @@ def test_face_marks_change_when_a_face_is_added_placed_deferred_or_detected_agai
     assert changed() == {f1, f2}
     (f4,) = store.replace_faces(b, M, [face(angle(3))])
     assert changed() == {f1, f2, f4}
+    assert store.face_changes(M).rule == "reach 0.5"
+
+
+def test_the_marks_kept_are_what_the_pass_saw_not_the_faces_as_they_are_when_it_ends(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    """Whatever happens to a face while a pass runs is a change for the next one."""
+    (a,) = assets(repo, 1)
+    f1, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(1))])
+    seen = store.face_changes(M).marks
+    store.mark_deferred(f1)  # by the pass itself, or by a person meanwhile
+    store.keep_face_marks(M, "reach 0.5", seen)
+    assert set(store.face_changes(M).marks) == {f1}
+    store.keep_face_marks(M, "reach 0.4", {})
+    assert store.face_changes(M).rule == "reach 0.4", "the settings of the last pass"
+    assert set(store.face_changes(M).marks) == {f1}
+
+
+def test_keeping_marks_is_all_or_nothing(repo: SqliteRepository, store: SqliteMlStore) -> None:
+    (a,) = assets(repo, 1)
+    f1, f2 = store.replace_faces(a, M, [face(angle(0)), face(angle(1))])
+    seen = dict(store.face_changes(M).marks)
+    with pytest.raises(sqlite3.Error):
+        store.keep_face_marks(M, "reach 0.5", seen | {f2: (None, None, None, None)})
+    assert store.face_changes(M) == FaceChanges(None, seen)
+
+
+def test_the_mark_of_a_face_goes_with_it_and_its_id_starts_again_as_changed(
+    repo: SqliteRepository, store: SqliteMlStore, conn: sqlite3.Connection
+) -> None:
+    (a, b) = assets(repo, 2)
+    (f1,) = store.replace_faces(a, M, [face(angle(0))])
+    (f2,) = store.replace_faces(b, M, [face(angle(90))])
+    seen = store.face_changes(M).marks
+    store.keep_face_marks(M, "reach 0.5", seen)
+    conn.execute("DELETE FROM asset WHERE id = ?", (b,))  # a purged photo takes its faces along
+    assert [r[0] for r in conn.execute("SELECT face_id FROM face_cluster_mark")] == [f1]
+    assert store.face_changes(M).marks == {}
+    assert store.replace_faces(a, M, [face(angle(0)), face(angle(90))]) == [f1, f2]
+    assert set(store.face_changes(M).marks) == {f1, f2}, "the same ids, even the same vectors"
+    store.replace_faces(a, M, [])
+    store.keep_face_marks(M, "reach 0.5", seen)  # a pass ending after its faces went
+    assert conn.execute("SELECT COUNT(*) FROM face_cluster_mark").fetchone()[0] == 0
+
+
+def test_a_mark_left_behind_by_another_tool_does_not_hide_the_face_that_got_its_id(
+    repo: SqliteRepository, store: SqliteMlStore, conn: sqlite3.Connection
+) -> None:
+    """A connection without foreign keys (the sqlite3 shell) deletes a face and not its mark."""
+    (a,) = assets(repo, 1)
+    (f1,) = store.replace_faces(a, M, [face(angle(0))])
+    store.mark_deferred(f1)
+    store.keep_face_marks(M, "reach 0.5", store.face_changes(M).marks)
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("DELETE FROM face")
+    conn.execute("PRAGMA foreign_keys = ON")
+    assert conn.execute("SELECT COUNT(*) FROM face_cluster_mark").fetchone()[0] == 1
+    assert store.face_changes(M).marks == {}
+    assert store.replace_faces(a, M, [face(angle(90))]) == [f1]
+    store.mark_deferred(f1)
+    assert set(store.face_changes(M).marks) == {f1}
 
 
 def test_cluster_queue_by_state_and_asset(repo: SqliteRepository, store: SqliteMlStore) -> None:
