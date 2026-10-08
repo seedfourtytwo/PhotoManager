@@ -3,6 +3,7 @@
 	import { api } from '$lib/app.svelte';
 	import { formatBytes } from '$lib/format';
 	import Dialog from '../Dialog.svelte';
+	import FolderPicker from './FolderPicker.svelte';
 	import RecoveryKey from './RecoveryKey.svelte';
 
 	type Props = { onclose: () => void; onchange: () => void };
@@ -19,6 +20,7 @@
 	let places = $state<BackupPlaces | null>(null);
 	let choice = $state('');
 	let folder = $state('');
+	let folderPending = $state(false);
 	let label = $state('');
 	let schedule = $state<string>(SCHEDULES[0][0]);
 	let plan = $state<BackupPlan | null>(null);
@@ -26,7 +28,12 @@
 	let error = $state('');
 	let busy = $state(false);
 
-	const place = $derived(choice === OTHER ? folder.trim() : choice);
+	const place = $derived(choice === OTHER ? folder : choice);
+
+	$effect(() => {
+		void folder; // another folder was opened: the verdict was about the previous one
+		plan = null;
+	});
 
 	$effect(() => {
 		api
@@ -162,14 +169,12 @@
 				</label>
 			</fieldset>
 			{#if choice === OTHER}
-				<label class="field"
-					>Folder <input
-						bind:value={folder}
-						oninput={() => (plan = null)}
-						placeholder="/media/you/Disk"
-						autocomplete="off"
-					/></label
-				>
+				<FolderPicker
+					onpick={(p) => {
+						folder = p.path;
+						folderPending = p.pending;
+					}}
+				/>
 			{/if}
 			{#if !places.disks.length && !places.remotes.length}
 				<p class="quiet small">
@@ -186,7 +191,7 @@
 			<button
 				class="primary"
 				type="button"
-				disabled={busy || !places || !place || !label.trim()}
+				disabled={busy || !places || !place || !label.trim() || (choice === OTHER && folderPending)}
 				onclick={check}>Check this place</button
 			>
 		{/snippet}

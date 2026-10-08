@@ -192,6 +192,36 @@ export function v11Routes(h: Helpers): Route[] {
 	const BACKUP_FOLDER = 'photo-assistant-backup';
 	const gb = (bytes: number) => `${(bytes / 1e9).toFixed(1)} GB`;
 
+	/** The mock machine's folders. Any other full path opens as an empty folder, unless its
+	 *  name says it is missing. */
+	const HOME = '/home/c';
+	const TREE: Record<string, string[]> = {
+		[HOME]: ['Documents', 'Pictures', 'Scans'],
+		[`${HOME}/Pictures`]: ['2019', '2020'],
+		'/media/c/USB disk': ['DCIM']
+	};
+
+	function listFolders(asked: string | undefined) {
+		const path = (asked ?? HOME).replace(/(?<=.)\/+$/, '');
+		if (!path.startsWith('/'))
+			throw new HttpError(422, 'give the full path of the folder, starting with /');
+		if (path.includes('missing'))
+			throw new HttpError(422, `folder not found on this machine: ${path}`);
+		const added = h.state().sources.find((s) => s.kind === 'folder' && s.path === path);
+		return {
+			path,
+			parent: path === '/' ? null : path.slice(0, path.lastIndexOf('/')) || '/',
+			folders: (TREE[path] ?? []).map((name) => ({ name, path: `${path}/${name}` })),
+			truncated: false,
+			roots: [{ label: 'Home', path: HOME }, ...DISKS.map((d) => ({ label: d.label, path: d.path }))], // prettier-ignore
+			source_problem: added
+				? `already added as “${added.label}”`
+				: path === HOME
+					? 'this folder contains the photo library itself'
+					: null
+		};
+	}
+
 	function planFor(place: string): BackupPlan {
 		const refuse = (problem: string, repository = place): BackupPlan => ({
 			repository, library_bytes: LIBRARY_BYTES, free_bytes: null, ok: false, problem, warnings: []
@@ -545,6 +575,11 @@ export function v11Routes(h: Helpers): Route[] {
 				h.state().backups.push(target);
 				return ok(targetOut(target), 201);
 			}
+		],
+		[
+			'GET',
+			/^\/api\/folders$/,
+			(ctx) => (admin(ctx), ok(listFolders(ctx.url.searchParams.get('path') ?? undefined)))
 		],
 		[
 			'GET',

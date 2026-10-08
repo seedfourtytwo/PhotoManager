@@ -89,7 +89,7 @@ e2e *args:
     (cd backend && PA_DATA_ROOT="$tmp/data" PA_TEST_MODE=1 PA_HOST=127.0.0.1 PA_PORT=8440 \
         PA_ALLOWED_HOSTS='["127.0.0.1","localhost"]' PA_MIN_FREE_GB=0 PA_WEB_DIR="$web" \
         PA_BACKUP_ENABLED=false PA_BACKUP_KEY_DIR="$tmp/backup-keys" \
-        exec uv run python -m photo_assistant >"$tmp/server.log" 2>&1) &
+        exec uv run env HOME="$tmp" python -m photo_assistant >"$tmp/server.log" 2>&1) &
     server=$!
     for _ in $(seq 60); do curl -sf http://127.0.0.1:8440/api/health >/dev/null && break; sleep 0.5; done
     cd web && E2E_BASE_URL=http://127.0.0.1:8440 E2E_RESET_URL=http://127.0.0.1:8440/__test/reset \

@@ -1,8 +1,10 @@
 <script lang="ts">
 	import type { ImportRun, Source } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
+	import { formatWhen } from '$lib/format';
 	import Dialog from '../Dialog.svelte';
 	import AccessDialog from './AccessDialog.svelte';
+	import FolderPicker, { type Picked } from './FolderPicker.svelte';
 	import ReportDialog from './ReportDialog.svelte';
 
 	type Props = { busy: boolean; onscan: () => void; refresh: number };
@@ -12,8 +14,16 @@
 	let runs = $state<ImportRun[]>([]);
 	let adding = $state(false);
 	let label = $state('');
-	let path = $state('');
+	let picked = $state<Picked>({ path: '', sourceProblem: null, pending: true });
+	const path = $derived(picked.path);
 	let addError = $state('');
+	let suggested = ''; // the name we filled in: replaced as the folder changes, unless edited
+
+	$effect(() => {
+		const name = path.split('/').filter(Boolean).pop() ?? '';
+		if (label === suggested) label = name;
+		suggested = name;
+	});
 	let cloud = $state<{ label: string; remote: string; path: string } | null>(null);
 	let remotes = $state<string[] | null>(null);
 	let remotesError = $state('');
@@ -39,9 +49,9 @@
 	async function add() {
 		addError = '';
 		try {
-			const source = await api.addSource({ label: label.trim(), path: path.trim() });
+			const source = await api.addSource({ label: label.trim(), path });
 			adding = false;
-			label = path = '';
+			label = suggested = '';
 			await api.scanSource(source.id);
 			notice.show(`Added “${source.label}”. Importing now; the folder itself is only read.`);
 			onscan();
@@ -118,7 +128,7 @@
 		<h2 id="a-sources">Folders</h2>
 		<button type="button" onclick={() => (adding = true)}>Add folder</button>
 		<button type="button" onclick={openCloud}>Add cloud folder</button>
-		<button type="button" disabled={busy} onclick={() => scan()}>Rescan all</button>
+		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
 	</header>
 	<ul>
 		{#each sources as source (source.id)}
@@ -144,14 +154,16 @@
 					{:else if run}&nbsp;· last import {run.status === 'done' ? '' : `${run.status} · `}{run
 							.summary.imported}
 						new{#if run.summary.failed}, {run.summary.failed} failed{/if}{#if run.summary.skipped},
-							{run.summary.skipped} skipped{/if}
+							{run.summary.skipped} skipped{/if}{#if run.finished_at}&nbsp;· checked {formatWhen(
+								run.finished_at
+							)}{/if}
 					{/if}
 				</div>
 				<div class="actions">
 					{#if source.kind === 'rclone'}
 						<button type="button" disabled={busy} onclick={() => pull(source)}>Pull now</button>
 					{:else}
-						<button type="button" disabled={busy} onclick={() => scan(source)}>Scan</button>
+						<button type="button" disabled={busy} onclick={() => scan(source)}>Check again</button>
 					{/if}
 					<button type="button" onclick={() => (accessFor = source)}>Access</button>
 					{#if run}
@@ -171,16 +183,23 @@
 {#if adding}
 	<Dialog title="Add a folder" onclose={() => (adding = false)}>
 		<p class="quiet small">
-			Photos are copied into the library; the folder is only ever read, never changed.
+			Open the folder your photos are in. They are copied into the library; the folder is only ever
+			read, never changed.
 		</p>
+		<FolderPicker onpick={(p) => (picked = p)} />
 		<label class="field">Name <input bind:value={label} placeholder="Old hard disk" /></label>
-		<label class="field"
-			>Folder path on the server <input bind:value={path} placeholder="/home/c/Pictures" /></label
-		>
+		{#if picked.sourceProblem}
+			<p role="alert">
+				{picked.sourceProblem.charAt(0).toUpperCase() + picked.sourceProblem.slice(1)}.
+			</p>
+		{/if}
 		{#if addError}<p role="alert">{addError}</p>{/if}
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={!label.trim() || !path.trim()} onclick={add}
-				>Add and import</button
+			<button
+				class="primary"
+				type="button"
+				disabled={!label.trim() || !path || picked.pending || !!picked.sourceProblem}
+				onclick={add}>Add and import</button
 			>
 		{/snippet}
 	</Dialog>

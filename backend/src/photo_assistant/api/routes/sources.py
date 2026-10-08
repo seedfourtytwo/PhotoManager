@@ -23,6 +23,7 @@ from photo_assistant.api.schemas import (
 from photo_assistant.api.services import Services
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.library_paths import folder_path_problem
 from photo_assistant.domain.model import Source
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
@@ -54,6 +55,8 @@ def list_sources(services: ServicesDep, viewer: ViewerDep) -> list[SourceOut]:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def add_source(services: ServicesDep, admin: AdminUser, body: SourceIn) -> SourceOut:
+    if problem := folder_path_problem(str(Path(body.path).expanduser())):
+        raise HTTPException(422, problem)
     folder = Path(body.path).expanduser()
     if not folder.is_dir():
         raise HTTPException(422, f"folder not found on this machine: {folder}")

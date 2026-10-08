@@ -32,6 +32,10 @@ just import ~/Pictures          # read-only on ~/Pictures; copies into the libra
 just import /media/$USER/OldDisk/Photos --label "Old disk"
 ```
 
+Or in the web app, without typing a path: **Admin → Folders → Add folder**, click your way
+to the folder (it starts in your home folder; plugged-in disks are listed on top), then
+**Add and import**. The folder is only ever read.
+
 Each import ends with a summary: seen = imported + duplicates + skipped + failed, and
 every skip or failure says why. Running it again only picks up new files.
 

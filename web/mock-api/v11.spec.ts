@@ -146,6 +146,25 @@ describe('print', () => {
 });
 
 describe('backups, devices and remote sources', () => {
+	it("lists the server's folders for picking one, to admins only", async () => {
+		const api = await h.signedIn();
+		const home = await api.folders();
+		expect(home).toMatchObject({ path: '/home/c', parent: '/home' });
+		expect(home.folders.map((f) => f.name)).toEqual(['Documents', 'Pictures', 'Scans']);
+		expect(home.roots.map((r) => r.label)).toEqual(['Home', 'Tiny stick', 'USB disk']);
+		expect(home.source_problem).toContain('photo library itself');
+		const pictures = await api.folders('/home/c/Pictures/');
+		expect(pictures.path).toBe('/home/c/Pictures');
+		expect(pictures.source_problem).toBeNull();
+		await api.addSource({ label: 'Pics', path: pictures.path });
+		expect((await api.folders(pictures.path)).source_problem).toBe('already added as “Pics”');
+		expect((await api.folders('/')).parent).toBeNull();
+		await expect(api.folders('/home/c/missing')).rejects.toMatchObject({ status: 422 });
+		await expect(api.folders('Pictures')).rejects.toMatchObject({ status: 422 });
+		const member = await h.signedIn('partner', '2345');
+		await expect(member.folders()).rejects.toMatchObject({ status: 403 });
+	});
+
 	it('guided setup: checks the place, hands over the key, backs up and proves the restore', async () => {
 		const api = await h.signedIn();
 		const places = await api.backupPlaces();
