@@ -16,6 +16,19 @@ import { wentBack } from './history-step';
 import { refocus } from './modal';
 import { withTransition } from './motion';
 
+/** Said once for a link to a photo that is not there, whatever was wrong with it. */
+const NOT_FOUND = 'That photo was not found.';
+
+/**
+ * A `photo` in the address that cannot be a photo's id (`?photo=abc`) opens nothing: say so
+ * and take it out of the address. Called where the app notices a new address (the layout).
+ */
+export function dropBadPhotoParam(url: URL) {
+	if (!url.searchParams.has('photo') || photoParam(url) !== undefined) return;
+	notice.show(NOT_FOUND);
+	replaceState(withPhoto(url.href, null), { photo: null });
+}
+
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
 	return value && /^\d+$/.test(value) ? Number(value) : undefined;
@@ -179,13 +192,16 @@ export class LinkedPhoto {
 		fetch: (id: Id) => Promise<AssetOut>;
 		/** Start looking for the photo in the page's own list (load more of it). */
 		find?: (id: Id) => void;
-		/** The photo does not exist or may not be seen: by default the loupe closes. */
+		/** The photo does not exist or may not be seen: by default that is said and the loupe closes. */
 		onmissing?: () => void;
 		/** It could not be fetched for another reason (offline, a server error): by default a toast. */
 		onerror?: (error: unknown) => void;
 	}) {
 		this.#options = {
-			onmissing: closePhoto,
+			onmissing: () => {
+				notice.show(NOT_FOUND);
+				closePhoto();
+			},
 			onerror: (error) => notice.error(error),
 			...options
 		};

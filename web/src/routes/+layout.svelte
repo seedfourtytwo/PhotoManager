@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '$lib/tokens.css';
 	import { onMount, untrack } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
@@ -17,11 +18,16 @@
 		settings
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
+	import { dropBadPhotoParam } from '$lib/loupe.svelte';
 
 	let { children } = $props();
 
 	const bare = $derived(isPublicRoute(page.url.pathname));
 	const filterable = $derived(isFilterable(page.url.pathname));
+
+	afterNavigate(({ to }) => {
+		if (to) dropBadPhotoParam(to.url);
+	});
 
 	onMount(() => {
 		look.show();
