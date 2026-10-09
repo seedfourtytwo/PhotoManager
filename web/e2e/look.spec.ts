@@ -271,3 +271,67 @@ test('the old per-browser theme setting moves to the account once, then is gone'
 		.toBe('light');
 	await expect.poll(() => page.evaluate(() => localStorage.getItem('pa.theme'))).toBeNull();
 });
+
+test('the old per-browser setting does not overwrite a mode chosen on another device', async ({
+	page,
+	context,
+	browser,
+	baseURL
+}) => {
+	await resetMock();
+	const phone = await elsewhere(browser, baseURL, MEMBER);
+	await phone.page.goto('/settings');
+	await phone.page.getByRole('radio', { name: 'Like the device' }).check();
+	await expect
+		.poll(async () => (await (await phone.page.request.get('/api/me/look')).json()).mode)
+		.toBe('system');
+	await phone.close();
+
+	await context.addInitScript(() => {
+		if (sessionStorage.getItem('seeded')) return;
+		sessionStorage.setItem('seeded', '1');
+		localStorage.setItem('pa.theme', 'light');
+	});
+	await signIn(page, '/settings', MEMBER);
+	await expect(page.getByRole('radio', { name: 'Like the device' })).toBeChecked();
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('pa.theme'))).toBeNull();
+	expect((await (await page.request.get('/api/me/look')).json()).mode).toBe('system');
+});
+
+test('on a shared device the next person does not get the last one’s look', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	await setMyLook(page, { theme: 'album', mode: 'light', accentHue: 200 });
+	await page.reload();
+	await expect(root(page)).toHaveAttribute('data-look', 'album');
+	await expect.poll(() => variable(page, '--acc-h')).toBe('200');
+
+	await page.getByRole('button', { name: 'Sign out' }).click();
+	await expect(page).toHaveURL(/\/login$/);
+	// gone from the sign-in page, and from what the next opening would paint
+	await expect(root(page)).not.toHaveAttribute('data-look');
+	await expect(root(page)).toHaveAttribute('data-theme', 'dark');
+	expect(await variable(page, '--acc-h')).toBe('');
+	expect(await page.evaluate(() => localStorage.getItem('pa.look'))).toBeNull();
+
+	// Partner signs in while the server cannot say what their look is: the defaults, not the admin's.
+	await page.route('**/api/me/look', (route) => route.abort());
+	await signIn(page, '/settings', MEMBER);
+	await expect(page.getByRole('radio', { name: 'Dark (best for photos)' })).toBeChecked();
+	await expect(root(page)).not.toHaveAttribute('data-look');
+	expect(await variable(page, '--acc-h')).toBe('');
+});
+
+test('a session that ended elsewhere takes the look with it', async ({ page, context }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	await setMyLook(page, { theme: 'album' });
+	await page.reload();
+	await expect(root(page)).toHaveAttribute('data-look', 'album');
+
+	await context.clearCookies(); // as if the session ran out
+	await page.reload();
+	await expect(page).toHaveURL(/\/login/);
+	await expect(root(page)).not.toHaveAttribute('data-look');
+	expect(await page.evaluate(() => localStorage.getItem('pa.look'))).toBeNull();
+});
