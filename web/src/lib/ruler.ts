@@ -8,8 +8,10 @@ import { monthLabel } from './timeline';
 export type RulerMonth = { key: string; count: number }; // YYYY-MM, newest first
 export type YearMark = {
 	year: string;
-	/** Where the year begins on the ruler, coming from the newest end. */
+	/** Where the year's December is on the ruler (its end nearest to now), cut to the ruler. */
 	at: number;
+	/** Where its January is. */
+	end: number;
 	/** Where a tap on the year goes: its newest month with photos, or the next older one. */
 	key: string;
 	/** Whether there is room to write the year next to its mark. */
@@ -53,6 +55,7 @@ export function yearMarks(months: readonly RulerMonth[], room: number): YearMark
 		marks.push({
 			year: String(year),
 			at: position(months, december),
+			end: position(months, `${year}-01`),
 			key: months.find((m) => m.key <= december)?.key ?? months[months.length - 1].key,
 			label: (newest - year) % step === 0
 		});

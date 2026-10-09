@@ -27,6 +27,7 @@ const DIR =
 const LIGHT = new Set([
 	'02-login',
 	'03-library',
+	'03b-library-ruler',
 	'04-loupe',
 	'04b-loupe-info',
 	'04c-loupe-more',
@@ -72,6 +73,14 @@ test('every screen', async ({ page }, info) => {
 	await signIn(page);
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '03-library', p);
+	if (isPhone(page)) {
+		// The time ruler shows only while the page scrolls: caught before it fades.
+		await page.evaluate(() => window.scrollBy(0, 300));
+		await expect(page.getByRole('slider', { name: 'Jump to date' })).toHaveCSS('opacity', '1');
+		if (THEME === 'dark' || LIGHT.has('03b-library-ruler'))
+			await page.screenshot({ path: `${DIR}/${p}-03b-library-ruler.png` });
+		await page.evaluate(() => window.scrollTo(0, 0));
+	}
 
 	await page.locator('.tile').nth(3).click();
 	await shot(page, '04-loupe', p);

@@ -45,11 +45,11 @@ describe('monthAt', () => {
 });
 
 describe('yearMarks', () => {
-	it('every year gets a mark, the newest year at 0', () => {
+	it('every year gets a mark from its December to its January, cut to the ruler', () => {
 		expect(yearMarks(months, 10)).toEqual([
-			{ year: '2020', at: 0, key: '2020-05', label: true },
-			{ year: '2019', at: 5 / 28, key: '2019-12', label: true },
-			{ year: '2018', at: 17 / 28, key: '2018-01', label: true }
+			{ year: '2020', at: 0, end: 4 / 28, key: '2020-05', label: true },
+			{ year: '2019', at: 5 / 28, end: 16 / 28, key: '2019-12', label: true },
+			{ year: '2018', at: 17 / 28, end: 1, key: '2018-01', label: true }
 		]);
 	});
 

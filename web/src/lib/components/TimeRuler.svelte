@@ -136,8 +136,14 @@
 		{onkeydown}
 	>
 		{#each marks as mark (mark.year)}
-			<span class="year data" class:written={mark.label} data-key={mark.key} style:--at={mark.at}
-				>{mark.year}</span
+			<!-- Upright, a year is written at its December; lying, at its January (where it starts
+			     when read from the left), and only if it has the room before the ruler ends. -->
+			<span
+				class="year data"
+				class:written={mark.label &&
+					(orientation === 'vertical' || mark.end * length >= LABEL_ROOM)}
+				data-key={mark.key}
+				style:--at={orientation === 'vertical' ? mark.at : mark.end}>{mark.year}</span
 			>
 		{/each}
 		{#if needle}
@@ -255,13 +261,11 @@
 	.horizontal .year {
 		top: 0;
 		bottom: 0;
-		/* A year runs leftwards from its mark; the oldest one stays readable at the edge. */
-		left: max(calc((1 - var(--at)) * 100%), var(--s-7));
-		padding: var(--s-2) var(--s-1) 0 0;
-		transform: translateX(-100%);
+		left: calc((1 - var(--at)) * 100%);
+		padding: var(--s-2) 0 0 var(--s-1);
 	}
 	.horizontal .year::after {
-		right: 0;
+		left: 0;
 		bottom: 0;
 		width: 1px;
 		height: var(--s-3);
