@@ -4,6 +4,7 @@ import {
 	GUEST,
 	expect,
 	expectAccessible,
+	isPhone,
 	resetMock,
 	signIn,
 	test,
@@ -54,6 +55,60 @@ test.describe('first run and sign-in', () => {
 		await page.getByLabel('PIN').fill(ADMIN.pin);
 		await expect(page).toHaveURL(/\/albums$/);
 		await expect(page.getByRole('heading', { name: 'Albums' })).toBeVisible();
+	});
+
+	test('on a phone the PIN is tapped on a number pad: dots fill, Delete takes one back, the fourth digit signs in', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'a laptop types its PIN');
+		await resetMock();
+		await page.goto('/login');
+		await page.getByRole('button', { name: ADMIN.name, exact: true }).click();
+		const pad = page.getByRole('group', { name: 'Number pad' });
+		const key = (name: string) => pad.getByRole('button', { name, exact: true });
+		const dots = page.locator('.dots i');
+		await expect(dots).toHaveCount(4);
+		await expect(page.locator('.dots i.on')).toHaveCount(0);
+		await expectAccessible(page);
+
+		// every key is big enough for a thumb
+		for (const box of await pad
+			.getByRole('button')
+			.evaluateAll((keys) => keys.map((el) => el.getBoundingClientRect()))) {
+			expect(box.width).toBeGreaterThanOrEqual(44);
+			expect(box.height).toBeGreaterThanOrEqual(44);
+		}
+
+		await key('9').tap();
+		await key('9').tap();
+		await expect(page.locator('.dots i.on')).toHaveCount(2);
+		await key('Delete').tap();
+		await key('Delete').tap();
+		await expect(page.locator('.dots i.on')).toHaveCount(0);
+		await expect(page.getByLabel('PIN')).toHaveValue('');
+
+		for (const digit of '0000') await key(digit).tap();
+		await expect(page.getByRole('alert')).toContainText('Wrong PIN');
+		await expect(page.locator('.dots i.on')).toHaveCount(0);
+
+		for (const digit of ADMIN.pin) await key(digit).tap();
+		await expect(page).toHaveURL(/\/$/);
+		await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
+	});
+
+	test('on a laptop there is no number pad: the PIN is typed and shows as dots', async ({
+		page
+	}) => {
+		test.skip(isPhone(page), 'a phone taps its PIN');
+		await resetMock();
+		await page.goto('/login');
+		await page.getByRole('button', { name: ADMIN.name, exact: true }).click();
+		await expect(page.getByRole('group', { name: 'Number pad' })).toBeHidden();
+		await expect(page.getByLabel('PIN')).toBeFocused();
+		await page.keyboard.type(ADMIN.pin.slice(0, 3));
+		await expect(page.locator('.dots i.on')).toHaveCount(3);
+		await page.keyboard.type(ADMIN.pin.slice(3));
+		await expect(page).toHaveURL(/\/$/);
 	});
 
 	test('sign out, and change PIN from settings', async ({ page }) => {
