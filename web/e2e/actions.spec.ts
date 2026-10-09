@@ -1,4 +1,6 @@
+import type { Page } from '@playwright/test';
 import {
+	centre,
 	expect,
 	expectAccessible,
 	GUEST,
@@ -7,14 +9,18 @@ import {
 	loupeAction,
 	REAL_BACKEND,
 	resetMock,
+	scrollToTile,
 	selectionAction,
 	selectTiles,
 	signIn,
+	takesInput,
 	test,
-	scrollToTile,
 	toast,
+	touchDown,
 	viewOnlyPhoto
 } from './helpers.ts';
+
+const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
@@ -281,4 +287,223 @@ test('trash: “Delete for good” for a selection and “Empty trash” both as
 	await confirm.getByRole('button', { name: 'Delete for good' }).click();
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Empty trash' })).toHaveCount(0);
+});
+
+test.describe('selection pill', () => {
+	const pill = (page: Page) => page.getByRole('toolbar', { name: 'Selected photos' });
+
+	test('the selection bar is a floating pill at the bottom centre', async ({ page }) => {
+		await selectTiles(page, [0, 1]);
+		await expect(pill(page)).toHaveCSS('position', 'fixed');
+		await expect(pill(page)).toHaveCSS('border-radius', '999px');
+		const box = (await pill(page).boundingBox())!;
+		const { width, height } = page.viewportSize()!;
+		expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThan(2);
+		expect(box.x).toBeGreaterThan(4);
+		const below = height - (box.y + box.height);
+		expect(below).toBeGreaterThan(8);
+		expect(below).toBeLessThan(isPhone(page) ? 120 : 60);
+		await expect(pill(page).getByRole('status')).toHaveText('2 selected');
+		await expectAccessible(page);
+	});
+
+	test('the pill offers Add to album, Download, Fix date, Move to trash and More', async ({
+		page
+	}) => {
+		await selectTiles(page, [0]);
+		const actions = pill(page).locator('.actions > button');
+		// A 390 px phone has room for two beside the count and Clear; the others join the rest
+		// under More.
+		const onBar = ['Add to album', 'Download', 'Fix date', 'Move to trash'].slice(
+			0,
+			isPhone(page) ? 2 : 4
+		);
+		await expect(actions).toHaveText([...onBar, 'More']);
+		await expect(actions.locator('svg')).toHaveCount(onBar.length + 1);
+		const more = pill(page).getByRole('button', { name: 'More' });
+		await more.click();
+		for (const name of ['Favourite', 'Hide', 'Make private'])
+			await expect(pill(page).getByRole('button', { name, exact: true })).toBeVisible();
+		await expect(pill(page).getByRole('button', { name: 'Move to trash' })).toBeVisible();
+		// Escape closes More first, then clears the selection.
+		await page.keyboard.press('Escape');
+		await expect(more).toHaveAttribute('aria-expanded', 'false');
+		await expect(pill(page)).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(pill(page)).toHaveCount(0);
+		await expect(page.locator('.tile.selected')).toHaveCount(0);
+	});
+
+	test('a selected photo that is gone after a reload leaves the selection', async ({ page }) => {
+		// Hiding a photo leaves a toast whose Undo reloads the library.
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Hide');
+		await expect(toast(page)).toContainText('Hid 1 photo');
+		await expect(pill(page)).toHaveCount(0);
+		await selectTiles(page, [0]);
+		const gone = await page.locator('.tile.selected').getAttribute('data-id');
+		// Meanwhile the selected photo goes to the trash on another device.
+		await page.request.delete('/api/assets', { data: { ids: [Number(gone)] } });
+		await toast(page).getByRole('button', { name: 'Undo' }).click();
+		await expect(page.locator(`.tile[data-id="${gone}"]`)).toHaveCount(0);
+		// Nothing is selected any more, anywhere: no pill, and a press opens a photo again.
+		await expect(pill(page)).toHaveCount(0);
+		await page.locator('.tile').first().click();
+		await expect(loupe(page)).toBeVisible();
+	});
+
+	test('with the filter sheet open, Escape closes the sheet and keeps the selection', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'the laptop has its filters in the margin');
+		await selectTiles(page, [0]);
+		await page.getByRole('button', { name: 'Filter', exact: true }).click();
+		const sheet = page.getByRole('complementary', { name: 'Filters' });
+		await expect(sheet).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(sheet).toBeHidden();
+		await expect(pill(page).getByRole('status')).toHaveText('1 selected');
+		await page.keyboard.press('Escape');
+		await expect(pill(page)).toHaveCount(0);
+	});
+
+	// From the narrowest phone up, at the look's largest text and with a long count: what does
+	// not fit goes under More, nothing leaves the glass.
+	const fitsInside = async (page: Page, width: number) => {
+		const glass = (await pill(page).boundingBox())!;
+		expect(glass.x).toBeGreaterThanOrEqual(0);
+		expect(glass.x + glass.width).toBeLessThanOrEqual(width);
+		const inside = pill(page).locator('.count, .actions > button, .clear');
+		for (const part of await inside.all()) {
+			const box = (await part.boundingBox())!;
+			expect(box.x).toBeGreaterThanOrEqual(glass.x);
+			expect(box.x + box.width).toBeLessThanOrEqual(glass.x + glass.width);
+		}
+	};
+	const bigText = (page: Page) =>
+		page.evaluate(() => document.documentElement.style.setProperty('--text-scale', '1.25'));
+
+	for (const { width, scale, one } of [
+		{ width: 320, scale: 1, one: false },
+		{ width: 320, scale: 1, one: true },
+		{ width: 320, scale: 1.25, one: false },
+		{ width: 390, scale: 1, one: false },
+		{ width: 390, scale: 1.25, one: false },
+		{ width: 390, scale: 1.25, one: true },
+		{ width: 700, scale: 1, one: false },
+		{ width: 700, scale: 1.25, one: false }
+	])
+		test(`at ${width} px, text ${scale}, ${one ? 'one photo' : 'hundreds'} selected: everything on the pill is inside it`, async ({
+			page
+		}) => {
+			test.skip(isPhone(page), 'one project sets the widths itself');
+			await page.setViewportSize({ width, height: 800 });
+			if (one) await page.locator('.tile .check').first().click({ force: true });
+			else await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+			await expect(pill(page).getByRole('status')).toHaveText(
+				one ? '1 selected' : /^\d{3} selected$/
+			);
+			// The text grows under a pill that is already there: it is measured again.
+			if (scale !== 1) await bigText(page);
+			await expect(async () => fitsInside(page, width)).toPass({ timeout: 3000 });
+			await expect(pill(page).getByRole('button', { name: 'Clear selection' })).toBeVisible();
+			// Whatever left the pill is still offered, under More.
+			await pill(page).getByRole('button', { name: 'More' }).click();
+			for (const name of ['Add to album', 'Download', 'Fix date', 'Move to trash'])
+				await expect(pill(page).getByRole('button', { name, exact: true })).toBeVisible();
+		});
+
+	test('320 px, the largest text and a four-figure count still fit', async ({ page }) => {
+		test.skip(isPhone(page), 'one project sets the widths itself');
+		test.skip(REAL_BACKEND, 'a library of a thousand photos is a mock-only switch');
+		await resetMock('seed', { count: 1100 });
+		await signIn(page);
+		await page.setViewportSize({ width: 320, height: 800 });
+		await bigText(page);
+		const all = page.getByRole('button', { name: 'Select all', exact: true });
+		await expect(async () => {
+			await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+			await expect(all).toBeVisible({ timeout: 500 });
+		}).toPass({ timeout: 20_000 });
+		await all.click();
+		await expect(pill(page).getByRole('status')).toHaveText(/^\d{4} selected$/);
+		await expect(async () => fitsInside(page, 320)).toPass({ timeout: 3000 });
+		await pill(page).getByRole('button', { name: 'More' }).click();
+		await expect(pill(page).getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+	});
+
+	test('phone: long-press then drag selects a run of photos', async ({ page }) => {
+		test.skip(!isPhone(page), 'touch only');
+		const tiles = page.locator('.tile');
+		const from = await centre(tiles.nth(0));
+		const to = await centre(tiles.nth(3));
+		const lift = await touchDown(page, from, to, { hold: 600 });
+		await expect(page.getByText('4 selected')).toBeVisible();
+		await lift();
+		// The page stayed put under the finger, and lifting it changes nothing.
+		expect(await page.evaluate(() => window.scrollY)).toBe(0);
+		await expect(page.getByText('4 selected')).toBeVisible();
+		await expect(page.locator('.tile.selected')).toHaveCount(4);
+	});
+});
+
+test.describe('keyboard focus is never left on nothing', () => {
+	const pill = (page: Page) => page.getByRole('toolbar', { name: 'Selected photos' });
+	/** Where the focus is: a photo, the page, or a named control; "nothing" when it fell to the body. */
+	const focus = (page: Page) =>
+		page.evaluate(() => {
+			const el = document.activeElement;
+			if (!el || el === document.body) return 'nothing';
+			if (el.matches('.tile')) return 'a photo';
+			return el.id === 'main' ? 'the page' : (el.textContent ?? '').trim();
+		});
+
+	test('after an action from the pill’s More, and when the pill goes away', async ({ page }) => {
+		await selectTiles(page, [0, 1]);
+		await selectionAction(page, 'Favourite');
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		expect(await focus(page)).toBe('More');
+		await selectionAction(page, 'Hide');
+		await expect(pill(page)).toHaveCount(0);
+		await expect.poll(() => focus(page)).toBe('a photo');
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Add to album');
+		const dialog = page.getByRole('dialog', { name: 'Add to album' });
+		await dialog.getByLabel('New album title').fill('Focus');
+		await dialog.getByRole('button', { name: 'Add' }).click();
+		await expect(pill(page)).toHaveCount(0);
+		await expect.poll(() => focus(page)).toBe('a photo');
+	});
+
+	test('in the trash, after Restore from the photo view and after Delete for good', async ({
+		page
+	}) => {
+		await selectTiles(page, [0, 1, 2]);
+		await selectionAction(page, 'Move to trash');
+		await expect(toast(page)).toContainText('Moved 3 photos to the trash');
+		await page.goto('/trash');
+		await page.locator('.tile').first().click();
+		await loupe(page).getByRole('button', { name: 'Restore' }).click();
+		await expect(toast(page)).toContainText('Restored 1 photo');
+		await expect(loupe(page)).toHaveCount(0);
+		await expect(page.locator('.tile')).toHaveCount(2);
+		await expect.poll(() => focus(page)).toBe('a photo');
+		await takesInput(page);
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Delete for good');
+		await page
+			.getByRole('dialog', { name: 'Delete for good?' })
+			.getByRole('button', { name: 'Delete for good' })
+			.click();
+		await expect(toast(page)).toContainText('Deleted 1 library copy for good');
+		await expect.poll(() => focus(page)).toBe('a photo');
+		// The last one goes: there is no photo left to take the focus, the page does.
+		await page.getByRole('button', { name: 'Empty trash' }).click();
+		await page
+			.getByRole('dialog', { name: 'Delete for good?' })
+			.getByRole('button', { name: 'Delete for good' })
+			.click();
+		await expect(page.getByText('The trash is empty.')).toBeVisible();
+		await expect.poll(() => focus(page)).toBe('the page');
+	});
 });

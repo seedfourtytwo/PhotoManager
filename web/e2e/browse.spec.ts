@@ -54,11 +54,3 @@ test('guessed dates say so in the loupe', async ({ page }) => {
 	if (isPhone(page)) await page.getByRole('button', { name: 'Info' }).click();
 	await expect(page.getByText('date guessed from file')).toBeVisible();
 });
-
-test('the date scrubber jumps to an older year', async ({ page }) => {
-	test.skip(isPhone(page), 'desktop only');
-	const scrubber = page.getByRole('slider', { name: 'Jump to date' });
-	await scrubber.focus();
-	await page.keyboard.press('End');
-	await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
-});

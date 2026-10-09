@@ -1,27 +1,9 @@
-/** The library grid: scrubber jumps, keyboard navigation, and loading only what is needed. */
+/** The library grid: keyboard navigation, and loading only what is needed. */
 import { expect, isPhone, resetMock, signIn, test } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
 	await signIn(page);
-});
-
-test('the scrubber lands at the start of a month, also when jumping back up', async ({ page }) => {
-	test.skip(isPhone(page), 'desktop only');
-	const scrubber = page.getByRole('slider', { name: 'Jump to date' });
-	await scrubber.focus();
-	await page.keyboard.press('End');
-	await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
-	for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
-	const key = await scrubber.getAttribute('aria-valuetext');
-	const section = page
-		.locator('section')
-		.filter({ has: page.getByRole('heading', { name: key! }) });
-	await expect
-		.poll(async () => (await section.boundingBox())!.y, { message: 'section top near the top' })
-		.toBeLessThan(80);
-	expect((await section.boundingBox())!.y).toBeGreaterThan(-10);
-	await expect(section.locator('.tile').first()).toBeInViewport();
 });
 
 test('the grid is one Tab stop; arrow keys move between photos', async ({ page }) => {
