@@ -5,8 +5,8 @@
 export type Point = { x: number; y: number; t: number };
 export type Gesture = 'tap' | 'double-tap' | 'previous' | 'next' | 'details' | 'close';
 
-/** A finger that moved less than this has not moved. */
-const SLOP = 10;
+/** A finger that moved less than this has not moved. Shared with the grid's long press (press.ts). */
+export const SLOP = 10;
 const TAP_MS = 500;
 /** A second tap this soon, and this close to the first, makes a double tap. */
 export const DOUBLE_TAP_MS = 300;

@@ -7,6 +7,7 @@
 	import { LatestWriter } from '$lib/latest';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
+	import { tileOf } from '$lib/tiles';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
@@ -98,9 +99,7 @@
 		items = next;
 		void savedOrder.set({ album: id, ids: next.map((a) => a.id) });
 		// Keep keyboard focus on the moved photo.
-		queueMicrotask(() =>
-			document.querySelector<HTMLElement>(`.tile[data-id="${assetId}"]`)?.focus()
-		);
+		queueMicrotask(() => tileOf(assetId)?.focus());
 	}
 
 	async function setCover() {

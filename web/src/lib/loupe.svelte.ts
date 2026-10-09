@@ -15,6 +15,7 @@ import { notice } from './app.svelte';
 import { wentBack } from './history-step';
 import { refocus } from './modal';
 import { withTransition } from './motion';
+import { tileOf } from './tiles';
 
 /** Said once for a link to a photo that is not there, whatever was wrong with it. */
 const NOT_FOUND = 'That photo was not found.';
@@ -77,11 +78,6 @@ export function openPhotoId(page: { state: App.PageState; url: URL }): Id | unde
 	if (state !== undefined) return state ?? undefined;
 	return photoParam(page.url);
 }
-
-const tileOf = (id: Id) =>
-	typeof document === 'undefined'
-		? null
-		: document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
 
 /**
  * The photo's tile takes the view-transition name the open photo has (Loupe.svelte), so the
