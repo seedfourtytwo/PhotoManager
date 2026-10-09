@@ -30,7 +30,7 @@ import { uploadRoutes } from './routes/upload.ts';
 import { userRoutes } from './routes/users.ts';
 import type { MockState } from './types.ts';
 
-export type MockOptions = { now?: () => number };
+type MockOptions = { now?: () => number };
 
 export function createMockApi(initial: MockState, options: MockOptions = {}) {
 	let state = initial;

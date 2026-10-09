@@ -21,7 +21,7 @@ export type Ctx = {
 export type Result =
 	| { status: number; json?: unknown; headers?: Record<string, string> }
 	| { status: number; raw: Buffer | string; type: string; headers?: Record<string, string> };
-export type Handler = (ctx: Ctx) => Result | Promise<Result>;
+type Handler = (ctx: Ctx) => Result | Promise<Result>;
 export type Route = [string, RegExp, Handler];
 
 export const ok = (json: unknown, status = 200): Result => ({ status, json });

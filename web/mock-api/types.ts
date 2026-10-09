@@ -116,7 +116,7 @@ export type MockBackup = {
 	/** Runs newest first; `ends_at` is when a running run finishes (mock clock). */
 	runs: (BackupRun & { ends_at: number })[];
 };
-export type MockDevice = Device & { user_id: number; token: string };
+type MockDevice = Device & { user_id: number; token: string };
 
 export type MockState = {
 	users: MockUser[];

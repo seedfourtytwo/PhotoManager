@@ -13,10 +13,7 @@ export const noWrongPins = () => ({
 	locked: false
 });
 
-export const SEED_USERS: Pick<
-	MockUser,
-	'username' | 'display_name' | 'role' | 'disabled' | 'pin'
->[] = [
+const SEED_USERS: Pick<MockUser, 'username' | 'display_name' | 'role' | 'disabled' | 'pin'>[] = [
 	{
 		username: 'admin',
 		display_name: 'C',

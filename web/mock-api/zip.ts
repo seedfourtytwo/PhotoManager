@@ -16,7 +16,7 @@ export function crc32(data: Uint8Array): number {
 	return (c ^ 0xffffffff) >>> 0;
 }
 
-export type ZipEntry = { name: string; data: Uint8Array };
+type ZipEntry = { name: string; data: Uint8Array };
 
 export function zip(entries: ZipEntry[]): Buffer {
 	const chunks: Buffer[] = [];
