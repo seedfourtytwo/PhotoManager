@@ -138,7 +138,10 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
   together. Escape or a press outside closes it. The account button shows the person's initial;
   a count that needs attention sits on it in full ink, never the accent.
-- **Toasts**: one line on a raised slip, bottom centre, the action (Undo) as a bold word.
+- **Toasts**: one line on a raised slip, bottom centre, the action (Undo) as a bold word. It
+  steps over the selection pill and a phone's lying ruler. In the photo view the bottom is the
+  bar's, so it sits under Close and Info; it is always on top of an open dialog and inside it,
+  where a screen reader still hears it.
 - **Selection**: a 3 px accent frame inset on the photo (with a 1 px shade so it reads on any
   photo) and a filled accent circle with a check. The actions come to the photos as a floating
   glass pill at the bottom centre: the count (the only accent text), Add to album, Download,

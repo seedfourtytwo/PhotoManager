@@ -7,6 +7,7 @@ import {
 	isPhone,
 	resetMock,
 	selectTiles,
+	selectionAction,
 	signIn,
 	test,
 	toast,
@@ -215,6 +216,57 @@ test.describe('photo view', () => {
 			await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
 	});
 
+	/** The toast is what a finger or a pointer at its middle would hit: in sight, on top, not inert. */
+	const expectOnTop = (page: Page) =>
+		expect
+			.poll(() =>
+				toast(page).evaluate((slip) => {
+					const box = slip.getBoundingClientRect();
+					const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+					return hit !== null && slip.contains(hit);
+				})
+			)
+			.toBe(true);
+
+	test('a toast raised in the photo view shows on top of it, clear of its bar', async ({
+		page
+	}) => {
+		await page.locator('.tile').first().click();
+		await loupe(page).getByRole('button', { name: 'Album' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add to album' });
+		await dialog.getByLabel('New album title').fill('Toasted');
+		await dialog.getByRole('button', { name: 'Add' }).click();
+		await expect(toast(page)).toContainText('Created “Toasted” with 1 photo');
+		await expect(loupe(page)).toBeVisible();
+		await expectOnTop(page);
+		// It is announced: a live region inside the modal viewer, which is the only part of the
+		// page a screen reader is given.
+		expect(await toast(page).evaluate((slip) => slip.closest('dialog')?.ariaLabel)).toBe(
+			'Photo viewer'
+		);
+		const slip = (await toast(page).boundingBox())!;
+		const bar = (await loupe(page).locator('.bar').boundingBox())!;
+		expect(slip.y + slip.height).toBeLessThan(bar.y);
+		// The viewer closes under it: the toast stays for its time.
+		await loupe(page).getByRole('button', { name: 'Close' }).click();
+		await expect(loupe(page)).toHaveCount(0);
+		await expect(toast(page)).toContainText('Created “Toasted”');
+		await expectOnTop(page);
+	});
+
+	test('a toast that is showing when a photo opens moves on top of the photo view', async ({
+		page
+	}) => {
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Favourite');
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		await page.getByRole('button', { name: 'Clear selection' }).click();
+		await page.locator('.tile').nth(1).click();
+		await expect(loupe(page)).toBeVisible();
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		await expectOnTop(page);
+	});
+
 	test('opening and closing run a view transition between the tile and the photo', async ({
 		page
 	}) => {
@@ -307,6 +359,19 @@ test.describe('time ruler', () => {
 		await touchSwipe(page, { x: box.x + box.width - 12, y }, { x: box.x + 2, y });
 		await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
 		await expect(ruler(page)).toHaveCSS('opacity', '0', { timeout: 10_000 });
+	});
+
+	test('phone: a toast sits above the lying ruler, not on it', async ({ page }) => {
+		test.skip(!isPhone(page), 'the laptop has the ruler at the right edge');
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Favourite');
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		await page.getByRole('button', { name: 'Clear selection' }).click();
+		await page.evaluate(() => window.scrollBy(0, 600));
+		await expect(ruler(page)).toHaveCSS('opacity', '1');
+		const slip = (await toast(page).boundingBox())!;
+		const strip = (await ruler(page).boundingBox())!;
+		expect(slip.y + slip.height).toBeLessThanOrEqual(strip.y);
 	});
 });
 

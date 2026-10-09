@@ -43,6 +43,38 @@
 		if (session.user) void loadLook();
 	}
 
+	// --- the toast ---------------------------------------------------------------------------
+	// A modal dialog (the photo view, every Dialog) paints over the page and makes the rest of
+	// it inert, for a screen reader too. So while one is open the toast lives inside the topmost
+	// one, and is shown as a popover, which puts it above whatever that dialog paints.
+	let slip: HTMLElement | undefined = $state();
+	let home: HTMLElement | null = null;
+	let placedFor = '';
+
+	function place(text: string) {
+		if (!slip) return;
+		home ??= slip.parentElement;
+		const host = [...document.querySelectorAll<HTMLElement>('dialog:modal')].at(-1) ?? home;
+		if (!host || (slip.parentElement === host && placedFor === text)) return;
+		placedFor = text;
+		if (slip.parentElement !== host) host.append(slip);
+		// Shown again for each message and each move: the newest in the top layer is on top.
+		if (!slip.showPopover) return;
+		if (slip.matches(':popover-open')) slip.hidePopover();
+		slip.showPopover();
+	}
+
+	// Before the words change, so a screen reader hears them change in a region it already
+	// knows; and again whenever a dialog opens or closes under a toast that is showing.
+	$effect.pre(() => {
+		const text = notice.text;
+		if (!text) return;
+		place(text);
+		const watch = new MutationObserver(() => place(text));
+		watch.observe(document.body, { childList: true, subtree: true });
+		return () => watch.disconnect();
+	});
+
 	// Admins see the backup warning on every page: ask again on each navigation, and
 	// forget it for anyone who is not (or no longer) an admin.
 	$effect(() => {
@@ -91,7 +123,14 @@
 	<p class="quiet opening">Opening the library…</p>
 {/if}
 
-<p class="notice" class:shown={notice.text} role="status" aria-live="polite">
+<p
+	class="notice"
+	class:shown={notice.text}
+	role="status"
+	aria-live="polite"
+	popover="manual"
+	bind:this={slip}
+>
 	{notice.text}{#if notice.action}
 		<button
 			type="button"
@@ -144,8 +183,8 @@
 	/* Toast: one quiet line on a raised slip; actions sit inline as words. */
 	.notice {
 		position: fixed;
-		left: 50%;
-		bottom: var(--s-5);
+		/* it is a popover (see the script): nothing of the browser's own placing is kept */
+		inset: auto auto var(--s-5) 50%;
 		transform: translateX(-50%);
 		margin: 0;
 		z-index: 60;
@@ -161,6 +200,7 @@
 		max-width: min(40rem, calc(100vw - 2 * var(--s-4)));
 		box-sizing: border-box;
 		width: max-content;
+		overflow: visible;
 	}
 	.notice button {
 		margin-right: calc(-1 * var(--s-2));
@@ -174,6 +214,11 @@
 	:global(body:has([role='toolbar'][aria-label='Selected photos'])) .notice {
 		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
+	/* In the photo view the bottom belongs to its bar: the toast sits under Close and Info. */
+	:global(dialog[aria-label='Photo viewer']) > .notice {
+		top: calc(env(safe-area-inset-top) + var(--s-3) + var(--target) + var(--s-2));
+		bottom: auto;
+	}
 	@media (max-width: 1023px) {
 		.app,
 		.app.filters {
@@ -186,8 +231,18 @@
 		.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
 		}
-		:global(body:has([role='toolbar'][aria-label='Selected photos'])) .notice {
+		/* The pill and the lying time ruler share the strip above the dock; the toast clears both. */
+		:global(
+				body:has(
+					[role='toolbar'][aria-label='Selected photos'],
+					[role='slider'][aria-orientation='horizontal']
+				)
+			)
+			.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--pill) + var(--s-3));
+		}
+		:global(dialog[aria-label='Photo viewer']) > .notice {
+			bottom: auto;
 		}
 	}
 </style>
