@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { errorMessage, formatBytes, formatWhen, nextCheckText, photos, plural } from './format';
+import {
+	errorMessage,
+	formatBytes,
+	formatCount,
+	formatWhen,
+	nextCheckText,
+	photos,
+	plural
+} from './format';
 
 describe('formatBytes', () => {
 	it.each([
@@ -70,5 +78,14 @@ describe('plural', () => {
 		expect(plural(3, 'source')).toBe('3 sources');
 		expect(plural(1, 'library copy', 'library copies')).toBe('1 library copy');
 		expect(plural(2, 'library copy', 'library copies')).toBe('2 library copies');
+	});
+});
+
+describe('formatCount', () => {
+	it('groups thousands and leaves small numbers alone', () => {
+		expect(formatCount(0)).toBe('0');
+		expect(formatCount(999)).toBe('999');
+		expect(formatCount(1204)).toBe('1,204');
+		expect(formatCount(1234567)).toBe('1,234,567');
 	});
 });

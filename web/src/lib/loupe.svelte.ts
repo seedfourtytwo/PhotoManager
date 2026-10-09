@@ -11,8 +11,9 @@ import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
-import { notice } from './app.svelte';
+import { api, notice } from './app.svelte';
 import { wentBack } from './history-step';
+import type { TimelineLoader } from './loader.svelte';
 import { refocus } from './modal';
 import { withTransition } from './motion';
 import { tileOf } from './tiles';
@@ -246,5 +247,66 @@ export class LinkedPhoto {
 	/** A change made in the loupe while the photo is shown on its own. */
 	patch(change: Partial<AssetOut>) {
 		if (this.single) this.single = { ...this.single, ...change };
+	}
+}
+
+/** A linked photo is looked for among at most this many photos of a timeline. */
+const DEEP_LINK_LIMIT = 2000;
+
+/**
+ * The open photo of a page whose photos are a timeline that pages in (the library, a person).
+ * A linked photo shows at once on its own; the timeline looks for it meanwhile (so far and no
+ * further) and takes over when it has it. Closed: back to where the photo is in the grid.
+ */
+export class TimelineLoupe {
+	#loader: TimelineLoader;
+	#linked: LinkedPhoto;
+	#tracker: LoupeTracker;
+	/** The photo the address asks for, if any. */
+	readonly id = $derived(openPhotoId(page));
+	// `.by`: the loader and the linked photo are set in the constructor, after these fields.
+	readonly #index = $derived.by(() =>
+		this.id === undefined ? -1 : this.#loader.items.findIndex((a) => a.id === this.id)
+	);
+	/** What the loupe shows: the timeline at the photo, the linked photo on its own, or nothing. */
+	readonly shown = $derived.by(() =>
+		this.#index >= 0
+			? { items: this.#loader.items, index: this.#index }
+			: this.#linked.single && this.#linked.single.id === this.id
+				? { items: [this.#linked.single], index: 0 }
+				: null
+	);
+
+	/** `timeline` gives the page's timeline once it is on the page: it scrolls to a photo. */
+	constructor(loader: TimelineLoader, timeline: () => { reveal: (id: Id) => unknown } | undefined) {
+		this.#loader = loader;
+		this.#linked = new LinkedPhoto({
+			fetch: (id) => api.asset(id),
+			find: (id) =>
+				void loader.until(
+					(items) => items.some((a) => a.id === id) || items.length >= DEEP_LINK_LIMIT
+				)
+		});
+		this.#tracker = new LoupeTracker((id) => void timeline()?.reveal(id));
+	}
+
+	/** Call from an effect: follows the address as a photo opens, changes and closes. */
+	follow() {
+		this.#tracker.seen(this.id);
+		this.#linked.seen(this.id, this.#index >= 0);
+	}
+
+	/** A change made in the loupe: to the photo in the timeline, or to the one shown on its own. */
+	changed(asset: AssetOut) {
+		if (this.#index >= 0) this.#loader.update(asset.id, asset);
+		else this.#linked.patch(asset);
+	}
+
+	/**
+	 * Before a reload that may take the open photo out of the timeline (its date changed): it
+	 * stays open all the same.
+	 */
+	hold() {
+		if (this.shown) this.#linked.hold(this.shown.items[this.shown.index]);
 	}
 }
