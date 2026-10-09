@@ -56,12 +56,6 @@
 
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
 
-	function onkeydown(event: KeyboardEvent) {
-		const target = event.target as HTMLElement;
-		if (loupeId !== undefined || target.closest('input, select, textarea, dialog')) return;
-		if (event.key === 'Escape' && selection.ids.size) selection = EMPTY;
-	}
-
 	async function rename(event: SubmitEvent) {
 		event.preventDefault();
 		if (busy) return;
@@ -123,7 +117,6 @@
 	);
 </script>
 
-<svelte:window {onkeydown} />
 <svelte:head><title>{person?.name ?? 'Person'} · Photos</title></svelte:head>
 
 <div class="page">

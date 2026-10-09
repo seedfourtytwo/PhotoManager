@@ -52,6 +52,33 @@ describe('Timeline', () => {
 		expect(loader.done).toBe(false);
 	});
 
+	it('at the very end of the list the month in view is the last one, though the label cannot reach it', async () => {
+		const { fetchPage } = yearOfPages();
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({});
+		await loader.until(() => false);
+		const onmonth = vi.fn();
+		render(Timeline, {
+			loader,
+			selection: EMPTY,
+			onopen: () => {},
+			ontoggle: () => {},
+			onselect: () => {},
+			onmonth
+		});
+		await expect.element(page.getByRole('heading', { name: /January 2020/ })).toBeInTheDocument();
+		// Short months: the last ones share the last screen, and the page ends before their turn.
+		const end = document.documentElement.scrollHeight - window.innerHeight;
+		expect(end).toBeGreaterThan(0);
+		window.scrollTo(0, end - 40);
+		await vi.waitFor(() => expect(onmonth).toHaveBeenCalled());
+		await new Promise((r) => setTimeout(r, 100));
+		expect(onmonth).not.toHaveBeenLastCalledWith('2020-01');
+		window.scrollTo(0, end);
+		await vi.waitFor(() => expect(onmonth).toHaveBeenLastCalledWith('2020-01'));
+		window.scrollTo(0, 0);
+	});
+
 	it('says “Loading…” as a status while a page is on its way', async () => {
 		const loader = new TimelineLoader(() => new Promise<AssetPage>(() => {}));
 		void loader.reset({});

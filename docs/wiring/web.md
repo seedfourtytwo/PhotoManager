@@ -103,10 +103,15 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 
 - **Loupe**: `?photo=<id>` in the URL (reload/share reopens it; Back closes it; closing scrolls
   the grid to that photo and focuses its tile). Chrome fades after 2.5 s and returns on any
-  touch, key or mouse movement; a tap on the photo toggles it. The photo area has
-  `touch-action: none`, so vertical swipes (up = info, down = close) are not taken by the
-  browser. Favourite/Private are optimistic and single-flight. View-only photos show a disabled
-  Download with the reason; Edit/Fix date/Private need `edit` (contract v1.2).
+  touch, key or mouse movement; a tap on the photo toggles it (after 300 ms, in case it is
+  the first half of a double tap, which favourites). The photo area has `touch-action: none`,
+  so vertical swipes (up = info, down = close) are not taken by the browser; `lib/gesture.ts`
+  says what each press means. Favourite/Private are optimistic and single-flight. View-only
+  photos show a disabled Download with the reason; Edit/Fix date/Private need `edit` (contract
+  v1.2); Private, Fix date and More like this sit behind More. Opening and closing run through
+  `withTransition` (`lib/motion.ts`); the page takes no input while a view transition runs.
+- **Time ruler** (`TimeRuler`, `lib/ruler.ts`): linear in time, from the newest month with
+  photos to the oldest (`GET /api/calendar`). It jumps once, where a drag ends.
 - **Grid**: one Tab stop; arrow keys, Home/End move between photos across months.
 - **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename,
   merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
@@ -119,12 +124,12 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   `lib/collections.ts`.
 - **Navigation**: Library · Collections (People, Places, Albums) · Search everywhere, in a top
   bar on a laptop and a floating dock on a phone. The account menu holds To review, Trash,
-  Settings, Admin (admins) and Sign out. The phone selection bar keeps three actions and puts
-  the rest under “More”.
+  Settings, Admin (admins) and Sign out. The selection pill shows Add to album, Download,
+  Fix date and Move to trash (the first three on a phone) and puts the rest under “More”.
 - **Downloads**: the dialog pre-flights with the estimate (an expired session goes to sign-in,
   a refusal is a sentence), then posts into a fresh hidden frame; if the frame loads the
   server's JSON error instead of a file, the status line says so.
-- **Counts** (header, scrubber, filter facets) reload after trash, hide, restore, date fixes
+- **Counts** (header, time ruler, filter facets) reload after trash, hide, restore, date fixes
   and uploads (`library.version`). Facets load only while the filter panel is shown, after the
   first thumbnails; years and sources are counted without their own filter, so other values
   stay listed and a chosen value with no matches can be unticked.

@@ -118,19 +118,27 @@
 			});
 		});
 
+	// On the pill: the four the spec names (§4.5). Everything else, and what a page adds, is
+	// under More.
 	const actions = $derived<Action[]>([
-		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite },
-		{ label: allHidden ? 'Unhide' : 'Hide', run: setHidden },
-		{ label: 'Add to album', run: () => (dialog = 'album'), hidden: !session.canEdit },
-		{ label: 'Download', run: () => (dialog = 'download') },
-		{ label: 'Fix date', run: () => (dialog = 'date'), hidden: !session.canEdit },
+		{
+			label: 'Add to album',
+			icon: 'album',
+			run: () => (dialog = 'album'),
+			hidden: !session.canEdit
+		},
+		{ label: 'Download', icon: 'download', run: () => (dialog = 'download') },
+		{ label: 'Fix date', icon: 'date', run: () => (dialog = 'date'), hidden: !session.canEdit },
+		{ label: 'Move to trash', icon: 'trash', run: trash, hidden: !session.canEdit },
+		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite, more: true },
+		{ label: allHidden ? 'Unhide' : 'Hide', run: setHidden, more: true },
 		{
 			label: allPrivate ? 'Not private' : 'Make private',
 			run: setPrivate,
-			hidden: !session.canEdit
+			hidden: !session.canEdit,
+			more: true
 		},
-		...extra,
-		{ label: 'Move to trash', run: trash, hidden: !session.canEdit }
+		...extra.map((action) => ({ ...action, more: true }))
 	]);
 </script>
 

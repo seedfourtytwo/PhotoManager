@@ -44,6 +44,10 @@
 	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
 	const tracker = new LoupeTracker();
 	$effect(() => tracker.seen(loupeId));
+	// A linked photo that is not in the album (any more): the link is spent, the URL says so.
+	$effect(() => {
+		if (album && loupeId !== undefined && loupeIndex < 0) closePhoto();
+	});
 
 	/** Only the latest load counts: an answer for the album you left must not replace this one. */
 	let loads = 0;

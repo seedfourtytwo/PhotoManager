@@ -108,6 +108,76 @@ describe('TimelineLoader', () => {
 		expect(calls.map((c) => c.cursor)).toEqual([null, '10', '10']);
 	});
 
+	it('reload keeps what is shown until the fresh list has come, and comes back as long', async () => {
+		const { calls, fetchPage } = pages(45, 10);
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({ year: 2020 });
+		await loader.loadMore();
+		await loader.loadMore();
+		const before = loader.items;
+		calls.length = 0;
+		const reloading = loader.reload();
+		// Nothing is taken off the screen meanwhile: an open photo stays open.
+		expect(loader.items).toBe(before);
+		expect(loader.loading).toBe(true);
+		// Scrolling meanwhile waits for the reload instead of paging the old list on.
+		await loader.loadMore();
+		await reloading;
+		expect(loader.items.map((a) => a.id)).toEqual(before.map((a) => a.id));
+		expect(loader.items).not.toBe(before);
+		expect(calls).toEqual(
+			[null, '10', '20'].map((cursor) => ({ filters: { year: 2020 }, cursor }))
+		);
+		expect(loader.loading).toBe(false);
+		await loader.loadMore();
+		expect(loader.items).toHaveLength(40);
+	});
+
+	it('reload shows what the server has now: a photo that is gone is gone', async () => {
+		let list = [makeAsset(1), makeAsset(2), makeAsset(3)];
+		const loader = new TimelineLoader(async () => ({ items: list, next_cursor: null }));
+		await loader.reset({});
+		list = [makeAsset(1), makeAsset(3), makeAsset(4)];
+		await loader.reload();
+		expect(loader.items.map((a) => a.id)).toEqual([1, 3, 4]);
+		expect(loader.done).toBe(true);
+	});
+
+	it('a reload that fails keeps the list and says why', async () => {
+		const { fetchPage } = pages(15, 10);
+		let broken = false;
+		const loader = new TimelineLoader((f, c) =>
+			broken
+				? Promise.reject(new Error('The library server could not be reached.'))
+				: fetchPage(f, c)
+		);
+		await loader.reset({});
+		broken = true;
+		await loader.reload();
+		expect(loader.items).toHaveLength(10);
+		expect(loader.error).toBe('The library server could not be reached.');
+		broken = false;
+		await loader.retry();
+		expect(loader.items).toHaveLength(15);
+	});
+
+	it('a new filter during a reload wins', async () => {
+		let release: (page: AssetPage) => void = () => {};
+		const { fetchPage } = pages(5, 10);
+		let slow = false;
+		const loader = new TimelineLoader((f, c) =>
+			slow ? new Promise<AssetPage>((resolve) => (release = resolve)) : fetchPage(f, c)
+		);
+		await loader.reset({});
+		slow = true;
+		const reloading = loader.reload();
+		slow = false;
+		await loader.reset({ year: 2020 });
+		release({ items: [makeAsset(99)], next_cursor: null });
+		await reloading;
+		expect(loader.items.map((a) => a.id)).toEqual([1, 2, 3, 4, 5]);
+	});
+
 	it('updates and removes items without reloading', async () => {
 		const { fetchPage } = pages(3, 10);
 		const loader = new TimelineLoader(fetchPage);

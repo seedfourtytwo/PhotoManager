@@ -6,6 +6,15 @@ import type { AssetFilters, AssetOut, AssetPage, Id } from './api/types';
 
 export type PageFetcher = (filters: AssetFilters, cursor: string | null) => Promise<AssetPage>;
 
+/**
+ * Pages can overlap (offset paging after a change): a repeated id would collide in the grid's
+ * keyed blocks.
+ */
+function append(items: AssetOut[], more: AssetOut[]): AssetOut[] {
+	const seen = new Set(items.map((a) => a.id));
+	return [...items, ...more.filter((a) => !seen.has(a.id))];
+}
+
 export class TimelineLoader {
 	items = $state.raw<AssetOut[]>([]);
 	loading = $state(false);
@@ -35,8 +44,29 @@ export class TimelineLoader {
 		return this.loadMore();
 	}
 
+	/**
+	 * The same list again from the start (something changed on the server). What is on screen
+	 * stays until as much of the fresh list has come, so an open photo stays open and the page
+	 * keeps its place; if it fails, the old list stays with the error.
+	 */
 	reload(): Promise<void> {
-		return this.reset(this.#filters);
+		const generation = ++this.#generation;
+		const wanted = this.items.length;
+		this.error = null;
+		const fresh = async () => {
+			let items: AssetOut[] = [];
+			let cursor: string | null = null;
+			do {
+				const page = await this.#fetch(this.#filters, cursor);
+				if (generation !== this.#generation) return;
+				items = append(items, page.items);
+				cursor = page.next_cursor;
+			} while (cursor !== null && items.length < wanted);
+			this.items = items;
+			this.#cursor = cursor;
+			this.done = cursor === null;
+		};
+		return this.#run(fresh());
 	}
 
 	/** After a failed page: ask for that same page again, keeping what is already loaded. */
@@ -46,21 +76,24 @@ export class TimelineLoader {
 	}
 
 	loadMore(): Promise<void> {
-		if (this.done || this.error) return Promise.resolve();
 		if (this.#pending) return this.#pending;
+		if (this.done || this.error) return Promise.resolve();
 		const generation = this.#generation;
-		this.loading = true;
-		this.#pending = this.#fetch(this.#filters, this.#cursor)
-			.then((page) => {
+		return this.#run(
+			this.#fetch(this.#filters, this.#cursor).then((page) => {
 				if (generation !== this.#generation) return;
-				// Pages can overlap (offset paging after a change): a repeated id would collide
-				// in the grid's keyed blocks.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a throw-away lookup, not state
-				const seen = new Set(this.items.map((a) => a.id));
-				this.items = [...this.items, ...page.items.filter((a) => !seen.has(a.id))];
+				this.items = append(this.items, page.items);
 				this.#cursor = page.next_cursor;
 				this.done = page.next_cursor === null;
 			})
+		);
+	}
+
+	/** One load at a time: whoever asks meanwhile gets the same promise. */
+	#run(work: Promise<void>): Promise<void> {
+		const generation = this.#generation;
+		this.loading = true;
+		this.#pending = work
 			.catch((error: unknown) => {
 				if (generation !== this.#generation) return;
 				this.error = error instanceof Error ? error.message : 'Could not load photos.';

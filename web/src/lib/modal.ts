@@ -6,6 +6,19 @@ import type { Action } from 'svelte/action';
  * do not close it by themselves: they ask `onclose`, and the owner takes it off the page.
  * The focus then goes back to the control that opened it.
  */
+/**
+ * What had the focus has left the page (a bar that closed, a photo that was restored): the
+ * photos take it at their one tab stop, or the page itself. Nothing happens while the focus
+ * is somewhere.
+ */
+export function refocus() {
+	const focused = document.activeElement;
+	if (focused && focused !== document.body && focused.isConnected) return;
+	const target =
+		document.querySelector<HTMLElement>('.tile[tabindex="0"]') ?? document.getElementById('main');
+	target?.focus({ preventScroll: true });
+}
+
 export const modal: Action<HTMLDialogElement, () => void> = (dialog, onclose) => {
 	let ask = onclose;
 	const cancel = (event: Event) => {

@@ -48,11 +48,13 @@
 	--check-radius: 4px; /* a 16 px box: --r-1 would turn it into a circle */
 
 	/* Layout */
-	--gutter: 2px;
+	--gutter: 2px; /* between photos, and beside them on a phone; the look's gap dial moves it */
+	--fine: 2px; /* the finest line and gap: the ruler's needle, an icon and its word */
 	--margin: 16rem; /* right-margin notes and filters on desktop */
 	--top: 56px; /* the top bar on a laptop; 0 on a phone. Sticky things offset by it. */
 	--dock: 56px; /* the floating dock on a phone */
 	--bar: calc(var(--dock) + var(--s-4)); /* room the dock takes at the bottom of a phone */
+	--pill: 52px; /* the selection pill; the toast steps over it */
 	--blur: blur(18px) saturate(1.4); /* the frosted-glass look of bars over photos */
 	--target: 44px; /* the smallest touch target; a promise in pixels, not in text size */
 	--page-x: var(--s-5); /* page side padding on a laptop */
@@ -237,6 +239,28 @@ button.primary,
 button.primary:disabled {
 	background: var(--hairline);
 	color: var(--ink-3);
+}
+
+/* An action in a bar over photos: its icon above its word (rule 3). */
+.action {
+	display: inline-grid;
+	justify-items: center;
+	align-content: center;
+	gap: var(--fine);
+	min-width: var(--target);
+	min-height: var(--target);
+	padding: var(--s-1) var(--s-2);
+	font-size: var(--fs-12);
+	font-weight: 500;
+	color: var(--ink-2);
+	white-space: nowrap;
+}
+.action[aria-pressed='true'],
+.action[aria-expanded='true'] {
+	color: var(--ink);
+}
+.action[aria-pressed='true'] svg {
+	fill: currentColor;
 }
 
 /* Touch screens: every control is at least 44 px tall. */
@@ -563,6 +587,24 @@ legend {
 			backdrop-filter: none;
 		}
 	}
+}
+
+/* View transitions (the photo view opening from its tile) run on the sheets' clock. */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+	animation-duration: var(--motion-sheet);
+	animation-timing-function: var(--ease);
+}
+
+/* Only the photo is in the transition, not the page: a page that is part of the picture takes
+   no touch while it runs, and a tap or a swipe made just after opening was lost. The picture
+   itself lets touches through to what is under it. */
+:root {
+	view-transition-name: none;
+}
+::view-transition {
+	pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

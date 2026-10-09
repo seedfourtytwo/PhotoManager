@@ -17,16 +17,17 @@
 		EMPTY,
 		TOO_MANY_SELECTED,
 		applyClick,
+		keepLoaded,
 		limitSelection,
 		selectAll,
 		selectAllLabel,
 		type Selection
 	} from '$lib/selection';
-	import DateScrubber from '$lib/components/DateScrubber.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
+	import TimeRuler from '$lib/components/TimeRuler.svelte';
 	import UploadButton from '$lib/components/UploadButton.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 
@@ -52,7 +53,7 @@
 		void loader.reset(filters);
 	});
 
-	// Counts and the scrubber follow the filters and every change to the library.
+	// Counts and the time ruler follow the filters and every change to the library.
 	$effect(() => {
 		const f = filters;
 		void library.version;
@@ -84,6 +85,12 @@
 
 	const order = $derived(loader.items.map((a) => a.id));
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
+	// Only loaded photos are ever selected: what a reload (an upload, Undo) no longer brings
+	// leaves the selection, so the pill, the tiles, Escape and the ruler speak of the same photos.
+	$effect(() => {
+		const kept = keepLoaded(selection, order);
+		if (kept !== selection) selection = kept;
+	});
 	const described = $derived(describeFilters(filters));
 
 	// --- the loupe follows ?photo=<id> -------------------------------------------------------
@@ -125,7 +132,6 @@
 	function onkeydown(event: KeyboardEvent) {
 		const target = event.target as HTMLElement;
 		if (loupeId !== undefined || target.closest('input, select, textarea, dialog')) return;
-		if (event.key === 'Escape' && selection.ids.size) selection = EMPTY;
 		if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
 			event.preventDefault();
 			select(selectAll(order));
@@ -136,7 +142,7 @@
 <svelte:window {onkeydown} />
 <svelte:head><title>Library · Photos</title></svelte:head>
 
-<div class="page" class:scrub={viewport.desktop}>
+<div class="page">
 	<ViewHeader view="grid" {query} {total} {described}>
 		{#if !viewport.desktop}
 			<button type="button" onclick={() => (ui.sheet = true)}>Filter</button>
@@ -189,9 +195,16 @@
 	/>
 </div>
 
-{#if viewport.desktop}
-	<div class="scrubber" class:shift={settings.filtersOpen}>
-		<DateScrubber {months} current={currentMonth} onjump={(key) => timeline?.jumpTo(key)} />
+<!-- On a phone the selection pill takes the ruler's place while photos are selected. -->
+{#if viewport.desktop || selection.ids.size === 0}
+	<div class="ruler" class:shift={settings.filtersOpen}>
+		<TimeRuler
+			{months}
+			current={currentMonth}
+			onjump={(key) => timeline?.jumpTo(key)}
+			orientation={viewport.desktop ? 'vertical' : 'horizontal'}
+			fades={!viewport.desktop}
+		/>
 	</div>
 {/if}
 
@@ -203,7 +216,11 @@
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
 		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
-		ondates={reloadAll}
+		ondates={() => {
+			// Its new date may put it beyond what is loaded: it stays open all the same.
+			linked.hold(shown.items[shown.index]);
+			reloadAll();
+		}}
 	/>
 {/if}
 
@@ -213,21 +230,35 @@
 
 <style>
 	.page {
-		padding: 0 var(--page-x);
+		padding: 0 var(--s-8) 0 var(--page-x);
 	}
-	.page.scrub {
-		padding-right: 4rem;
-	}
-	.scrubber {
+	/* The time ruler: a column at the right edge on a laptop. */
+	.ruler {
 		position: fixed;
 		top: var(--top);
 		right: 0;
-		width: 3.5rem;
+		width: calc(var(--s-8) - var(--s-1));
 		height: calc(100vh - var(--top));
 		z-index: 4;
 	}
-	.scrubber.shift {
+	.ruler.shift {
 		right: var(--margin);
+	}
+	/* Smaller screens: lying above the dock. Only the ruler itself takes the pointer. */
+	@media (max-width: 1023px) {
+		.page {
+			padding: 0 var(--page-x);
+		}
+		.ruler,
+		.ruler.shift {
+			top: auto;
+			left: var(--s-3);
+			right: var(--s-3);
+			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-2));
+			width: auto;
+			height: auto;
+			pointer-events: none;
+		}
 	}
 	@media (max-width: 639px) {
 		.page {

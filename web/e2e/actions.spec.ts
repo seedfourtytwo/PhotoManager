@@ -4,6 +4,7 @@ import {
 	GUEST,
 	isPhone,
 	longPress,
+	loupeAction,
 	REAL_BACKEND,
 	resetMock,
 	selectionAction,
@@ -88,7 +89,7 @@ test('fix date: shift a selection with a before → after preview', async ({ pag
 
 test('fix date from the loupe: set an exact date', async ({ page }) => {
 	await page.locator('.tile').first().click();
-	await page.getByRole('button', { name: 'Fix date' }).click();
+	await loupeAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await dialog.getByLabel('Set exactly').check();
 	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');

@@ -79,20 +79,39 @@ export async function swipe(target: Locator, dx: number, dy = 0) {
 }
 
 /**
+ * The photo view opens and closes as a view transition. While the browser takes its two
+ * pictures (from `startViewTransition` until the first moving frame: a frame or two on
+ * opening, the trip back through the history on closing) it delivers input to nothing. Once
+ * the pictures move, the page takes input again.
+ */
+export const takesInput = (page: Page) =>
+	page.waitForFunction(
+		() =>
+			!document.documentElement.matches(':active-view-transition') ||
+			document
+				.getAnimations()
+				.some((a) => (a.effect as KeyframeEffect).pseudoElement?.startsWith('::view-transition'))
+	);
+
+/**
  * Real touch input through the DevTools protocol: the browser applies touch-action and may
  * cancel the pointer stream, exactly as on a phone (dispatched pointer events would not).
+ * The finger goes down at `from` (and rests there for `hold` ms), moves to `to` and stays
+ * down; the returned function lifts it.
  */
-export async function touchSwipe(
+export async function touchDown(
 	page: Page,
 	from: { x: number; y: number },
 	to: { x: number; y: number },
-	steps = 8
-) {
+	{ steps = 8, hold = 0 }: { steps?: number; hold?: number } = {}
+): Promise<() => Promise<void>> {
+	await takesInput(page);
 	const cdp = await page.context().newCDPSession(page);
 	const point = (t: number) => [
 		{ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }
 	];
 	await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(0) });
+	if (hold) await page.waitForTimeout(hold);
 	for (let i = 1; i <= steps; i++) {
 		await cdp.send('Input.dispatchTouchEvent', {
 			type: 'touchMove',
@@ -100,8 +119,22 @@ export async function touchSwipe(
 		});
 		await page.waitForTimeout(16);
 	}
-	await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-	await cdp.detach();
+	return async () => {
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+		await cdp.detach();
+	};
+}
+
+/** A whole swipe: down at `from`, across to `to`, and up. */
+export async function touchSwipe(
+	page: Page,
+	from: { x: number; y: number },
+	to: { x: number; y: number },
+	steps = 8
+) {
+	await (
+		await touchDown(page, from, to, { steps })
+	)();
 }
 
 /** The centre of an element, for touch gestures. */
@@ -153,6 +186,14 @@ export async function selectionAction(page: Page, name: string) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
 	const button = bar.getByRole('button', { name, exact: true });
 	if (!(await button.isVisible())) await bar.getByRole('button', { name: 'More' }).click();
+	await button.click();
+}
+
+/** Run an action of the open photo; the ones that are not on its bar are under "More". */
+export async function loupeAction(page: Page, name: string) {
+	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	const button = viewer.getByRole('button', { name, exact: true });
+	if (!(await button.isVisible())) await viewer.getByRole('button', { name: 'More' }).click();
 	await button.click();
 }
 

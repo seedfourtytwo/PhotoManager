@@ -136,7 +136,11 @@
 
 <svelte:window
 	onkeydown={(e) => {
-		if (ui.sheet && e.key === 'Escape' && !e.defaultPrevented) ui.sheet = false;
+		if (ui.sheet && e.key === 'Escape' && !e.defaultPrevented) {
+			// This Escape is spent on the sheet: it does not also clear a selection behind it.
+			e.preventDefault();
+			ui.sheet = false;
+		}
 	}}
 />
 

@@ -5,6 +5,7 @@ import {
 	expectAccessible,
 	GUEST,
 	isPhone,
+	loupeAction,
 	resetMock,
 	signIn,
 	test,
@@ -185,8 +186,9 @@ test.describe('as admin', () => {
 		await page.locator('.tile').first().click();
 		const toggle = loupe(page).getByRole('button', { name: 'Private' });
 		const patch = page.waitForRequest((r) => r.method() === 'PATCH' && r.url().endsWith('/state'));
-		await toggle.click();
+		await loupeAction(page, 'Private');
 		expect((await patch).postDataJSON()).toEqual({ private: true });
+		await loupe(page).getByRole('button', { name: 'More' }).click();
 		await expect(toggle).toHaveAttribute('aria-pressed', 'true');
 		await expectAccessible(page);
 	});
@@ -212,8 +214,27 @@ test('more like this, when the models are installed', async ({ page }) => {
 	await resetMock('seed', { models: true });
 	await signIn(page);
 	await page.locator('.tile').first().click();
-	await loupe(page).getByRole('button', { name: 'More like this' }).click();
+	await loupeAction(page, 'More like this');
 	await expect(page).toHaveURL(/\/search\?like=\d+/);
 	await expect(page.getByRole('heading', { name: /Like this photo/ })).toBeVisible();
 	await expect(page.locator('.tile').first()).toBeVisible();
+});
+
+test('trash and albums: a linked photo that is not in the list leaves no trace in the URL', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page);
+	const album = await (
+		await page.request.post('/api/albums', { data: { title: 'Nothing linked here' } })
+	).json();
+	for (const path of ['/trash', `/albums/${album.id}`]) {
+		await page.goto('/albums');
+		await page.goto(`${path}?photo=999999`);
+		await expect(page).toHaveURL(new RegExp(`${path}$`));
+		await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toHaveCount(0);
+		// One Back leaves the page: no dead entry was left behind.
+		await page.goBack();
+		await expect(page).toHaveURL(/\/albums$/);
+	}
 });

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { Id, TrashItem } from '$lib/api';
+	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { api, library, notice, session, settings, viewport } from '$lib/app.svelte';
+	import { refocus } from '$lib/modal';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import {
 		EMPTY,
@@ -46,6 +48,9 @@
 		} catch (e) {
 			notice.error(e);
 		}
+		// Photos that were restored or deleted may have had the focus, or the button that did it.
+		await tick();
+		refocus();
 	}
 	$effect(() => void load());
 
@@ -53,6 +58,10 @@
 	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
 	const tracker = new LoupeTracker();
 	$effect(() => tracker.seen(loupeId));
+	// A linked photo that is not in the trash (any more): the link is spent, the URL says so.
+	$effect(() => {
+		if (items && loupeId !== undefined && loupeIndex < 0) closePhoto();
+	});
 	let restoring = false;
 
 	async function restore(ids: Id[]) {
@@ -129,8 +138,13 @@
 		<SelectionBar
 			count={selection.ids.size}
 			actions={[
-				{ label: 'Restore', run: () => restore([...selection.ids]) },
-				{ label: 'Delete for good', run: () => (confirmEmpty = true), hidden: !session.isAdmin }
+				{ label: 'Restore', icon: 'restore', run: () => restore([...selection.ids]) },
+				{
+					label: 'Delete for good',
+					icon: 'trash',
+					run: () => (confirmEmpty = true),
+					hidden: !session.isAdmin
+				}
 			]}
 			onclear={() => (selection = EMPTY)}
 		/>

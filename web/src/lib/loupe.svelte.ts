@@ -6,10 +6,14 @@
  * `page.state.pushed` says this history entry was made by `openPhoto`, so Back closes the
  * loupe; it lives in the entry (not in a variable) so that leaving by a link forgets it.
  */
-import { untrack } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
+import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
+import { notice } from './app.svelte';
+import { refocus } from './modal';
+import { withTransition } from './motion';
 
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
@@ -25,33 +29,119 @@ export function withPhoto(href: string, id: Id | null): string {
 	return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/**
+ * Stepping writes the open photo into the URL, and browsers ration that (Safari throws after
+ * 100 history changes in 30 s; a held arrow key steps faster). The photo changes at once; the
+ * URL follows at most every STEP_MS.
+ */
+const STEP_MS = 350;
+/** The photo stepped to whose URL is still to be written, and the page it was stepped on. */
+let stepped = $state.raw<{ id: Id; path: string } | null>(null);
+let stepTimer: ReturnType<typeof setTimeout> | undefined;
+let lastStep = -Infinity;
+
+const pathname = () => new URL(location.href).pathname;
+
+function writeStep() {
+	clearTimeout(stepTimer);
+	stepTimer = undefined;
+	const step = stepped;
+	stepped = null;
+	// Left by a link meanwhile: that page's URL is not this one's to write.
+	if (!step || step.path !== pathname()) return;
+	lastStep = Date.now();
+	const state: App.PageState = page.state.pushed
+		? { photo: step.id, pushed: true }
+		: { photo: step.id };
+	replaceState(withPhoto(location.href, step.id), state);
+}
+
 /** Which photo the loupe shows on this page, if any. */
 export function openPhotoId(page: { state: App.PageState; url: URL }): Id | undefined {
+	if (stepped && stepped.path === page.url.pathname) return stepped.id;
 	const state = page.state.photo;
 	if (state !== undefined) return state ?? undefined;
 	return photoParam(page.url);
 }
 
+const tileOf = (id: Id) =>
+	typeof document === 'undefined'
+		? null
+		: document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
+
+/**
+ * The photo's tile takes the view-transition name the open photo has (Loupe.svelte), so the
+ * browser moves one picture between the two places. Returns what takes the name off again.
+ */
+function nameTile(id: Id): () => void {
+	const tile = tileOf(id);
+	tile?.style.setProperty('view-transition-name', 'photo');
+	return () => tile?.style.removeProperty('view-transition-name');
+}
+
+/** After `history.back()`: the earlier entry is the current one (or it is taking too long). */
+function wentBack(): Promise<void> {
+	if (typeof window === 'undefined') return Promise.resolve();
+	return new Promise((resolve) => {
+		window.addEventListener('popstate', () => resolve(), { once: true });
+		setTimeout(resolve, 300);
+	});
+}
+
+/** Opens from the photo's tile where the browser can show that. */
 export function openPhoto(id: Id) {
-	pushState(withPhoto(location.href, id), { photo: id, pushed: true });
+	const release = nameTile(id);
+	void withTransition(async () => {
+		release();
+		pushState(withPhoto(location.href, id), { photo: id, pushed: true });
+		await tick();
+	});
 }
 
 export function showPhoto(id: Id) {
-	const state: App.PageState = page.state.pushed ? { photo: id, pushed: true } : { photo: id };
-	replaceState(withPhoto(location.href, id), state);
+	stepped = { id, path: pathname() };
+	const wait = lastStep + STEP_MS - Date.now();
+	if (wait <= 0) writeStep();
+	else stepTimer ??= setTimeout(writeStep, wait);
 }
 
+let closing = false;
+
+/** Closes back to the photo's tile, when it is on screen. */
 export function closePhoto() {
-	if (page.state.pushed) history.back();
-	else replaceState(withPhoto(location.href, null), { photo: null });
+	// Asked twice (Escape and the dialog's own close event): going back twice would leave the page.
+	if (closing) return;
+	// A step whose URL still waits: the photo that closes is the one on screen.
+	writeStep();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- read once, not state
+	const id = photoParam(new URL(location.href));
+	if (id === undefined) return;
+	closing = true;
+	let release = () => {};
+	void withTransition(async () => {
+		if (page.state.pushed) {
+			history.back();
+			await wentBack();
+		} else replaceState(withPhoto(location.href, null), { photo: null });
+		await tick();
+		release = nameTile(id);
+	})
+		.catch((error: unknown) => notice.error(error))
+		// Whatever happened, the next close must be able to try again.
+		.finally(() => {
+			release();
+			closing = false;
+		});
 }
 
 /** After closing the loupe over a plain grid: show and focus the photo that was open. */
 export function focusTile(id: Id) {
 	requestAnimationFrame(() => {
-		const tile = document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
+		const tile = tileOf(id);
 		tile?.scrollIntoView({ block: 'nearest' });
 		tile?.focus({ preventScroll: true });
+		// The photo has left the list meanwhile (restored from the trash): not on nothing.
+		refocus();
 	});
 }
 
@@ -87,9 +177,11 @@ export class LinkedPhoto {
 		fetch: (id: Id) => Promise<AssetOut>;
 		find?: (id: Id) => void;
 		onmissing: () => void;
+		onerror: (error: unknown) => void;
 	};
 	/** What `single` is being fetched for; kept apart so `seen` reads no state in an effect. */
 	#wanted: Id | undefined;
+	#held: AssetOut | undefined;
 
 	constructor(options: {
 		fetch: (id: Id) => Promise<AssetOut>;
@@ -97,28 +189,50 @@ export class LinkedPhoto {
 		find?: (id: Id) => void;
 		/** The photo does not exist or may not be seen: by default the loupe closes. */
 		onmissing?: () => void;
+		/** It could not be fetched for another reason (offline, a server error): by default a toast. */
+		onerror?: (error: unknown) => void;
 	}) {
-		this.#options = { onmissing: closePhoto, ...options };
+		this.#options = {
+			onmissing: closePhoto,
+			onerror: (error) => notice.error(error),
+			...options
+		};
+	}
+
+	/**
+	 * The open photo as the page shows it now, before a reload that may take it out of the
+	 * list (its date changed): it then stays on screen instead of closing and opening again.
+	 */
+	hold(asset: AssetOut) {
+		this.#held = asset;
+		// Now, not when the list is seen without it: the page must never find nothing to show.
+		this.single = asset;
 	}
 
 	/** Call from an effect with the open photo and whether the page's list holds it. */
 	seen(id: Id | undefined, inList: boolean) {
 		if (id === undefined || inList) {
 			this.#wanted = undefined;
+			if (id !== undefined && this.#held?.id === id) return;
+			this.#held = undefined;
 			this.single = null;
 			return;
 		}
 		if (this.#wanted === id) return;
 		this.#wanted = id;
-		this.single = null;
+		this.single = this.#held?.id === id ? this.#held : null;
+		this.#held = undefined;
 		this.#options.fetch(id).then(
 			(asset) => {
 				if (this.#wanted === id) this.single = asset;
 			},
-			() => {
+			(error: unknown) => {
 				if (this.#wanted !== id) return;
-				this.#wanted = undefined;
-				this.#options.onmissing();
+				// Only "not there" and "not yours" mean the photo is missing.
+				if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+					this.#wanted = undefined;
+					this.#options.onmissing();
+				} else this.#options.onerror(error);
 			}
 		);
 		// Untracked: the page's list is read while looking, and must not re-run the caller.

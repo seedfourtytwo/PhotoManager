@@ -22,6 +22,15 @@ describe('style guard', () => {
 		expect(offenders).toEqual([]);
 	});
 
+	// The look's "gap between photos" dial moves --gutter from 0 to 8 px: a needle or a gap
+	// inside a control that borrowed it would vanish or swell with it. Those use --fine.
+	it('--gutter is only the room between and beside photos: no component borrows it', () => {
+		const offenders = Object.entries(sources)
+			.filter(([path, text]) => path.startsWith('/src/lib/') && text.includes('var(--gutter)'))
+			.map(([path]) => path);
+		expect(offenders).toEqual([]);
+	});
+
 	it('no stylesheet makes glass wait for "not (prefers-reduced-transparency …)"', () => {
 		// Unknown to Safari, so false there even when negated: the bars would be solid on every iPhone.
 		const offenders = Object.entries(sources)

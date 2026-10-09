@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-	EMPTY,
-	MAX_SELECTION,
 	applyClick,
+	EMPTY,
 	idsInRect,
+	keepLoaded,
 	limitSelection,
+	MAX_SELECTION,
 	selectAll,
 	selectAllLabel,
 	selectMany,
@@ -57,6 +58,20 @@ describe('selection model', () => {
 
 	it('selectAll takes every loaded photo', () => {
 		expect(ids(selectAll(order))).toEqual(order);
+	});
+});
+
+describe('keepLoaded', () => {
+	it('drops the photos that are no longer loaded, and an anchor that went with them', () => {
+		const selection = { ids: new Set([1, 2, 3]), anchor: 2 };
+		expect(keepLoaded(selection, [3, 1, 9])).toEqual({ ids: new Set([1, 3]), anchor: null });
+		expect(keepLoaded(selection, [2, 4])).toEqual({ ids: new Set([2]), anchor: 2 });
+		expect(keepLoaded(selection, []).ids.size).toBe(0);
+	});
+	it('is the same selection when nothing left', () => {
+		const selection = { ids: new Set([1, 2]), anchor: 1 };
+		expect(keepLoaded(selection, [2, 1, 5])).toBe(selection);
+		expect(keepLoaded(EMPTY, [])).toBe(EMPTY);
 	});
 });
 

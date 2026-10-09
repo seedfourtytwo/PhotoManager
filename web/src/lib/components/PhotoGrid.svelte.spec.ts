@@ -20,7 +20,7 @@ function setup(extra: Partial<Parameters<typeof render<typeof PhotoGrid>>[1]> = 
 	const onopen = vi.fn();
 	const ontoggle = vi.fn();
 	const onmove = vi.fn();
-	render(PhotoGrid, {
+	const view = render(PhotoGrid, {
 		items,
 		layout,
 		selected: new Set<number>(),
@@ -30,7 +30,7 @@ function setup(extra: Partial<Parameters<typeof render<typeof PhotoGrid>>[1]> = 
 		onmove,
 		...extra
 	});
-	return { onopen, ontoggle, onmove };
+	return { onopen, ontoggle, onmove, view };
 }
 
 describe('PhotoGrid', () => {
@@ -87,5 +87,75 @@ describe('PhotoGrid', () => {
 		el.click();
 		expect(ontoggle).toHaveBeenCalledTimes(1);
 		expect(onopen).not.toHaveBeenCalled();
+	});
+
+	/** A touch pointer event on the first photo, at the centre of the photo taken at `over`. */
+	function finger(type: string, over: RegExp) {
+		const first = page.getByRole('button', { name: /18:30/ }).element();
+		const rect = page.getByRole('button', { name: over }).element().getBoundingClientRect();
+		// A touch stays captured by the element it went down on: the events keep that target.
+		first.dispatchEvent(
+			new PointerEvent(type, {
+				pointerType: 'touch',
+				bubbles: true,
+				clientX: rect.left + rect.width / 2,
+				clientY: rect.top + rect.height / 2
+			})
+		);
+	}
+
+	it('long-press then drag selects up to the photo under the finger', async () => {
+		const { ontoggle } = setup();
+		finger('pointerdown', /18:30/);
+		await new Promise((r) => setTimeout(r, 550));
+		expect(ontoggle.mock.calls).toEqual([[1, false]]);
+		finger('pointermove', /18:31/);
+		finger('pointermove', /18:31/);
+		finger('pointermove', /18:32/);
+		finger('pointerup', /18:32/);
+		// Once per photo the finger reaches, as a range from the pressed one.
+		expect(ontoggle.mock.calls).toEqual([
+			[1, false],
+			[2, true],
+			[3, true]
+		]);
+	});
+
+	it('a press still being held when the grid goes away selects nothing', async () => {
+		const { ontoggle, view } = setup();
+		finger('pointerdown', /18:30/);
+		view.unmount();
+		await new Promise((r) => setTimeout(r, 550));
+		expect(ontoggle).not.toHaveBeenCalled();
+	});
+
+	it('the pressed photo leaves the grid before the finger lifts: the next touch scrolls again', async () => {
+		const { view } = setup();
+		finger('pointerdown', /18:30/);
+		await new Promise((r) => setTimeout(r, 550));
+		const grid = page.getByRole('group', { name: 'Photos' }).element();
+		const scrolls = () => {
+			const move = new TouchEvent('touchmove', { bubbles: true, cancelable: true });
+			grid.dispatchEvent(move);
+			return !move.defaultPrevented;
+		};
+		// The long press holds the page still under the finger.
+		expect(scrolls()).toBe(false);
+		// The windowed grid drops the tile (the page moved on); the finger lifts over nothing.
+		await view.rerender({ items: items.slice(1), layout: justify([3 / 4, 1], 600, 150, 3) });
+		document.body.dispatchEvent(
+			new PointerEvent('pointerup', { pointerType: 'touch', bubbles: true })
+		);
+		expect(scrolls()).toBe(true);
+	});
+
+	it('a drag before the long press has fired selects nothing', async () => {
+		const { ontoggle } = setup();
+		finger('pointerdown', /18:30/);
+		finger('pointermove', /18:32/);
+		await new Promise((r) => setTimeout(r, 550));
+		finger('pointermove', /18:31/);
+		finger('pointerup', /18:31/);
+		expect(ontoggle).not.toHaveBeenCalled();
 	});
 });
