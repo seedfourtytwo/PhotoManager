@@ -4,7 +4,32 @@
  * defaults leaves nothing behind. The first-paint script in app.html sets the same from the
  * cached sheet; boot.spec.ts keeps the two equal.
  */
-import type { Look } from './sheet';
+import type { Look, Mode, Theme } from './sheet';
+
+/** The three dials a look may leave to its theme, as numbers. */
+export type ThemeDials = { accentHue: number; corners: number; photoGap: number };
+
+/** The accent hue (per mode) and the corners each theme has in themes.css and tokens.css. */
+const THEMES_OWN: Record<Theme, { accentHue: { dark: number; light: number }; corners: number }> = {
+	safelight: { accentHue: { dark: 72, light: 72 }, corners: 12 },
+	album: { accentHue: { dark: 281, light: 275 }, corners: 3 }
+};
+/** The gap between photos in a grid when the look leaves it to the theme (px): one for all. */
+const PHOTO_GAP = 3;
+
+/**
+ * What a theme itself gives the dials a look can leave to it: the one place that says so
+ * outside the stylesheets (apply.spec.ts keeps them equal). The look form starts a dial
+ * there, and the grid takes its gap from it. Following the device counts as dark.
+ */
+export function themeDials(theme: Theme, mode: Mode): ThemeDials {
+	const { accentHue, corners } = THEMES_OWN[theme];
+	return {
+		accentHue: accentHue[mode === 'light' ? 'light' : 'dark'],
+		corners,
+		photoGap: PHOTO_GAP
+	};
+}
 
 export type RootLook = {
 	attributes: Record<'data-look' | 'data-theme', string | null>;
