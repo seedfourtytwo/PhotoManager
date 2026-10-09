@@ -129,6 +129,20 @@ Long-press then drag on a phone; click, shift-click, lasso on a laptop (unchange
 selection bar becomes a floating pill at the bottom centre: count, Add to album, Share,
 Download, Fix date, Delete, and More. `Esc` clears.
 
+**As built in step 3, and what is still open** (plan: `docs/superpowers/plans/2026-10-08-redesign-3-photo-view.md`):
+
+- **Share** is not built, in the photo bar or in the pill: nothing here says what sharing one
+  photo does, and handing it to the phone's share sheet sends photo data to other apps.
+  Download holds its place (Favourite · Download · Album · Edit · More).
+- **Aperture, shutter, ISO and focal length** are not in the API or the database. The
+  readout's second line is camera · pixel size · file name until they are.
+- The pill says **Move to trash** where this page says Delete: that is what it does, and the
+  Trash page keeps "Delete for good" for the other thing.
+- The sideways swipe stays in the gesture recogniser (the photo follows the finger through a
+  transform), not native snap-scrolling (§6).
+- The ruler jumps where a drag ends, not while the finger moves: a far month may need many
+  pages. Long-press then drag adds photos to the run; dragging back does not take them out.
+
 ### 4.6 System (admin)
 
 `/admin` is named **System** in the UI (route unchanged). Order: one status line ("All good"

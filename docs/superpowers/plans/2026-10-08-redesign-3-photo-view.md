@@ -31,6 +31,7 @@
 | **Share** in the photo bar and in the pill | Nothing defines what Share does for a photo; the one web-only reading (the phone's share sheet) hands photo data to other apps, which is an `AGENTS.md` hard stop | Download keeps its place; the bar is Favourite · Download · Album · Edit · More |
 | Sideways swipe by native snap-scrolling (§6) | The swipe stays in the recogniser, where the photo follows the finger through a transform; a three-pane scroller could not be checked on iOS Safari from here | the same gesture, the same thresholds |
 | Dragging the ruler scrolls while the finger moves | A far month may need many pages; the jump stays at release, the needle follows the finger meanwhile | as the scrubber did |
+| Long-press then drag, dragging back to take photos out again | The drag reuses the range selection every page already has (`ontoggle(id, true)`), which only adds | a run that grows with the finger |
 
 ## File Structure
 
@@ -49,7 +50,7 @@
 | `web/src/lib/components/PhotoGrid.svelte` | Long-press then drag selects a run of photos. |
 | `web/src/lib/tokens.css` | `.action` (an icon over its word), `--pill`, view-transition timing. |
 | `web/src/routes/+page.svelte`, `people/[id]/+page.svelte`, `trash/+page.svelte`, `+layout.svelte` | Ruler on both devices; Esc handled by the pill; the toast clears the pill. |
-| `web/e2e/photo-view.spec.ts` (new), `web/e2e/helpers.ts` | Journeys for the three pieces; `loupeAction`, a hold in `touchSwipe`. |
+| `web/e2e/photo-view.spec.ts` (new), `web/e2e/helpers.ts` | Journeys for the three pieces; `loupeAction`, `touchDown` (a finger that rests, moves and stays down), `transitionOver`. |
 
 ---
 
@@ -150,7 +151,9 @@ Test names (`motion.spec.ts`): `runs the change inside a view transition where t
 
 - [ ] **Step 1:** tests red, `motion.ts` green.
 - [ ] **Step 2:** `openPhoto` names the tile `photo` for the old picture and pushes the state inside the transition; `closePhoto` goes back inside one and names the tile for the new picture. The loupe's `.frame` carries `view-transition-name: photo`. Where the browser has no view transitions the loupe fades in (`@supports not`). The existing `loupe.spec.ts` unit tests stay untouched and green (node has no `document`, so the change runs at once).
-- [ ] **Step 3:** e2e `opening a photo runs a view transition from its tile` (the frame and, while it opens, the tile carry the name). Run the whole e2e suite: the loupe is opened and closed in most journeys. Commit — `feat(ui): the photo view opens from its tile and closes back to it`.
+- [ ] **Step 3:** e2e `opening and closing run a view transition between the tile and the photo` (the frame carries the name, the tile only for the length of the transition). Run the whole e2e suite: the loupe is opened and closed in most journeys.
+- [ ] **Step 4: Existing e2e behaviour that must change** — a page takes no input while a view transition runs (§4.3: "Opening and closing uses a View Transition"), so a touch sent a few milliseconds after the click that opened the photo lands on nothing. No test file is edited for it: `touchDown` (which `touchSwipe` now calls) waits for a running transition before the finger comes down. This is what keeps `loupe.spec.ts` `phone: real vertical swipes show info (up) and close (down)` green.
+- [ ] **Step 5:** `closePhoto` ignores a second request while one is under way (Escape plus the dialog's own close event), so the page is never left by going back twice. Commit — `feat(ui): the photo view opens from its tile and closes back to it`.
 
 ### Task 6: The time ruler
 
@@ -164,21 +167,23 @@ export type RulerMonth = { key: string; count: number }; // newest first
 export function position(months: readonly RulerMonth[], key: string): number;
 /** The month with photos nearest to a point of the ruler. */
 export function monthAt(months: readonly RulerMonth[], at: number): string | null;
-/** One mark per calendar year; `label` on as many as `room` allows, evenly. `key` is where a tap on it goes. */
-export function yearMarks(months: readonly RulerMonth[], room: number): { year: string; at: number; key: string; label: boolean }[];
+/** One mark per calendar year, from its December (`at`) to its January (`end`); `label` on as many as `room` allows, evenly. `key` is where a tap on it goes. */
+export function yearMarks(months: readonly RulerMonth[], room: number): { year: string; at: number; end: number; key: string; label: boolean }[];
 /** Calendar months from the newest to the oldest, for the small ticks. */
 export function span(months: readonly RulerMonth[]): number;
+/** "Dec 2019", for the needle's tag. */
+export function monthTag(key: string): string;
 ```
 
 `TimeRuler` props: `months`, `current`, `onjump`, `orientation: 'vertical' | 'horizontal'`, `fades?: boolean`.
 
 Test names:
 
-- `ruler.spec.ts`: `the newest month is at 0, the oldest at 1, and time between them is linear`, `one month alone sits at 0`, `a month outside the range is clamped`, `monthAt finds the nearest month that has photos`, `monthAt clamps points beyond the ends`, `every year gets a mark, the newest year at 0`, `labels thin out evenly when there is no room for all`, `a tap on a year goes to that year's newest month with photos`, `no months, no marks`
+- `ruler.spec.ts`: `the newest month is at 0, the oldest at 1, and time between them is linear`, `one month alone sits at 0`, `a month outside the range is clamped`, `monthAt finds the nearest month that has photos`, `monthAt clamps points beyond the ends`, `every year gets a mark from its December to its January, cut to the ruler`, `labels thin out evenly when there is no room for all`, `a tap on a year goes to that year's newest month with photos, or the next older one`, `no months, no marks`, `monthTag writes a month short enough for the needle`
 - `small.svelte.spec.ts` (the `DateScrubber` blocks become `TimeRuler`; §4.4 "Replaces `DateScrubber`"): `labels years along the track and reports the current month`, `jumps by keyboard` (both unchanged), `the needle shows the month under the pointer while dragging and jumps once, on release`, `a cancelled drag ends the drag: no jump, and the needle goes back`, `tapping a year jumps to it`, `horizontal: time runs left to right, the newest month at the right end`, `a fading ruler is hidden until the page scrolls and hides again when idle`
 - `photo-view.spec.ts`: `phone: the time ruler shows while scrolling, fades when idle, and a drag along it jumps`, `laptop: the ruler is a column of years at the right edge with the needle on the month in view`
 
-- [ ] **Step 1:** `ruler.spec.ts` red → `ruler.ts` green. `monthShort` ("Dec 2019") in `timeline.ts` with its test.
+- [ ] **Step 1:** `ruler.spec.ts` red → `ruler.ts` green.
 - [ ] **Step 2:** component tests red → `TimeRuler.svelte` green; delete `DateScrubber.svelte`.
 - [ ] **Step 3:** the Library page shows it on both devices (hidden on a phone while photos are selected: the pill takes its place). e2e red → green. `grid.spec.ts` and `browse.spec.ts` scrubber tests pass unedited.
 - [ ] **Step 4:** commit — `feat(ui): time ruler replaces the date scrubber, on the phone too`.
@@ -206,6 +211,6 @@ Test names:
 
 - [ ] **Step 1:** `docs/DESIGN_PRINCIPLES.md` (the loupe, selection and layout-by-device rows; the time ruler), `docs/wiring/web.md`, `docs/FEATURES.md` wording, the spec's §4.3–4.5 where what shipped differs (the table above).
 - [ ] **Step 2:** scroll speed with the ruler and the non-passive listener on: the probe at the top of `web/e2e/perf.spec.ts`, phone project, this branch against `origin/main`.
-- [ ] **Step 3:** `just check`, `just e2e-mock`, `just e2e`: all green; record the counts.
+- [ ] **Step 3:** `just check`, `just e2e-mock`, `just e2e`: all green; record the counts. Run the web tests with `PA_API` pointing at a closed port (`PA_API=http://127.0.0.1:9 just check`): one component test (`admin/pickers.svelte.spec.ts`) lets a request through the dev proxy, which by default reaches whatever listens on 8420, and a real server there answers 401 and fails the run with an unhandled rejection.
 - [ ] **Step 4:** `cd web && pnpm screenshots && THEME=light pnpm screenshots`; look at the loupe, selection and library shots on both devices and in both modes.
 - [ ] **Step 5:** commit — `docs: photo view, pill and ruler in the design principles; fresh screenshots`. Push, open the PR with the template; do not merge.

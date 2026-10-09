@@ -140,8 +140,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   a count that needs attention sits on it in full ink, never the accent.
 - **Toasts**: one line on a raised slip, bottom centre, the action (Undo) as a bold word.
 - **Selection**: a 3 px accent frame inset on the photo (with a 1 px shade so it reads on any
-  photo) and a filled accent circle with a check; the count in the selection bar is the only
-  accent text.
+  photo) and a filled accent circle with a check. The actions come to the photos as a floating
+  glass pill at the bottom centre: the count (the only accent text), Add to album, Download,
+  Fix date, Move to trash, and More for the rest. Escape clears.
 - **Focus**: 2 px accent outline, 2 px offset (inset on photo tiles).
 - **Icons**: a small set of 1.6 px-stroke SVGs drawn for this app, one component, no icon
   font. In navigation and action bars an icon carries its word beneath or beside it. Every
@@ -157,9 +158,18 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
   are a title with their actions on the same baseline, separated by one hairline.
-- **The loupe** draws nothing over the photo: one band of words above it (Close … actions …
-  Info), the sidenote in the right margin on a laptop; on a phone Close/Info at the top and the
-  photo actions in a single-line bar at the bottom, in thumb reach. Chrome fades when idle.
+- **The photo view** (the loupe) gives the photo the whole screen. Its chrome floats over it as
+  glass: Close and Info as pills at the top, one bar at the bottom with a two-line readout in
+  the data face (date · time · place / camera · size · file name) and at most five actions,
+  each an icon over its word: Favourite, Download, Album, Edit, More. The details are the
+  sidenote in the right margin on a laptop and a bottom sheet on a phone. Chrome fades when
+  idle. The photo follows the finger; every gesture (swipe sideways, pull down, swipe up,
+  double-tap) has a button that does the same. It opens from its tile and closes back to it as
+  a view transition.
+- **The time ruler** is the one signature: even ticks for the months, the years in the data
+  face, an accent needle with the month in view. Upright at the right edge on a laptop; lying
+  above the dock on a phone, where it shows while the page scrolls and fades when idle. A drag
+  moves the needle and the Library jumps where it is let go; a tap on a year jumps to it.
 - **Charts** (year bars, calendar, map) use `--ink` only, zero-based, directly labelled; the
   chosen map dot takes the accent because it is the selection.
 
@@ -170,8 +180,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | Navigation | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
 | Filters | right margin, always visible, collapsible | bottom sheet |
 | Loupe metadata | right margin "sidenote" | Info opens a bottom sheet |
-| Loupe actions | one band above the photo | Close/Info on top, actions in a bottom bar |
-| Selection | click / shift-click / drag-lasso | long-press then tap |
+| Loupe actions | Close and Info at the top, one glass bar at the bottom | the same |
+| Time ruler | upright at the right edge | lying above the dock, fading when idle |
+| Selection | click / shift-click / drag-lasso | long-press, then drag or tap |
 | Grid row height | ~220 px | ~110 px, pinch to change |
 
 ## 4. Print design (albums)
