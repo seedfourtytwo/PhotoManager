@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { AssetOut, Id } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
+	import { photos } from '$lib/format';
 	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
 	import FixDateDialog from './FixDateDialog.svelte';
@@ -26,7 +27,6 @@
 	const allFavourite = $derived(selected.length > 0 && selected.every((a) => a.favourite));
 	const allHidden = $derived(selected.length > 0 && selected.every((a) => a.hidden));
 	const allPrivate = $derived(selected.length > 0 && selected.every((a) => a.private));
-	const plural = (n: number) => `${n} photo${n === 1 ? '' : 's'}`;
 
 	async function once(run: () => Promise<void>) {
 		if (busy) return;
@@ -64,7 +64,7 @@
 			onremove(new Set(these));
 			onclear();
 			library.changed();
-			notice.show(`${hidden ? 'Hid' : 'Unhid'} ${plural(these.length)}.`, {
+			notice.show(`${hidden ? 'Hid' : 'Unhid'} ${photos(these.length)}.`, {
 				action: {
 					label: 'Undo',
 					run: () =>
@@ -92,7 +92,7 @@
 			onpatch(new Set(done), { private: value });
 			const refused = ids.length - done.length;
 			notice.show(
-				`${value ? 'Made' : 'Unmarked'} ${plural(done.length)} private.` +
+				`${value ? 'Made' : 'Unmarked'} ${photos(done.length)} private.` +
 					(refused
 						? ` ${refused} you may only view ${refused === 1 ? 'was' : 'were'} left as they are.`
 						: '')
@@ -106,7 +106,7 @@
 			onremove(new Set(these));
 			onclear();
 			library.changed();
-			notice.show(`Moved ${plural(trashed)} to the trash.`, {
+			notice.show(`Moved ${photos(trashed)} to the trash.`, {
 				action: {
 					label: 'Undo',
 					run: () =>

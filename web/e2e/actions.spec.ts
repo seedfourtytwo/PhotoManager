@@ -248,7 +248,7 @@ test('trash: “Delete for good” for a selection and “Empty trash” both as
 	await selectTiles(page, [0]);
 	await selectionAction(page, 'Delete for good');
 	const confirm = page.getByRole('dialog', { name: 'Delete for good?' });
-	await expect(confirm).toContainText('1 library copy and their previews will be removed');
+	await expect(confirm).toContainText('1 library copy and its preview will be removed');
 	await expect(confirm).toContainText('Originals in source folders stay where they are');
 	await expectAccessible(page);
 	await confirm.getByRole('button', { name: 'Cancel' }).click();

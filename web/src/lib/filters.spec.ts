@@ -99,6 +99,11 @@ describe('activeFilterCount and describeFilters', () => {
 		expect(describeFilters({})).toBe('');
 	});
 
+	it('counts sources in words', () => {
+		expect(describeFilters({ source_id: [3] })).toBe('1 source');
+		expect(describeFilters({ source_id: [3, 4] })).toBe('2 sources');
+	});
+
 	it('names day ranges compactly', () => {
 		expect(describeFilters({ from: '2019-07-04', to: '2019-07-04' })).toBe('4 Jul 2019');
 		expect(describeFilters({ from: '2019-07-01', to: '2019-07-31', has_location: false })).toBe(

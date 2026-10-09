@@ -42,3 +42,16 @@ export function nextCheckText(iso: string | null | undefined, now: number = Date
 export function errorMessage(error: unknown, fallback: string): string {
 	return (error instanceof Error && error.message) || fallback;
 }
+
+const COUNT = new Intl.NumberFormat('en-GB');
+
+/**
+ * A count with its noun: "1 source", "1,204 sources". `many` is for a noun whose plural is
+ * not an added s ("library copy", "library copies").
+ */
+export function plural(n: number, one: string, many = `${one}s`): string {
+	return `${COUNT.format(n)} ${n === 1 ? one : many}`;
+}
+
+/** "1 photo", "1,204 photos". */
+export const photos = (n: number) => plural(n, 'photo');

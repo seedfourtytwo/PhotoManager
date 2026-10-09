@@ -3,6 +3,7 @@
  * fetch() can't report upload progress yet, so this one request uses XMLHttpRequest.
  */
 import { ApiError, unreachable, type UploadResult } from './api';
+import { photos } from './format';
 
 /** The parts of XMLHttpRequest we use (a fake in tests). */
 export type UploadRequest = {
@@ -69,8 +70,6 @@ export function uploadFiles(files: File[], options: UploadOptions): Promise<Uplo
 		xhr.send(form);
 	});
 }
-
-const photos = (n: number) => `${n} photo${n === 1 ? '' : 's'}`;
 
 /** One line for the status bar: what was added, what was already there, what was refused. */
 export function summarizeUpload(result: UploadResult): string {

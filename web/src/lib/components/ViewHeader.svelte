@@ -1,15 +1,16 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { photos } from '$lib/format';
 
 	type Props = {
 		view: 'grid' | 'calendar';
 		query: string;
+		/** How many photos the view holds; null while that is being counted. */
 		total: number | null;
 		described: string;
 		children?: Snippet;
 	};
 	let { view, query, total, described, children }: Props = $props();
-	const count = new Intl.NumberFormat('en-GB');
 </script>
 
 <header>
@@ -21,7 +22,7 @@
 		>
 	</nav>
 	<p class="quiet meta" aria-live="polite">
-		{#if total !== null}{count.format(total)} photos{/if}{#if described}&ensp;·&ensp;{described}{/if}
+		{total === null ? 'Counting…' : photos(total)}{#if described}&ensp;·&ensp;{described}{/if}
 	</p>
 	<span class="tools">{@render children?.()}</span>
 </header>

@@ -3,6 +3,8 @@
  * library view is shareable and bookmarkable, and the query can be forwarded to the API as-is.
  */
 import type { AssetFilters, Facets } from './api/types';
+// With its extension: the mock API runs this file in plain Node.
+import { plural } from './format.ts';
 
 type Key = keyof AssetFilters;
 const BOOLEAN_KEYS = ['favourite', 'hidden', 'guessed_date', 'has_location'] as const;
@@ -123,7 +125,7 @@ function describeParts(f: AssetFilters): string[] {
 	else if (f.from || f.to)
 		parts.push(`${f.from ? formatDay(f.from) : '…'} – ${f.to ? formatDay(f.to) : '…'}`);
 	if (f.year !== undefined) parts.push(f.month ? `${MONTHS[f.month - 1]} ${f.year}` : `${f.year}`);
-	if (f.source_id?.length) parts.push(`${f.source_id.length} source(s)`);
+	if (f.source_id?.length) parts.push(plural(f.source_id.length, 'source'));
 	if (f.camera) parts.push(f.camera);
 	if (f.place) parts.push(f.place);
 	if (f.q) parts.push(`“${f.q}”`);

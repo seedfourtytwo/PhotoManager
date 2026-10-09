@@ -10,5 +10,3 @@ const TITLES: Record<string, string> = {
 export function reviewTitle(reason: string): string {
 	return TITLES[reason] ?? 'Other';
 }
-
-export const photos = (n: number) => `${n} photo${n === 1 ? '' : 's'}`;
