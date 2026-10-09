@@ -153,6 +153,20 @@ describe('longPress', () => {
 		expect(press.echoes(1)).toBe(false);
 	});
 
+	it('a new touch on the pressed photo ends the echo: its click is a tap of its own', () => {
+		const { press } = setup();
+		press.down(1, at(50));
+		vi.advanceTimersByTime(LONG_PRESS_MS);
+		press.end();
+		expect(press.echoes(1)).toBe(true);
+		// The finger comes down again at once: what follows belongs to this touch.
+		vi.advanceTimersByTime(100);
+		press.down(1, at(50));
+		expect(press.echoes(1)).toBe(false);
+		press.end();
+		expect(press.echoes(1)).toBe(false);
+	});
+
 	it('a short tap leaves no echo: its click is a click', () => {
 		const { press } = setup();
 		press.down(1, at(50));

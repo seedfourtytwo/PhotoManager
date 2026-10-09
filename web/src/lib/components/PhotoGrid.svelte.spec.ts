@@ -166,6 +166,22 @@ describe('PhotoGrid', () => {
 		expect(onopen).not.toHaveBeenCalled();
 	});
 
+	it('a tap on the photo right after its long press is a tap, not the echo of the press', async () => {
+		const { onopen, ontoggle } = setup();
+		const el = page.getByRole('button', { name: /18:30/ }).element() as HTMLElement;
+		const touch = (type: string) =>
+			el.dispatchEvent(new PointerEvent(type, { pointerType: 'touch', bubbles: true }));
+		touch('pointerdown');
+		await new Promise((r) => setTimeout(r, 550));
+		touch('pointerup');
+		el.click();
+		touch('pointerdown');
+		touch('pointerup');
+		el.click();
+		expect(ontoggle).toHaveBeenCalledTimes(1);
+		expect(onopen).toHaveBeenCalledExactlyOnceWith(1);
+	});
+
 	/** A touch pointer event on the first photo, at the centre of the photo taken at `over`. */
 	function finger(type: string, over: RegExp) {
 		const first = page.getByRole('button', { name: /18:30/ }).element();

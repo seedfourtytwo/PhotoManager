@@ -9,7 +9,10 @@ import { SLOP } from './gesture';
 
 /** How long a finger has to stay down, without moving, to make a long press. */
 export const LONG_PRESS_MS = 450;
-/** A click this soon after a long press ended, on the photo that was pressed, belongs to it. */
+/**
+ * A click this soon after a long press ended, on the photo that was pressed, belongs to it,
+ * unless a finger went down again first: that click is a tap of its own.
+ */
 const ECHO_MS = 500;
 
 type At = { x: number; y: number };
@@ -46,6 +49,8 @@ export function longPress(on: PressHandlers) {
 		/** A finger went down on photo `id`. */
 		down(id: Id, at: At) {
 			start = { x: at.x, y: at.y };
+			// The echo comes with no touch of its own; a click after this one is this one's.
+			firedAt = -Infinity;
 			clearTimeout(timer);
 			timer = setTimeout(() => {
 				fired = true;
