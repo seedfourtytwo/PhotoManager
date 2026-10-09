@@ -79,6 +79,21 @@ export async function swipe(target: Locator, dx: number, dy = 0) {
 }
 
 /**
+ * The photo view opens and closes as a view transition. While the browser takes its two
+ * pictures (from `startViewTransition` until the first moving frame: a frame or two on
+ * opening, the trip back through the history on closing) it delivers input to nothing. Once
+ * the pictures move, the page takes input again.
+ */
+export const takesInput = (page: Page) =>
+	page.waitForFunction(
+		() =>
+			!document.documentElement.matches(':active-view-transition') ||
+			document
+				.getAnimations()
+				.some((a) => (a.effect as KeyframeEffect).pseudoElement?.startsWith('::view-transition'))
+	);
+
+/**
  * Real touch input through the DevTools protocol: the browser applies touch-action and may
  * cancel the pointer stream, exactly as on a phone (dispatched pointer events would not).
  * The finger goes down at `from` (and rests there for `hold` ms), moves to `to` and stays
@@ -90,6 +105,7 @@ export async function touchDown(
 	to: { x: number; y: number },
 	{ steps = 8, hold = 0 }: { steps?: number; hold?: number } = {}
 ): Promise<() => Promise<void>> {
+	await takesInput(page);
 	const cdp = await page.context().newCDPSession(page);
 	const point = (t: number) => [
 		{ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }

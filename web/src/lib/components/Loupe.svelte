@@ -102,6 +102,14 @@
 		if (index >= items.length - 3) onneedmore?.();
 	});
 
+	// A step to the first or the last photo takes the edge button away from under the focus:
+	// the viewer takes it, so the arrow keys go on working.
+	$effect(() => {
+		void [index, items.length];
+		const focused = document.activeElement;
+		if (focused instanceof HTMLButtonElement && focused.disabled) root?.focus();
+	});
+
 	function go(step: number) {
 		const next = index + step;
 		if (next >= 0 && next < items.length) onindex(next);

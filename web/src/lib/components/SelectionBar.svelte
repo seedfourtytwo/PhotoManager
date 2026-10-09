@@ -12,7 +12,9 @@
 </script>
 
 <script lang="ts">
+	import { onDestroy, tick } from 'svelte';
 	import { viewport } from '$lib/app.svelte';
+	import { refocus } from '$lib/modal';
 	import Icon from './Icon.svelte';
 
 	type Props = { count: number; actions: Action[]; onclear: () => void; busy?: boolean };
@@ -91,9 +93,13 @@
 	});
 
 	function run(action: Action) {
+		// The list closes under the focus: More takes it back, as when Escape closes it.
+		if (more) moreButton?.focus();
 		more = false;
 		action.run();
 	}
+	// The pill goes when the selection does, often with the focus on it or on a dialog it opened.
+	onDestroy(() => void tick().then(refocus));
 </script>
 
 <svelte:window {onkeydown} {onclick} />

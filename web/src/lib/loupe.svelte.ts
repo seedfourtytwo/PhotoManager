@@ -12,6 +12,7 @@ import { page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
 import { notice } from './app.svelte';
+import { refocus } from './modal';
 import { withTransition } from './motion';
 
 export function photoParam(url: URL): Id | undefined {
@@ -139,6 +140,8 @@ export function focusTile(id: Id) {
 		const tile = tileOf(id);
 		tile?.scrollIntoView({ block: 'nearest' });
 		tile?.focus({ preventScroll: true });
+		// The photo has left the list meanwhile (restored from the trash): not on nothing.
+		refocus();
 	});
 }
 

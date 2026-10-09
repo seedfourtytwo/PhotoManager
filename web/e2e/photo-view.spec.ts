@@ -13,6 +13,7 @@ import {
 	test,
 	toast,
 	touchDown,
+	takesInput,
 	touchSwipe
 } from './helpers.ts';
 
@@ -33,6 +34,7 @@ test.describe('photo view', () => {
 		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
 		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
 		const photo = await centre(loupe(page).locator('img.photo'));
+		await takesInput(page);
 		await page.touchscreen.tap(photo.x, photo.y);
 		await page.touchscreen.tap(photo.x, photo.y);
 		await expect(favourite).toHaveAttribute('aria-pressed', 'true');
@@ -145,6 +147,7 @@ test.describe('photo view', () => {
 		const viewer = loupe(page);
 		const was = await alt(viewer);
 		const mid = await centre(viewer.locator('.stage'));
+		await takesInput(page);
 		const cdp = await page.context().newCDPSession(page);
 		const fingers = (spread: number, lift = 0) =>
 			[
@@ -337,6 +340,7 @@ test.describe('photo view', () => {
 		await page.locator('.tile').first().click();
 		await expect(viewer).toBeVisible();
 		const close = await centre(viewer.getByRole('button', { name: 'Close' }));
+		await takesInput(page);
 		expect(await opening()).toBe(true);
 		await page.touchscreen.tap(close.x, close.y);
 		await expect(viewer).toHaveCount(0);
@@ -586,5 +590,66 @@ test.describe('selection pill', () => {
 		expect(await page.evaluate(() => window.scrollY)).toBe(0);
 		await expect(page.getByText('4 selected')).toBeVisible();
 		await expect(page.locator('.tile.selected')).toHaveCount(4);
+	});
+});
+
+test.describe('keyboard focus is never left on nothing', () => {
+	const pill = (page: Page) => page.getByRole('toolbar', { name: 'Selected photos' });
+	/** Where the focus is: a photo, the page, or a named control; "nothing" when it fell to the body. */
+	const focus = (page: Page) =>
+		page.evaluate(() => {
+			const el = document.activeElement;
+			if (!el || el === document.body) return 'nothing';
+			if (el.matches('.tile')) return 'a photo';
+			return el.id === 'main' ? 'the page' : (el.textContent ?? '').trim();
+		});
+
+	test('after an action from the pill’s More, and when the pill goes away', async ({ page }) => {
+		await selectTiles(page, [0, 1]);
+		await selectionAction(page, 'Favourite');
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		expect(await focus(page)).toBe('More');
+		await selectionAction(page, 'Hide');
+		await expect(pill(page)).toHaveCount(0);
+		await expect.poll(() => focus(page)).toBe('a photo');
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Add to album');
+		const dialog = page.getByRole('dialog', { name: 'Add to album' });
+		await dialog.getByLabel('New album title').fill('Focus');
+		await dialog.getByRole('button', { name: 'Add' }).click();
+		await expect(pill(page)).toHaveCount(0);
+		await expect.poll(() => focus(page)).toBe('a photo');
+	});
+
+	test('in the trash, after Restore from the photo view and after Delete for good', async ({
+		page
+	}) => {
+		await selectTiles(page, [0, 1, 2]);
+		await selectionAction(page, 'Move to trash');
+		await expect(toast(page)).toContainText('Moved 3 photos to the trash');
+		await page.goto('/trash');
+		await page.locator('.tile').first().click();
+		await loupe(page).getByRole('button', { name: 'Restore' }).click();
+		await expect(toast(page)).toContainText('Restored 1 photo');
+		await expect(loupe(page)).toHaveCount(0);
+		await expect(page.locator('.tile')).toHaveCount(2);
+		await expect.poll(() => focus(page)).toBe('a photo');
+		await takesInput(page);
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Delete for good');
+		await page
+			.getByRole('dialog', { name: 'Delete for good?' })
+			.getByRole('button', { name: 'Delete for good' })
+			.click();
+		await expect(toast(page)).toContainText('Deleted 1 library copy for good');
+		await expect.poll(() => focus(page)).toBe('a photo');
+		// The last one goes: there is no photo left to take the focus, the page does.
+		await page.getByRole('button', { name: 'Empty trash' }).click();
+		await page
+			.getByRole('dialog', { name: 'Delete for good?' })
+			.getByRole('button', { name: 'Delete for good' })
+			.click();
+		await expect(page.getByText('The trash is empty.')).toBeVisible();
+		await expect.poll(() => focus(page)).toBe('the page');
 	});
 });

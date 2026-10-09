@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { Id, TrashItem } from '$lib/api';
+	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { api, library, notice, session, settings, viewport } from '$lib/app.svelte';
+	import { refocus } from '$lib/modal';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import {
 		EMPTY,
@@ -46,6 +48,9 @@
 		} catch (e) {
 			notice.error(e);
 		}
+		// Photos that were restored or deleted may have had the focus, or the button that did it.
+		await tick();
+		refocus();
 	}
 	$effect(() => void load());
 

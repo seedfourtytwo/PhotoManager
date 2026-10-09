@@ -161,6 +161,21 @@ describe('Loupe: chrome', () => {
 		await expect.element(viewer()).not.toHaveClass(/idle/);
 	});
 
+	it('stepping to the first or last photo with its edge button leaves the focus on the viewer', async () => {
+		server();
+		const { view } = open(photos, 1);
+		for (const [name, index] of [
+			['Previous photo', 0],
+			['Next photo', 2]
+		] as const) {
+			await view.rerender({ index: 1 });
+			const edge = page.getByRole('button', { name }).element() as HTMLElement;
+			edge.focus();
+			await view.rerender({ index });
+			await expect.element(viewer()).toHaveFocus();
+		}
+	});
+
 	it('arrow keys belong to the open More menu, not to the photos', async () => {
 		server();
 		const { onindex } = open();
