@@ -121,6 +121,13 @@ class AccountsMixin(SqliteBase):
     def set_pin_hash(self, user_id: int, password_hash: str) -> None:
         self._write("UPDATE user SET password_hash = ? WHERE id = ?", (password_hash, user_id))
 
+    def stored_look(self, user_id: int) -> str | None:
+        row = self._one("SELECT look FROM user WHERE id = ?", (user_id,))
+        return row["look"] if row else None
+
+    def store_look(self, user_id: int, look: str) -> None:
+        self._write("UPDATE user SET look = ? WHERE id = ?", (look, user_id))
+
     def count_active_admins(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM user WHERE role = 'admin' AND disabled = 0")
 
