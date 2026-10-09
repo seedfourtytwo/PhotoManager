@@ -192,6 +192,13 @@ Rules:
 - All look code sits in `web/src/lib/look/` and `domain/look.py` with no imports from the
   rest of the app, so it can be copied into another project.
 
+As built (step 4, `docs/superpowers/plans/2026-10-08-redesign-4-look-sheet.md`): a value of
+the wrong kind or an unknown choice is rejected like an unknown field; `collectionsRows` may
+not be empty; dials are whole numbers (text scale: two decimals); every role may set its own
+mode; `showToday` and `startPage` are stored but not in the form and without effect until
+the Today page exists; `thumbSize` gives the photo size unless one was chosen on the device
+in Settings; resetting is a `PUT` of `{}`.
+
 ## 6. Technical decisions
 
 - **No component library.** Three primitives of our own on the browser's native dialog and

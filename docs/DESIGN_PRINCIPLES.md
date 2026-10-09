@@ -39,6 +39,15 @@ over photos are translucent glass. This is the **Safelight** theme; the earlier 
 lives on as the **Album** theme (serif titles, small corners, indigo ink). A theme changes
 colours, corners and the title face, never layout.
 
+**Each account has its own look** (`docs/adr/0001`): a theme, a mode (dark, light, or like
+the device), a few dials and a few switches, kept as a validated sheet of values and never as
+CSS. The account chooses its mode in Settings; an admin sets the rest in Admin → People → Look.
+The dials only move tokens (`--acc-h`, `--r-1`/`--r-2`, `--gutter`, the root text size); the
+switches choose from fixed lists (which Collections rows, words under the dock icons). So the
+rules on this page hold for every look: any accent hue passes contrast because lightness and
+chroma stay the theme's, and "reset look" always works. The tables below give a theme's own
+values, which is what a dial left alone uses.
+
 The `.data` class (mono for counts and dates) exists and is used on the account menu's
 counts and badge; other counts and dates outside the photo view take it as their screens are
 reworked. The `--ok` / `--fail` colours exist; the System page's status dots are not built
@@ -140,6 +149,10 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - **Glass** (`.glass`): only for bars that float over photos (dock, top bar, photo actions,
   selection, time ruler). It turns solid `--raised` where blur is unavailable, under
   "reduce transparency", or if it costs the 60 fps scroll budget.
+- **The look form** (Admin → People → Look): one control per field of the sheet, each with
+  its range or its choices, so nothing can be entered that the server would refuse. "Try on
+  my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
+  quiet line at the top of every page says whose look is being tried and offers Stop trying.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
@@ -178,4 +191,4 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - [ ] Keyboard reachable, visible focus, AA contrast, reduced motion respected?
 - [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`, `themes.css` and `fonts.css`?
 - [ ] Phone: 44 px targets, nothing wraps to a second toolbar line, safe areas respected?
-- [ ] Checked in both themes?
+- [ ] Checked in both themes, and with the look's dials at their ends (text size 125 %, corners 0 and 22, gap 0 and 8)?

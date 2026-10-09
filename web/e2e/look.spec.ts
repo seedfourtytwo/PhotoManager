@@ -9,6 +9,7 @@ import {
 	expect,
 	expectAccessible,
 	isPhone,
+	openAccountMenu,
 	resetMock,
 	signIn,
 	test,
@@ -166,6 +167,20 @@ test('a trial ends when the page is reloaded', async ({ page }) => {
 	await expect(page.getByRole('region', { name: 'People' })).toBeVisible();
 	await expect(root(page)).not.toHaveAttribute('data-look');
 	await expect(page.getByText('Trying a look')).toHaveCount(0);
+});
+
+test('a trial ends when the admin signs out: the next person does not get it', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/admin');
+	const form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
+	await form.getByRole('button', { name: 'Try on my screen' }).click();
+	await form.getByRole('button', { name: 'Cancel' }).click();
+	await expect(root(page)).toHaveAttribute('data-look', 'album');
+	const nav = await openAccountMenu(page);
+	await nav.getByRole('button', { name: 'Sign out' }).click();
+	await expect(page).toHaveURL(/\/login$/); // the app went there itself: no reload
+	await expect(root(page)).not.toHaveAttribute('data-look');
 });
 
 test('a member has no way to anyone’s look but their mode', async ({ page }) => {

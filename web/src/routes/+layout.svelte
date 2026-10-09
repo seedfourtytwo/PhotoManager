@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '$lib/tokens.css';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
@@ -28,10 +28,12 @@
 		if (!bare) void session.load();
 	});
 
-	// Each account has its own look: fetch it for whoever is signed in now.
+	// Each account has its own look: fetch it for whoever is signed in now. A look an admin
+	// was trying ends with their session, so the next person here never gets it.
 	const signedInAs = $derived(session.user?.id);
 	$effect(() => {
 		if (signedInAs !== undefined) void loadLook();
+		else untrack(() => look.stopTrying());
 	});
 
 	function cameBack() {

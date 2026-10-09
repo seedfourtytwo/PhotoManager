@@ -122,7 +122,14 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   and uploads (`library.version`). Facets load only while the filter panel is shown, after the
   first thumbnails; years and sources are counted without their own filter, so other values
   stay listed and a chosen value with no matches can be unticked.
-- **Theme**: dark by default; Settings offers Light and Like the system.
+- **Look**: each account has a look sheet (theme, mode, dials, switches; contract v1.5,
+  `docs/adr/0001`). `web/src/lib/look/` holds it and imports nothing from the app: `sheet.ts`
+  (the rules, mirrored from `domain/look.py`), `apply.ts` (root attributes and CSS
+  variables), `cache.ts` (`pa.look` in localStorage), `look.svelte.ts` (the account's sheet
+  and a trial sheet). `app.svelte.ts` fetches it after sign-in and when the tab comes back;
+  a small script in `app.html` paints the cached sheet before the app loads. Dark by
+  default; Settings offers the mode (Dark, Light, Like the device), saved on the account.
+  The earlier per-browser `pa.theme` key is sent as the mode once, then removed.
 
 ## Performance (library grid, 10 000-photo mock, phone 390×844, CPU ×4)
 
