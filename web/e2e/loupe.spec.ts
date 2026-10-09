@@ -219,3 +219,22 @@ test('more like this, when the models are installed', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: /Like this photo/ })).toBeVisible();
 	await expect(page.locator('.tile').first()).toBeVisible();
 });
+
+test('trash and albums: a linked photo that is not in the list leaves no trace in the URL', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page);
+	const album = await (
+		await page.request.post('/api/albums', { data: { title: 'Nothing linked here' } })
+	).json();
+	for (const path of ['/trash', `/albums/${album.id}`]) {
+		await page.goto('/albums');
+		await page.goto(`${path}?photo=999999`);
+		await expect(page).toHaveURL(new RegExp(`${path}$`));
+		await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toHaveCount(0);
+		// One Back leaves the page: no dead entry was left behind.
+		await page.goBack();
+		await expect(page).toHaveURL(/\/albums$/);
+	}
+});
