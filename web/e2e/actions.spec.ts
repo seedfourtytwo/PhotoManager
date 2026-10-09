@@ -154,10 +154,17 @@ test('trash: move, see it with its thumbnail, open it full size, restore', async
 
 test('fix date can be undone: the previous dates come back', async ({ page }) => {
 	await selectTiles(page, [0, 1]);
+	// The photo in words, as its tile says it: the picture's alt text, or the tile's own words
+	// where the thumbnail did not load (the real backend's reset brings back rows, not files).
 	const before = await page
 		.locator('.tile.selected')
 		.evaluateAll((els) =>
-			els.map((e) => [e.getAttribute('data-id'), e.querySelector('img')?.getAttribute('alt')])
+			els.map((e) => [
+				e.getAttribute('data-id'),
+				(e.querySelector('img')?.getAttribute('alt') ?? e.textContent ?? '')
+					.replace('(preview missing)', '')
+					.trim()
+			])
 		);
 	await selectionAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
@@ -170,8 +177,12 @@ test('fix date can be undone: the previous dates come back', async ({ page }) =>
 	await toast(page).getByRole('button', { name: 'Undo' }).click();
 	expect((await undo).postDataJSON()).toHaveProperty('set');
 	await expect(toast(page)).toContainText('Dates put back');
-	for (const [id, alt] of before)
-		await expect(page.locator(`.tile[data-id="${id}"] img`)).toHaveAttribute('alt', alt!);
+	for (const [id, words] of before) {
+		expect(words).toMatch(/^Photo, \d/);
+		await expect(page.locator(`.tile[data-id="${id}"]`)).toHaveAccessibleName(
+			new RegExp(`^${words!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( \\(preview missing\\))?$`)
+		);
+	}
 });
 
 test('download: a server error or an expired session is said, not swallowed', async ({ page }) => {
