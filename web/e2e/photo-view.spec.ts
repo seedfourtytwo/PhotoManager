@@ -1,6 +1,7 @@
 /** Redesign step 3 (spec §4.3–4.5): the photo view's bar and gestures, the time ruler, the selection pill. */
 import type { Locator, Page } from '@playwright/test';
 import {
+	REAL_BACKEND,
 	centre,
 	expect,
 	expectAccessible,
@@ -632,6 +633,7 @@ test.describe('selection pill', () => {
 
 	test('320 px, the largest text and a four-figure count still fit', async ({ page }) => {
 		test.skip(isPhone(page), 'one project sets the widths itself');
+		test.skip(REAL_BACKEND, 'a library of a thousand photos is a mock-only switch');
 		await resetMock('seed', { count: 1100 });
 		await signIn(page);
 		await page.setViewportSize({ width: 320, height: 800 });
