@@ -1,12 +1,13 @@
 import {
+	centre,
 	expect,
 	expectAccessible,
 	isPhone,
 	loupe,
 	resetMock,
 	signIn,
-	swipe,
-	test
+	test,
+	touchSwipe
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -32,11 +33,12 @@ test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page
 	await expect(photo).toHaveAttribute('alt', firstAlt!);
 
 	if (isPhone(page)) {
-		await swipe(viewer.locator('.stage'), -150);
+		const at = await centre(viewer.locator('.stage'));
+		await touchSwipe(page, at, { x: at.x - 150, y: at.y });
 		await expect(photo).not.toHaveAttribute('alt', firstAlt!);
-		await swipe(viewer.locator('.stage'), 150);
+		await touchSwipe(page, at, { x: at.x + 150, y: at.y });
 		await expect(photo).toHaveAttribute('alt', firstAlt!);
-		await swipe(viewer.locator('.stage'), 0, -120);
+		await touchSwipe(page, at, { x: at.x, y: at.y - 120 });
 	} else {
 		await page.keyboard.press('ArrowRight');
 		await expect(photo).not.toHaveAttribute('alt', firstAlt!);

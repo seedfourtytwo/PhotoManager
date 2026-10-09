@@ -85,7 +85,7 @@ export const toast = (page: Page) => page.locator('[role="status"][aria-live="po
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 
-/** Touch pointer events, dispatched directly (Playwright has tap but no long-press/swipe). */
+/** Touch pointer events, dispatched directly (Playwright has tap but no long-press). */
 async function touch(target: Locator, type: string, dx = 0, dy = 0) {
 	const box = (await target.boundingBox())!;
 	await target.dispatchEvent(type, {
@@ -101,11 +101,6 @@ export async function longPress(tile: Locator) {
 	await touch(tile, 'pointerdown');
 	await tile.page().waitForTimeout(600);
 	await touch(tile, 'pointerup');
-}
-
-export async function swipe(target: Locator, dx: number, dy = 0) {
-	await touch(target, 'pointerdown');
-	await touch(target, 'pointerup', dx, dy);
 }
 
 /**
