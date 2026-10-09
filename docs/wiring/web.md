@@ -116,6 +116,12 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 - **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename,
   merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
   faces**, **Settings → Phones and devices**.
+- **Collections** (`/collections`, `CollectionRows`): each row of the account's look shows what
+  is behind it and asks only for that: People `GET /api/people`, Albums `GET /api/albums`,
+  Places `GET /api/assets/facets` and then `GET /api/assets?place=<name>&limit=1` for each of
+  the sixteen biggest places (its newest photo is the cover, and tells a country from a city).
+  A row that fails says so in the toast and the others stay. The ordering rules are pure, in
+  `lib/collections.ts`.
 - **Navigation**: Library · Collections (People, Places, Albums) · Search everywhere, in a top
   bar on a laptop and a floating dock on a phone. The account menu holds To review, Trash,
   Settings, Admin (admins) and Sign out. The selection pill shows Add to album, Download,
