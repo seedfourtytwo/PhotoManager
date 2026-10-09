@@ -28,7 +28,7 @@ import { v11Routes } from './v11.ts';
 import { makeState, noWrongPins } from './data.ts';
 import { makeAsset, PLACES, rng } from './library.ts';
 import type { MockAlbum, MockAsset, MockSource, MockState, MockUser } from './types.ts';
-import { editedSize, iconSvg, renderAsset } from './images.ts';
+import { editedSize, renderAsset } from './images.ts';
 import { zip } from './zip.ts';
 import {
 	admin,
@@ -1691,10 +1691,6 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			state.ml.installed = body.models ?? false;
 			if (body.review) holdSome();
 			return noContent;
-		}
-		if (url.pathname.startsWith('/__mock/icon-')) {
-			const size = Number(url.pathname.replace(/\D/g, '')) || 192;
-			return { status: 200, raw: iconSvg(size), type: 'image/svg+xml' };
 		}
 		return null;
 	}

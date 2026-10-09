@@ -75,8 +75,3 @@ export function editedSize(asset: MockAsset): { width: number; height: number } 
 	const c = recipe.crop ?? { x: 0, y: 0, w: 1, h: 1 };
 	return { width: Math.round(fw * c.w), height: Math.round(fh * c.h) };
 }
-
-/** A calm app icon: a sun over a horizon, drawn in ink on the background. */
-export function iconSvg(size: number): string {
-	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" fill="#111"/><circle cx="${size * 0.5}" cy="${size * 0.46}" r="${size * 0.14}" fill="#ededed"/><rect x="${size * 0.18}" y="${size * 0.66}" width="${size * 0.64}" height="${size * 0.03}" fill="#ededed"/></svg>`;
-}
