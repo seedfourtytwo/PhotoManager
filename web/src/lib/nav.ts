@@ -30,19 +30,15 @@ export const PLACES: Place[] = [
 	}
 ];
 
-const COLLECTIONS: Record<CollectionsRow, { href: string; label: string; about: string }> = {
-	people: {
-		href: '/people',
-		label: 'People',
-		about: 'Everyone the app has recognised in your photos.'
-	},
-	places: { href: '/map', label: 'Places', about: 'Your photos on a map.' },
-	albums: { href: '/albums', label: 'Albums', about: 'Sets of photos you put together.' }
+const COLLECTIONS: Record<CollectionsRow, { href: string; label: string }> = {
+	people: { href: '/people', label: 'People' },
+	places: { href: '/map', label: 'Places' },
+	albums: { href: '/albums', label: 'Albums' }
 };
 
 /** The rows of the Collections page: the ones the account's look names, in its order. */
 export function collectionRows(shown: readonly CollectionsRow[]) {
-	return shown.map((row) => COLLECTIONS[row]);
+	return shown.map((row) => ({ row, ...COLLECTIONS[row] }));
 }
 
 export function accountItems(

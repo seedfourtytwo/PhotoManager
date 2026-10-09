@@ -33,6 +33,14 @@ const FACETS = {
 	total: 180
 };
 
+/** Where the newest photo of each place was taken. */
+const TAKEN_IN: Record<string, { country: string; region: null; city: string }> = {
+	France: { country: 'France', region: null, city: 'Paris' },
+	Carnac: { country: 'France', region: null, city: 'Carnac' },
+	Portugal: { country: 'Portugal', region: null, city: 'Lisbon' },
+	Lisbon: { country: 'Portugal', region: null, city: 'Lisbon' }
+};
+
 type Answers = Partial<Record<'people' | 'albums' | 'facets', unknown>>;
 
 /** Answers the page's requests; a missing answer is a server error. Returns the paths asked for. */
@@ -50,8 +58,12 @@ function stubApi(answers: Answers) {
 			{ '/api/people': 'people', '/api/albums': 'albums', '/api/assets/facets': 'facets' } as const
 		)[url.pathname];
 		if (key) return key in answers ? json(answers[key]) : json({ detail: 'broken' }, 500);
-		if (url.pathname === '/api/assets')
-			return json({ items: [makeAsset(url.searchParams.get('place') === 'France' ? 5 : 6)] });
+		if (url.pathname === '/api/assets') {
+			const place = url.searchParams.get('place') ?? '';
+			return json({
+				items: [makeAsset(place === 'France' ? 5 : 6, undefined, 4, 3, { place: TAKEN_IN[place] })]
+			});
+		}
 		return json({ detail: 'not here' }, 404);
 	});
 	return asked;
@@ -113,6 +125,19 @@ describe('Collections rows', () => {
 		await expect
 			.poll(() => france.element().querySelector('img')?.getAttribute('src'))
 			.toBe('/api/assets/5/thumb');
+	});
+
+	it('a country that is one city and nothing else is not shown twice', async () => {
+		const places = [
+			{ name: 'France', count: 180 },
+			{ name: 'Portugal', count: 73 },
+			{ name: 'Lisbon', count: 73 }
+		];
+		stubApi({ facets: { ...FACETS, places } });
+		render(CollectionRows, { rows: ['places'] });
+		await expect.element(page.getByRole('link', { name: 'Lisbon 73 photos' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'France 180 photos' })).toBeVisible();
+		expect(page.getByRole('link', { name: /^Portugal/ }).elements()).toHaveLength(0);
 	});
 
 	it('do not ask for a row the look leaves out', async () => {

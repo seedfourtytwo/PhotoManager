@@ -23,8 +23,10 @@
 ></span>
 
 <style>
+	/* A face is a badge, not a photo: the one picture that is round. */
 	.face {
 		display: block;
+		border-radius: 50%;
 		background-color: var(--hairline);
 		background-repeat: no-repeat;
 	}

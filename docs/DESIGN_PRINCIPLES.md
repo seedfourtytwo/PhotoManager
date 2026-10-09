@@ -110,7 +110,7 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--s-1 … --s-8` | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px — the only spacings used |
 | `--page-x` | 24 px laptop, 12 px phone (grids on a phone use `--gutter` and pad their words) |
 | `--gutter` | 2 px between photos |
-| `--r-1` / `--r-2` / `--r-pill` | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded |
+| `--r-1` / `--r-2` / `--r-pill` | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded (a person's face is a round badge, not a photo) |
 | `--check-radius` | 4 px: checkbox corners (`--r-1` would make a 16 px box round) |
 | `--target` | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button |
 | `--top` | 56 px top bar on a laptop; 0 on a phone. Everything sticky offsets by it |
@@ -155,6 +155,13 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   its range or its choices, so nothing can be entered that the server would refuse. "Try on
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
   quiet line at the top of every page says whose look is being tried and offers Stop trying.
+- **Collections rows** show what is behind them, not a sentence about it: people as round
+  faces with a name, albums and places as 4:3 covers (a chosen frame, so it may crop), each
+  with its count. Named people come first, then the album changed last, then the places with
+  the most photos; a country that is one city and nothing else is shown once, as the city. A
+  row holds eight; its heading, with a small arrowhead, opens the whole of it. On a phone the
+  strip runs off the side and scrolls; on a laptop it wraps. A row with nothing in it says in
+  one quiet line what will be there.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { AlbumSummary, Person } from './api/types';
-import { albumStrip, peopleStrip, personName, placeStrip } from './collections';
+import {
+	albumStrip,
+	peopleStrip,
+	personName,
+	photoCount,
+	placeStrip,
+	withoutEchoes
+} from './collections';
 
 const person = (id: number, name: string | null, asset_count: number): Person => ({
 	id,
@@ -98,5 +105,58 @@ describe('place strip', () => {
 	});
 	it('stops at the limit', () => {
 		expect(placeStrip(places, 1).map((p) => p.name)).toEqual(['France']);
+	});
+});
+
+describe('photo count', () => {
+	it.each([
+		[0, '0 photos'],
+		[1, '1 photo'],
+		[2, '2 photos'],
+		[12480, '12,480 photos']
+	])('%i reads "%s"', (count, text) => {
+		expect(photoCount(count)).toBe(text);
+	});
+});
+
+describe('places that say the same thing twice', () => {
+	const at = (country: string, city: string | null) => ({ country, region: null, city });
+	const seen = (name: string, count: number, of: ReturnType<typeof at> | null) => ({
+		name,
+		count,
+		href: `/?place=${name}`,
+		of
+	});
+	it('drops a country that is one city and nothing else, and keeps the city', () => {
+		const places = [
+			seen('France', 107, at('France', 'Paris')),
+			seen('Portugal', 73, at('Portugal', 'Lisbon')),
+			seen('Lisbon', 73, at('Portugal', 'Lisbon')),
+			seen('Paris', 28, at('France', 'Paris'))
+		];
+		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['France', 'Lisbon', 'Paris']);
+	});
+	it('keeps a country that holds more than its city', () => {
+		const places = [
+			seen('France', 30, at('France', 'Paris')),
+			seen('Paris', 28, at('France', 'Paris'))
+		];
+		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['France', 'Paris']);
+	});
+	it('keeps two cities that happen to hold as many photos', () => {
+		const places = [
+			seen('Carnac', 36, at('France', 'Carnac')),
+			seen('Sarlat', 36, at('France', 'Sarlat'))
+		];
+		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['Carnac', 'Sarlat']);
+	});
+	it('keeps a country whose city is not among the places shown', () => {
+		expect(
+			withoutEchoes([seen('Portugal', 73, at('Portugal', 'Lisbon'))]).map((p) => p.name)
+		).toEqual(['Portugal']);
+	});
+	it('keeps a place whose photo could not be looked up', () => {
+		const places = [seen('Portugal', 73, null), seen('Lisbon', 73, null)];
+		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['Portugal', 'Lisbon']);
 	});
 });
