@@ -10,7 +10,7 @@
 
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import { NAV_KEYS, neighbour, type Layout, type NavKey } from '$lib/timeline';
+	import { NAV_KEYS, letterboxed, neighbour, type Layout, type NavKey } from '$lib/timeline';
 
 	type Props = {
 		items: AssetOut[];
@@ -236,7 +236,13 @@
 				ondrop={(e) => ondrop(e, i)}
 			>
 				{#if item.thumb}
-					<img src={item.thumb.url} alt={describePhoto(item)} loading="lazy" decoding="async" />
+					<img
+						class:whole={letterboxed(item)}
+						src={item.thumb.url}
+						alt={describePhoto(item)}
+						loading="lazy"
+						decoding="async"
+					/>
 				{:else}
 					<span class="visually-hidden">{describePhoto(item)} (preview not ready)</span>
 				{/if}
@@ -286,6 +292,10 @@
 		height: 100%;
 		object-fit: fill; /* the box already has the photo's true aspect ratio */
 		pointer-events: none;
+	}
+	/* A panorama or a tall strip gets a tile of a sane shape, and sits whole inside it. */
+	img.whole {
+		object-fit: contain;
 	}
 	/* Selection: the accent as an inset frame (a hairline of shade keeps it visible on any
 	   photo); the photo itself stays uncropped and undimmed. */

@@ -42,6 +42,21 @@ describe('PhotoGrid', () => {
 		expect(parseFloat(el.style.width) / parseFloat(el.style.height)).toBeCloseTo(0.75, 3);
 	});
 
+	it('shows a panorama and a tall strip whole, never stretched to the tile', async () => {
+		const extremes = [
+			makeAsset(1, '2019-07-04T18:30:00', 6000, 400, { thumb: { url: pixel } }),
+			makeAsset(2, '2019-07-04T18:31:00', 400, 6000, { thumb: { url: pixel } }),
+			makeAsset(3, '2019-07-04T18:32:00', 400, 300, { thumb: { url: pixel } })
+		];
+		setup({ items: extremes, layout: justify([4, 0.4, 4 / 3], 900, 150, 3) });
+		const fit = (time: string) =>
+			getComputedStyle(page.getByAltText(`Photo, 4 Jul 2019, ${time}`).element()).objectFit;
+		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:30')).toBeInTheDocument();
+		expect(fit('18:30')).toBe('contain');
+		expect(fit('18:31')).toBe('contain');
+		expect(fit('18:32')).toBe('fill');
+	});
+
 	it('describes each photo in words for screen readers', async () => {
 		setup();
 		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:31, Paris')).toBeInTheDocument();
