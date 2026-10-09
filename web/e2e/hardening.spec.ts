@@ -7,6 +7,7 @@ import {
 	expect,
 	isPhone,
 	loupe,
+	NOTHING_HAPPENS_MS,
 	REAL_BACKEND,
 	resetMock,
 	selectTiles,
@@ -106,12 +107,15 @@ async function busyStats(page: Page, delayMs = 0) {
 	return asked;
 }
 
+/** Admin asks for its counts every 1.5 s while work runs: two of those, and a little slack. */
+const TWO_POLLS_MS = 3200;
+
 test('admin: counts are polled at a steady pace while work is running', async ({ page }) => {
 	const asked = await busyStats(page);
 	await signIn(page, '/admin');
 	await expect(page.getByText(/working: 1 running/)).toBeVisible();
 	const from = asked.length;
-	await page.waitForTimeout(3200);
+	await page.waitForTimeout(TWO_POLLS_MS);
 	// One request every 1.5 s: two in this window (three with timing slack), not dozens.
 	expect(asked.length - from).toBeGreaterThanOrEqual(1);
 	expect(asked.length - from).toBeLessThanOrEqual(3);
@@ -132,7 +136,7 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible();
 	await page.waitForTimeout(600); // let the request in flight come back
 	const settled = asked.length;
-	await page.waitForTimeout(3200);
+	await page.waitForTimeout(TWO_POLLS_MS);
 	expect(asked.length).toBe(settled);
 });
 
@@ -282,7 +286,7 @@ test('album: a slow answer for the album you left does not replace the one you a
 	await follow(page, `/albums/${other.id}`);
 	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
 	await late;
-	await page.waitForTimeout(100);
+	await page.waitForTimeout(NOTHING_HAPPENS_MS);
 	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
 	await expect(page.locator('.tile')).toHaveCount(0);
 });

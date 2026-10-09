@@ -58,6 +58,14 @@ export async function openAccountMenu(page: Page): Promise<Locator> {
 }
 
 /**
+ * How long a test waits before it says that nothing happened: no second request, no step
+ * out of the page, no late answer painted over the screen. Nothing announces that, so the
+ * test waits out what could still be on its way (a request `countSlow` holds for 300 ms, a
+ * debounced write, a navigation, a frame of drawing) and then looks.
+ */
+export const NOTHING_HAPPENS_MS = 500;
+
+/**
  * Count the requests a route gets and hold each one a moment, so a double click overlaps.
  * With a `method`, only those requests count and wait.
  */
@@ -97,6 +105,10 @@ async function touch(target: Locator, type: string, dx = 0, dy = 0) {
 	});
 }
 
+/**
+ * A touch held past the grid's long-press threshold: 450 ms, a constant private to
+ * PhotoGrid.svelte (`LONG_PRESS_MS`). 600 ms is that with room for a slow machine.
+ */
 export async function longPress(tile: Locator) {
 	await touch(tile, 'pointerdown');
 	await tile.page().waitForTimeout(600);

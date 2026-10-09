@@ -12,6 +12,7 @@ import {
 	isPhone,
 	loupe,
 	loupeAction,
+	NOTHING_HAPPENS_MS,
 	resetMock,
 	selectionAction,
 	selectTiles,
@@ -122,7 +123,7 @@ test.describe('as admin', () => {
 		await expect(loupe(page)).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(loupe(page)).toHaveCount(0);
-		await page.waitForTimeout(300);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
 		await expect(page).toHaveURL(/\/$/);
 		await expect(page.locator('.tile').first()).toBeVisible();
 	});
@@ -143,7 +144,7 @@ test.describe('as admin', () => {
 		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
 		await page.touchscreen.tap(at.x, at.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');
-		await page.waitForTimeout(300);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
 		expect(patches).toBe(0);
 		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
 		// Now that it can be seen, it works.
@@ -179,7 +180,7 @@ test.describe('as admin', () => {
 		const fav = loupe(page).getByRole('button', { name: 'Favourite' });
 		await fav.dblclick();
 		await expect(fav).toHaveAttribute('aria-pressed', 'true');
-		await page.waitForTimeout(500);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
 		expect(patches.count).toBe(1);
 	});
 

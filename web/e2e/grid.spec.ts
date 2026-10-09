@@ -38,7 +38,7 @@ test('first load fetches one page, and facets only once the filters are open', a
 	});
 	await page.goto('/');
 	await expect(page.locator('.tile img').first()).toBeVisible();
-	await page.waitForTimeout(1500);
+	await page.waitForTimeout(1500); // a second page, were one asked for, would be on its way by now
 	expect(pages).toHaveLength(1);
 	if (isPhone(page)) {
 		expect(facets).toHaveLength(0);
@@ -54,7 +54,7 @@ test('only photos within about a screen and a half are in the page', async ({ pa
 	const height = 300;
 	await page.setViewportSize({ width: page.viewportSize()!.width, height });
 	await page.evaluate(() => window.scrollTo(0, 1500));
-	await page.waitForTimeout(400);
+	await page.waitForTimeout(400); // the grid redraws its rows after the scroll
 	// The grid's one Tab stop stays rendered wherever it is; every other tile is near the screen.
 	const tops = await page
 		.locator('.tile[tabindex="-1"]')

@@ -4,6 +4,7 @@ import {
 	expect,
 	expectAccessible,
 	isPhone,
+	NOTHING_HAPPENS_MS,
 	resetMock,
 	selectionAction,
 	selectTiles,
@@ -141,7 +142,7 @@ test.describe('time ruler', () => {
 		await ruler(page).focus();
 		await page.keyboard.press('End');
 		await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
-		await page.waitForTimeout(500);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
 		await expect(ruler(page)).toHaveAttribute('aria-valuenow', '0');
 	});
 

@@ -1,4 +1,12 @@
-import { expect, expectAccessible, isPhone, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	isPhone,
+	NOTHING_HAPPENS_MS,
+	resetMock,
+	signIn,
+	test
+} from './helpers.ts';
 import type { Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
@@ -63,7 +71,7 @@ test('a search typed just before leaving the page does not follow you there', as
 	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
 	await page.getByRole('link', { name: 'Collections', exact: true }).click();
 	await expect(page).toHaveURL(/\/collections$/);
-	await page.waitForTimeout(500);
+	await page.waitForTimeout(NOTHING_HAPPENS_MS);
 	await expect(page).toHaveURL(/\/collections$/);
 });
 
