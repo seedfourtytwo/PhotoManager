@@ -1,9 +1,8 @@
 <script lang="ts">
-	const rows = [
-		{ href: '/people', label: 'People', about: 'Everyone the app has recognised in your photos.' },
-		{ href: '/map', label: 'Places', about: 'Your photos on a map.' },
-		{ href: '/albums', label: 'Albums', about: 'Sets of photos you put together.' }
-	];
+	import { look } from '$lib/look';
+	import { collectionRows } from '$lib/nav';
+
+	const rows = $derived(collectionRows(look.shown.collectionsRows));
 </script>
 
 <svelte:head><title>Collections · Photos</title></svelte:head>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLACES, accountItems, initialOf } from './nav';
+import { PLACES, accountItems, collectionRows, initialOf } from './nav';
 
 const current = (path: string) => PLACES.find((place) => place.match(path))?.label;
 
@@ -82,5 +82,23 @@ describe('initialOf', () => {
 	});
 	it('falls back to ? without a name', () => {
 		expect(initialOf(undefined)).toBe('?');
+	});
+});
+
+describe('collections rows', () => {
+	it('are People, Places and Albums by default', () => {
+		expect(
+			collectionRows(['people', 'places', 'albums']).map((row) => [row.label, row.href])
+		).toEqual([
+			['People', '/people'],
+			['Places', '/map'],
+			['Albums', '/albums']
+		]);
+	});
+	it('come in the look’s order and only those it names', () => {
+		expect(collectionRows(['albums', 'people']).map((row) => row.label)).toEqual([
+			'Albums',
+			'People'
+		]);
 	});
 });

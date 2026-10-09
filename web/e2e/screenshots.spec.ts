@@ -38,7 +38,9 @@ const LIGHT = new Set([
 	'14-admin',
 	'16-settings',
 	'19-people',
-	'20-print'
+	'20-print',
+	'22-look-form',
+	'23-look-trial'
 ]);
 
 test.beforeEach(async ({ page }) => {
@@ -161,6 +163,28 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '14-admin', p, true);
 	await page.getByRole('region', { name: 'Backups' }).scrollIntoViewIfNeeded();
 	await shot(page, '14b-backups', p);
+
+	// The look of one account: the form, then that look tried on the admin's own screen.
+	await page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: 'partner', exact: true }) })
+		.getByRole('button', { name: 'Look', exact: true })
+		.click();
+	const look = page.getByRole('dialog', { name: 'Look for Partner' });
+	await look.getByRole('checkbox', { name: 'Accent colour: the theme’s own' }).uncheck();
+	await look.getByRole('slider', { name: 'Accent hue' }).fill('200');
+	await shot(page, '22-look-form', p);
+	await look.getByRole('slider', { name: 'Text size' }).fill('1.15');
+	await look.getByRole('button', { name: 'Try on my screen' }).click();
+	await look.getByRole('button', { name: 'Cancel' }).click();
+	// Inside the app: loading a page afresh would end the trial.
+	await page
+		.getByRole('navigation', { name: 'Main' })
+		.getByRole('link', { name: 'Library' })
+		.click();
+	await expect(page.locator('.tile img').first()).toBeVisible();
+	await shot(page, '23-look-trial', p);
+	await page.getByRole('button', { name: 'Stop trying' }).click();
 
 	await page.goto('/settings');
 	await shot(page, '16-settings', p);
