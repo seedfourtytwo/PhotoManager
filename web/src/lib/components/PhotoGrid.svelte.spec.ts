@@ -126,6 +126,33 @@ describe('PhotoGrid', () => {
 		expect(onmove).toHaveBeenCalledWith(2, 0);
 	});
 
+	/** A drag event on the photo taken at `time`; a drop lands on the tile's second half. */
+	function drag(type: string, time: RegExp) {
+		const tile = page.getByRole('button', { name: time }).element();
+		const { right } = tile.getBoundingClientRect();
+		tile.dispatchEvent(
+			new DragEvent(type, { bubbles: true, cancelable: true, clientX: right - 1 })
+		);
+	}
+
+	it('arranging: a photo dropped on another moves there', async () => {
+		const { onmove } = setup({ arrange: true });
+		drag('dragstart', /18:30/);
+		drag('drop', /18:32/);
+		drag('dragend', /18:30/);
+		expect(onmove).toHaveBeenCalledExactlyOnceWith(1, 2);
+	});
+
+	it('arranging: a drag given up moves nothing, then or when something else is dropped later', async () => {
+		const { onmove } = setup({ arrange: true });
+		drag('dragstart', /18:30/);
+		// Esc, or let go outside the grid: the drag ends without a drop.
+		drag('dragend', /18:30/);
+		// Something that is not a photo of this grid (a file, a piece of text) lands on a tile.
+		drag('drop', /18:32/);
+		expect(onmove).not.toHaveBeenCalled();
+	});
+
 	it('long-press on touch selects, and the click that follows does not undo it', async () => {
 		const { onopen, ontoggle } = setup();
 		const el = page.getByRole('button', { name: /18:30/ }).element() as HTMLElement;
