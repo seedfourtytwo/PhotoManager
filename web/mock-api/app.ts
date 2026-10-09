@@ -23,7 +23,14 @@ import { createHelpers } from './helpers.ts';
 import { renderAsset } from './images.ts';
 import { makeAsset, rng } from './library.ts';
 import type { MockAlbum, MockAsset, MockSource, MockState, MockUser } from './types.ts';
-import { v11Routes } from './v11.ts';
+import { backupRoutes } from './routes/backups.ts';
+import { deviceRoutes } from './routes/devices.ts';
+import { folderRoutes } from './routes/folders.ts';
+import { peopleRoutes } from './routes/people.ts';
+import { printRoutes } from './routes/print.ts';
+import { protonRoutes } from './routes/proton.ts';
+import { remoteSourceRoutes } from './routes/remote-sources.ts';
+import { searchRoutes } from './routes/search.ts';
 import { zip } from './zip.ts';
 import {
 	admin,
@@ -1211,7 +1218,16 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		]
 	];
 
-	routes.push(...v11Routes(h));
+	routes.push(
+		...searchRoutes(h),
+		...peopleRoutes(h),
+		...printRoutes(h),
+		...backupRoutes(h),
+		...folderRoutes(h),
+		...deviceRoutes(h),
+		...remoteSourceRoutes(h),
+		...protonRoutes(h)
+	);
 
 	const PUBLIC = new Set(['/api/health', '/api/setup', '/api/auth/accounts', '/api/auth/login']);
 
