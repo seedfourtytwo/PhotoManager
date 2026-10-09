@@ -8,6 +8,7 @@
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
 	import { DOUBLE_TAP_MS, pull, recognise, type Point } from '$lib/gesture';
+	import type { MenuItem } from '$lib/menu';
 	import { modal } from '$lib/modal';
 	import { readout } from '$lib/readout';
 	import { describePhoto } from './PhotoGrid.svelte';
@@ -16,7 +17,7 @@
 	import Editor from './Editor.svelte';
 	import FixDateDialog from './FixDateDialog.svelte';
 	import Icon from './Icon.svelte';
-	import Menu, { type MenuItem } from './Menu.svelte';
+	import Menu from './Menu.svelte';
 
 	type Props = {
 		items: AssetOut[];
