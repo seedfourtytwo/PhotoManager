@@ -511,7 +511,7 @@
 			bottom: 0;
 			height: auto;
 			max-height: 85dvh;
-			z-index: 40;
+			z-index: var(--z-sheet);
 			background: var(--raised);
 			border: 0;
 			border-radius: var(--r-2) var(--r-2) 0 0;
@@ -542,7 +542,7 @@
 			position: fixed;
 			inset: 0;
 			background: var(--scrim);
-			z-index: 35;
+			z-index: var(--z-sheet-backdrop);
 			width: 100%;
 			border-radius: 0;
 		}

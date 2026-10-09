@@ -275,7 +275,7 @@
 		padding: 0;
 		border: 0;
 		color: var(--ink);
-		z-index: 70;
+		z-index: var(--z-editor);
 		background: var(--bg);
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) auto;

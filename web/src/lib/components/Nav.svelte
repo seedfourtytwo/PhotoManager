@@ -57,7 +57,7 @@
 		grid-column: 1 / -1;
 		position: sticky;
 		top: 0;
-		z-index: 20;
+		z-index: var(--z-bar);
 		height: var(--top);
 		box-sizing: border-box;
 		display: flex;
@@ -149,7 +149,7 @@
 			height: auto;
 			justify-content: center;
 			gap: var(--s-2);
-			z-index: 28; /* over the selection bar (25) so the open menu is not covered, under the filter sheet (35) */
+			z-index: var(--z-dock); /* over the selection bar (25) so the open menu is not covered, under the filter sheet (35) */
 			padding: 0 calc(var(--s-3) + env(safe-area-inset-right))
 				calc(var(--s-3) + env(safe-area-inset-bottom)) calc(var(--s-3) + env(safe-area-inset-left));
 			background: none;

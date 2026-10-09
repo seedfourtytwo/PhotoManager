@@ -68,6 +68,21 @@
 	--page-x: var(--s-5); /* page side padding on a laptop */
 	--measure: 36rem; /* line length for prose */
 
+	/* Layers — what floats over what, lowest first. Numbers of 1 to 5 inside a component
+	   order its own pieces and stay there. */
+	--z-ruler: 4; /* the time ruler beside the photos */
+	--z-bar: 20; /* the top bar on a laptop */
+	--z-selection: 25; /* the selection pill */
+	--z-dock: 28; /* the dock on a phone: over the pill, so its open menu is not covered */
+	--z-menu: 30; /* an open menu */
+	--z-lasso: 30; /* the rectangle drawn while selecting with the mouse */
+	--z-sheet-backdrop: 35; /* the scrim under the filter sheet */
+	--z-sheet: 40; /* the filter sheet on a phone */
+	--z-loupe: 50; /* the photo view */
+	--z-toast: 60; /* the toast */
+	--z-editor: 70; /* the editor, over the photo view it opens from */
+	--z-skip: 100; /* the skip link, when focused */
+
 	/* Motion — short, and it follows the finger; off under prefers-reduced-motion. */
 	--motion: 200ms;
 	--motion-sheet: 240ms;
