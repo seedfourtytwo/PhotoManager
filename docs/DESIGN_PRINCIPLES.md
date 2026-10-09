@@ -162,6 +162,11 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   row holds eight; its heading, with a small arrowhead, opens the whole of it. On a phone the
   strip runs off the side and scrolls; on a laptop it wraps. A row with nothing in it says in
   one quiet line what will be there.
+- **Sign-in**: who is looking is a row of round badges with each person's initial, the name
+  under it. The PIN shows as four dots, never as a text box. A touch screen gets a number pad
+  of round keys (1 to 9, then 0 with the word Delete to its right), set in the middle of the
+  screen where the thumb is, and no system keyboard; a laptop has no pad and types. The
+  fourth digit signs in; a wrong PIN empties the dots, which shake once, and says why.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections

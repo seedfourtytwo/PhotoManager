@@ -25,6 +25,7 @@ const DIR =
 /** The light set: the screens where the theme matters most. */
 const LIGHT = new Set([
 	'02-login',
+	'02b-login-pin',
 	'03-library',
 	'04-loupe',
 	'04b-loupe-info',
@@ -67,6 +68,12 @@ test('every screen', async ({ page }, info) => {
 	await resetMock();
 	await page.goto('/login');
 	await shot(page, '02-login', p);
+	await page.getByRole('button', { name: 'Partner', exact: true }).click();
+	// two digits in: tapped on a phone's pad, typed on a laptop
+	if (isPhone(page))
+		for (const digit of '12') await page.getByRole('button', { name: digit }).tap();
+	else await page.getByLabel('PIN').fill('12');
+	await shot(page, '02b-login-pin', p);
 	await signIn(page);
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '03-library', p);
