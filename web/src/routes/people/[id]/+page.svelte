@@ -5,23 +5,13 @@
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { errorMessage, formatCount, photos, plural } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
-	import {
-		LinkedPhoto,
-		LoupeTracker,
-		closePhoto,
-		openPhoto,
-		openPhotoId,
-		showPhoto
-	} from '$lib/loupe.svelte';
+	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
-
-	/** A linked photo is looked for among at most this many of the person's photos. */
-	const DEEP_LINK_LIMIT = 2000;
 
 	const id = $derived(Number(page.params.id));
 	let person = $state<Person | null>(null);
@@ -90,30 +80,10 @@
 		}
 	}
 
-	const loupeId = $derived(openPhotoId(page));
-	const loupeIndex = $derived(
-		loupeId === undefined ? -1 : loader.items.findIndex((a) => a.id === loupeId)
-	);
 	// Same as the library: a linked photo shows on its own until the list holds it.
-	const linked = new LinkedPhoto({
-		fetch: (photo) => api.asset(photo),
-		find: (photo) =>
-			void loader.until(
-				(items) => items.some((a) => a.id === photo) || items.length >= DEEP_LINK_LIMIT
-			)
-	});
-	const tracker = new LoupeTracker((photo) => void timeline?.reveal(photo));
-	$effect(() => {
-		tracker.seen(loupeId);
-		linked.seen(loupeId, loupeIndex >= 0);
-	});
-	const shown = $derived(
-		loupeIndex >= 0
-			? { items: loader.items, index: loupeIndex }
-			: linked.single && linked.single.id === loupeId
-				? { items: [linked.single], index: 0 }
-				: null
-	);
+	const loupe = new TimelineLoupe(loader, () => timeline);
+	$effect(() => loupe.follow());
+	const shown = $derived(loupe.shown);
 </script>
 
 <svelte:head><title>{person?.name ?? 'Person'} · Photos</title></svelte:head>
@@ -186,7 +156,7 @@
 		onindex={(i) => showPhoto(shown.items[i].id)}
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
-		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
+		onchanged={(a) => loupe.changed(a)}
 	/>
 {/if}
 

@@ -5,14 +5,7 @@
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { monthTotals } from '$lib/calendar';
 	import { TimelineLoader } from '$lib/loader.svelte';
-	import {
-		LinkedPhoto,
-		LoupeTracker,
-		closePhoto,
-		openPhoto,
-		openPhotoId,
-		showPhoto
-	} from '$lib/loupe.svelte';
+	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
 	import {
 		EMPTY,
 		TOO_MANY_SELECTED,
@@ -30,9 +23,6 @@
 	import TimeRuler from '$lib/components/TimeRuler.svelte';
 	import UploadButton from '$lib/components/UploadButton.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
-
-	/** A linked photo is looked for among at most this many photos of the timeline. */
-	const DEEP_LINK_LIMIT = 2000;
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
@@ -96,29 +86,9 @@
 	const described = $derived(describeFilters(filters));
 
 	// --- the loupe follows ?photo=<id> -------------------------------------------------------
-	const loupeId = $derived(openPhotoId(page));
-	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
-	// A linked photo shows at once on its own; the timeline looks for it meanwhile (so far and
-	// no further) and takes over when it has it. Closed: back to where the photo is in the grid.
-	const linked = new LinkedPhoto({
-		fetch: (id) => api.asset(id),
-		find: (id) =>
-			void loader.until(
-				(items) => items.some((a) => a.id === id) || items.length >= DEEP_LINK_LIMIT
-			)
-	});
-	const tracker = new LoupeTracker((id) => void timeline?.reveal(id));
-	$effect(() => {
-		tracker.seen(loupeId);
-		linked.seen(loupeId, loupeIndex >= 0);
-	});
-	const shown = $derived(
-		loupeIndex >= 0
-			? { items: loader.items, index: loupeIndex }
-			: linked.single && linked.single.id === loupeId
-				? { items: [linked.single], index: 0 }
-				: null
-	);
+	const loupe = new TimelineLoupe(loader, () => timeline);
+	$effect(() => loupe.follow());
+	const shown = $derived(loupe.shown);
 
 	/** Every way of selecting ends here, so no selection outgrows what one action may carry. */
 	function select(next: Selection) {
@@ -133,7 +103,7 @@
 
 	function onkeydown(event: KeyboardEvent) {
 		const target = event.target as HTMLElement;
-		if (loupeId !== undefined || target.closest('input, select, textarea, dialog')) return;
+		if (loupe.id !== undefined || target.closest('input, select, textarea, dialog')) return;
 		if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
 			event.preventDefault();
 			select(selectAll(order));
@@ -217,10 +187,10 @@
 		onindex={(i) => showPhoto(shown.items[i].id)}
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
-		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
+		onchanged={(a) => loupe.changed(a)}
 		ondates={() => {
 			// Its new date may put it beyond what is loaded: it stays open all the same.
-			linked.hold(shown.items[shown.index]);
+			loupe.hold();
 			reloadAll();
 		}}
 	/>
