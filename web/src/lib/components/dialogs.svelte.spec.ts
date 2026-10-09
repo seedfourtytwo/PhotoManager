@@ -1,7 +1,8 @@
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { makeAsset } from '$lib/testing/fixtures';
+import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 import DownloadDialog from './DownloadDialog.svelte';
 import FixDateDialog from './FixDateDialog.svelte';
 
@@ -74,6 +75,47 @@ describe('FixDateDialog', () => {
 		stubFetch(() => ({}));
 		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
 		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+	});
+});
+
+describe('AddToAlbumDialog', () => {
+	const answers = (url: string) =>
+		url === '/api/albums' ? [] : { id: 7, title: 'Summer', count: 2 };
+
+	it('Enter in the title of a new album adds the photos to it', async () => {
+		const sent = stubFetch((url) => (sent.length ? { id: 7, title: 'Summer' } : answers(url)));
+		const ondone = vi.fn();
+		render(AddToAlbumDialog, { ids: [1, 2], onclose: () => {}, ondone });
+		await page.getByRole('textbox', { name: 'New album title' }).fill('Summer');
+		await userEvent.keyboard('{Enter}');
+		await vi.waitFor(() => expect(ondone).toHaveBeenCalledWith(7));
+		expect(sent.at(-1)).toEqual({
+			url: '/api/albums',
+			body: { title: 'Summer', asset_ids: [1, 2] }
+		});
+	});
+
+	it('Enter does nothing while there is no title', async () => {
+		const sent = stubFetch(answers);
+		render(AddToAlbumDialog, { ids: [1], onclose: () => {}, ondone: () => {} });
+		await page.getByRole('textbox', { name: 'New album title' }).click();
+		await userEvent.keyboard('{Enter}');
+		await expect.element(page.getByRole('button', { name: 'Add' })).toBeDisabled();
+		expect(sent.filter((request) => request.body)).toEqual([]);
+	});
+
+	it('a title stops at 200 characters, and a sentence says so', async () => {
+		stubFetch(answers);
+		render(AddToAlbumDialog, { ids: [1], onclose: () => {}, ondone: () => {} });
+		const title = page.getByRole('textbox', { name: 'New album title' });
+		await expect.element(title).toHaveAttribute('maxlength', '200');
+		await title.fill('x'.repeat(199));
+		await expect.element(page.getByText(/200 characters/)).not.toBeInTheDocument();
+		await userEvent.keyboard('yz');
+		await expect.element(title).toHaveValue('x'.repeat(199) + 'y');
+		await expect
+			.element(page.getByText('A title can be up to 200 characters long.'))
+			.toBeInTheDocument();
 	});
 });
 

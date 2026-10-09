@@ -258,6 +258,8 @@ export type AlbumSummary = {
 	updated_at: string;
 };
 export type AlbumDetail = AlbumSummary & { items: AssetOut[] };
+/** The longest title an album may have (the server refuses a longer one). */
+export const ALBUM_TITLE_MAX = 200;
 export type AlbumIn = { title: string; description?: string; asset_ids?: Id[] };
 export type AlbumPatch = Partial<{ title: string; description: string; cover_asset_id: Id }>;
 export type AlbumMember = { user_id: Id; role: 'viewer' | 'editor' };
