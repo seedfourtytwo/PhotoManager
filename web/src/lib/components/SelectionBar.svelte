@@ -51,9 +51,9 @@
 	// Nothing leaves the glass: while the last thing on the pill ends beyond it, one more
 	// action goes under More. Measured again whenever the room or what is written changes.
 	let bar: HTMLElement | undefined = $state();
+	let tally: HTMLElement | undefined = $state();
 	let clear: HTMLElement | undefined = $state();
 	let measured = $state(0);
-	const remeasure = () => measured++;
 	const room = $derived([viewport.width, count, most, look, measured].join());
 	$effect(() => {
 		void room;
@@ -69,10 +69,25 @@
 			parseFloat(style.borderRightWidth);
 		if (clear.getBoundingClientRect().right > end + 0.5) fits = inline.length - 1;
 	});
-	// The faces arrive after the first paint and are wider or narrower than their fallbacks.
+	// The two ends of the pill change size when the look's text size does, and when the faces
+	// arrive after the first paint; how many actions sit between them does not move either.
 	$effect(() => {
-		document.fonts.addEventListener('loadingdone', remeasure);
-		return () => document.fonts.removeEventListener('loadingdone', remeasure);
+		if (!tally || !clear) return;
+		const ends = [tally, clear];
+		let widths = '';
+		// After this frame, and only for a new size: measuring moves the actions between them.
+		const watch = new ResizeObserver(() => {
+			const now = ends.map((end) => Math.round(end.offsetWidth)).join();
+			if (now === widths) return;
+			widths = now;
+			frame = requestAnimationFrame(() => measured++);
+		});
+		let frame = 0;
+		for (const end of ends) watch.observe(end);
+		return () => {
+			cancelAnimationFrame(frame);
+			watch.disconnect();
+		};
 	});
 
 	function run(action: Action) {
@@ -84,7 +99,7 @@
 <svelte:window {onkeydown} {onclick} />
 
 <div class="bar glass" role="toolbar" aria-label="Selected photos" aria-busy={busy} bind:this={bar}>
-	<span class="count data" role="status">{count} selected</span>
+	<span class="count data" role="status" bind:this={tally}>{count} selected</span>
 	<span class="actions">
 		{#each inline as action (action.label)}
 			<button type="button" class={look} disabled={busy} onclick={() => run(action)}

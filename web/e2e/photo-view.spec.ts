@@ -510,30 +510,69 @@ test.describe('selection pill', () => {
 		await expect(pill(page)).toHaveCount(0);
 	});
 
-	// From the narrowest phone up: what does not fit goes under More, nothing leaves the glass.
-	for (const width of [320, 390, 700])
-		test(`at ${width} px everything on the pill is inside it, and the pill inside the screen`, async ({
+	// From the narrowest phone up, at the look's largest text and with a long count: what does
+	// not fit goes under More, nothing leaves the glass.
+	const fitsInside = async (page: Page, width: number) => {
+		const glass = (await pill(page).boundingBox())!;
+		expect(glass.x).toBeGreaterThanOrEqual(0);
+		expect(glass.x + glass.width).toBeLessThanOrEqual(width);
+		const inside = pill(page).locator('.count, .actions > button, .clear');
+		for (const part of await inside.all()) {
+			const box = (await part.boundingBox())!;
+			expect(box.x).toBeGreaterThanOrEqual(glass.x);
+			expect(box.x + box.width).toBeLessThanOrEqual(glass.x + glass.width);
+		}
+	};
+	const bigText = (page: Page) =>
+		page.evaluate(() => document.documentElement.style.setProperty('--text-scale', '1.25'));
+
+	for (const { width, scale, one } of [
+		{ width: 320, scale: 1, one: false },
+		{ width: 320, scale: 1, one: true },
+		{ width: 320, scale: 1.25, one: false },
+		{ width: 390, scale: 1, one: false },
+		{ width: 390, scale: 1.25, one: false },
+		{ width: 390, scale: 1.25, one: true },
+		{ width: 700, scale: 1, one: false },
+		{ width: 700, scale: 1.25, one: false }
+	])
+		test(`at ${width} px, text ${scale}, ${one ? 'one photo' : 'hundreds'} selected: everything on the pill is inside it`, async ({
 			page
 		}) => {
 			test.skip(isPhone(page), 'one project sets the widths itself');
 			await page.setViewportSize({ width, height: 800 });
-			await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
-			await expect(pill(page).getByRole('status')).toHaveText(/^\d{3} selected$/);
-			const glass = (await pill(page).boundingBox())!;
-			expect(glass.x).toBeGreaterThanOrEqual(0);
-			expect(glass.x + glass.width).toBeLessThanOrEqual(width);
-			const inside = pill(page).locator('.count, .actions > button, .clear');
-			for (const part of await inside.all()) {
-				const box = (await part.boundingBox())!;
-				expect(box.x).toBeGreaterThanOrEqual(glass.x);
-				expect(box.x + box.width).toBeLessThanOrEqual(glass.x + glass.width);
-			}
+			if (one) await page.locator('.tile .check').first().click({ force: true });
+			else await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+			await expect(pill(page).getByRole('status')).toHaveText(
+				one ? '1 selected' : /^\d{3} selected$/
+			);
+			// The text grows under a pill that is already there: it is measured again.
+			if (scale !== 1) await bigText(page);
+			await expect(async () => fitsInside(page, width)).toPass({ timeout: 3000 });
 			await expect(pill(page).getByRole('button', { name: 'Clear selection' })).toBeVisible();
 			// Whatever left the pill is still offered, under More.
 			await pill(page).getByRole('button', { name: 'More' }).click();
 			for (const name of ['Add to album', 'Download', 'Fix date', 'Move to trash'])
 				await expect(pill(page).getByRole('button', { name, exact: true })).toBeVisible();
 		});
+
+	test('320 px, the largest text and a four-figure count still fit', async ({ page }) => {
+		test.skip(isPhone(page), 'one project sets the widths itself');
+		await resetMock('seed', { count: 1100 });
+		await signIn(page);
+		await page.setViewportSize({ width: 320, height: 800 });
+		await bigText(page);
+		const all = page.getByRole('button', { name: 'Select all', exact: true });
+		await expect(async () => {
+			await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+			await expect(all).toBeVisible({ timeout: 500 });
+		}).toPass({ timeout: 20_000 });
+		await all.click();
+		await expect(pill(page).getByRole('status')).toHaveText(/^\d{4} selected$/);
+		await expect(async () => fitsInside(page, 320)).toPass({ timeout: 3000 });
+		await pill(page).getByRole('button', { name: 'More' }).click();
+		await expect(pill(page).getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+	});
 
 	test('phone: long-press then drag selects a run of photos', async ({ page }) => {
 		test.skip(!isPhone(page), 'touch only');
