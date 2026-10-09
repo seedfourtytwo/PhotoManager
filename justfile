@@ -76,10 +76,14 @@ test-web:
     cd web && pnpm test
 
 # E2E (Playwright, desktop 1440x900 + phone 390x844) against the REAL backend: a synthetic
-# library, a throw-away data root and a test-mode server on 127.0.0.1:8440. Never your library.
+# library, a throw-away data root and a test-mode server on 127.0.0.1:8440 (E2E_PORT picks another). Never your library.
 e2e *args:
     #!/usr/bin/env bash
     set -euo pipefail
+    port="${E2E_PORT:-8440}"
+    if curl -s -o /dev/null "http://127.0.0.1:$port/"; then
+        echo "Port $port is taken (another e2e run?). Wait for it, or set E2E_PORT." >&2; exit 1
+    fi
     tmp="$(mktemp -d)"
     server=""
     trap '[ -n "$server" ] && kill "$server" 2>/dev/null; rm -rf "$tmp"' EXIT
@@ -88,13 +92,13 @@ e2e *args:
     (cd backend && uv run python scripts/e2e_seed.py "$tmp/src" "$tmp/data" --scans "$tmp/scans")
     (cd web && pnpm build >/dev/null)
     web="$(cd web/build && pwd)"
-    (cd backend && PA_DATA_ROOT="$tmp/data" PA_TEST_MODE=1 PA_HOST=127.0.0.1 PA_PORT=8440 \
+    (cd backend && PA_DATA_ROOT="$tmp/data" PA_TEST_MODE=1 PA_HOST=127.0.0.1 PA_PORT="$port" \
         PA_ALLOWED_HOSTS='["127.0.0.1","localhost"]' PA_MIN_FREE_GB=0 PA_WEB_DIR="$web" \
         PA_BACKUP_ENABLED=false PA_BACKUP_KEY_DIR="$tmp/backup-keys" \
         exec uv run env HOME="$tmp" python -m photo_assistant >"$tmp/server.log" 2>&1) &
     server=$!
-    for _ in $(seq 60); do curl -sf http://127.0.0.1:8440/api/health >/dev/null && break; sleep 0.5; done
-    cd web && E2E_BASE_URL=http://127.0.0.1:8440 E2E_RESET_URL=http://127.0.0.1:8440/__test/reset \
+    for _ in $(seq 60); do curl -sf "http://127.0.0.1:$port/api/health" >/dev/null && break; sleep 0.5; done
+    cd web && E2E_BASE_URL="http://127.0.0.1:$port" E2E_RESET_URL="http://127.0.0.1:$port/__test/reset" \
         E2E_SCANS_DIR="$tmp/scans" pnpm exec playwright test {{args}}
 
 # The same E2E suite against the in-memory mock API (no backend needed).
