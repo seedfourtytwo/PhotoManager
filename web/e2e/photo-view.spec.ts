@@ -102,6 +102,83 @@ test.describe('photo view', () => {
 		await expect(viewer).toHaveCount(0);
 	});
 
+	test('phone: a touch on hidden chrome that slides away does not eat the next tap', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'touch only');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const toolbar = viewer.getByRole('toolbar', { name: 'Photo actions' });
+		const close = viewer.getByRole('button', { name: 'Close' });
+		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 10_000 });
+		// A finger lands on the hidden Close and slides off: the chrome is back, nothing pressed.
+		const at = await centre(close);
+		await (
+			await touchDown(page, at, { x: at.x + 150, y: at.y })
+		)();
+		await expect(toolbar).toHaveCSS('opacity', '1');
+		await expect(viewer).toBeVisible();
+		// What is in sight can be pressed.
+		await page.touchscreen.tap(at.x, at.y);
+		await expect(viewer).toHaveCount(0);
+	});
+
+	test('phone: the tap that brings the chrome back does not press the button under it', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'touch only');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const toolbar = viewer.getByRole('toolbar', { name: 'Photo actions' });
+		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 10_000 });
+		const at = await centre(viewer.getByRole('button', { name: 'Close' }));
+		await page.touchscreen.tap(at.x, at.y);
+		await expect(toolbar).toHaveCSS('opacity', '1');
+		await expect(viewer).toBeVisible();
+		await page.touchscreen.tap(at.x, at.y);
+		await expect(viewer).toHaveCount(0);
+	});
+
+	test('phone: a pinch neither steps to another photo nor closes the view', async ({ page }) => {
+		test.skip(!isPhone(page), 'touch only');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const was = await alt(viewer);
+		const mid = await centre(viewer.locator('.stage'));
+		await transitionOver(page);
+		const cdp = await page.context().newCDPSession(page);
+		const fingers = (spread: number, lift = 0) =>
+			[
+				{ id: 1, x: mid.x - 30 - spread, y: mid.y + lift },
+				{ id: 2, x: mid.x + 30 + spread, y: mid.y + lift }
+			] as const;
+		await cdp.send('Input.dispatchTouchEvent', {
+			type: 'touchStart',
+			touchPoints: [fingers(0)[0]]
+		});
+		await cdp.send('Input.dispatchTouchEvent', {
+			type: 'touchStart',
+			touchPoints: [...fingers(0)]
+		});
+		// Apart and down together, as a pinch that drifts: far past every swipe threshold.
+		for (let i = 1; i <= 8; i++)
+			await cdp.send('Input.dispatchTouchEvent', {
+				type: 'touchMove',
+				touchPoints: [...fingers(i * 15, i * 15)]
+			});
+		await cdp.send('Input.dispatchTouchEvent', {
+			type: 'touchEnd',
+			touchPoints: [fingers(120, 120)[0]]
+		});
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+		await cdp.detach();
+		await expect(viewer).toBeVisible();
+		expect(await alt(viewer)).toBe(was);
+		// One finger swipes again afterwards.
+		await touchSwipe(page, mid, { x: mid.x - 200, y: mid.y });
+		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', was!);
+	});
+
 	test('the bar reads the photo’s date, time and file name in the data face', async ({ page }) => {
 		await page.locator('.tile').first().click();
 		const readout = loupe(page).locator('.readout');

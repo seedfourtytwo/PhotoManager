@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import type { AssetDetail, AssetOut } from '$lib/api';
 	import { api, library, notice, session, viewport } from '$lib/app.svelte';
@@ -42,17 +43,15 @@
 	let detail = $state<AssetDetail | null>(null);
 	let info = $state(viewport.desktop);
 	let idle = $state(false);
-	/** Keyboard focus is in the toolbar: it stays visible (see the style), so it stays usable. */
-	let toolbarFocus = $state(false);
 	/** The press that brings hidden chrome back must not also press what it uncovers. */
-	let waking = $state(false);
+	let waking = false;
 	let dialog = $state<'download' | 'date' | 'edit' | 'album' | null>(null);
 	let more = $state(false);
 	let root: HTMLDialogElement | undefined = $state();
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
 	let similarReady = $state(false);
-	/** Per-photo actions in flight: a second click while one runs is ignored. */
-	let busy = $state<'favourite' | 'private' | null>(null);
+	/** Actions in flight, each for its own photo: a second click while one runs is ignored. */
+	const busy = new SvelteSet<string>();
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
 
 	const previewOf = (a: AssetOut) =>
@@ -79,9 +78,11 @@
 			.catch(() => undefined);
 	});
 
-	// Details for the sidenote; ignore answers for photos we've already moved past.
+	// Details for the sidenote; ignore answers for photos we've already moved past. Asked once
+	// per photo: a change to the open photo (a favourite) keeps the details it has.
+	const openId = $derived(asset?.id);
 	$effect(() => {
-		const id = asset?.id;
+		const id = openId;
 		if (id === undefined || trash) return;
 		let stale = false;
 		detail = null;
@@ -113,10 +114,19 @@
 		// An open menu is being read: it does not fade away under the eyes.
 		idleTimer = setTimeout(() => (more ? wake() : (idle = true)), IDLE_MS);
 	}
+	// Hidden chrome stays where it is for a screen reader. A press on it brings it back, and the
+	// click of that same press is dropped; a press that ends without a click is forgotten by
+	// the next one.
 	function onchromedown(e: PointerEvent) {
-		if ((e.target as HTMLElement).closest('.stage')) return;
-		waking = idle;
-		wake();
+		const target = e.target as HTMLElement;
+		waking = idle && target.closest('.top') !== null;
+		if (!target.closest('.stage')) wake();
+	}
+	function onchromeclick(e: MouseEvent) {
+		if (!waking) return;
+		waking = false;
+		e.stopPropagation();
+		e.preventDefault();
 	}
 	function hideChrome() {
 		clearTimeout(idleTimer);
@@ -131,8 +141,9 @@
 	/** Optimistic, idempotent toggles: the second click of a double click is ignored. */
 	async function toggle(key: 'favourite' | 'private') {
 		const target = asset;
-		if (!target || busy) return;
-		busy = key;
+		const running = target && `${target.id}:${key}`;
+		if (!running || busy.has(running)) return;
+		busy.add(running);
 		const value = !target[key];
 		onchanged({ ...target, [key]: value });
 		try {
@@ -141,7 +152,7 @@
 			onchanged({ ...target, [key]: !value });
 			notice.error(e);
 		} finally {
-			busy = null;
+			busy.delete(running);
 		}
 	}
 
@@ -153,7 +164,7 @@
 	async function refresh(target: AssetOut, changed: boolean) {
 		try {
 			const fresh = await api.asset(target.id);
-			detail = fresh;
+			if (asset?.id === target.id) detail = fresh;
 			if (changed) onchanged(fresh);
 		} catch (e) {
 			notice.error(e);
@@ -161,7 +172,8 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
-		if (dialog || event.defaultPrevented) return;
+		// An open dialog or menu has the keys.
+		if (dialog || more || event.defaultPrevented) return;
 		const target = event.target as HTMLElement;
 		if (target.closest('input, select, textarea')) return;
 		const keys: Record<string, () => void> = {
@@ -182,6 +194,10 @@
 	// touch-action: none on the stage, so the browser never claims a vertical swipe as a
 	// scroll and cancels it.
 	let press: (Point & { wasIdle: boolean; id: number }) | null = null;
+	/** Fingers on the photo. A second one ends the gesture (a pinch is not a swipe), and none
+	    starts until all are up. */
+	let fingers = 0;
+	let pinched = false;
 	let lastTap: Point | null = null;
 	let tapTimer: ReturnType<typeof setTimeout> | undefined;
 	/** How far the finger has pulled the photo; it eases back when let go. */
@@ -190,6 +206,13 @@
 	const point = (e: PointerEvent): Point => ({ x: e.clientX, y: e.clientY, t: performance.now() });
 
 	function onstagedown(e: PointerEvent) {
+		if (e.button !== 0) return;
+		fingers++;
+		if (pinched || fingers > 1) {
+			pinched = true;
+			endPress();
+			return;
+		}
 		press = { ...point(e), wasIdle: idle, id: e.pointerId };
 		try {
 			(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -207,7 +230,18 @@
 		pulled = { x: 0, y: 0 };
 	}
 
+	function lift() {
+		fingers = Math.max(0, fingers - 1);
+		if (fingers === 0) pinched = false;
+	}
+
+	function onstagecancel() {
+		lift();
+		endPress();
+	}
+
 	function onstageup(e: PointerEvent) {
+		lift();
 		if (!press || press.id !== e.pointerId) return;
 		const up = point(e);
 		const wasIdle = press.wasIdle;
@@ -254,7 +288,7 @@
 	tabindex="-1"
 	onpointermove={(e) => e.pointerType === 'mouse' && wake()}
 	onpointerdown={onchromedown}
-	onclickcapture={() => (waking = false)}
+	onclickcapture={onchromeclick}
 	use:modal={onclose}
 	onclose={() => onclose()}
 >
@@ -268,7 +302,7 @@
 			onpointerdown={onstagedown}
 			onpointermove={onstagemove}
 			onpointerup={onstageup}
-			onpointercancel={endPress}
+			onpointercancel={onstagecancel}
 		>
 			{#key asset.id}
 				<div
@@ -303,14 +337,7 @@
 			><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5 16.5 12 9 19.5" /></svg></button
 		>
 
-		<div
-			class="top"
-			role="toolbar"
-			aria-label="Photo actions"
-			inert={(idle || waking) && !toolbarFocus}
-			onfocusin={(e) => (toolbarFocus = (e.target as HTMLElement).matches(':focus-visible'))}
-			onfocusout={() => (toolbarFocus = false)}
-		>
+		<div class="top" role="toolbar" aria-label="Photo actions">
 			<button type="button" class="pill glass" onclick={onclose}><Icon name="close" />Close</button>
 			<div class="bar glass">
 				<p class="readout data">
@@ -327,7 +354,7 @@
 							type="button"
 							class="action"
 							aria-pressed={asset.favourite}
-							aria-busy={busy === 'favourite'}
+							aria-busy={busy.has(`${asset.id}:favourite`)}
 							onclick={() => toggle('favourite')}><Icon name="favourite" />Favourite</button
 						>
 						{#if viewOnly}
