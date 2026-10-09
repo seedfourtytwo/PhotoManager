@@ -80,10 +80,16 @@ class LookError(ValueError):
 
 
 def _number(field: str, value: object, bounds: tuple[float, float]) -> float:
-    # bool is an int to Python; on a sheet `true` is not a number
-    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
-        raise LookError(f"'{field}' must be a number from {bounds[0]} to {bounds[1]}")
-    return min(max(value, bounds[0]), bounds[1])
+    low, high = bounds
+    # bool is an int to Python, but on a sheet `true` is not a number. Only a float can be
+    # NaN or infinite; an int may be too large for math.isfinite to take, and clamps fine.
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or (isinstance(value, float) and not math.isfinite(value))
+    ):
+        raise LookError(f"'{field}' must be a number from {low} to {high}")
+    return min(max(value, low), high)
 
 
 def _dial(field: str, bounds: tuple[int, int]) -> Callable[[object], int | None]:
@@ -165,7 +171,7 @@ def read_look(stored: str | None) -> Look:
         return DEFAULT_LOOK
     try:
         return parse_look(json.loads(stored))
-    except ValueError:  # not JSON, or not a look (LookError); RecursionError is not ours to hide
+    except ValueError:  # not JSON, or not a look (LookError)
         return DEFAULT_LOOK
 
 

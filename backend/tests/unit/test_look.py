@@ -89,6 +89,13 @@ def test_a_number_outside_its_range_is_clamped(field: str, low: float, high: flo
     assert look_sheet(parse_look({field: high}))[field] == high
 
 
+def test_a_number_too_large_for_a_float_is_clamped_like_any_other() -> None:
+    huge = 10**400  # JSON may carry it; float() of it would overflow
+    sheet = look_sheet(parse_look({"accentHue": huge, "corners": -huge, "textScale": huge}))
+    assert (sheet["accentHue"], sheet["corners"], sheet["textScale"]) == (360, 0, 1.25)
+    assert read_look(f'{{"photoGap": {huge}}}').photo_gap == 8
+
+
 def test_dials_are_stored_as_round_numbers() -> None:
     sheet = look_sheet(parse_look({"accentHue": 71.6, "corners": 3.2, "textScale": 1.1234}))
     assert (sheet["accentHue"], sheet["corners"], sheet["textScale"]) == (72, 3, 1.12)
