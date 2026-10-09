@@ -213,6 +213,13 @@ mode; `showToday` and `startPage` are stored but not in the form and without eff
 the Today page exists; `thumbSize` gives the photo size unless one was chosen on the device
 in Settings; resetting is a `PUT` of `{}`.
 
+After the QA pass on step 4: a *stored* sheet falls back field by field, not as a whole (one
+field that no longer passes reads as its default, the rest stays); a half rounds up and a
+number of any size is clamped, by one table of cases both sides run
+(`docs/contracts/api-v1.md`, `docs/contracts/look-cases.json`); the cached sheet is kept with
+its account's id and cleared on sign-out; `pa.theme` is handed over only to an account that
+still has the defaults.
+
 ## 6. Technical decisions
 
 - **No component library.** Three primitives of our own on the browser's native dialog and

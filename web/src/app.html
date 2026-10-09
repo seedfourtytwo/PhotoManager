@@ -5,31 +5,46 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<!-- First paint in the look this browser last showed, so the default look never flashes.
-		     Sets what applyLook sets (src/lib/look/apply.ts); boot.spec.ts keeps the two equal. -->
+		     Reads the cache as src/lib/look/cache.ts does (a look kept with its account, each
+		     field by the sheet's own rule) and sets what applyLook sets (apply.ts);
+		     boot.spec.ts keeps them equal. -->
 		<script>
 			(function () {
 				var root = document.documentElement;
-				var look = {};
+				var sheet = {};
 				var old = null;
 				try {
 					old = localStorage.getItem('pa.theme');
-					look = JSON.parse(localStorage.getItem('pa.look')) || {};
+					var kept = JSON.parse(localStorage.getItem('pa.look'));
+					if (kept && typeof kept.user === 'number' && kept.sheet) sheet = kept.sheet;
 				} catch (e) {
-					look = {};
+					// blocked storage or not JSON: the defaults
 				}
-				var mode = /^(system|dark|light)$/.test(old) ? old : look.mode || 'dark';
-				if (mode !== 'system') root.setAttribute('data-theme', mode);
-				if (look.theme === 'album') root.setAttribute('data-look', 'album');
-				var px = function (name, value) {
-					if (typeof value === 'number') root.style.setProperty(name, value + 'px');
+				var isMode = function (value) {
+					return value === 'system' || value === 'dark' || value === 'light';
 				};
-				if (typeof look.accentHue === 'number')
-					root.style.setProperty('--acc-h', String(look.accentHue));
-				px('--r-1', look.corners);
-				if (typeof look.corners === 'number') px('--r-2', Math.round((look.corners * 5) / 3));
-				px('--gutter', look.photoGap);
-				if (typeof look.textScale === 'number' && look.textScale !== 1)
-					root.style.setProperty('--text-scale', String(look.textScale));
+				var mode = isMode(old) ? old : isMode(sheet.mode) ? sheet.mode : 'dark';
+				if (mode !== 'system') root.setAttribute('data-theme', mode);
+				if (sheet.theme === 'album') root.setAttribute('data-look', 'album');
+				// a number is pulled into its range, then a half rounds up; anything else is unset
+				var within = function (value, low, high) {
+					return typeof value === 'number' ? Math.min(Math.max(value, low), high) : null;
+				};
+				var whole = function (value) {
+					return value === null ? null : Math.floor(value + 0.5);
+				};
+				var hue = whole(within(sheet.accentHue, 0, 360));
+				var corners = whole(within(sheet.corners, 0, 22));
+				var gap = whole(within(sheet.photoGap, 0, 8));
+				var scale = within(sheet.textScale, 0.9, 1.25);
+				if (hue !== null) root.style.setProperty('--acc-h', String(hue));
+				if (corners !== null) {
+					root.style.setProperty('--r-1', corners + 'px');
+					root.style.setProperty('--r-2', Math.round((corners * 5) / 3) + 'px');
+				}
+				if (gap !== null) root.style.setProperty('--gutter', gap + 'px');
+				if (scale !== null) scale = whole(scale * 100) / 100; // two decimals
+				if (scale !== null && scale !== 1) root.style.setProperty('--text-scale', String(scale));
 			})();
 		</script>
 		%sveltekit.head%

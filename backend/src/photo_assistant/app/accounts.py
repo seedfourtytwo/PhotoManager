@@ -246,8 +246,8 @@ class Accounts:
     # --- look ------------------------------------------------------------------------------
 
     def look_of(self, user_id: int) -> Look:
-        """The account's look; the defaults while it has none, or a stored one no longer
-        passes. Raises UserNotFoundError."""
+        """The account's look; the defaults while it has none, and the default for each stored
+        field that no longer passes. Raises UserNotFoundError."""
         if self._store.get_user(user_id) is None:
             raise UserNotFoundError()
         return read_look(self._store.stored_look(user_id))
@@ -257,22 +257,25 @@ class Accounts:
         so an empty sheet resets the look. Raises UserNotFoundError, InvalidLookError."""
         if self._store.get_user(user_id) is None:
             raise UserNotFoundError()
-        return self._keep_look(user_id, _parsed_look(sheet))
+        look = _parsed_look(sheet)
+        self._store.store_look(user_id, dump_look(look))
+        return look
 
     def choose_mode(self, user: User, sheet: object) -> Look:
         """The one thing an account sets for itself: a sheet holding ``mode`` and nothing
-        else. The rest of its look stays. Raises InvalidLookError."""
+        else. The rest of its look stays, and so does an admin's save that arrives at the same
+        moment: the stored sheet is read and written as one step. Raises InvalidLookError."""
         if not isinstance(sheet, dict) or sheet.keys() != {"mode"}:
             raise InvalidLookError(
                 'you can change only your mode: send {"mode": "dark"}, "light" or "system"; '
                 "an admin sets the rest of your look"
             )
-        current = read_look(self._store.stored_look(user.id))
-        return self._keep_look(user.id, replace(current, mode=_parsed_look(sheet).mode))
-
-    def _keep_look(self, user_id: int, look: Look) -> Look:
-        self._store.store_look(user_id, dump_look(look))
-        return look
+        mode = _parsed_look(sheet).mode
+        return read_look(
+            self._store.change_look(
+                user.id, lambda stored: dump_look(replace(read_look(stored), mode=mode))
+            )
+        )
 
     def _guard_last_admin(self, user: User, patch: UserPatch) -> None:
         is_active_admin = user.role is Role.ADMIN and not user.disabled

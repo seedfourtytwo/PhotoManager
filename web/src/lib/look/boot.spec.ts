@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import page from '../../app.html?raw';
 import { rootLook } from './apply';
 import { cachedLook, type LookStorage } from './cache';
-import { parseLook } from './sheet';
+import { LOOK_RANGES, parseLook } from './sheet';
 
 /**
  * app.html carries a small script that paints the cached look before the app has loaded, so
- * the default look never flashes. It cannot import apply.ts; this keeps the two equal.
+ * the default look never flashes. It cannot import apply.ts or sheet.ts; this keeps it equal
+ * to them, also for a cache that an older or newer build wrote: every field is read by the
+ * sheet's own rule, and a look cached without its account is nobody's.
  */
 const script = /<script>([\s\S]*?)<\/script>/.exec(page)?.[1] ?? '';
 
@@ -40,7 +42,10 @@ function expected(storage: LookStorage) {
 	return { attributes: set(attributes), variables: set(variables) };
 }
 
-const cached = (sheet: unknown) => ({ 'pa.look': JSON.stringify(parseLook(sheet)) });
+/** A cache as the app writes it; `raw` for one that another build, or nobody, wrote. */
+const raw = (sheet: unknown, user: unknown = 7) => ({ 'pa.look': JSON.stringify({ user, sheet }) });
+const cached = (sheet: unknown) => raw(parseLook(sheet));
+const DEFAULTS_PAINTED = { attributes: { 'data-theme': 'dark' }, variables: {} };
 
 describe('the first-paint script', () => {
 	it('is there', () => {
@@ -59,10 +64,42 @@ describe('the first-paint script', () => {
 		['an old setting that is no mode', { ...cached({ mode: 'light' }), 'pa.theme': 'sepia' }],
 		['a cache that is not JSON', { 'pa.look': '{not json' }],
 		['a cache that is not a sheet', { 'pa.look': '[1]' }],
-		['a cached null', { 'pa.look': 'null' }]
+		['a cached null', { 'pa.look': 'null' }],
+		// what cache.ts makes of a cache this build did not write: field by field
+		['one bad field among good ones', raw({ theme: 'album', mode: 'sepia', corners: 6 })],
+		['values of the wrong kind', raw({ theme: 3, mode: ['light'], accentHue: '200', corners: true })], // prettier-ignore
+		['a null where a number must be', raw({ textScale: null, photoGap: null, corners: 4 })],
+		['numbers below their range', raw({ accentHue: -5, corners: -3, photoGap: -1, textScale: 0 })],
+		['numbers above their range', raw({ accentHue: 720, corners: 99, photoGap: 99, textScale: 5 })],
+		['halves, which round up', raw({ accentHue: 0.5, corners: 2.5, photoGap: 7.5, textScale: 1.125 })], // prettier-ignore
+		['a number too large to hold', { 'pa.look': '{"user":7,"sheet":{"accentHue":1e999}}' }],
+		['fields this build does not know', raw({ theme: 'album', addedLater: [1], css: 'x' })],
+		['a sheet that is a list', raw([{ theme: 'album' }])],
+		['a sheet cached without its account', { 'pa.look': JSON.stringify(parseLook({ theme: 'album' })) }], // prettier-ignore
+		['an account that is not a number', raw(parseLook({ theme: 'album' }), '7')],
+		['no account at all', raw(parseLook({ theme: 'album' }), null)]
 	])('sets what applyLook sets: %s', (_, kept) => {
 		const storage = storageOf(kept);
 		expect(firstPaint(storage)).toEqual(expected(storage));
+	});
+
+	const corners = Array.from({ length: LOOK_RANGES.corners[1] + 1 }, (_, at) => at);
+	it.each(corners)('rounds the two corner radii as applyLook does: %i px', (px) => {
+		const storage = storageOf(cached({ corners: px }));
+		expect(firstPaint(storage)).toEqual(expected(storage));
+	});
+
+	it('paints the fields that pass of a cache with one that does not', () => {
+		const storage = storageOf(raw({ theme: 'album', mode: 'sepia', corners: 6, accentHue: 720 }));
+		expect(firstPaint(storage)).toEqual({
+			attributes: { 'data-look': 'album', 'data-theme': 'dark' },
+			variables: { '--acc-h': '360', '--r-1': '6px', '--r-2': '10px' }
+		});
+	});
+
+	it('paints the defaults for a look cached without its account', () => {
+		const ownerless = { 'pa.look': JSON.stringify(parseLook({ theme: 'album', mode: 'light' })) };
+		expect(firstPaint(storageOf(ownerless))).toEqual(DEFAULTS_PAINTED);
 	});
 
 	it('paints the defaults when storage is blocked', () => {
@@ -73,6 +110,6 @@ describe('the first-paint script', () => {
 			setItem: () => undefined,
 			removeItem: () => undefined
 		};
-		expect(firstPaint(blocked)).toEqual({ attributes: { 'data-theme': 'dark' }, variables: {} });
+		expect(firstPaint(blocked)).toEqual(DEFAULTS_PAINTED);
 	});
 });

@@ -1,6 +1,7 @@
 """AccountStore on SQLite: users, sessions, failed logins."""
 
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
@@ -127,6 +128,13 @@ class AccountsMixin(SqliteBase):
 
     def store_look(self, user_id: int, look: str) -> None:
         self._write("UPDATE user SET look = ? WHERE id = ?", (look, user_id))
+
+    def change_look(self, user_id: int, change: Callable[[str | None], str]) -> str:
+        with self._transaction():  # BEGIN IMMEDIATE: a save at the same moment waits its turn
+            row = self._conn.execute("SELECT look FROM user WHERE id = ?", (user_id,)).fetchone()
+            look = change(row["look"] if row else None)
+            self._conn.execute("UPDATE user SET look = ? WHERE id = ?", (look, user_id))
+        return look
 
     def count_active_admins(self) -> int:
         return self._scalar("SELECT COUNT(*) FROM user WHERE role = 'admin' AND disabled = 0")

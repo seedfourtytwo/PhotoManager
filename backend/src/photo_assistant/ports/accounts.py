@@ -1,5 +1,6 @@
 """Ports for accounts: password hashing and the account/session store."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -82,6 +83,11 @@ class AccountStore(Protocol):
         ...
 
     def store_look(self, user_id: int, look: str) -> None: ...
+    def change_look(self, user_id: int, change: Callable[[str | None], str]) -> str:
+        """Store what ``change`` makes of the account's stored sheet, and answer it. One
+        transaction: no other write to this look lands between the read and the write."""
+        ...
+
     def count_active_admins(self) -> int: ...
 
     # sessions

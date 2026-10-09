@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { applyLook, rootLook, type LookRoot } from './apply';
-import { parseLook } from './sheet';
+import themes from '../themes.css?raw';
+import tokens from '../tokens.css?raw';
+import { readBlocks } from '../testing/css-blocks';
+import { applyLook, rootLook, themeDials, type LookRoot } from './apply';
+import { parseLook, type Mode, type Theme } from './sheet';
 
 const styles = Object.values(
 	import.meta.glob(['/src/**/*.svelte', '/src/**/*.css'], {
@@ -82,6 +85,33 @@ describe('rootLook', () => {
 describe('the stylesheets', () => {
 	it.each(Object.keys(NOTHING))('read %s, so the dial does something', (name) => {
 		expect(styles).toContain(`var(${name}`);
+	});
+});
+
+describe('themeDials (where a dial stands while it is left to the theme)', () => {
+	const colours = readBlocks(themes);
+	const shapes = readBlocks(tokens);
+
+	it.each<[Theme, Mode, string, string]>([
+		['safelight', 'dark', ':root', ':root'],
+		['safelight', 'light', ":root[data-theme='light']", ':root'],
+		['album', 'dark', ":root[data-look='album']", ":root[data-look='album']"],
+		['album', 'light', ":root[data-look='album'][data-theme='light']", ":root[data-look='album']"]
+	])('%s %s has the accent and corners of the stylesheets', (theme, mode, colour, shape) => {
+		expect(themeDials(theme, mode)).toMatchObject({
+			accentHue: Number(colours.get(colour)?.['--acc-h']),
+			corners: parseInt(shapes.get(shape)?.['--r-1'] ?? '')
+		});
+	});
+
+	it('differs between the themes, so one theme’s values cannot stand in for the other’s', () => {
+		expect(themeDials('safelight', 'dark')).toEqual({ accentHue: 72, corners: 12, photoGap: 3 });
+		expect(themeDials('album', 'dark')).toEqual({ accentHue: 281, corners: 3, photoGap: 3 });
+		expect(themeDials('album', 'light').accentHue).toBe(275);
+	});
+
+	it('following the device counts as dark, the mode a look starts in', () => {
+		expect(themeDials('album', 'system')).toEqual(themeDials('album', 'dark'));
 	});
 });
 
