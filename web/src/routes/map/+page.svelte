@@ -5,12 +5,14 @@
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { photos } from '$lib/format';
 	import { eachPage } from '$lib/paging';
 	import {
 		clusterPoints,
 		clusterRadius,
 		clustersInView,
 		dominantPlace,
+		nearestCluster,
 		type Cluster
 	} from '$lib/geo';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
@@ -22,7 +24,8 @@
 	let points = $state.raw<MapPoint[]>([]);
 	let loaded = $state(false);
 	let located = $state.raw<Map<Id, AssetOut>>(new Map());
-	let chosen = $state<Cluster | null>(null);
+	/** Where on the map a dot was chosen. */
+	let chosenAt = $state<{ x: number; y: number } | null>(null);
 	let width = $state(0);
 	let gridWidth = $state(0);
 
@@ -45,11 +48,14 @@
 	const clusters = $derived(
 		clustersInView(allClusters, { x: view.x, y: view.y, w: view.w, h: vh }, 5)
 	);
+	// The chosen dot is the one that is there now: choosing zooms in and the dots split, so
+	// the heading, the photos below and the dot drawn as chosen are always the same dot.
+	const chosen = $derived(chosenAt ? nearestCluster(allClusters, chosenAt) : null);
 
 	$effect(() => {
 		const f = filters;
 		let stale = false;
-		chosen = null;
+		chosenAt = null;
 		api
 			.map(f)
 			.then((p) => {
@@ -157,7 +163,7 @@
 	});
 
 	function choose(c: Cluster) {
-		chosen = c;
+		chosenAt = { x: c.x, y: c.y };
 		// Zoom towards dense clusters so they split; single places stay put.
 		if (c.ids.length > 1 && view.w > 20) zoom(0.35, c.x, c.y);
 	}
@@ -169,7 +175,7 @@
 	<header>
 		<h1>Map</h1>
 		<p class="quiet">
-			{points.length} photos with a location{#if describeFilters(filters)}&ensp;·&ensp;{describeFilters(
+			{photos(points.length)} with a location{#if describeFilters(filters)}&ensp;·&ensp;{describeFilters(
 					filters
 				)}{/if}
 		</p>
@@ -209,7 +215,7 @@
 				{@const r = clusterRadius(c.ids.length, 2) / pxPerUnit}
 				<a
 					href={`/${filtersToQuery(filters)}`}
-					aria-label={`${c.ids.length} photo${c.ids.length === 1 ? '' : 's'} here`}
+					aria-label={`${photos(c.ids.length)} here`}
 					onclick={(e) => {
 						e.preventDefault();
 						// detail 0 is the keyboard (Enter), which no drag precedes
@@ -258,8 +264,13 @@
 			</h2>
 			{#if chosenPlace && placeTotal !== null && placeTotal !== chosen.ids.length}
 				<p class="quiet small">
-					This dot holds {chosen.ids.length} photos; the library filters by place, so it shows all {placeTotal}
-					from {chosenPlace}.
+					{#if placeTotal > chosen.ids.length}
+						This dot holds {photos(chosen.ids.length)}; the library filters by place, so it shows
+						all {placeTotal} from {chosenPlace}.
+					{:else}
+						This dot holds {photos(chosen.ids.length)} from more than one place; the library filters by
+						place, so it shows the {placeTotal} from {chosenPlace}.
+					{/if}
 				</p>
 			{/if}
 			<div bind:clientWidth={gridWidth}>

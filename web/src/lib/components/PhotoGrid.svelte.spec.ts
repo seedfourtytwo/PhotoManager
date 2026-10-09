@@ -5,7 +5,8 @@ import { makeAsset } from '$lib/testing/fixtures';
 import { justify } from '$lib/timeline';
 import PhotoGrid from './PhotoGrid.svelte';
 
-const pixel = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+// A complete 1 × 1 image: one that does not load would leave its tile without a picture.
+const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const items = [
 	makeAsset(1, '2019-07-04T18:30:00', 400, 300, { thumb: { url: pixel } }),
 	makeAsset(2, '2019-07-04T18:31:00', 300, 400, {
@@ -40,6 +41,55 @@ describe('PhotoGrid', () => {
 		await expect.element(tile).toBeInTheDocument();
 		const el = tile.element() as HTMLElement;
 		expect(parseFloat(el.style.width) / parseFloat(el.style.height)).toBeCloseTo(0.75, 3);
+	});
+
+	it('shows a panorama and a tall strip whole, never stretched to the tile', async () => {
+		const extremes = [
+			makeAsset(1, '2019-07-04T18:30:00', 6000, 400, { thumb: { url: pixel } }),
+			makeAsset(2, '2019-07-04T18:31:00', 400, 6000, { thumb: { url: pixel } }),
+			makeAsset(3, '2019-07-04T18:32:00', 400, 300, { thumb: { url: pixel } })
+		];
+		setup({ items: extremes, layout: justify([4, 0.4, 4 / 3], 900, 150, 3) });
+		const fit = (time: string) =>
+			getComputedStyle(page.getByAltText(`Photo, 4 Jul 2019, ${time}`).element()).objectFit;
+		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:30')).toBeInTheDocument();
+		expect(fit('18:30')).toBe('contain');
+		expect(fit('18:31')).toBe('contain');
+		expect(fit('18:32')).toBe('fill');
+	});
+
+	it('a thumbnail that fails to load leaves a quiet tile, not a broken image', async () => {
+		const broken = [
+			makeAsset(1, '2019-07-04T18:30:00', 400, 300, {
+				thumb: { url: 'data:image/png;base64,AAAA' }
+			}),
+			makeAsset(2, '2019-07-04T18:31:00', 400, 300, { thumb: { url: pixel } })
+		];
+		setup({ items: broken, layout: justify([4 / 3, 4 / 3], 600, 150, 3) });
+		const tile = page.getByRole('button', { name: /18:30/ });
+		await expect.element(tile).toHaveTextContent('Photo, 4 Jul 2019, 18:30 (preview missing)');
+		expect(tile.element().querySelector('img')).toBeNull();
+		// The photo beside it is untouched.
+		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:31')).toBeInTheDocument();
+	});
+
+	it('a thumbnail that failed is asked for again when the photos are loaded anew', async () => {
+		const bad = 'data:image/png;base64,AAAA';
+		const fresh = () => [makeAsset(1, '2019-07-04T18:30:00', 400, 300, { thumb: { url: bad } })];
+		const { view } = setup({ items: fresh(), layout: justify([4 / 3], 600, 150, 3) });
+		const tile = page.getByRole('button', { name: /18:30/ });
+		await expect.element(tile).toHaveTextContent(/preview missing/);
+		// Every picture put into the tile from here on: a new try is a new <img>.
+		let tries = 0;
+		const watch = new MutationObserver((records) => {
+			for (const record of records)
+				for (const node of record.addedNodes) if (node.nodeName === 'IMG') tries++;
+		});
+		watch.observe(tile.element(), { childList: true, subtree: true });
+		await view.rerender({ items: fresh() });
+		await vi.waitFor(() => expect(tries).toBe(1));
+		await expect.element(tile).toHaveTextContent(/preview missing/);
+		watch.disconnect();
 	});
 
 	it('describes each photo in words for screen readers', async () => {

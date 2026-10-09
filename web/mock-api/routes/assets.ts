@@ -125,7 +125,7 @@ export function assetRoutes(h: Helpers): Route[] {
 			'POST',
 			/^\/api\/assets\/dates$/,
 			(ctx) => {
-				const body = ctx.body as { set?: string; shift_minutes?: number };
+				const body = (ctx.body ?? {}) as { set?: string; shift_minutes?: number };
 				if ((body.set === undefined) === (body.shift_minutes === undefined))
 					throw new HttpError(422, 'Give exactly one of set or shift_minutes.');
 				if (body.set !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(body.set))

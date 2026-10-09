@@ -283,6 +283,12 @@ describe('with seeded users', () => {
 		expect(Date.parse(`${a.taken_at}Z`) - Date.parse(`${detail.taken_at}Z`)).toBe(3_600_000);
 	});
 
+	it('refuses a date change without a body as invalid, like the server (422, not 500)', async () => {
+		const api = await signedIn();
+		// Nothing at all is sent: the typed client would never, a stray caller might.
+		await expect(api.changeDates(undefined as never)).rejects.toMatchObject({ status: 422 });
+	});
+
 	it('saves and reverts an edit recipe, bumping the thumb version', async () => {
 		const api = await signedIn();
 		const [a] = (await api.assets({}, null, 1)).items;

@@ -12,8 +12,22 @@ import { page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
 import { notice } from './app.svelte';
+import { wentBack } from './history-step';
 import { refocus } from './modal';
 import { withTransition } from './motion';
+
+/** Said once for a link to a photo that is not there, whatever was wrong with it. */
+const NOT_FOUND = 'That photo was not found.';
+
+/**
+ * A `photo` in the address that cannot be a photo's id (`?photo=abc`) opens nothing: say so
+ * and take it out of the address. Called where the app notices a new address (the layout).
+ */
+export function dropBadPhotoParam(url: URL) {
+	if (!url.searchParams.has('photo') || photoParam(url) !== undefined) return;
+	notice.show(NOT_FOUND);
+	replaceState(withPhoto(url.href, null), { photo: null });
+}
 
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
@@ -77,15 +91,6 @@ function nameTile(id: Id): () => void {
 	const tile = tileOf(id);
 	tile?.style.setProperty('view-transition-name', 'photo');
 	return () => tile?.style.removeProperty('view-transition-name');
-}
-
-/** After `history.back()`: the earlier entry is the current one (or it is taking too long). */
-function wentBack(): Promise<void> {
-	if (typeof window === 'undefined') return Promise.resolve();
-	return new Promise((resolve) => {
-		window.addEventListener('popstate', () => resolve(), { once: true });
-		setTimeout(resolve, 300);
-	});
 }
 
 /** Opens from the photo's tile where the browser can show that. */
@@ -187,13 +192,16 @@ export class LinkedPhoto {
 		fetch: (id: Id) => Promise<AssetOut>;
 		/** Start looking for the photo in the page's own list (load more of it). */
 		find?: (id: Id) => void;
-		/** The photo does not exist or may not be seen: by default the loupe closes. */
+		/** The photo does not exist or may not be seen: by default that is said and the loupe closes. */
 		onmissing?: () => void;
 		/** It could not be fetched for another reason (offline, a server error): by default a toast. */
 		onerror?: (error: unknown) => void;
 	}) {
 		this.#options = {
-			onmissing: closePhoto,
+			onmissing: () => {
+				notice.show(NOT_FOUND);
+				closePhoto();
+			},
 			onerror: (error) => notice.error(error),
 			...options
 		};

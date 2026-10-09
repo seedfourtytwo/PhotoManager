@@ -24,10 +24,24 @@ export function groupByMonth(assets: AssetOut[]): MonthGroup[] {
 	return groups;
 }
 
-/** Width ÷ height, falling back to 3:2 when the size is unknown. Clamped so panoramas stay sane. */
+/** The narrowest and the widest tile: a strip or a panorama at its own shape would be a sliver. */
+const MIN_ASPECT = 0.4;
+const MAX_ASPECT = 4;
+
+/** Width ÷ height of the photo's tile, falling back to 3:2 when the size is unknown. */
 export function aspect(asset: Pick<AssetOut, 'width' | 'height'>): number {
 	if (!asset.width || !asset.height) return 1.5;
-	return Math.min(Math.max(asset.width / asset.height, 0.4), 4);
+	return Math.min(Math.max(asset.width / asset.height, MIN_ASPECT), MAX_ASPECT);
+}
+
+/**
+ * The tile is not the photo's own shape (a panorama, a tall strip): the photo is shown whole
+ * inside it, with room left over, rather than stretched or cropped.
+ */
+export function letterboxed(asset: Pick<AssetOut, 'width' | 'height'>): boolean {
+	if (!asset.width || !asset.height) return false;
+	const ratio = asset.width / asset.height;
+	return ratio < MIN_ASPECT || ratio > MAX_ASPECT;
 }
 
 export type Box = { x: number; y: number; w: number; h: number };

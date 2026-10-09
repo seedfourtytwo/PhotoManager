@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { errorMessage, formatBytes, formatWhen, nextCheckText } from './format';
+import { errorMessage, formatBytes, formatWhen, nextCheckText, photos, plural } from './format';
 
 describe('formatBytes', () => {
 	it.each([
@@ -55,5 +55,20 @@ describe('errorMessage', () => {
 		expect(errorMessage(new Error(''), 'Could not change the PIN.')).toBe(
 			'Could not change the PIN.'
 		);
+	});
+});
+
+describe('plural', () => {
+	it('counts photos in words', () => {
+		expect(photos(0)).toBe('0 photos');
+		expect(photos(1)).toBe('1 photo');
+		expect(photos(2)).toBe('2 photos');
+		expect(photos(1204)).toBe('1,204 photos');
+	});
+	it('takes any noun, and its own plural where an s is not it', () => {
+		expect(plural(1, 'source')).toBe('1 source');
+		expect(plural(3, 'source')).toBe('3 sources');
+		expect(plural(1, 'library copy', 'library copies')).toBe('1 library copy');
+		expect(plural(2, 'library copy', 'library copies')).toBe('2 library copies');
 	});
 });

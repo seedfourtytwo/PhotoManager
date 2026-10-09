@@ -4,6 +4,7 @@ import {
 	clusterRadius,
 	clustersInView,
 	dominantPlace,
+	nearestCluster,
 	placeLabel,
 	project
 } from './geo';
@@ -117,5 +118,24 @@ describe('dominantPlace', () => {
 	it('labels places compactly', () => {
 		expect(placeLabel(paris)).toBe('Paris, Île-de-France, France');
 		expect(placeLabel(null)).toBeNull();
+	});
+});
+
+describe('nearestCluster (the chosen dot, after the map has clustered again)', () => {
+	const bounds = { south: 0, west: 0, north: 0, east: 0 };
+	const clusters = [
+		{ x: 10, y: 10, ids: [1, 2, 3], bounds },
+		{ x: 12, y: 10, ids: [4], bounds },
+		{ x: 200, y: 90, ids: [5, 6], bounds }
+	];
+
+	it('is the dot closest to where the choice was made', () => {
+		expect(nearestCluster(clusters, { x: 10.4, y: 10 })?.ids).toEqual([1, 2, 3]);
+		expect(nearestCluster(clusters, { x: 11.5, y: 10 })?.ids).toEqual([4]);
+		expect(nearestCluster(clusters, { x: 190, y: 80 })?.ids).toEqual([5, 6]);
+	});
+
+	it('is nothing on an empty map', () => {
+		expect(nearestCluster([], { x: 1, y: 1 })).toBeNull();
 	});
 });

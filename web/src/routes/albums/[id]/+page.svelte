@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
+	import { ALBUM_TITLE_MAX, type AlbumDetail, type AssetOut, type Id } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
 	import { errorMessage } from '$lib/format';
 	import { LatestWriter } from '$lib/latest';
@@ -153,8 +153,9 @@
 		}
 	}
 
-	async function rename() {
-		if (busy) return;
+	async function rename(event: SubmitEvent) {
+		event.preventDefault();
+		if (busy || !title.trim()) return;
 		busy = true;
 		try {
 			await api.updateAlbum(id, { title: title.trim(), description: description.trim() });
@@ -173,7 +174,8 @@
 		try {
 			await api.deleteAlbum(id);
 			notice.show('Album deleted. Its photos are still in the library.');
-			await goto('/albums');
+			// In place of the confirmation's history step: Back does not return to its question.
+			await goto('/albums', { replaceState: true });
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -275,10 +277,16 @@
 	/>
 {:else if dialog === 'rename'}
 	<Dialog title="Rename album" onclose={() => (dialog = null)}>
-		<label class="field">Title <input bind:value={title} /></label>
-		<label class="field">Description <input bind:value={description} /></label>
+		<!-- A form, so Enter in a field saves. -->
+		<form id="rename-album" onsubmit={rename}>
+			<label class="field">Title <input bind:value={title} maxlength={ALBUM_TITLE_MAX} /></label>
+			{#if title.length >= ALBUM_TITLE_MAX}
+				<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
+			{/if}
+			<label class="field">Description <input bind:value={description} /></label>
+		</form>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={busy || !title.trim()} onclick={rename}
+			<button class="primary" type="submit" form="rename-album" disabled={busy || !title.trim()}
 				>Save</button
 			>
 		{/snippet}

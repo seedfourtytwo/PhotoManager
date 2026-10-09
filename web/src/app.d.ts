@@ -6,6 +6,8 @@ declare global {
 			photo?: number | null;
 			/** This entry was pushed to open the loupe: Back closes it. */
 			pushed?: boolean;
+			/** This entry is the history step of an open sheet (lib/history-step.ts): its mark. */
+			sheet?: string;
 		}
 	}
 }

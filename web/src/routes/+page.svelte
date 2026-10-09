@@ -50,6 +50,8 @@
 		if (query === lastQuery) return;
 		lastQuery = query;
 		selection = EMPTY;
+		// The count of the filters before is not this view's: none is shown until it is known.
+		total = null;
 		void loader.reset(filters);
 	});
 

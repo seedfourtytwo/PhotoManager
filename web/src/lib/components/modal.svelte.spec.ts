@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { createRawSnippet } from 'svelte';
 import { makeAsset } from '$lib/testing/fixtures';
+// The sizes under test are tokens: without them a dialog has no width of its own.
+import '$lib/tokens.css';
 import Dialog from './Dialog.svelte';
 import Editor from './Editor.svelte';
 
@@ -137,5 +139,19 @@ describe.each(cases)('$name as a modal', ({ open, find }) => {
 			await settled();
 			expect(document.activeElement).toBe(document.body);
 		});
+	});
+});
+
+describe('Dialog on a phone', () => {
+	afterEach(() => page.viewport(1280, 720));
+
+	it.each([false, true])('is a sheet as wide as the screen (wide: %s)', async (wide) => {
+		await page.viewport(390, 844);
+		render(Dialog, { title: 'Access', onclose: () => {}, children: body, wide });
+		const dialog = page.getByRole('dialog', { name: 'Access' });
+		await expect.element(dialog).toBeVisible();
+		const box = dialog.element().getBoundingClientRect();
+		expect(box.left).toBe(0);
+		expect(box.width).toBe(390);
 	});
 });
