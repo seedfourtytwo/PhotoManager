@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import { NAV_KEYS, neighbour, type Layout, type NavKey } from '$lib/timeline';
 
 	type Props = {
@@ -145,12 +145,15 @@
 		return () => element.removeEventListener('touchmove', hold);
 	});
 
+	// Heard on the window, not on the tile: the windowed grid may take the pressed tile off the
+	// page before the finger lifts, and the press has to end all the same.
 	function cancelPress() {
 		clearTimeout(pressTimer);
 		pressStart = null;
 		if (pressFired) longPressAt = performance.now();
 		pressFired = false;
 	}
+	onDestroy(() => clearTimeout(pressTimer));
 
 	function onkeydown(event: KeyboardEvent, id: Id, index: number) {
 		const plain = !event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
@@ -191,6 +194,8 @@
 	}
 </script>
 
+<svelte:window onpointerup={cancelPress} onpointercancel={cancelPress} />
+
 <div
 	class="grid"
 	role="group"
@@ -219,8 +224,6 @@
 				onclick={(e) => onclick(e, item.id)}
 				onpointerdown={(e) => onpointerdown(e, item.id)}
 				{onpointermove}
-				onpointerup={cancelPress}
-				onpointercancel={cancelPress}
 				oncontextmenu={(e) => {
 					if (pressStart) e.preventDefault();
 				}}
