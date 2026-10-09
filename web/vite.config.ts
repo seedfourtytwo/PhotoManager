@@ -16,7 +16,9 @@ export default defineConfig({
 	],
 	server: {
 		// PA_API points the dev server at another API, e.g. the mock (pnpm mock) on :8421.
-		proxy: { '/api': process.env.PA_API ?? 'http://127.0.0.1:8420' }
+		// Not under vitest: a request a component test lets through must never reach a real
+		// library that happens to be running on this machine.
+		proxy: process.env.VITEST ? {} : { '/api': process.env.PA_API ?? 'http://127.0.0.1:8420' }
 	},
 	test: {
 		expect: { requireAssertions: true },
