@@ -4,6 +4,7 @@ import {
 	ADMIN,
 	expect,
 	isPhone,
+	loupe,
 	REAL_BACKEND,
 	resetMock,
 	selectTiles,
@@ -430,10 +431,10 @@ test('a link to an old photo opens it at once, not after paging through the libr
 		await route.continue().catch(() => undefined);
 	});
 	await page.goto(`/?photo=${oldest}`);
-	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
-	await expect(loupe).toBeVisible({ timeout: 1200 });
+	const viewer = loupe(page);
+	await expect(viewer).toBeVisible({ timeout: 1200 });
 	// Once the timeline reaches it, the loupe has its neighbours: Previous works.
-	await expect(loupe.getByRole('button', { name: /Previous/ })).toBeEnabled({ timeout: 10_000 });
+	await expect(viewer.getByRole('button', { name: /Previous/ })).toBeEnabled({ timeout: 10_000 });
 });
 
 test('a person’s photos: a link to a photo beyond the loaded ones still opens it', async ({
@@ -458,5 +459,5 @@ test('a person’s photos: a link to a photo beyond the loaded ones still opens 
 		});
 	});
 	await page.goto(`${person}?photo=${second}`);
-	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+	await expect(loupe(page)).toBeVisible();
 });

@@ -2,6 +2,7 @@
 import {
 	expect,
 	isPhone,
+	loupe,
 	resetMock,
 	selectionAction,
 	selectTiles,
@@ -130,7 +131,7 @@ for (const id of ['999999', 'abc']) {
 		await page.goto(`/?year=2019&photo=${id}`);
 		await expect(toast(page)).toHaveText('That photo was not found.');
 		await expect(page).toHaveURL(/\/\?year=2019$/);
-		await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeHidden();
+		await expect(loupe(page)).toBeHidden();
 		await expect(page.locator('.tile').first()).toBeVisible();
 	});
 }

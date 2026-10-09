@@ -9,6 +9,7 @@ import {
 	expectAccessible,
 	GUEST,
 	isPhone,
+	loupe,
 	loupeAction,
 	resetMock,
 	selectionAction,
@@ -19,9 +20,6 @@ import {
 	touchSwipe,
 	viewOnlyPhoto
 } from './helpers.ts';
-
-const loupe = (page: import('@playwright/test').Page) =>
-	page.getByRole('dialog', { name: 'Photo viewer' });
 
 test.describe('as admin', () => {
 	test.beforeEach(async ({ page }) => {
@@ -239,7 +237,7 @@ test('trash and albums: a linked photo that is not in the list leaves no trace i
 		await page.goto('/albums');
 		await page.goto(`${path}?photo=999999`);
 		await expect(page).toHaveURL(new RegExp(`${path}$`));
-		await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toHaveCount(0);
+		await expect(loupe(page)).toHaveCount(0);
 		// One Back leaves the page: no dead entry was left behind.
 		await page.goBack();
 		await expect(page).toHaveURL(/\/albums$/);

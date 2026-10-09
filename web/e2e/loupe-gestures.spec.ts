@@ -1,9 +1,10 @@
 /** The photo view under the finger: double tap, drag, pinch, and touches that land mid-transition. */
-import type { Locator, Page } from '@playwright/test';
+import type { Locator } from '@playwright/test';
 import {
 	centre,
 	expect,
 	isPhone,
+	loupe,
 	resetMock,
 	signIn,
 	takesInput,
@@ -12,7 +13,6 @@ import {
 	touchSwipe
 } from './helpers.ts';
 
-const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
 const alt = (viewer: Locator) => viewer.locator('img.photo').getAttribute('alt');
 
 test.beforeEach(async ({ page }) => {

@@ -1,11 +1,12 @@
 /**
  * "Opening a sheet or a photo adds a history step, so Back on the phone closes it" (redesign
- * spec §4.2). The photo's own step is in loupe.spec.ts and photo-view.spec.ts; these are the
+ * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts; these are the
  * sheets and dialogs.
  */
 import {
 	expect,
 	isPhone,
+	loupe,
 	loupeAction,
 	resetMock,
 	selectionAction,
@@ -97,7 +98,7 @@ test('a dialog closed with Cancel leaves no step behind', async ({ page }) => {
 
 test('over an open photo, Back closes the dialog, then the photo', async ({ page }) => {
 	await page.locator('.tile').first().click();
-	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	const viewer = loupe(page);
 	await expect(viewer).toBeVisible();
 	await loupeAction(page, 'Album');
 	const dialog = page.getByRole('dialog', { name: 'Add to album' });
@@ -113,7 +114,7 @@ test('over an open photo, Back closes the dialog, then the photo', async ({ page
 
 test('Back closes the editor, not the photo under it', async ({ page }) => {
 	await page.locator('.tile').first().click();
-	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	const viewer = loupe(page);
 	await loupeAction(page, 'Edit');
 	const editor = page.getByRole('dialog', { name: 'Edit photo' });
 	await expect(editor).toBeVisible();

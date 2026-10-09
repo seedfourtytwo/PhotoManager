@@ -6,6 +6,7 @@ import {
 	GUEST,
 	isPhone,
 	longPress,
+	loupe,
 	loupeAction,
 	REAL_BACKEND,
 	resetMock,
@@ -19,8 +20,6 @@ import {
 	touchDown,
 	viewOnlyPhoto
 } from './helpers.ts';
-
-const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
@@ -147,13 +146,13 @@ test('trash: move, see it with its thumbnail, open it full size, restore', async
 		.toBeGreaterThan(0);
 	await expectAccessible(page);
 	await tile.click();
-	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
-	await expect(loupe.locator('img.photo')).toBeVisible();
+	const viewer = loupe(page);
+	await expect(viewer.locator('img.photo')).toBeVisible();
 	await expect
-		.poll(() => loupe.locator('img.photo').evaluate((i: HTMLImageElement) => i.naturalWidth))
+		.poll(() => viewer.locator('img.photo').evaluate((i: HTMLImageElement) => i.naturalWidth))
 		.toBeGreaterThan(0);
-	await expect(loupe.getByRole('button', { name: 'Edit' })).toHaveCount(0);
-	await loupe.getByRole('button', { name: 'Restore' }).click();
+	await expect(viewer.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+	await viewer.getByRole('button', { name: 'Restore' }).click();
 	await expect(toast(page)).toContainText('Restored 1 photo');
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
 });

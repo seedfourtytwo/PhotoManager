@@ -195,9 +195,12 @@ export async function selectionAction(page: Page, name: string) {
 	await button.click();
 }
 
+/** The open photo: the photo view (the loupe), a modal dialog. */
+export const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
+
 /** Run an action of the open photo; the ones that are not on its bar are under "More". */
 export async function loupeAction(page: Page, name: string) {
-	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	const viewer = loupe(page);
 	const button = viewer.getByRole('button', { name, exact: true });
 	if (!(await button.isVisible())) await viewer.getByRole('button', { name: 'More' }).click();
 	await button.click();
