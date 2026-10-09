@@ -52,7 +52,9 @@ test('map: a failed page of located photos is reported, not swallowed', async ({
 		route.fulfill({ status: 500, json: { detail: 'the library is busy, try again' } })
 	);
 	await signIn(page, '/map');
-	await expect(page.getByRole('status')).toContainText('The library is busy, try again');
+	await expect(
+		page.getByRole('status').filter({ hasText: 'The library is busy, try again' })
+	).toBeVisible();
 });
 
 test('opening the app while the server is down says so and recovers on Retry', async ({ page }) => {
@@ -197,7 +199,9 @@ test('trash: “Empty trash” deletes what the page showed, not what arrived si
 	const sent = page.waitForRequest('**/api/trash/empty');
 	await dialog.getByRole('button', { name: 'Delete for good' }).click();
 	expect((await sent).postDataJSON()).toEqual({ ids: [first] });
-	await expect(page.getByRole('status')).toContainText('Deleted 1 library copy for good');
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Deleted 1 library copy for good' })
+	).toBeVisible();
 	await expect(page.locator(`.tile[data-id="${later}"]`)).toBeVisible();
 });
 
@@ -358,7 +362,7 @@ test.describe('a double click sends one request', () => {
 			.getByRole('dialog', { name: 'Delete album?' })
 			.getByRole('button', { name: 'Delete album' })
 			.dblclick();
-		await expect(page.getByRole('status')).toContainText('Album deleted');
+		await expect(page.getByRole('status').filter({ hasText: 'Album deleted' })).toBeVisible();
 		await expect(page).toHaveURL(/\/albums$/);
 		expect(deletes.count).toBe(1);
 	});
@@ -369,7 +373,7 @@ test.describe('a double click sends one request', () => {
 		await page.getByLabel('Current PIN').fill(ADMIN.pin);
 		await page.getByLabel('New PIN').fill('8642');
 		await page.getByRole('button', { name: 'Change PIN' }).dblclick();
-		await expect(page.getByRole('status')).toContainText('PIN changed');
+		await expect(page.getByRole('status').filter({ hasText: 'PIN changed' })).toBeVisible();
 		expect(posts.count).toBe(1);
 		// the backup warning is an alert on every page: look for one about the PIN
 		await expect(page.getByRole('alert').filter({ hasText: /PIN/ })).toHaveCount(0);
@@ -379,7 +383,7 @@ test.describe('a double click sends one request', () => {
 		const posts = await countSlow(page, '**/api/ml/backfill', 'POST');
 		await signIn(page, '/admin');
 		await page.getByRole('button', { name: 'Analyse photos not done yet' }).dblclick();
-		await expect(page.getByRole('status')).toContainText(/Queued/);
+		await expect(page.getByRole('status').filter({ hasText: /Queued/ })).toBeVisible();
 		expect(posts.count).toBe(1);
 	});
 });
