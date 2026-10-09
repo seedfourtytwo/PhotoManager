@@ -12,6 +12,7 @@ import { page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
 import { notice } from './app.svelte';
+import { wentBack } from './history-step';
 import { refocus } from './modal';
 import { withTransition } from './motion';
 
@@ -77,15 +78,6 @@ function nameTile(id: Id): () => void {
 	const tile = tileOf(id);
 	tile?.style.setProperty('view-transition-name', 'photo');
 	return () => tile?.style.removeProperty('view-transition-name');
-}
-
-/** After `history.back()`: the earlier entry is the current one (or it is taking too long). */
-function wentBack(): Promise<void> {
-	if (typeof window === 'undefined') return Promise.resolve();
-	return new Promise((resolve) => {
-		window.addEventListener('popstate', () => resolve(), { once: true });
-		setTimeout(resolve, 300);
-	});
 }
 
 /** Opens from the photo's tile where the browser can show that. */

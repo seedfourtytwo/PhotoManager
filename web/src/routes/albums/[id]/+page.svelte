@@ -173,7 +173,8 @@
 		try {
 			await api.deleteAlbum(id);
 			notice.show('Album deleted. Its photos are still in the library.');
-			await goto('/albums');
+			// In place of the confirmation's history step: Back does not return to its question.
+			await goto('/albums', { replaceState: true });
 		} catch (e) {
 			notice.error(e);
 		} finally {

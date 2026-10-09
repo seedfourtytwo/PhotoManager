@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
+	import { historyStep } from '$lib/history-step';
 	import { modal } from '$lib/modal';
 
 	type Props = {
@@ -15,6 +16,9 @@
 	let { title, onclose, children, actions, wide = false, cancelLabel = 'Cancel' }: Props = $props();
 
 	const id = `dlg-${Math.random().toString(36).slice(2, 8)}`;
+
+	// Back closes it, like Cancel (a bottom sheet on a phone).
+	onMount(() => historyStep(() => onclose()));
 </script>
 
 <dialog use:modal={onclose} class:wide aria-labelledby={id} onkeydown={(e) => e.stopPropagation()}>

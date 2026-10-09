@@ -25,8 +25,8 @@
 				title: title.trim(),
 				description: description.trim() || undefined
 			});
-			creating = false;
-			await goto(`/albums/${album.id}`);
+			// In place of the dialog's history step: Back from the album is the list of albums.
+			await goto(`/albums/${album.id}`, { replaceState: true });
 		} catch (e) {
 			notice.error(e);
 		} finally {

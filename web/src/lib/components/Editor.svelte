@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { describePhoto } from './PhotoGrid.svelte';
 	import Dialog from './Dialog.svelte';
 	import { IDENTITY_RECIPE, type AssetOut, type CropRect, type Recipe } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
+	import { historyStep } from '$lib/history-step';
 	import { modal } from '$lib/modal';
 	import {
 		MAX_STRAIGHTEN,
@@ -21,6 +22,9 @@
 
 	type Props = { asset: AssetOut; onclose: () => void; onsaved: () => void };
 	let { asset, onclose, onsaved }: Props = $props();
+
+	// Back closes the editor, not the photo under it.
+	onMount(() => historyStep(() => onclose()));
 
 	const FULL: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 	let recipe = $state<Recipe>({ ...IDENTITY_RECIPE });
