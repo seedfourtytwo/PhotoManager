@@ -106,7 +106,15 @@
 
 <svelte:window {onkeydown} {onclick} />
 
-<div class="bar glass" role="toolbar" aria-label="Selected photos" aria-busy={busy} bind:this={bar}>
+<!-- `data-selection-pill`: the layout moves the toast out of the pill's way by it. -->
+<div
+	class="bar glass"
+	role="toolbar"
+	aria-label="Selected photos"
+	aria-busy={busy}
+	data-selection-pill
+	bind:this={bar}
+>
 	<span class="count data" role="status" bind:this={tally}>{count} selected</span>
 	<span class="actions">
 		{#each inline as action (action.label)}
