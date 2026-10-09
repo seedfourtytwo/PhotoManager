@@ -227,9 +227,11 @@ describe('taking photos out', () => {
 		vi.spyOn(api, 'removeFromAlbum').mockResolvedValue(albumOf(4, []));
 		const add = vi.spyOn(api, 'addToAlbum').mockResolvedValue(albumOf(4, []));
 		let id = 4;
-		const album = vi.spyOn(api, 'album').mockImplementation(async (which) =>
-			which === 4 ? albumOf(4, [1, 2, 3, 4, 5]) : albumOf(which, [8, 9], 'Winter')
-		);
+		const album = vi
+			.spyOn(api, 'album')
+			.mockImplementation(async (which) =>
+				which === 4 ? albumOf(4, [1, 2, 3, 4, 5]) : albumOf(which, [8, 9], 'Winter')
+			);
 		const view = new AlbumView(() => id);
 		await view.load();
 		view.selection = { ids: new Set([2]), anchor: 2 };

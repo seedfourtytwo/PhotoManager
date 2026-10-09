@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { CalendarDay } from '$lib/api';
 	import { buildHeatmap, ink, monthStarts } from '$lib/calendar';
-	import { formatCount } from '$lib/format';
+	import { formatCount, photos } from '$lib/format';
 	import { formatDay } from '$lib/filters';
 
 	type Props = { days: CalendarDay[]; hrefFor: (day: string) => string };
@@ -21,7 +21,7 @@
 <!-- One sideways scroller for all years on narrow screens, so the panels stay aligned. -->
 <div class="years">
 	{#each map.years as y (y.year)}
-		<section aria-label={`${y.year}: ${formatCount(y.total)} photos`}>
+		<section aria-label={`${y.year}: ${photos(y.total)}`}>
 			<h2>{y.year} <span class="quiet">{formatCount(y.total)}</span></h2>
 			<svg
 				viewBox={`0 0 ${width} ${height}`}
@@ -33,10 +33,7 @@
 				{/each}
 				{#each y.cells as c (c.day)}
 					{#if c.count > 0}
-						<a
-							href={hrefFor(c.day)}
-							aria-label={`${formatDay(c.day)}: ${c.count} photo${c.count === 1 ? '' : 's'}`}
-						>
+						<a href={hrefFor(c.day)} aria-label={`${formatDay(c.day)}: ${photos(c.count)}`}>
 							<rect
 								x={LEFT + c.week * STEP}
 								y={TOP + c.weekday * STEP}

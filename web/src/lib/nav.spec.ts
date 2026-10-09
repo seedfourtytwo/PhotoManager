@@ -57,6 +57,11 @@ describe('account menu', () => {
 	it('says "1 photo" in the singular', () => {
 		expect(accountItems({ isAdmin: false, waiting: 1 }, '/', noop)[0].countLabel).toBe('1 photo');
 	});
+	it('groups thousands', () => {
+		expect(accountItems({ isAdmin: false, waiting: 1204 }, '/', noop)[0].countLabel).toBe(
+			'1,204 photos'
+		);
+	});
 	it('marks the page you are on, including pages below it', () => {
 		const items = accountItems({ isAdmin: true, waiting: 0 }, '/settings/devices', noop);
 		expect(items.filter((item) => item.current).map((item) => item.label)).toEqual(['Settings']);

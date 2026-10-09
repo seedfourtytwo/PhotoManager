@@ -81,6 +81,25 @@ describe('plural', () => {
 	});
 });
 
+describe('counts of photos in the app', () => {
+	const sources = import.meta.glob(['/src/**/*.svelte', '/src/**/*.ts', '!/src/**/*.spec.ts'], {
+		query: '?raw',
+		import: 'default',
+		eager: true
+	}) as Record<string, string>;
+	// A number followed by a written-out "photo(s)", or an s chosen on the spot: both get the
+	// singular or the thousands separator wrong sooner or later. `photos` and `plural` do not.
+	const BY_HAND = [/[})](?:&nbsp;|\s)*photos?\b/, /photo\$?\{[^}]*=== 1/, /'photo'\s*:\s*'photos'/];
+
+	it('no source file builds one by hand', () => {
+		const offenders = Object.entries(sources)
+			.filter(([path, text]) => path !== '/src/lib/format.ts' && BY_HAND.some((p) => p.test(text)))
+			.map(([path]) => path);
+		expect(Object.keys(sources).length).toBeGreaterThan(50);
+		expect(offenders).toEqual([]);
+	});
+});
+
 describe('formatCount', () => {
 	it('groups thousands and leaves small numbers alone', () => {
 		expect(formatCount(0)).toBe('0');

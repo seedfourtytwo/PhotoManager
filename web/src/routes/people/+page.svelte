@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MlStatus, Person } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
-	import { formatCount } from '$lib/format';
+	import { photos } from '$lib/format';
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 
 	let people = $state<Person[] | null>(null);
@@ -49,7 +49,7 @@
 						<a href={`/people/${person.id}`}>
 							<FaceCrop face={person.cover} />
 							<span class="name" class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
-							<span class="quiet small">{formatCount(person.asset_count)} photos</span>
+							<span class="quiet small">{photos(person.asset_count)}</span>
 						</a>
 					</li>
 				{/each}

@@ -3,6 +3,7 @@
 	import { ALBUM_TITLE_MAX, type Id } from '$lib/api';
 	import { AlbumView } from '$lib/album.svelte';
 	import { settings, viewport } from '$lib/app.svelte';
+	import { photos } from '$lib/format';
 	import { EMPTY, applyClick } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { tileOf } from '$lib/tiles';
@@ -68,8 +69,7 @@
 			<h1>{album.title}</h1>
 			{#if album.description}<p class="quiet desc">{album.description}</p>{/if}
 			<p class="quiet small">
-				{items.length} photo{items.length === 1 ? '' : 's'}{#if album.role !== 'owner'}&nbsp;·
-					shared with you as {album.role}{/if}
+				{photos(items.length)}{#if album.role !== 'owner'}&nbsp;· shared with you as {album.role}{/if}
 			</p>
 			<div class="tools">
 				<button type="button" onclick={() => (view.dialog = 'download')}>Download</button>

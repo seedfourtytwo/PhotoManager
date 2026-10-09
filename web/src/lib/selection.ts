@@ -3,7 +3,7 @@
  * Desktop: click / ctrl-click toggle, shift-click range, drag lasso. Phone: long-press then tap.
  */
 import type { Id } from './api/types';
-import { formatCount } from './format';
+import { formatCount, photos } from './format';
 
 export type Selection = { readonly ids: ReadonlySet<Id>; readonly anchor: Id | null };
 export type Modifiers = { shift: boolean; toggle: boolean };
@@ -63,7 +63,7 @@ export function selectAll(order: readonly Id[]): Selection {
 /** The most photos one action may change: the server refuses a longer list of ids. */
 export const MAX_SELECTION = 10_000;
 
-export const TOO_MANY_SELECTED = `Selected the first ${formatCount(MAX_SELECTION)} photos: that is the most one action can change at once.`;
+export const TOO_MANY_SELECTED = `Selected the first ${photos(MAX_SELECTION)}: that is the most one action can change at once.`;
 
 /** The selection cut down to its first `max` photos; the same object when it already fits. */
 export function limitSelection(selection: Selection, max = MAX_SELECTION): Selection {

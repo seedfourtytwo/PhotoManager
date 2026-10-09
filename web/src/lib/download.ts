@@ -1,5 +1,6 @@
 /** Download dialog model: presets, defaults, and the contract request. */
 import type { DownloadOptions, DownloadRequest, DownloadScope } from './api/types';
+import { plural } from './format';
 
 export const EDGE_PRESETS: { label: string; value: number | null }[] = [
 	{ label: 'Original', value: null },
@@ -48,10 +49,11 @@ export function isUntouched(options: DownloadOptions): boolean {
 }
 
 export function scopeLabel(scope: DownloadScope, count?: number): string {
-	if ('ids' in scope)
-		return `${scope.ids.length} selected photo${scope.ids.length === 1 ? '' : 's'}`;
+	if ('ids' in scope) return plural(scope.ids.length, 'selected photo');
 	if ('album_id' in scope) return 'this album';
-	return count === undefined ? 'everything matching the filters' : `all ${count} matching photos`;
+	return count === undefined
+		? 'everything matching the filters'
+		: `all ${plural(count, 'matching photo')}`;
 }
 
 /** File name a single download is saved or shared under. */

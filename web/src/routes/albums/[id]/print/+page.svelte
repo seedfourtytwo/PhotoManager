@@ -10,7 +10,7 @@
 	} from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatShort } from '$lib/dates';
-	import { errorMessage } from '$lib/format';
+	import { errorMessage, photos } from '$lib/format';
 
 	/** Previews are small multiples: identical, low-resolution pages side by side. */
 	const PREVIEW_PPI = 40;
@@ -86,7 +86,7 @@
 			a.remove();
 			setTimeout(() => URL.revokeObjectURL(url), 60_000);
 			notice.show(
-				`Saved ${pdf.filename}${pdf.warnings ? ` (${pdf.warnings} photo${pdf.warnings === 1 ? '' : 's'} may look soft)` : ''}.`
+				`Saved ${pdf.filename}${pdf.warnings ? ` (${photos(pdf.warnings)} may look soft)` : ''}.`
 			);
 		} catch (e) {
 			printError =
@@ -134,7 +134,7 @@
 				>
 
 				<p class="quiet small summary">
-					{#if plan}{plan.page_count} pages · {trimLabel} · {album?.items.length ?? 0} photos{/if}
+					{#if plan}{plan.page_count} pages · {trimLabel} · {photos(album?.items.length ?? 0)}{/if}
 				</p>
 
 				<section aria-labelledby="p-res" class="issues">

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ImportRun, Recheck, Source } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
-	import { formatCount, formatWhen, nextCheckText } from '$lib/format';
+	import { formatCount, formatWhen, nextCheckText, photos } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import AccessDialog from './AccessDialog.svelte';
 	import AddCloud from './AddCloud.svelte';
@@ -126,7 +126,7 @@
 					{#if source.problem}<span class="problem small">{source.problem}</span>{/if}
 				</div>
 				<div class="quiet small">
-					{formatCount(source.asset_count)} photos{#if !source.enabled}&nbsp;· disabled{/if}
+					{photos(source.asset_count)}{#if !source.enabled}&nbsp;· disabled{/if}
 					{#if run?.status === 'running'}
 						&nbsp;· <span class="live"
 							>importing · {formatCount(run.summary.files_seen)} file{run.summary.files_seen === 1
