@@ -64,6 +64,7 @@ test('the two Hide buttons have different names', async ({ page }) => {
 test('sliders are wide enough to use', async ({ page }) => {
 	await page.locator('.tile').first().click();
 	await page.getByRole('button', { name: 'Download' }).click();
+	await page.getByRole('button', { name: 'More options' }).click();
 	await page.getByLabel('JPEG').check();
 	const slider = page.getByRole('dialog', { name: 'Download photo' }).getByRole('slider');
 	expect((await slider.boundingBox())!.width).toBeGreaterThan(100);

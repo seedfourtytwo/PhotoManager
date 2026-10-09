@@ -55,6 +55,7 @@ describe('DownloadDialog', () => {
 		await expect
 			.element(page.getByText(/3 selected photos\s+· about 12\.4 MB/))
 			.toBeInTheDocument();
+		await page.getByRole('button', { name: 'More options' }).click();
 		await page.getByRole('radio', { name: 'WebP' }).click();
 		await expect.element(page.getByRole('slider')).toBeInTheDocument();
 		await page.getByRole('radio', { name: '4K · 3840' }).click();
@@ -62,6 +63,61 @@ describe('DownloadDialog', () => {
 			expect(sent.at(-1)?.body).toMatchObject({ ids: [1, 2, 3], format: 'webp', max_edge: 3840 })
 		);
 		expect(sent.every((s) => s.url === '/api/downloads/estimate')).toBe(true);
+	});
+
+	const choice = (name: string) => page.getByRole('radio', { name, exact: true });
+
+	it('opens on two plain choices; formats, sizes and the ZIP layout wait under More options', async () => {
+		stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
+		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
+		await expect.element(choice('Full size')).toBeChecked();
+		await expect.element(choice('Smaller')).not.toBeChecked();
+		await expect.element(choice('With edits')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('checkbox', { name: 'Remove location' })).toBeVisible();
+		expect(document.querySelectorAll('input[type=radio]').length).toBe(2);
+		await expect.element(page.getByRole('combobox', { name: 'Folders' })).not.toBeInTheDocument();
+
+		const more = page.getByRole('button', { name: 'More options' });
+		await expect.element(more).toHaveAttribute('aria-expanded', 'false');
+		await more.click();
+		await expect.element(more).toHaveAttribute('aria-expanded', 'true');
+		await expect.element(choice('WebP')).toBeVisible();
+		await expect.element(page.getByRole('combobox', { name: 'Folders' })).toBeVisible();
+	});
+
+	it('Smaller asks for a 2048 JPEG', async () => {
+		const sent = stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
+		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
+		await choice('Smaller').click();
+		await vi.waitFor(() =>
+			expect(sent.at(-1)?.body).toMatchObject({ format: 'jpeg', max_edge: 2048, quality: 90 })
+		);
+	});
+
+	it('an edited photo gets a With edits choice, and Full size says the edits stay behind', async () => {
+		const sent = stubFetch(() => ({ count: 1, bytes: 2_000_000 }));
+		const single = makeAsset(1, '2019-07-04T18:30:00', 400, 300, { edited: true });
+		render(DownloadDialog, { scope: { ids: [1] }, single, onclose: () => {} });
+		await expect.element(choice('Full size')).toBeChecked();
+		await expect.element(page.getByText(/as it was taken, without the edits/)).toBeVisible();
+		await choice('With edits').click();
+		await vi.waitFor(() =>
+			expect(sent.at(-1)?.body).toMatchObject({ format: 'jpeg', max_edge: null })
+		);
+	});
+
+	it('a format picked by hand is none of the plain choices, and picking one again wins', async () => {
+		const sent = stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
+		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
+		await page.getByRole('button', { name: 'More options' }).click();
+		await choice('PNG').click();
+		await expect.element(choice('Full size')).not.toBeChecked();
+		await expect.element(choice('Smaller')).not.toBeChecked();
+		await choice('Full size').click();
+		await expect.element(choice('Original file (without edits)')).toBeChecked();
+		await vi.waitFor(() =>
+			expect(sent.at(-1)?.body).toMatchObject({ format: 'original', max_edge: null })
+		);
 	});
 });
 

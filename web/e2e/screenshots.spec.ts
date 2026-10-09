@@ -129,8 +129,10 @@ test('every screen', async ({ page }, info) => {
 		await bar.getByRole('button', { name: 'More' }).click();
 	}
 	await selectionAction(page, 'Download');
-	await page.getByLabel('JPEG').check();
 	await shot(page, '07-download', p);
+	await page.getByRole('button', { name: 'More options' }).click();
+	await page.getByLabel('JPEG').check();
+	await shot(page, '07b-download-more', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Clear selection' }).click();
 

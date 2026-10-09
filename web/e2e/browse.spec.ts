@@ -40,7 +40,7 @@ test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page
 	}
 	const info = loupe.getByRole('complementary', { name: 'About this photo' });
 	await expect(info).toContainText(/date (from camera|guessed from file|from file name)/);
-	await expect(info.getByText('Sources')).toBeVisible();
+	await expect(info.getByText('Came from')).toBeVisible();
 	await expectAccessible(page);
 
 	if (isPhone(page)) await loupe.getByRole('button', { name: 'Close' }).click();
