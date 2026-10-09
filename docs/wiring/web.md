@@ -1,7 +1,10 @@
 # Web app wiring (M2)
 
-> **Historical integration record.** This page describes how a branch was wired in and is not
-> kept up to date: file, class and migration names in it may be stale. For the settings see
+> **Part reference, part record.** This page began as the integration record of the M2 web
+> branch. Four sections are still edited when the app changes: "Run it", "Tests", "The mock
+> API" and "Screens and behaviour". The others ("Contract assumptions", "Performance", "Asks
+> for the backend", "Not in this slice", "Dependencies added") record that branch as it was
+> merged: names, numbers and open asks in them may be stale. For the settings see
 > [`docs/guides/settings.md`](../guides/settings.md); for how the app is built today see
 > [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
 
@@ -19,7 +22,7 @@ pnpm install
 pnpm dev
 
 # Against the in-memory mock API (no backend needed)
-pnpm mock            # mock API on http://127.0.0.1:8421, sign in as admin / correct horse
+pnpm mock            # mock API on http://127.0.0.1:8421, sign in as C with PIN 1234
 pnpm dev:mock        # dev server with /api proxied to the mock
 
 MOCK_USERS=none pnpm mock    # start with no accounts → first-run setup screen
@@ -185,8 +188,8 @@ which dominates the remaining frame time; real WebP thumbnails are cheaper.
 - **Backups**: `PATCH /api/backups/{id}` accepts only `{enabled}`; to change a schedule or
   quiet window after adding a target the UI would need `{schedule?, quiet_window?,
   retention?}` there. Today the schedule is set when adding.
-- **Rate-limited sign-in**: no admin endpoint exists to clear the login lock for a user, so
-  the admin page has no “Unlock”. If wanted: `POST /api/users/{id}/unlock` → `204`.
+- **Rate-limited sign-in**: answered since. `POST /api/users/{id}/unlock` → `204` clears the
+  lock, and Admin → People shows “Unlock” on a locked account (`admin/Users.svelte`).
 
 
 - Accept the form-encoded `request` field on `POST /api/downloads` (assumption 1).
@@ -206,6 +209,7 @@ dot, the map says so (“This dot holds M photos; the library … shows all N”
 
 `@playwright/test` and `@axe-core/playwright` (both listed under “Web tests” in
 TECH_DECISIONS). The map outline is generated once from Natural Earth 1:110m (public domain,
-via the `world-atlas` npm tarball) by `scripts/make-world.ts` into `src/lib/world.ts`; icons by
-`scripts/make-icons.ts`. No runtime dependencies were added; D3, MapLibre and
+via the `world-atlas` npm tarball) by `scripts/make-world.ts` into `src/lib/world.ts`; the
+PWA icons in `static/` by `scripts/make-icons.ts` (the interface's own icons are drawn in
+`src/lib/icons.ts`). No runtime dependencies were added; D3, MapLibre and
 openapi-typescript (named in TECH_DECISIONS) turned out unnecessary for M2.

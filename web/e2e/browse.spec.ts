@@ -1,4 +1,14 @@
-import { expect, expectAccessible, isPhone, resetMock, signIn, swipe, test } from './helpers.ts';
+import {
+	centre,
+	expect,
+	expectAccessible,
+	isPhone,
+	loupe,
+	resetMock,
+	signIn,
+	test,
+	touchSwipe
+} from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
@@ -17,17 +27,18 @@ test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page
 	const first = page.locator('.tile').first();
 	const firstAlt = await first.locator('img').getAttribute('alt');
 	await first.click();
-	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
-	await expect(loupe).toBeVisible();
-	const photo = loupe.locator('img.photo');
+	const viewer = loupe(page);
+	await expect(viewer).toBeVisible();
+	const photo = viewer.locator('img.photo');
 	await expect(photo).toHaveAttribute('alt', firstAlt!);
 
 	if (isPhone(page)) {
-		await swipe(loupe.locator('.stage'), -150);
+		const at = await centre(viewer.locator('.stage'));
+		await touchSwipe(page, at, { x: at.x - 150, y: at.y });
 		await expect(photo).not.toHaveAttribute('alt', firstAlt!);
-		await swipe(loupe.locator('.stage'), 150);
+		await touchSwipe(page, at, { x: at.x + 150, y: at.y });
 		await expect(photo).toHaveAttribute('alt', firstAlt!);
-		await swipe(loupe.locator('.stage'), 0, -120);
+		await touchSwipe(page, at, { x: at.x, y: at.y - 120 });
 	} else {
 		await page.keyboard.press('ArrowRight');
 		await expect(photo).not.toHaveAttribute('alt', firstAlt!);
@@ -35,17 +46,17 @@ test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page
 		await expect(photo).toHaveAttribute('alt', firstAlt!);
 		// Info is open by default on desktop; I toggles it.
 		await page.keyboard.press('i');
-		await expect(loupe.getByRole('complementary')).toHaveCount(0);
+		await expect(viewer.getByRole('complementary')).toHaveCount(0);
 		await page.keyboard.press('i');
 	}
-	const info = loupe.getByRole('complementary', { name: 'About this photo' });
+	const info = viewer.getByRole('complementary', { name: 'About this photo' });
 	await expect(info).toContainText(/date (from camera|guessed from file|from file name)/);
 	await expect(info.getByText('Sources')).toBeVisible();
 	await expectAccessible(page);
 
-	if (isPhone(page)) await loupe.getByRole('button', { name: 'Close' }).click();
+	if (isPhone(page)) await viewer.getByRole('button', { name: 'Close' }).click();
 	else await page.keyboard.press('Escape');
-	await expect(loupe).toHaveCount(0);
+	await expect(viewer).toHaveCount(0);
 });
 
 test('guessed dates say so in the loupe', async ({ page }) => {
@@ -53,12 +64,4 @@ test('guessed dates say so in the loupe', async ({ page }) => {
 	await page.locator('.tile').first().click();
 	if (isPhone(page)) await page.getByRole('button', { name: 'Info' }).click();
 	await expect(page.getByText('date guessed from file')).toBeVisible();
-});
-
-test('the date scrubber jumps to an older year', async ({ page }) => {
-	test.skip(isPhone(page), 'desktop only');
-	const scrubber = page.getByRole('slider', { name: 'Jump to date' });
-	await scrubber.focus();
-	await page.keyboard.press('End');
-	await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
 });

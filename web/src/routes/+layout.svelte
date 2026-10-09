@@ -181,7 +181,7 @@
 		width: auto;
 		height: auto;
 		clip-path: none;
-		z-index: 100;
+		z-index: var(--z-skip);
 		background: var(--raised);
 		padding: var(--s-2) var(--s-3);
 		border-radius: var(--r-1);
@@ -193,7 +193,7 @@
 		inset: auto auto var(--s-5) 50%;
 		transform: translateX(-50%);
 		margin: 0;
-		z-index: 60;
+		z-index: var(--z-toast);
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);
@@ -217,7 +217,7 @@
 		display: none;
 	}
 	/* While photos are selected the pill has the bottom centre: the toast sits above it. */
-	:global(body:has([role='toolbar'][aria-label='Selected photos'])) .notice {
+	:global(body:has([role='toolbar'][data-selection-pill])) .notice {
 		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
 	/* In the photo view the bottom belongs to its bar: the toast sits under Close and Info. */
@@ -240,7 +240,7 @@
 		/* The pill and the lying time ruler share the strip above the dock; the toast clears both. */
 		:global(
 				body:has(
-					[role='toolbar'][aria-label='Selected photos'],
+					[role='toolbar'][data-selection-pill],
 					[role='slider'][aria-orientation='horizontal']
 				)
 			)

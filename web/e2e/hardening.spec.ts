@@ -2,8 +2,12 @@
 import type { Page } from '@playwright/test';
 import {
 	ADMIN,
+	countSlow,
+	delayRoute,
 	expect,
 	isPhone,
+	loupe,
+	NOTHING_HAPPENS_MS,
 	REAL_BACKEND,
 	resetMock,
 	selectTiles,
@@ -103,12 +107,15 @@ async function busyStats(page: Page, delayMs = 0) {
 	return asked;
 }
 
+/** Admin asks for its counts every 1.5 s while work runs: two of those, and a little slack. */
+const TWO_POLLS_MS = 3200;
+
 test('admin: counts are polled at a steady pace while work is running', async ({ page }) => {
 	const asked = await busyStats(page);
 	await signIn(page, '/admin');
 	await expect(page.getByText(/working: 1 running/)).toBeVisible();
 	const from = asked.length;
-	await page.waitForTimeout(3200);
+	await page.waitForTimeout(TWO_POLLS_MS);
 	// One request every 1.5 s: two in this window (three with timing slack), not dozens.
 	expect(asked.length - from).toBeGreaterThanOrEqual(1);
 	expect(asked.length - from).toBeLessThanOrEqual(3);
@@ -129,7 +136,7 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible();
 	await page.waitForTimeout(600); // let the request in flight come back
 	const settled = asked.length;
-	await page.waitForTimeout(3200);
+	await page.waitForTimeout(TWO_POLLS_MS);
 	expect(asked.length).toBe(settled);
 });
 
@@ -146,10 +153,7 @@ async function follow(page: Page, href: string) {
 test('search: clearing the search while one is running does not leave “Searching…”', async ({
 	page
 }) => {
-	await page.route('**/api/search?*', async (route) => {
-		await new Promise((r) => setTimeout(r, 800));
-		await route.continue().catch(() => undefined);
-	});
+	await delayRoute(page, '**/api/search?*', 800);
 	await signIn(page, '/search');
 	const box = page.getByRole('searchbox', { name: 'Search' });
 	await box.fill('sarlat');
@@ -274,10 +278,7 @@ test('album: a slow answer for the album you left does not replace the one you a
 	const other = await (
 		await page.request.post('/api/albums', { data: { title: 'The other album' } })
 	).json();
-	await page.route('**/api/albums/1', async (route) => {
-		await new Promise((r) => setTimeout(r, 700));
-		await route.continue().catch(() => undefined);
-	});
+	await delayRoute(page, '**/api/albums/1', 700);
 	const asked = page.waitForRequest('**/api/albums/1');
 	const late = page.waitForResponse('**/api/albums/1');
 	await follow(page, '/albums/1');
@@ -285,7 +286,7 @@ test('album: a slow answer for the album you left does not replace the one you a
 	await follow(page, `/albums/${other.id}`);
 	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
 	await late;
-	await page.waitForTimeout(100);
+	await page.waitForTimeout(NOTHING_HAPPENS_MS);
 	await expect(page.getByRole('heading', { name: 'The other album' })).toBeVisible();
 	await expect(page.locator('.tile')).toHaveCount(0);
 });
@@ -316,18 +317,6 @@ test('album: two quick moves reach the server in order, the last one last', asyn
 	await page.reload();
 	await expect.poll(ids).toEqual(moved);
 });
-
-/** Count the requests a route gets and hold each one a moment, so a double click overlaps. */
-async function countSlow(page: Page, url: string, method: string) {
-	const seen = { count: 0 };
-	await page.route(url, async (route) => {
-		if (route.request().method() !== method) return route.continue();
-		seen.count++;
-		await new Promise((r) => setTimeout(r, 300));
-		await route.continue();
-	});
-	return seen;
-}
 
 test.describe('a double click sends one request', () => {
 	test.beforeEach(({ page }) => test.skip(isPhone(page), 'double click'));
@@ -425,15 +414,12 @@ test('a link to an old photo opens it at once, not after paging through the libr
 		cursor = list.next_cursor;
 	} while (cursor);
 	// Every further page of the timeline is slow: the photo must not wait for them.
-	await page.route(/\/api\/assets\?.*cursor=/, async (route) => {
-		await new Promise((r) => setTimeout(r, 1500));
-		await route.continue().catch(() => undefined);
-	});
+	await delayRoute(page, /\/api\/assets\?.*cursor=/, 1500);
 	await page.goto(`/?photo=${oldest}`);
-	const loupe = page.getByRole('dialog', { name: 'Photo viewer' });
-	await expect(loupe).toBeVisible({ timeout: 1200 });
+	const viewer = loupe(page);
+	await expect(viewer).toBeVisible({ timeout: 1200 });
 	// Once the timeline reaches it, the loupe has its neighbours: Previous works.
-	await expect(loupe.getByRole('button', { name: /Previous/ })).toBeEnabled({ timeout: 10_000 });
+	await expect(viewer.getByRole('button', { name: /Previous/ })).toBeEnabled({ timeout: 10_000 });
 });
 
 test('a person’s photos: a link to a photo beyond the loaded ones still opens it', async ({
@@ -458,5 +444,5 @@ test('a person’s photos: a link to a photo beyond the loaded ones still opens 
 		});
 	});
 	await page.goto(`${person}?photo=${second}`);
-	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+	await expect(loupe(page)).toBeVisible();
 });

@@ -3,6 +3,7 @@ import {
 	expect,
 	expectAccessible,
 	GUEST,
+	loupe,
 	REAL_BACKEND,
 	resetMock,
 	signIn,
@@ -30,7 +31,7 @@ test('search without models: word matches and a calm note on how to get AI searc
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await expectAccessible(page);
 	await page.locator('.tile').first().click();
-	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+	await expect(loupe(page)).toBeVisible();
 });
 
 test('search with models ranks by meaning; facets are read back', async ({ page }) => {

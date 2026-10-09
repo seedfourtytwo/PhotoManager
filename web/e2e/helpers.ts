@@ -44,18 +44,56 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
+/** Where every Admin spec starts: a fresh library, signed in on the Admin page. */
+export async function openAdmin(page: Page) {
+	await resetMock();
+	await signIn(page, '/admin');
+}
+
 /** Opens the account menu (the button with the person's initial); returns the main nav. */
 export async function openAccountMenu(page: Page): Promise<Locator> {
 	const nav = page.getByRole('navigation', { name: 'Main' });
 	await nav.getByRole('button', { name: /^Account/ }).click();
 	return nav;
 }
+
+/**
+ * How long a test waits before it says that nothing happened: no second request, no step
+ * out of the page, no late answer painted over the screen. Nothing announces that, so the
+ * test waits out what could still be on its way (a request `countSlow` holds for 300 ms, a
+ * debounced write, a navigation, a frame of drawing) and then looks.
+ */
+export const NOTHING_HAPPENS_MS = 500;
+
+/**
+ * Count the requests a route gets and hold each one a moment, so a double click overlaps.
+ * With a `method`, only those requests count and wait.
+ */
+export async function countSlow(page: Page, url: string | RegExp, method?: string) {
+	const seen = { count: 0 };
+	await page.route(url, async (route) => {
+		if (method && route.request().method() !== method) return route.fallback();
+		seen.count++;
+		await new Promise((r) => setTimeout(r, 300));
+		await route.fallback();
+	});
+	return seen;
+}
+
+/** Answer a route `ms` late. The page may have left by then: an answer nobody waits for is fine. */
+export async function delayRoute(page: Page, url: string | RegExp, ms: number) {
+	await page.route(url, async (route) => {
+		await new Promise((r) => setTimeout(r, ms));
+		await route.continue().catch(() => undefined);
+	});
+}
+
 /** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
 export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 
-/** Touch pointer events, dispatched directly (Playwright has tap but no long-press/swipe). */
+/** Touch pointer events, dispatched directly (Playwright has tap but no long-press). */
 async function touch(target: Locator, type: string, dx = 0, dy = 0) {
 	const box = (await target.boundingBox())!;
 	await target.dispatchEvent(type, {
@@ -67,15 +105,14 @@ async function touch(target: Locator, type: string, dx = 0, dy = 0) {
 	});
 }
 
+/**
+ * A touch held past the grid's long-press threshold: 450 ms, a constant private to
+ * PhotoGrid.svelte (`LONG_PRESS_MS`). 600 ms is that with room for a slow machine.
+ */
 export async function longPress(tile: Locator) {
 	await touch(tile, 'pointerdown');
 	await tile.page().waitForTimeout(600);
 	await touch(tile, 'pointerup');
-}
-
-export async function swipe(target: Locator, dx: number, dy = 0) {
-	await touch(target, 'pointerdown');
-	await touch(target, 'pointerup', dx, dy);
 }
 
 /**
@@ -181,7 +218,7 @@ export async function viewOnlyPhoto(page: Page): Promise<number> {
 	throw new Error('no view-only photo for this user');
 }
 
-/** Run an action of the selection bar; on a phone the later ones are under "More". */
+/** Run an action of the selection pill; on a phone the later ones are under "More". */
 export async function selectionAction(page: Page, name: string) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
 	const button = bar.getByRole('button', { name, exact: true });
@@ -189,9 +226,12 @@ export async function selectionAction(page: Page, name: string) {
 	await button.click();
 }
 
+/** The open photo: the photo view (the loupe), a modal dialog. */
+export const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
+
 /** Run an action of the open photo; the ones that are not on its bar are under "More". */
 export async function loupeAction(page: Page, name: string) {
-	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	const viewer = loupe(page);
 	const button = viewer.getByRole('button', { name, exact: true });
 	if (!(await button.isVisible())) await viewer.getByRole('button', { name: 'More' }).click();
 	await button.click();

@@ -275,7 +275,7 @@
 		padding: 0;
 		border: 0;
 		color: var(--ink);
-		z-index: 70;
+		z-index: var(--z-editor);
 		background: var(--bg);
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) auto;
@@ -302,9 +302,9 @@
 	.crop {
 		position: absolute;
 		box-sizing: border-box;
-		border: 1px solid rgb(255 255 255 / 0.9);
+		border: 1px solid var(--on-photo-90);
 		/* Dim what will be cut away. */
-		box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.55);
+		box-shadow: 0 0 0 100vmax var(--photo-shade-55);
 		cursor: move;
 		touch-action: none;
 	}
@@ -323,7 +323,7 @@
 		position: absolute;
 		width: 10px;
 		height: 10px;
-		border: 2px solid #fff;
+		border: 2px solid var(--on-photo);
 	}
 	.nw {
 		left: -4px;

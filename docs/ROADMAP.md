@@ -55,8 +55,8 @@ Goal: C and partner use it on laptop and phone over LAN.
 |---|---|
 | Account system (roles admin/member/guest), login, per-user favourites/hidden/private | M |
 | **Per-source access lists** + `visible_assets` rule + access admin UI | L |
-| Web shell: nav rail / bottom bar, dark & light tokens | M |
-| Virtualised justified grid with date scrubber | L |
+| Web shell: nav rail / bottom bar, dark & light tokens. *Superseded by the redesign (`superpowers/specs/2026-10-08-ui-redesign-design.md`): a top bar on a laptop, a floating dock on a phone, an account menu* | M |
+| Virtualised justified grid with date scrubber. *Scrubber superseded by the redesign: the time ruler* | L |
 | **Loupe**: fullscreen, keyboard ← → Esc F I, swipe, two fading edge buttons, neighbour preload | M |
 | Facet filters + keyword search | L |
 | **Fix dates** for one or many photos (FEATURES 2.12) | M |

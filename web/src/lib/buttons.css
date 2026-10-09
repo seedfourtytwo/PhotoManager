@@ -1,0 +1,91 @@
+/* Buttons — imported by tokens.css.
+   Default: a word, quiet (rule 3). Hover washes it with --tint.
+   .primary: the one action a dialog or form exists for — filled with ink, never the accent. */
+button,
+.button {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: var(--s-1) var(--s-2);
+	margin: 0;
+	cursor: pointer;
+	border-radius: var(--r-1);
+	text-decoration: none;
+	min-height: 2rem;
+	line-height: var(--lh-tight);
+	transition: background-color var(--motion) var(--ease);
+	-webkit-tap-highlight-color: transparent;
+}
+.button {
+	display: inline-flex;
+	align-items: center;
+	box-sizing: border-box;
+}
+
+@media (hover: hover) {
+	button:not(:disabled):hover,
+	.button:hover {
+		background-color: var(--tint);
+	}
+}
+
+button:disabled {
+	color: var(--ink-3);
+	cursor: default;
+}
+
+button[aria-busy='true'] {
+	cursor: progress;
+}
+
+button.primary,
+.button.primary {
+	background: var(--ink);
+	color: var(--bg);
+	font-weight: 600;
+	padding: var(--s-1) var(--s-4);
+}
+@media (hover: hover) {
+	button.primary:not(:disabled):hover,
+	.button.primary:hover {
+		background: var(--ink-2);
+	}
+}
+
+button.primary:disabled {
+	background: var(--hairline);
+	color: var(--ink-3);
+}
+
+/* An action in a bar over photos: its icon above its word (rule 3). */
+.action {
+	display: inline-grid;
+	justify-items: center;
+	align-content: center;
+	gap: var(--fine);
+	min-width: var(--target);
+	min-height: var(--target);
+	padding: var(--s-1) var(--s-2);
+	font-size: var(--fs-12);
+	font-weight: 500;
+	color: var(--ink-2);
+	white-space: nowrap;
+}
+.action[aria-pressed='true'],
+.action[aria-expanded='true'] {
+	color: var(--ink);
+}
+.action[aria-pressed='true'] svg {
+	fill: currentColor;
+}
+
+/* Touch screens: every control is at least 44 px tall. */
+@media (pointer: coarse) {
+	button,
+	.button,
+	input:where(:not([type='checkbox'], [type='radio'], [type='range'])),
+	select {
+		min-height: var(--target);
+	}
+}

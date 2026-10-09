@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
 	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
-	import { photos } from '$lib/format';
+	import { formatCount, photos } from '$lib/format';
 	import { historyStep } from '$lib/history-step';
 	import {
 		activeFilterCount,
@@ -13,6 +13,8 @@
 		mergeFacets,
 		withFilter
 	} from '$lib/filters';
+	import FilterFrame from './FilterFrame.svelte';
+	import YearBars from './YearBars.svelte';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let facets = $state<Facets | null>(null);
@@ -28,7 +30,6 @@
 	});
 	// A search still waiting to be applied must not land on the page you went to instead.
 	onDestroy(() => clearTimeout(typing));
-	const count = new Intl.NumberFormat('en-GB');
 	const MONTHS = [
 		'Jan',
 		'Feb',
@@ -80,10 +81,6 @@
 		}
 	}
 
-	$effect(() => {
-		if (ui.focusSearch > 0) queueMicrotask(() => search?.focus());
-	});
-
 	/** The address the last filter chosen in the open sheet gave the page. */
 	let chosen: string | null = null;
 
@@ -127,81 +124,10 @@
 		set('source_id', on ? [...others, id] : others);
 	}
 
-	// Phone and tablet: the sheet is modal. Focus moves in; the rest of the app is inert, so Tab
-	// stays in and a screen reader sees only the sheet; Escape closes; focus goes back.
-	let panel: HTMLElement | undefined = $state();
-	let backdrop: HTMLElement | undefined = $state();
-	$effect(() => {
-		if (!ui.sheet || viewport.desktop || !panel) return;
-		const opener = document.activeElement as HTMLElement | null;
-		// Everything beside the sheet, at every level up to the body, except its own backdrop
-		// and the live notice (a toast must still be heard, and its Undo reached).
-		const behind: HTMLElement[] = [];
-		for (
-			let at: HTMLElement = panel;
-			at.parentElement && at !== document.body;
-			at = at.parentElement
-		)
-			for (const el of at.parentElement.children)
-				if (el instanceof HTMLElement && el !== at && el !== backdrop && !el.ariaLive)
-					behind.push(el);
-		for (const el of behind) el.inert = true;
-		if (!panel.contains(document.activeElement)) panel.focus();
-		return () => {
-			for (const el of behind) el.inert = false;
-			opener?.focus?.({ preventScroll: true });
-		};
-	});
-
-	const maxYear = $derived(Math.max(1, ...(facets?.years.map((y) => y.count) ?? [1])));
 	const active = $derived(activeFilterCount(filters));
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (ui.sheet && e.key === 'Escape' && !e.defaultPrevented) {
-			// This Escape is spent on the sheet: it does not also clear a selection behind it.
-			e.preventDefault();
-			ui.sheet = false;
-		}
-	}}
-/>
-
-{#if ui.sheet}
-	<button
-		bind:this={backdrop}
-		class="backdrop"
-		type="button"
-		aria-label="Close filters"
-		onclick={() => (ui.sheet = false)}
-	></button>
-{/if}
-
-<aside
-	class="panel"
-	class:open={settings.filtersOpen}
-	class:sheet={ui.sheet}
-	aria-label="Filters"
-	id="filters"
-	tabindex="-1"
-	bind:this={panel}
->
-	<header>
-		<h2>
-			Filters {#if active}<span class="quiet">{active}</span>{/if}
-		</h2>
-		<span>
-			{#if active}<button type="button" onclick={() => apply({})}>Clear</button>{/if}
-			<button
-				type="button"
-				class="collapse"
-				aria-label="Hide filters"
-				onclick={() => settings.setFiltersOpen(false)}>Hide</button
-			>
-			<button type="button" class="done" onclick={() => (ui.sheet = false)}>Done</button>
-		</span>
-	</header>
-
+<FilterFrame {active} onclear={() => apply({})}>
 	<label class="block">
 		<span class="visually-hidden">Search</span>
 		<input
@@ -220,21 +146,11 @@
 
 	<section>
 		<h3 id="f-year">Year</h3>
-		<ul class="bars">
-			{#each facets?.years ?? [] as y (y.year)}
-				<li>
-					<button
-						type="button"
-						aria-pressed={filters.year === y.year}
-						onclick={() => set('year', filters.year === y.year ? undefined : y.year)}
-					>
-						<span class="year">{y.year}</span>
-						<span class="bar" style:width={`${(y.count / maxYear) * 100}%`}></span>
-						<span class="n">{count.format(y.count)}</span>
-					</button>
-				</li>
-			{/each}
-		</ul>
+		<YearBars
+			years={facets?.years ?? []}
+			selected={filters.year}
+			onpick={(year) => set('year', year)}
+		/>
 		{#if filters.year}
 			<label class="row">
 				Month
@@ -281,7 +197,7 @@
 				<option value={filters.place}>{filters.place}</option>
 			{/if}
 			{#each facets?.places ?? [] as p (p.name)}
-				<option value={p.name}>{p.name} · {count.format(p.count)}</option>
+				<option value={p.name}>{p.name} · {formatCount(p.count)}</option>
 			{/each}
 		</select>
 		<label class="row">
@@ -313,7 +229,7 @@
 				<option value={filters.camera}>{filters.camera}</option>
 			{/if}
 			{#each facets?.cameras ?? [] as c (c.name)}
-				<option value={c.name}>{c.name} · {count.format(c.count)}</option>
+				<option value={c.name}>{c.name} · {formatCount(c.count)}</option>
 			{/each}
 		</select>
 	</section>
@@ -327,7 +243,7 @@
 					checked={filters.source_id?.includes(s.id) ?? false}
 					onchange={(e) => toggleSource(s.id, e.currentTarget.checked)}
 				/>
-				{s.label} <span class="n">{count.format(s.count)}</span>
+				{s.label} <span class="n">{formatCount(s.count)}</span>
 			</label>
 		{/each}
 	</section>
@@ -349,7 +265,7 @@
 				onchange={(e) => set('guessed_date', e.currentTarget.checked || undefined)}
 			/>
 			Guessed dates
-			{#if facets}<span class="n">{count.format(facets.guessed_dates)}</span>{/if}
+			{#if facets}<span class="n">{formatCount(facets.guessed_dates)}</span>{/if}
 		</label>
 		<label class="check">
 			<input
@@ -360,63 +276,11 @@
 			Hidden
 		</label>
 	</section>
-</aside>
-
-{#if !settings.filtersOpen}
-	<button class="reopen" type="button" onclick={() => settings.setFiltersOpen(true)}>
-		Filters{#if active}&nbsp;·&nbsp;{active}{/if}
-	</button>
-{/if}
+</FilterFrame>
 
 <style>
-	.panel {
-		position: sticky;
-		top: var(--top);
-		height: calc(100vh - var(--top));
-		height: calc(100dvh - var(--top));
-		overflow-y: auto;
-		box-sizing: border-box;
-		padding: var(--s-5) var(--s-4) var(--s-6);
-		border-left: 1px solid var(--hairline);
-		display: none;
-		font-size: var(--fs-14);
-		scrollbar-width: thin;
-	}
-	.panel.open {
-		display: block;
-	}
-	header {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		margin-bottom: var(--s-2);
-	}
-	h2 {
-		font-size: var(--fs-20);
-		white-space: nowrap;
-	}
-	h2 .quiet {
-		font-family: var(--font-ui);
-		font-size: var(--fs-12);
-		margin-left: var(--s-1);
-	}
 	h3 {
 		margin: var(--s-5) 0 var(--s-1);
-	}
-	header > span {
-		display: flex;
-		margin-right: calc(-1 * var(--s-2));
-	}
-	header button {
-		color: var(--ink-2);
-	}
-	@media (hover: hover) {
-		header button:hover {
-			color: var(--ink);
-		}
-	}
-	.done {
-		display: none;
 	}
 	.block input {
 		width: 100%;
@@ -446,105 +310,10 @@
 		color: var(--ink-2);
 		font-size: var(--fs-12);
 	}
-	.bars {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	/* Years as a small bar chart: zero-based, direct labels, one ink. */
-	.bars button {
-		display: grid;
-		grid-template-columns: 2.5rem 1fr 2.25rem;
-		align-items: center;
-		width: calc(100% + 2 * var(--s-2));
-		margin: 0 calc(-1 * var(--s-2));
-		gap: var(--s-2);
-		padding: 0 var(--s-2);
-		min-height: 1.5rem;
-		color: var(--ink-2);
-	}
-	@media (hover: hover) {
-		.bars button:hover {
-			color: var(--ink);
-		}
-	}
-	.bars button[aria-pressed='true'] {
-		color: var(--ink);
-		font-weight: 600;
-	}
-	.bars .bar {
-		height: 3px;
-		background: currentColor;
-		opacity: 0.55;
-		justify-self: start;
-	}
-	.bars button[aria-pressed='true'] .bar {
-		opacity: 1;
-	}
-	.bars .n {
-		text-align: right;
-		font-weight: 400;
-	}
-	.reopen {
-		position: fixed;
-		top: calc(var(--top) + var(--s-4));
-		right: var(--s-4);
-		color: var(--ink-2);
-		z-index: 5;
-	}
-	.backdrop {
-		display: none;
-	}
-
-	/* Phone and tablet: a bottom sheet opened from Search or the page's Filter button. */
+	/* Phone and tablet: the sheet's rows are finger-sized. */
 	@media (max-width: 1023px) {
-		.panel,
-		.panel.open {
-			display: none;
-		}
-		.panel.sheet {
-			display: block;
-			position: fixed;
-			top: auto;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			height: auto;
-			max-height: 85dvh;
-			z-index: 40;
-			background: var(--raised);
-			border: 0;
-			border-radius: var(--r-2) var(--r-2) 0 0;
-			padding: var(--s-4) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom));
-		}
-		.panel.sheet header {
-			position: sticky;
-			top: calc(-1 * var(--s-4));
-			margin: calc(-1 * var(--s-4)) calc(-1 * var(--s-4)) var(--s-2);
-			padding: var(--s-3) var(--s-4) var(--s-2);
-			background: var(--raised);
-			z-index: 1;
-		}
-		.collapse,
-		.reopen {
-			display: none;
-		}
-		.done {
-			display: inline;
-			color: var(--ink) !important;
-			font-weight: 600;
-		}
 		.check {
 			min-height: var(--target);
-		}
-		.backdrop {
-			display: block;
-			position: fixed;
-			inset: 0;
-			background: var(--scrim);
-			z-index: 35;
-			width: 100%;
-			border-radius: 0;
 		}
 	}
 </style>

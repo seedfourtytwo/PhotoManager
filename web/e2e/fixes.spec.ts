@@ -1,7 +1,9 @@
 /** Small fixes from the E2E review that have no journey of their own. */
 import {
+	countSlow,
 	expect,
 	isPhone,
+	loupe,
 	resetMock,
 	selectionAction,
 	selectTiles,
@@ -32,21 +34,14 @@ test('counts follow a hide: the header and the filter panel', async ({ page }) =
 
 test('a double click on Move to trash trashes once', async ({ page }) => {
 	test.skip(isPhone(page), 'double click');
-	let deletes = 0;
-	await page.route('**/api/assets', async (route) => {
-		if (route.request().method() === 'DELETE') {
-			deletes++;
-			await new Promise((r) => setTimeout(r, 300));
-		}
-		await route.continue();
-	});
+	const deletes = await countSlow(page, '**/api/assets', 'DELETE');
 	await selectTiles(page, [0]);
 	await page
 		.getByRole('toolbar', { name: 'Selected photos' })
 		.getByRole('button', { name: 'Move to trash' })
 		.dblclick();
 	await expect(toast(page)).toContainText('Moved 1 photo to the trash');
-	expect(deletes).toBe(1);
+	expect(deletes.count).toBe(1);
 	await expect(toast(page)).not.toContainText(/not found/i);
 });
 
@@ -130,7 +125,7 @@ for (const id of ['999999', 'abc']) {
 		await page.goto(`/?year=2019&photo=${id}`);
 		await expect(toast(page)).toHaveText('That photo was not found.');
 		await expect(page).toHaveURL(/\/\?year=2019$/);
-		await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeHidden();
+		await expect(loupe(page)).toBeHidden();
 		await expect(page.locator('.tile').first()).toBeVisible();
 	});
 }

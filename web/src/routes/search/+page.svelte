@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import type { AssetOut, MlStatus, SearchResult } from '$lib/api';
 	import { api, library } from '$lib/app.svelte';
-	import { errorMessage } from '$lib/format';
+	import { errorMessage, photos } from '$lib/format';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
@@ -19,7 +19,6 @@
 	let error = $state('');
 	let busy = $state(false);
 	let input: HTMLInputElement | undefined = $state();
-	const count = new Intl.NumberFormat('en-GB');
 
 	$effect(() => {
 		library
@@ -69,7 +68,7 @@
 	const semantic = $derived(!!status?.clip.ready);
 	const summary = $derived(
 		[
-			`${count.format(items.length)} photo${items.length === 1 ? '' : 's'}`,
+			photos(items.length),
 			result?.mode === 'semantic' ? 'ranked by meaning' : null,
 			result?.mode === 'text' ? 'matching words' : null,
 			...(result?.facets ?? []).map((f) => `${f.name}: ${f.value}`)

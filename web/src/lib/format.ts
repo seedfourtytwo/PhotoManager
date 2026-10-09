@@ -55,3 +55,6 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 
 /** "1 photo", "1,204 photos". */
 export const photos = (n: number) => plural(n, 'photo');
+
+/** A count on its own, grouped the British way: "1,204". */
+export const formatCount = (n: number) => COUNT.format(n);

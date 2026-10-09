@@ -97,7 +97,7 @@
 	}
 	.key {
 		display: block;
-		font-family: var(--font-mono);
+		font-family: var(--font-data);
 		font-stretch: 80%;
 		overflow-wrap: anywhere;
 		user-select: all;
