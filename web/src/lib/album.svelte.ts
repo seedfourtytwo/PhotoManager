@@ -89,14 +89,19 @@ export class AlbumView {
 	removeSelected = async () => {
 		if (this.#removing) return;
 		this.#removing = true;
+		// The album the photos leave: the page may be on another one by the time the answer
+		// comes, or Undo is pressed (the toast outlives the page it was raised on).
+		const album = this.#id();
 		const ids = [...this.selection.ids];
 		const before = this.items.map((a) => a.id);
 		try {
-			await api.removeFromAlbum(this.#id(), ids);
-			this.items = this.items.filter((a) => !ids.includes(a.id));
-			this.selection = EMPTY;
+			await api.removeFromAlbum(album, ids);
+			if (this.#id() === album) {
+				this.items = this.items.filter((a) => !ids.includes(a.id));
+				this.selection = EMPTY;
+			}
 			notice.show(`Removed ${ids.length} from the album. The photos stay in the library.`, {
-				action: { label: 'Undo', run: () => void this.#undoRemove(ids, before) }
+				action: { label: 'Undo', run: () => void this.#undoRemove(album, ids, before) }
 			});
 		} catch (e) {
 			notice.error(e);
@@ -108,15 +113,16 @@ export class AlbumView {
 	/**
 	 * Put removed photos back exactly where they were: each at its old index, smallest first
 	 * (contract v1.2; positions count the photos you see, so this works for editors too).
+	 * Into the album they left, which is read again only if the page is still on it.
 	 */
-	async #undoRemove(ids: Id[], before: Id[]) {
+	async #undoRemove(album: Id, ids: Id[], before: Id[]) {
 		try {
 			const back = ids
 				.map((photo) => ({ photo, at: before.indexOf(photo) }))
 				.filter((p) => p.at >= 0)
 				.sort((a, b) => a.at - b.at);
-			for (const { photo, at } of back) await api.addToAlbum(this.#id(), [photo], at);
-			await this.load();
+			for (const { photo, at } of back) await api.addToAlbum(album, [photo], at);
+			if (this.#id() === album) await this.load();
 			notice.show('Put back.');
 		} catch (e) {
 			notice.error(e);

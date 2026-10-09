@@ -223,6 +223,55 @@ describe('taking photos out', () => {
 		expect(ids(view)).toEqual([1, 2, 3, 4, 5]);
 	});
 
+	it('Undo after going to another album puts the photos back in the album they left', async () => {
+		vi.spyOn(api, 'removeFromAlbum').mockResolvedValue(albumOf(4, []));
+		const add = vi.spyOn(api, 'addToAlbum').mockResolvedValue(albumOf(4, []));
+		let id = 4;
+		const album = vi.spyOn(api, 'album').mockImplementation(async (which) =>
+			which === 4 ? albumOf(4, [1, 2, 3, 4, 5]) : albumOf(which, [8, 9], 'Winter')
+		);
+		const view = new AlbumView(() => id);
+		await view.load();
+		view.selection = { ids: new Set([2]), anchor: 2 };
+		await view.removeSelected();
+		id = 7;
+		view.open();
+		await settled();
+		album.mockClear();
+		notice.action!.run();
+		await settled();
+		expect(add.mock.calls).toEqual([[4, [2], 1]]);
+		expect(notice.text).toBe('Put back.');
+		// The page is on the other album and stays as it is: nothing of album 4 comes onto it.
+		expect(album).not.toHaveBeenCalled();
+		expect(view.album).toMatchObject({ id: 7, title: 'Winter' });
+		expect(ids(view)).toEqual([8, 9]);
+	});
+
+	it('a removal answered after going to another album takes nothing off that album’s page', async () => {
+		const removed = deferred<AlbumDetail>();
+		const remove = vi.spyOn(api, 'removeFromAlbum').mockReturnValue(removed.promise);
+		let id = 4;
+		// Photo 2 is in both albums.
+		vi.spyOn(api, 'album').mockImplementation(async (which) =>
+			which === 4 ? albumOf(4, [1, 2, 3]) : albumOf(which, [2, 9], 'Winter')
+		);
+		const view = new AlbumView(() => id);
+		await view.load();
+		view.selection = { ids: new Set([2]), anchor: 2 };
+		const removing = view.removeSelected();
+		id = 7;
+		view.open();
+		await settled();
+		view.selection = { ids: new Set([9]), anchor: 9 };
+		removed.resolve(albumOf(4, []));
+		await removing;
+		expect(remove).toHaveBeenCalledExactlyOnceWith(4, [2]);
+		expect(ids(view)).toEqual([2, 9]);
+		expect([...view.selection.ids]).toEqual([9]);
+		expect(notice.action?.label).toBe('Undo');
+	});
+
 	it('an Undo that fails is said', async () => {
 		vi.spyOn(api, 'removeFromAlbum').mockResolvedValue(albumOf(4, []));
 		vi.spyOn(api, 'addToAlbum').mockRejectedValue(new Error('Offline.'));
