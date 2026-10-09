@@ -22,6 +22,7 @@
 	let folder = $state('');
 	let folderPending = $state(false);
 	let label = $state('');
+	let labelTyped = $state(false); // a name the person typed is theirs; otherwise it follows the place
 	let schedule = $state<string>(SCHEDULES[0][0]);
 	let plan = $state<BackupPlan | null>(null);
 	let created = $state<{ id: number; recovery: BackupRecovery } | null>(null);
@@ -50,6 +51,7 @@
 	function choose(value: string, name: string) {
 		choice = value;
 		label = name;
+		labelTyped = false;
 		error = '';
 		plan = null; // a verdict belongs to the place it was asked about
 	}
@@ -172,6 +174,7 @@
 					onpick={(p) => {
 						folder = p.path;
 						folderPending = p.pending;
+						if (!labelTyped && p.path) label = p.path.split('/').filter(Boolean).pop() ?? '';
 					}}
 				/>
 			{/if}
@@ -180,7 +183,13 @@
 					No external disk is plugged in. Plug one in and open this again, or type a folder.
 				</p>
 			{/if}
-			<label class="field">Name <input bind:value={label} placeholder="USB disk" /></label>
+			<label class="field"
+				>Name <input
+					bind:value={label}
+					oninput={() => (labelTyped = label.trim() !== '')}
+					placeholder="USB disk"
+				/></label
+			>
 		{:else if !error}
 			<p class="quiet">Looking for disks…</p>
 		{/if}
