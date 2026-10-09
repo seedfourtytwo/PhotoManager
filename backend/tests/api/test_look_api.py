@@ -171,7 +171,7 @@ def test_an_empty_sheet_resets_the_look(admin: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    "stored", ["{not json", "[]", '{"mode": "light", "css": "x"}', '{"textScale": "big"}']
+    "stored", ["{not json", "[]", '{"css": "x"}', '{"textScale": "big"}', '{"theme": "gone"}']
 )
 def test_a_broken_stored_sheet_answers_the_defaults(admin: TestClient, stored: str) -> None:
     lea = add_user(admin, "lea")
@@ -183,6 +183,38 @@ def test_a_broken_stored_sheet_answers_the_defaults(admin: TestClient, stored: s
     # and the way out of a broken sheet works: the account's own mode, the admin's save
     assert lea.put("/api/me/look", json={"mode": "light"}).json() == {**DEFAULTS, "mode": "light"}
     assert admin.put(f"/api/admin/accounts/{lea_id}/look", json=WARM).json() == WARM
+
+
+def test_a_stored_field_that_no_longer_passes_costs_only_itself(admin: TestClient) -> None:
+    """A theme removed in a later version: the account keeps its other choices, also after
+    it changes its mode (which writes the sheet back)."""
+    lea = add_user(admin, "lea")
+    lea_id = user_id_of(admin, "lea")
+    stored = '{"theme": "gone", "mode": "light", "accentHue": 200, "corners": 4, "css": "x"}'
+    services_of(admin).repo.store_look(lea_id, stored)
+    kept = {**DEFAULTS, "mode": "light", "accentHue": 200, "corners": 4}
+
+    assert lea.get("/api/me/look").json() == kept
+    assert admin.get(f"/api/admin/accounts/{lea_id}/look").json() == kept
+    assert lea.put("/api/me/look", json={"mode": "system"}).json() == {**kept, "mode": "system"}
+    assert lea.get("/api/me/look").json() == {**kept, "mode": "system"}
+
+
+def test_a_half_is_rounded_up_and_a_number_beyond_every_float_is_clamped(
+    admin: TestClient,
+) -> None:
+    body = '{"accentHue": 0.5, "corners": 2.5, "photoGap": 1e400, "textScale": 1.125}'
+    saved = admin.put(
+        _look_url(admin, "admin"), content=body, headers={"content-type": "application/json"}
+    )
+    assert saved.status_code == 200
+    assert saved.json() == {
+        **DEFAULTS,
+        "accentHue": 1,
+        "corners": 3,
+        "photoGap": 8,
+        "textScale": 1.13,
+    }
 
 
 def test_the_look_of_an_unknown_account_is_not_found(admin: TestClient) -> None:

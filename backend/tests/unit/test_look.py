@@ -1,8 +1,9 @@
 """The look sheet's rules (spec 2026-10-08 §5, docs/adr/0001): unknown fields rejected,
-numbers clamped, a broken stored sheet falls back to the defaults."""
+numbers clamped, a stored sheet loses only the fields that no longer pass."""
 
 import json
 import math
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +21,16 @@ from photo_assistant.domain.look import (
     parse_look,
     read_look,
 )
+
+# The table both sides run (web/src/lib/look/sheet.spec.ts reads the same file).
+CASES = json.loads(
+    (Path(__file__).parents[3] / "docs" / "contracts" / "look-cases.json").read_text()
+)
+
+
+def _case_id(case: dict[str, object]) -> str:
+    return json.dumps(case["sheet"])[:40]
+
 
 EVERYTHING = {
     "theme": "album",
@@ -96,6 +107,24 @@ def test_a_number_too_large_for_a_float_is_clamped_like_any_other() -> None:
     assert read_look(f'{{"photoGap": {huge}}}').photo_gap == 8
 
 
+def test_a_number_beyond_every_float_is_clamped_too() -> None:
+    sheet = look_sheet(parse_look({"accentHue": math.inf, "textScale": -math.inf}))
+    assert (sheet["accentHue"], sheet["textScale"]) == (360, 0.9)
+
+
+@pytest.mark.parametrize("case", CASES["sent"], ids=_case_id)
+def test_a_sent_sheet_reads_as_the_shared_table_says(case: dict[str, object]) -> None:
+    gives = case["gives"]
+    assert isinstance(gives, dict)
+    assert look_sheet(parse_look(case["sheet"])) == {**look_sheet(DEFAULT_LOOK), **gives}
+
+
+def test_a_half_rounds_up_not_to_the_even_number() -> None:
+    sheet = look_sheet(parse_look({"accentHue": 0.5, "corners": 2.5, "textScale": 1.125}))
+    assert (sheet["accentHue"], sheet["corners"], sheet["textScale"]) == (1, 3, 1.13)
+    assert type(sheet["accentHue"]) is int
+
+
 def test_dials_are_stored_as_round_numbers() -> None:
     sheet = look_sheet(parse_look({"accentHue": 71.6, "corners": 3.2, "textScale": 1.1234}))
     assert (sheet["accentHue"], sheet["corners"], sheet["textScale"]) == (72, 3, 1.12)
@@ -115,7 +144,7 @@ def test_a_dial_left_to_the_theme_stays_null(field: str) -> None:
         ("textScale", None),  # this dial has no "theme default"
         ("textScale", "1.1"),
         ("textScale", math.nan),
-        ("accentHue", math.inf),
+        ("accentHue", math.nan),
         ("showToday", "yes"),
         ("dockLabels", 1),
         ("theme", 3),
@@ -175,10 +204,28 @@ def test_nothing_stored_reads_as_the_defaults() -> None:
         "{not json",
         "[]",
         "null",
-        '{"mode": "light", "css": "x"}',
+        '{"css": "x"}',
         '{"textScale": "big"}',
         '{"theme": "gone-in-a-later-version"}',
     ],
 )
 def test_a_broken_stored_sheet_reads_as_the_defaults(stored: str) -> None:
     assert read_look(stored) == DEFAULT_LOOK
+
+
+@pytest.mark.parametrize("case", CASES["stored"], ids=_case_id)
+def test_a_stored_sheet_reads_as_the_shared_table_says(case: dict[str, object]) -> None:
+    reads = case["reads"]
+    assert isinstance(reads, dict)
+    stored = json.dumps(case["sheet"])
+    assert look_sheet(read_look(stored)) == {**look_sheet(DEFAULT_LOOK), **reads}
+
+
+def test_a_stored_sheet_loses_only_the_fields_that_no_longer_pass() -> None:
+    stored = '{"theme": "gone-in-a-later-version", "mode": "light", "accentHue": 200, "css": "x"}'
+    assert read_look(stored) == Look(mode=Mode.LIGHT, accent_hue=200)
+
+
+def test_a_sent_sheet_with_one_bad_field_is_still_refused_whole() -> None:
+    with pytest.raises(LookError, match="'theme'"):
+        parse_look({"theme": "gone-in-a-later-version", "accentHue": 200})
