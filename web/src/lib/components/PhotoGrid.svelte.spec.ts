@@ -5,7 +5,8 @@ import { makeAsset } from '$lib/testing/fixtures';
 import { justify } from '$lib/timeline';
 import PhotoGrid from './PhotoGrid.svelte';
 
-const pixel = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+// A complete 1 × 1 image: one that does not load would leave its tile without a picture.
+const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const items = [
 	makeAsset(1, '2019-07-04T18:30:00', 400, 300, { thumb: { url: pixel } }),
 	makeAsset(2, '2019-07-04T18:31:00', 300, 400, {
@@ -55,6 +56,21 @@ describe('PhotoGrid', () => {
 		expect(fit('18:30')).toBe('contain');
 		expect(fit('18:31')).toBe('contain');
 		expect(fit('18:32')).toBe('fill');
+	});
+
+	it('a thumbnail that fails to load leaves a quiet tile, not a broken image', async () => {
+		const broken = [
+			makeAsset(1, '2019-07-04T18:30:00', 400, 300, {
+				thumb: { url: 'data:image/png;base64,AAAA' }
+			}),
+			makeAsset(2, '2019-07-04T18:31:00', 400, 300, { thumb: { url: pixel } })
+		];
+		setup({ items: broken, layout: justify([4 / 3, 4 / 3], 600, 150, 3) });
+		const tile = page.getByRole('button', { name: /18:30/ });
+		await expect.element(tile).toHaveTextContent('Photo, 4 Jul 2019, 18:30 (preview missing)');
+		expect(tile.element().querySelector('img')).toBeNull();
+		// The photo beside it is untouched.
+		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:31')).toBeInTheDocument();
 	});
 
 	it('describes each photo in words for screen readers', async () => {
