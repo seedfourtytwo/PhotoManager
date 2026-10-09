@@ -84,7 +84,7 @@ const tileOf = (id: Id) =>
 		: document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
 
 /**
- * The photo's tile takes the view-transition name the open photo has (Loupe.svelte), so the
+ * The photo's tile takes the view-transition name the open photo has (PhotoStage.svelte), so the
  * browser moves one picture between the two places. Returns what takes the name off again.
  */
 function nameTile(id: Id): () => void {
