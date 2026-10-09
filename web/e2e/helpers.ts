@@ -56,6 +56,30 @@ export async function openAccountMenu(page: Page): Promise<Locator> {
 	await nav.getByRole('button', { name: /^Account/ }).click();
 	return nav;
 }
+
+/**
+ * Count the requests a route gets and hold each one a moment, so a double click overlaps.
+ * With a `method`, only those requests count and wait.
+ */
+export async function countSlow(page: Page, url: string | RegExp, method?: string) {
+	const seen = { count: 0 };
+	await page.route(url, async (route) => {
+		if (method && route.request().method() !== method) return route.fallback();
+		seen.count++;
+		await new Promise((r) => setTimeout(r, 300));
+		await route.fallback();
+	});
+	return seen;
+}
+
+/** Answer a route `ms` late. The page may have left by then: an answer nobody waits for is fine. */
+export async function delayRoute(page: Page, url: string | RegExp, ms: number) {
+	await page.route(url, async (route) => {
+		await new Promise((r) => setTimeout(r, ms));
+		await route.continue().catch(() => undefined);
+	});
+}
+
 /** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
 export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
 

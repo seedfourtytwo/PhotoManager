@@ -1,6 +1,6 @@
 /** Admin → cloud folders: an rclone remote, and Proton Drive (its Photos section or one folder). */
 import type { Page } from '@playwright/test';
-import { expect, openAdmin, REAL_BACKEND, test } from './helpers.ts';
+import { countSlow, expect, openAdmin, REAL_BACKEND, test } from './helpers.ts';
 
 test.beforeEach(({ page }) => openAdmin(page));
 
@@ -100,18 +100,12 @@ test.describe('adding a folder when the second step fails or the button is press
 	});
 
 	test('a double click on “Add and pull” adds the cloud folder once', async ({ page }) => {
-		let posts = 0;
-		await page.route('**/api/remote-sources', async (route) => {
-			if (route.request().method() !== 'POST') return route.fallback();
-			posts++;
-			await new Promise((r) => setTimeout(r, 300));
-			await route.fallback();
-		});
+		const posts = await countSlow(page, '**/api/remote-sources', 'POST');
 		const dialog = await fillCloud(page);
 		await dialog.getByRole('button', { name: 'Add and pull' }).dblclick();
 		await expect(dialog).toBeHidden();
 		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
-		expect(posts).toBe(1);
+		expect(posts.count).toBe(1);
 	});
 });
 

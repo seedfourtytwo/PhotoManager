@@ -1,6 +1,14 @@
 /** Admin → Folders: adding a folder of this machine, its access, its timer, its import reports. */
 import type { Page } from '@playwright/test';
-import { expect, expectAccessible, openAdmin, REAL_BACKEND, signIn, test } from './helpers.ts';
+import {
+	countSlow,
+	expect,
+	expectAccessible,
+	openAdmin,
+	REAL_BACKEND,
+	signIn,
+	test
+} from './helpers.ts';
 
 /** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
 const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
@@ -139,18 +147,12 @@ test.describe('adding a folder when the second step fails or the button is press
 	});
 
 	test('a double click on “Add and import” adds the folder once', async ({ page }) => {
-		let posts = 0;
-		await page.route('**/api/sources', async (route) => {
-			if (route.request().method() !== 'POST') return route.fallback();
-			posts++;
-			await new Promise((r) => setTimeout(r, 300));
-			await route.fallback();
-		});
+		const posts = await countSlow(page, '**/api/sources', 'POST');
 		const dialog = await pickScans(page);
 		await dialog.getByRole('button', { name: 'Add and import' }).dblclick();
 		await expect(dialog).toBeHidden();
 		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toHaveCount(1);
-		expect(posts).toBe(1);
+		expect(posts.count).toBe(1);
 	});
 
 	test('the dialog opens fresh: no old error, no name typed last time', async ({ page }) => {

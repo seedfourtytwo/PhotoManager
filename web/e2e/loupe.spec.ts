@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 import {
 	centre,
+	countSlow,
 	expect,
 	expectAccessible,
 	GUEST,
@@ -173,18 +174,13 @@ test.describe('as admin', () => {
 	});
 
 	test('favourite: a double click sends one request and ends favourited', async ({ page }) => {
-		let patches = 0;
-		await page.route(/\/api\/assets\/\d+\/state$/, async (route) => {
-			patches++;
-			await new Promise((r) => setTimeout(r, 300));
-			await route.continue();
-		});
+		const patches = await countSlow(page, /\/api\/assets\/\d+\/state$/);
 		await page.locator('.tile').first().click();
 		const fav = loupe(page).getByRole('button', { name: 'Favourite' });
 		await fav.dblclick();
 		await expect(fav).toHaveAttribute('aria-pressed', 'true');
 		await page.waitForTimeout(500);
-		expect(patches).toBe(1);
+		expect(patches.count).toBe(1);
 	});
 
 	test('owner/admin can make a photo private from the loupe', async ({ page }) => {
