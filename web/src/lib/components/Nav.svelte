@@ -149,7 +149,8 @@
 			height: auto;
 			justify-content: center;
 			gap: var(--s-2);
-			z-index: var(--z-dock); /* over the selection bar (25) so the open menu is not covered, under the filter sheet (35) */
+			/* over the selection bar so the open menu is not covered, under the filter sheet */
+			z-index: var(--z-dock);
 			padding: 0 calc(var(--s-3) + env(safe-area-inset-right))
 				calc(var(--s-3) + env(safe-area-inset-bottom)) calc(var(--s-3) + env(safe-area-inset-left));
 			background: none;
