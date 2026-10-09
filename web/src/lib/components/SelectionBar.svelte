@@ -22,6 +22,8 @@
 
 	/** A phone's pill has room for this many actions; the rest open from "More". */
 	const INLINE_ON_PHONE = 3;
+	/** Positions are fractions of a px: the last thing may end this far past the glass and still fit. */
+	const FIT_SLACK = 0.5;
 	let more = $state(false);
 	let moreButton: HTMLButtonElement | undefined = $state();
 
@@ -69,7 +71,7 @@
 			bar.getBoundingClientRect().right -
 			parseFloat(style.paddingRight) -
 			parseFloat(style.borderRightWidth);
-		if (clear.getBoundingClientRect().right > end + 0.5) fits = inline.length - 1;
+		if (clear.getBoundingClientRect().right > end + FIT_SLACK) fits = inline.length - 1;
 	});
 	// The two ends of the pill change size when the look's text size does, and when the faces
 	// arrive after the first paint; how many actions sit between them does not move either.
@@ -104,7 +106,15 @@
 
 <svelte:window {onkeydown} {onclick} />
 
-<div class="bar glass" role="toolbar" aria-label="Selected photos" aria-busy={busy} bind:this={bar}>
+<!-- `data-selection-pill`: the layout moves the toast out of the pill's way by it. -->
+<div
+	class="bar glass"
+	role="toolbar"
+	aria-label="Selected photos"
+	aria-busy={busy}
+	data-selection-pill
+	bind:this={bar}
+>
 	<span class="count data" role="status" bind:this={tally}>{count} selected</span>
 	<span class="actions">
 		{#each inline as action (action.label)}

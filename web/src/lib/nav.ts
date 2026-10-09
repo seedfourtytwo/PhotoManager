@@ -1,7 +1,7 @@
 /** Where things are: the places of the app and what sits behind the account button. */
-import type { MenuItem } from './components/Menu.svelte';
 import type { IconName } from './icons';
 import type { CollectionsRow } from './look';
+import type { MenuItem } from './menu';
 
 export type Place = {
 	href: string;
