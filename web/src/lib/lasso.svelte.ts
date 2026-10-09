@@ -16,14 +16,21 @@ export type LassoHost = {
 	selection: () => Selection;
 	/** How many photos are loaded. */
 	count: () => number;
+	/** Another value (by identity) whenever the photos may have moved: a new width, a new row height. */
+	layout: () => unknown;
 	/** Every loaded photo and its box, in the wrapper's coordinates. */
 	placed: () => Placed[];
 	onselect: (next: Selection) => void;
 };
 
 export function createLasso(host: LassoHost) {
-	let start: { x: number; y: number; base: Selection; placed: readonly Placed[] | null } | null =
-		null;
+	let start: {
+		x: number;
+		y: number;
+		base: Selection;
+		placed: readonly Placed[] | null;
+		layout: unknown;
+	} | null = null;
 	let rect = $state<Rect | null>(null);
 	let frame = 0;
 
@@ -32,8 +39,13 @@ export function createLasso(host: LassoHost) {
 		if (!start || !rect || !wrapper) return;
 		// From the layout, not the DOM: photos outside the window are not rendered. Every loaded
 		// photo's box, in timeline coordinates, is worked out once per drag (again only if a page
-		// arrived meanwhile); each frame then only moves the rectangle into those coordinates.
-		if (start.placed?.length !== host.count()) start.placed = host.placed();
+		// arrived or the photos moved meanwhile); each frame then only moves the rectangle into
+		// those coordinates.
+		const layout = host.layout();
+		if (start.placed?.length !== host.count() || start.layout !== layout) {
+			start.placed = host.placed();
+			start.layout = layout;
+		}
 		const origin = wrapper.getBoundingClientRect();
 		const inside = {
 			x1: rect.x1 - origin.left,
@@ -56,7 +68,8 @@ export function createLasso(host: LassoHost) {
 				x: event.clientX,
 				y: event.clientY + window.scrollY,
 				base: host.selection(),
-				placed: null
+				placed: null,
+				layout: null
 			};
 		},
 

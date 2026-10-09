@@ -22,13 +22,14 @@ function setup(selection: Selection = EMPTY) {
 	const capture = vi.fn();
 	wrapper.setPointerCapture = capture;
 	const onselect = vi.fn<(next: Selection) => void>();
-	/** What is loaded: a page that arrives adds to it. */
-	const state = { photos };
+	/** What is loaded and how it is laid out: a page that arrives adds to it, a new width moves it. */
+	const state = { photos, layout: {} };
 	const placed = vi.fn(() => state.photos);
 	const lasso = createLasso({
 		wrapper: () => wrapper,
 		selection: () => selection,
 		count: () => state.photos.length,
+		layout: () => state.layout,
 		placed,
 		onselect
 	});
@@ -177,6 +178,26 @@ describe('lasso', () => {
 		lasso.move(event(LEFT + 150, TOP + 60));
 		lasso.end(false);
 		expect(placed).toHaveBeenCalledTimes(3);
+	});
+
+	it('the photos moved under a held drag (a new width, as many photos): it asks again and selects by where they are now', async () => {
+		const { lasso, event, placed, state, selected } = setup();
+		lasso.down(event(LEFT + 50, TOP + 50));
+		lasso.move(event(LEFT + 150, TOP + 60));
+		await nextFrame();
+		expect(selected()).toEqual([1, 2]);
+		// Half as wide: one column of four.
+		state.photos = photos.map((photo, i) => ({ ...photo, x: 0, y: i * 100 }));
+		state.layout = {};
+		lasso.move(event(LEFT + 150, TOP + 61));
+		await nextFrame();
+		expect(placed).toHaveBeenCalledTimes(2);
+		expect(selected()).toEqual([1]);
+		lasso.move(event(LEFT + 150, TOP + 150));
+		await nextFrame();
+		expect(placed).toHaveBeenCalledTimes(2);
+		expect(selected()).toEqual([1, 2]);
+		lasso.end(false);
 	});
 
 	it('the page scrolled under a held drag: the rectangle stays on the photo it started on', async () => {
