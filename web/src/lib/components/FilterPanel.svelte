@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
 	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
-	import { photos } from '$lib/format';
+	import { formatCount, photos } from '$lib/format';
 	import { historyStep } from '$lib/history-step';
 	import {
 		activeFilterCount,
@@ -28,7 +28,6 @@
 	});
 	// A search still waiting to be applied must not land on the page you went to instead.
 	onDestroy(() => clearTimeout(typing));
-	const count = new Intl.NumberFormat('en-GB');
 	const MONTHS = [
 		'Jan',
 		'Feb',
@@ -230,7 +229,7 @@
 					>
 						<span class="year">{y.year}</span>
 						<span class="bar" style:width={`${(y.count / maxYear) * 100}%`}></span>
-						<span class="n">{count.format(y.count)}</span>
+						<span class="n">{formatCount(y.count)}</span>
 					</button>
 				</li>
 			{/each}
@@ -281,7 +280,7 @@
 				<option value={filters.place}>{filters.place}</option>
 			{/if}
 			{#each facets?.places ?? [] as p (p.name)}
-				<option value={p.name}>{p.name} · {count.format(p.count)}</option>
+				<option value={p.name}>{p.name} · {formatCount(p.count)}</option>
 			{/each}
 		</select>
 		<label class="row">
@@ -313,7 +312,7 @@
 				<option value={filters.camera}>{filters.camera}</option>
 			{/if}
 			{#each facets?.cameras ?? [] as c (c.name)}
-				<option value={c.name}>{c.name} · {count.format(c.count)}</option>
+				<option value={c.name}>{c.name} · {formatCount(c.count)}</option>
 			{/each}
 		</select>
 	</section>
@@ -327,7 +326,7 @@
 					checked={filters.source_id?.includes(s.id) ?? false}
 					onchange={(e) => toggleSource(s.id, e.currentTarget.checked)}
 				/>
-				{s.label} <span class="n">{count.format(s.count)}</span>
+				{s.label} <span class="n">{formatCount(s.count)}</span>
 			</label>
 		{/each}
 	</section>
@@ -349,7 +348,7 @@
 				onchange={(e) => set('guessed_date', e.currentTarget.checked || undefined)}
 			/>
 			Guessed dates
-			{#if facets}<span class="n">{count.format(facets.guessed_dates)}</span>{/if}
+			{#if facets}<span class="n">{formatCount(facets.guessed_dates)}</span>{/if}
 		</label>
 		<label class="check">
 			<input

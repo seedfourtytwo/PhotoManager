@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
-	import { errorMessage, photos, plural } from '$lib/format';
+	import { errorMessage, formatCount, photos, plural } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import {
 		LinkedPhoto,
@@ -34,7 +34,6 @@
 	let selection = $state<Selection>(EMPTY);
 	let timeline: Timeline | undefined = $state();
 	const loader = new TimelineLoader((_filters, cursor) => api.personAssets(id, cursor, 200));
-	const count = new Intl.NumberFormat('en-GB');
 
 	async function load() {
 		try {
@@ -214,7 +213,7 @@
 						<input type="checkbox" value={other.id} bind:group={merging} />
 						<FaceCrop face={other.cover} size={40} />
 						<span class:quiet={!other.name}>{other.name ?? 'Someone'}</span>
-						<span class="quiet small">{count.format(other.asset_count)}</span>
+						<span class="quiet small">{formatCount(other.asset_count)}</span>
 					</label>
 				</li>
 			{/each}
