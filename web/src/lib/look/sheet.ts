@@ -6,7 +6,12 @@
  *
  * `parseLook` is strict (a sheet someone sends): an unknown field, a wrong kind or an unknown
  * choice throws, a number outside its range is clamped. `readLook` is forgiving (a sheet that
- * was stored or received): anything `parseLook` refuses reads as the defaults.
+ * was stored or received): a field that does not pass reads as its default, a field this
+ * build does not know is left out, and the rest of the sheet stays. So a newer backend never
+ * sends an open tab back to the defaults, and no sheet can make the app unusable.
+ *
+ * Numbers follow the backend's rule (docs/contracts/look-cases.json is the table both test
+ * suites run): clamp first, however far outside the number is, then round a half up.
  */
 
 export const THEMES = ['safelight', 'album'] as const;
@@ -71,13 +76,17 @@ export class LookError extends Error {}
 
 function number(field: keyof typeof LOOK_RANGES, value: unknown): number {
 	const [low, high] = LOOK_RANGES[field];
-	if (typeof value !== 'number' || !Number.isFinite(value))
+	// Infinity is what JSON makes of a number too large to hold: far outside, so clamped
+	if (typeof value !== 'number' || Number.isNaN(value))
 		throw new LookError(`'${field}' must be a number from ${low} to ${high}`);
 	return Math.min(Math.max(value, low), high);
 }
 
+/** The nearest whole number, a half going up: the same sum as the backend's. */
+const halfUp = (value: number) => Math.floor(value + 0.5);
+
 const dial = (field: 'accentHue' | 'corners' | 'photoGap') => (value: unknown) =>
-	value === null ? null : Math.round(number(field, value));
+	value === null ? null : halfUp(number(field, value));
 
 const choice =
 	<T extends string>(field: string, allowed: readonly T[]) =>
@@ -111,7 +120,7 @@ const FIELDS: { [K in keyof Look]: (value: unknown) => Look[K] } = {
 	accentHue: dial('accentHue'),
 	corners: dial('corners'),
 	photoGap: dial('photoGap'),
-	textScale: (value) => Math.round(number('textScale', value) * 100) / 100,
+	textScale: (value) => halfUp(number('textScale', value) * 100) / 100,
 	thumbSize: choice('thumbSize', THUMB_SIZES),
 	showToday: toggle('showToday'),
 	startPage: choice('startPage', START_PAGES),
@@ -121,10 +130,30 @@ const FIELDS: { [K in keyof Look]: (value: unknown) => Look[K] } = {
 
 const isField = (name: string): name is keyof Look => Object.hasOwn(FIELDS, name);
 
+const isSheet = (raw: unknown): raw is object =>
+	typeof raw === 'object' && raw !== null && !Array.isArray(raw);
+
+/** The sheet's own fields of `raw`, read; `strict` throws for one that does not pass. */
+function fill(raw: object, strict: boolean): Look {
+	const look = defaults();
+	const assign = <K extends keyof Look>(name: K, value: unknown) => {
+		look[name] = FIELDS[name](value);
+	};
+	for (const [name, value] of Object.entries(raw)) {
+		if (!isField(name)) continue;
+		try {
+			assign(name, value);
+		} catch (error) {
+			if (strict || !(error instanceof LookError)) throw error;
+		}
+	}
+	if (!look.showToday) look.startPage = 'library'; // no Today tab to start on
+	return look;
+}
+
 /** The look a sent sheet describes; fields it leaves out take their default. Throws LookError. */
 export function parseLook(raw: unknown): Look {
-	if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
-		throw new LookError('a look is an object of named values');
+	if (!isSheet(raw)) throw new LookError('a look is an object of named values');
 	const unknown = Object.keys(raw)
 		.filter((name) => !isField(name))
 		.sort();
@@ -133,21 +162,20 @@ export function parseLook(raw: unknown): Look {
 			`unknown look field ${unknown.map((name) => `'${name}'`).join(', ')}; ` +
 				`a look has only: ${Object.keys(FIELDS).join(', ')}`
 		);
-	const look = defaults();
-	const assign = <K extends keyof Look>(name: K, value: unknown) => {
-		look[name] = FIELDS[name](value);
-	};
-	for (const [name, value] of Object.entries(raw)) if (isField(name)) assign(name, value);
-	if (!look.showToday) look.startPage = 'library'; // no Today tab to start on
-	return look;
+	return fill(raw, true);
 }
 
-/** The look a stored or received sheet describes; the defaults for none or a broken one. */
+/**
+ * The look a stored or received sheet describes: each field that passes, the default for
+ * each that does not, and the defaults for something that is not a sheet at all.
+ */
 export function readLook(raw: unknown): Look {
-	try {
-		return parseLook(raw);
-	} catch (error) {
-		if (error instanceof LookError) return defaults();
-		throw error;
-	}
+	return isSheet(raw) ? fill(raw, false) : defaults();
+}
+
+/** Whether two looks hold the same values. */
+export function sameLook(a: Look, b: Look): boolean {
+	return Object.keys(FIELDS).every(
+		(name) => isField(name) && JSON.stringify(a[name]) === JSON.stringify(b[name])
+	);
 }
