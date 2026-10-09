@@ -22,6 +22,15 @@ describe('style guard', () => {
 		expect(offenders).toEqual([]);
 	});
 
+	// The look's "gap between photos" dial moves --gutter from 0 to 8 px: a needle or a gap
+	// inside a control that borrowed it would vanish or swell with it. Those use --fine.
+	it('--gutter is only the room between and beside photos: no component borrows it', () => {
+		const offenders = Object.entries(sources)
+			.filter(([path, text]) => path.startsWith('/src/lib/') && text.includes('var(--gutter)'))
+			.map(([path]) => path);
+		expect(offenders).toEqual([]);
+	});
+
 	it('every font file is used and every used font file exists', () => {
 		const used = [...fonts.matchAll(/url\('\/fonts\/([^']+)'\)/g)].map((match) => match[1]).sort();
 		const present = readdirSync('static/fonts')

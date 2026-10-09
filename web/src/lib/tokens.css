@@ -48,7 +48,8 @@
 	--check-radius: 4px; /* a 16 px box: --r-1 would turn it into a circle */
 
 	/* Layout */
-	--gutter: 2px;
+	--gutter: 2px; /* between photos, and beside them on a phone; the look's gap dial moves it */
+	--fine: 2px; /* the finest line and gap: the ruler's needle, an icon and its word */
 	--margin: 16rem; /* right-margin notes and filters on desktop */
 	--top: 56px; /* the top bar on a laptop; 0 on a phone. Sticky things offset by it. */
 	--dock: 56px; /* the floating dock on a phone */
@@ -245,7 +246,7 @@ button.primary:disabled {
 	display: inline-grid;
 	justify-items: center;
 	align-content: center;
-	gap: var(--gutter);
+	gap: var(--fine);
 	min-width: var(--target);
 	min-height: var(--target);
 	padding: var(--s-1) var(--s-2);

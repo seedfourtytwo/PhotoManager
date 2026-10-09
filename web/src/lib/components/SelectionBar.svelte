@@ -147,7 +147,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: var(--gutter);
+		gap: var(--fine);
 	}
 	.beside {
 		display: inline-flex;

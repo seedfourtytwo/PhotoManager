@@ -651,7 +651,7 @@
 	}
 	.readout {
 		display: grid;
-		gap: var(--gutter);
+		gap: var(--fine);
 		margin: 0;
 		font-size: var(--fs-12);
 		color: var(--ink-2);

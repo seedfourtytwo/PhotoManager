@@ -14,6 +14,7 @@ describe('shape and motion tokens', () => {
 			'--r-pill': '999px',
 			'--check-radius': '4px',
 			'--gutter': '2px',
+			'--fine': '2px',
 			'--motion': '200ms',
 			'--motion-sheet': '240ms'
 		});

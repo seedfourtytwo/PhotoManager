@@ -223,7 +223,7 @@
 	}
 	.tag {
 		position: absolute;
-		padding: var(--gutter) var(--s-1);
+		padding: var(--fine) var(--s-1);
 		border-radius: calc(var(--r-1) / 2);
 		background: var(--accent);
 		color: var(--on-accent);
@@ -262,8 +262,8 @@
 		top: calc(var(--at) * 100%);
 		left: 0;
 		right: 0;
-		height: var(--gutter);
-		margin-top: calc(var(--gutter) / -2);
+		height: var(--fine);
+		margin-top: calc(var(--fine) / -2);
 	}
 	.vertical .tag {
 		top: 50%;
@@ -305,8 +305,8 @@
 		top: 0;
 		bottom: 0;
 		left: calc((1 - var(--at)) * 100%);
-		width: var(--gutter);
-		margin-left: calc(var(--gutter) / -2);
+		width: var(--fine);
+		margin-left: calc(var(--fine) / -2);
 	}
 	.horizontal .tag {
 		top: var(--s-1);

@@ -109,7 +109,8 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 |---|---|
 | `--s-1 … --s-8` | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px — the only spacings used |
 | `--page-x` | 24 px laptop, 12 px phone (grids on a phone use `--gutter` and pad their words) |
-| `--gutter` | 2 px between photos |
+| `--gutter` | 2 px between photos, and beside them on a phone; the look's gap dial moves it (0–8 px), so nothing else uses it |
+| `--fine` | 2 px: the finest line and gap inside a control (the ruler's needle, an icon and its word); no dial moves it |
 | `--r-1` / `--r-2` / `--r-pill` | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded |
 | `--check-radius` | 4 px: checkbox corners (`--r-1` would make a 16 px box round) |
 | `--target` | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button |
