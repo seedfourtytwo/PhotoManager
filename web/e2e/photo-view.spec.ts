@@ -250,10 +250,11 @@ test.describe('selection pill', () => {
 	}) => {
 		await selectTiles(page, [0]);
 		const actions = pill(page).locator('.actions > button');
-		// A phone has room for three; the fourth joins the rest under More.
+		// A 390 px phone has room for two beside the count and Clear; the others join the rest
+		// under More.
 		const onBar = ['Add to album', 'Download', 'Fix date', 'Move to trash'].slice(
 			0,
-			isPhone(page) ? 3 : 4
+			isPhone(page) ? 2 : 4
 		);
 		await expect(actions).toHaveText([...onBar, 'More']);
 		await expect(actions.locator('svg')).toHaveCount(onBar.length + 1);
@@ -270,6 +271,31 @@ test.describe('selection pill', () => {
 		await expect(pill(page)).toHaveCount(0);
 		await expect(page.locator('.tile.selected')).toHaveCount(0);
 	});
+
+	// From the narrowest phone up: what does not fit goes under More, nothing leaves the glass.
+	for (const width of [320, 390, 700])
+		test(`at ${width} px everything on the pill is inside it, and the pill inside the screen`, async ({
+			page
+		}) => {
+			test.skip(isPhone(page), 'one project sets the widths itself');
+			await page.setViewportSize({ width, height: 800 });
+			await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+			await expect(pill(page).getByRole('status')).toHaveText(/^\d{3} selected$/);
+			const glass = (await pill(page).boundingBox())!;
+			expect(glass.x).toBeGreaterThanOrEqual(0);
+			expect(glass.x + glass.width).toBeLessThanOrEqual(width);
+			const inside = pill(page).locator('.count, .actions > button, .clear');
+			for (const part of await inside.all()) {
+				const box = (await part.boundingBox())!;
+				expect(box.x).toBeGreaterThanOrEqual(glass.x);
+				expect(box.x + box.width).toBeLessThanOrEqual(glass.x + glass.width);
+			}
+			await expect(pill(page).getByRole('button', { name: 'Clear selection' })).toBeVisible();
+			// Whatever left the pill is still offered, under More.
+			await pill(page).getByRole('button', { name: 'More' }).click();
+			for (const name of ['Add to album', 'Download', 'Fix date', 'Move to trash'])
+				await expect(pill(page).getByRole('button', { name, exact: true })).toBeVisible();
+		});
 
 	test('phone: long-press then drag selects a run of photos', async ({ page }) => {
 		test.skip(!isPhone(page), 'touch only');

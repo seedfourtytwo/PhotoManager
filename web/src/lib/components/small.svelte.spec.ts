@@ -192,6 +192,15 @@ describe('SelectionBar: the pill', () => {
 		await expect.element(page.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
 	});
 
+	it('More names the list it controls only while the list is there', async () => {
+		render(SelectionBar, { count: 1, actions: [{ label: 'Hide', run, more: true }], onclear: run });
+		const more = page.getByRole('button', { name: 'More' });
+		await expect.element(more).not.toHaveAttribute('aria-controls');
+		await more.click();
+		const list = document.getElementById(more.element().getAttribute('aria-controls')!);
+		expect(list?.textContent).toContain('Hide');
+	});
+
 	it('shows an icon beside the word of an action that has one', async () => {
 		render(SelectionBar, {
 			count: 1,
@@ -245,6 +254,25 @@ describe('SelectionBar on a phone', () => {
 		await expect.element(page.getByRole('button', { name: 'Download' })).toBeInTheDocument();
 		return more;
 	}
+
+	it('320 px and a four-figure count: Clear stays inside the pill, the rest goes under More', async () => {
+		viewport.width = 390;
+		render(SelectionBar, { count: 1234, actions, onclear: () => {} });
+		const bar = page.getByRole('toolbar', { name: 'Selected photos' }).element();
+		// The room the app's stylesheet gives the pill on such a screen (it is not loaded here).
+		Object.assign((bar as HTMLElement).style, { maxWidth: '304px', padding: '4px 8px' });
+		viewport.width = 320;
+		const clear = page.getByRole('button', { name: 'Clear selection' }).element();
+		await vi.waitFor(() =>
+			expect(clear.getBoundingClientRect().right).toBeLessThanOrEqual(
+				bar.getBoundingClientRect().right - 8
+			)
+		);
+		await page.getByRole('button', { name: 'More' }).click();
+		for (const { label } of actions)
+			await expect.element(page.getByRole('button', { name: label })).toBeInTheDocument();
+		viewport.width = window.innerWidth;
+	});
 
 	it('announces the count as a status', async () => {
 		render(SelectionBar, { count: 3, actions, onclear: () => {} });

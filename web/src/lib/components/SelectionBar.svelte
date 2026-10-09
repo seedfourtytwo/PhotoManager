@@ -40,10 +40,40 @@
 	}
 	const shown = $derived(actions.filter((a) => !a.hidden));
 	const onBar = $derived(shown.filter((a) => !a.more));
-	const inline = $derived(viewport.phone ? onBar.slice(0, INLINE_ON_PHONE) : onBar);
+	const most = $derived(viewport.phone ? Math.min(onBar.length, INLINE_ON_PHONE) : onBar.length);
+	/** How many actions the pill has been found to hold; the measuring below takes it down. */
+	let fits = $state(Infinity);
+	const inline = $derived(onBar.slice(0, Math.min(most, fits)));
 	const overflow = $derived(shown.filter((a) => !inline.includes(a)));
 	/** On a phone an action is its icon over its word; with more room, beside it. */
 	const look = $derived(viewport.phone ? 'action' : 'beside');
+
+	// Nothing leaves the glass: while the last thing on the pill ends beyond it, one more
+	// action goes under More. Measured again whenever the room or what is written changes.
+	let bar: HTMLElement | undefined = $state();
+	let clear: HTMLElement | undefined = $state();
+	let measured = $state(0);
+	const remeasure = () => measured++;
+	const room = $derived([viewport.width, count, most, look, measured].join());
+	$effect(() => {
+		void room;
+		fits = Infinity;
+	});
+	$effect(() => {
+		void room;
+		if (!bar || !clear || inline.length === 0) return;
+		const style = getComputedStyle(bar);
+		const end =
+			bar.getBoundingClientRect().right -
+			parseFloat(style.paddingRight) -
+			parseFloat(style.borderRightWidth);
+		if (clear.getBoundingClientRect().right > end + 0.5) fits = inline.length - 1;
+	});
+	// The faces arrive after the first paint and are wider or narrower than their fallbacks.
+	$effect(() => {
+		document.fonts.addEventListener('loadingdone', remeasure);
+		return () => document.fonts.removeEventListener('loadingdone', remeasure);
+	});
 
 	function run(action: Action) {
 		more = false;
@@ -53,7 +83,7 @@
 
 <svelte:window {onkeydown} {onclick} />
 
-<div class="bar glass" role="toolbar" aria-label="Selected photos" aria-busy={busy}>
+<div class="bar glass" role="toolbar" aria-label="Selected photos" aria-busy={busy} bind:this={bar}>
 	<span class="count data" role="status">{count} selected</span>
 	<span class="actions">
 		{#each inline as action (action.label)}
@@ -66,13 +96,19 @@
 				type="button"
 				class={look}
 				aria-expanded={more}
-				aria-controls="selection-more"
+				aria-controls={more ? 'selection-more' : undefined}
 				bind:this={moreButton}
 				onclick={() => (more = !more)}><Icon name="more" />More</button
 			>
 		{/if}
 	</span>
-	<button type="button" class="clear" onclick={onclear} aria-label="Clear selection">Clear</button>
+	<button
+		type="button"
+		class="clear"
+		bind:this={clear}
+		onclick={onclear}
+		aria-label="Clear selection">Clear</button
+	>
 	{#if more && overflow.length}
 		<ul class="more" id="selection-more">
 			{#each overflow as action (action.label)}
