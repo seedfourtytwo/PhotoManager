@@ -220,6 +220,67 @@ describe('LookForm', () => {
 		await vi.waitFor(() => expect(notice.text).toMatch(/could not be reached/));
 		expect(onclose).toHaveBeenCalledOnce();
 	});
+
+	it('a fetch that fails after the form was closed closes nothing and says nothing', async () => {
+		let fail!: (reason: unknown) => void;
+		const asked = vi.fn(() => new Promise<Response>((_, reject) => (fail = reject)));
+		vi.stubGlobal('fetch', asked);
+		const onclose = vi.fn(); // the page's: it would close whichever Look form is open now
+		const first = render(LookForm, { user: donna, onclose });
+		await vi.waitFor(() => expect(asked).toHaveBeenCalledOnce());
+		await first.unmount();
+
+		fail(new TypeError('Failed to fetch'));
+		await new Promise((done) => setTimeout(done, 50));
+
+		expect(onclose).not.toHaveBeenCalled();
+		expect(notice.text).toBe('');
+	});
+
+	it('a save that lands after the form was closed is told, but closes nothing', async () => {
+		let answer!: (response: Response) => void;
+		vi.stubGlobal('fetch', async (_: RequestInfo | URL, init?: RequestInit) =>
+			init?.method === 'PUT'
+				? new Promise<Response>((resolve) => (answer = resolve))
+				: Response.json(hers)
+		);
+		const onclose = vi.fn();
+		const first = render(LookForm, { user: donna, onclose });
+		await button('Save for Donna').click();
+		await vi.waitFor(() => expect(answer).toBeDefined());
+		await first.unmount();
+
+		answer(Response.json(hers));
+
+		await vi.waitFor(() => expect(notice.text).toMatch(/^Saved the look for Donna/));
+		expect(onclose).not.toHaveBeenCalled();
+	});
+
+	it('a dial left to the theme stands where that theme has it, and starts there', async () => {
+		const calls = serve(hers, echo); // Album, light
+		render(LookForm, { user: donna, onclose: () => {} });
+		const slider = (name: string) => form().getByRole('slider', { name });
+		await expect.element(slider('Accent hue')).toHaveValue('275');
+		await expect.element(slider('Corners')).toHaveValue('3');
+		await expect.element(slider('Gap between photos')).toHaveValue('3');
+
+		await form().getByRole('combobox', { name: 'Mode', exact: true }).selectOptions('dark');
+		await expect.element(slider('Accent hue')).toHaveValue('281');
+		await form().getByRole('checkbox', { name: 'Accent colour: the theme’s own' }).click();
+		await form().getByRole('checkbox', { name: 'Corners: the theme’s own' }).click();
+		await button('Save for Donna').click();
+		await vi.waitFor(() =>
+			expect(calls.at(-1)?.body).toMatchObject({ theme: 'album', accentHue: 281, corners: 3 })
+		);
+	});
+
+	it('the theme’s own values follow the theme chosen in the form', async () => {
+		serve(hers, echo);
+		render(LookForm, { user: donna, onclose: () => {} });
+		await form().getByRole('combobox', { name: 'Theme', exact: true }).selectOptions('safelight');
+		await expect.element(form().getByRole('slider', { name: 'Accent hue' })).toHaveValue('72');
+		await expect.element(form().getByRole('slider', { name: 'Corners' })).toHaveValue('12');
+	});
 });
 
 describe('LookTrial', () => {

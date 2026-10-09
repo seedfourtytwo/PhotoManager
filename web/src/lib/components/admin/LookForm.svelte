@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import type { ManagedUser } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import { errorMessage } from '$lib/format';
@@ -9,6 +9,7 @@
 		look,
 		parseLook,
 		readLook,
+		themeDials,
 		type CollectionsRow,
 		type Look
 	} from '$lib/look';
@@ -28,6 +29,13 @@
 	let saving = $state(false);
 	let error = $state('');
 
+	/**
+	 * This form was closed. `onclose` is the page's and closes whichever Look form is open
+	 * now, so an answer that arrives after this one is gone must not call it.
+	 */
+	let gone = false;
+	onDestroy(() => (gone = true));
+
 	onMount(async () => {
 		// Closed while trying and opened again: go on from what is on screen.
 		if (look.trial?.who.id === user.id) {
@@ -35,8 +43,10 @@
 			return;
 		}
 		try {
-			sheet = readLook(await api.accountLook(user.id));
+			const stored = await api.accountLook(user.id);
+			if (!gone) sheet = readLook(stored);
 		} catch (e) {
+			if (gone) return;
 			notice.error(e);
 			onclose();
 		}
@@ -49,17 +59,10 @@
 	}
 	const set = (change: Partial<Look>) => sheet && show(parseLook({ ...sheet, ...change }));
 
-	/** Where a dial starts when it is taken from the theme: Safelight's own values. */
 	const DIALS = [
-		{ field: 'accentHue', title: 'Accent colour', slider: 'Accent hue', start: 72, unit: '°' },
-		{ field: 'corners', title: 'Corners', slider: 'Corners', start: 12, unit: ' px' },
-		{
-			field: 'photoGap',
-			title: 'Gap between photos',
-			slider: 'Gap between photos',
-			start: 3,
-			unit: ' px'
-		}
+		{ field: 'accentHue', title: 'Accent colour', slider: 'Accent hue', unit: '°' },
+		{ field: 'corners', title: 'Corners', slider: 'Corners', unit: ' px' },
+		{ field: 'photoGap', title: 'Gap between photos', slider: 'Gap between photos', unit: ' px' }
 	] as const;
 
 	const ROW_LABELS: Record<CollectionsRow, string> = {
@@ -98,7 +101,7 @@
 					? 'Saved your look.'
 					: `Saved the look for ${user.display_name}. Their app shows it the next time it opens.`
 			);
-			onclose();
+			if (!gone) onclose();
 		} catch (e) {
 			error = errorMessage(e, 'Could not save the look.');
 		} finally {
@@ -110,6 +113,8 @@
 <Dialog title={`Look for ${user.display_name}`} {onclose}>
 	{#if sheet}
 		{@const current = sheet}
+		<!-- where a dial stands while it is left to the theme, and starts when it is taken over -->
+		{@const own = themeDials(current.theme, current.mode)}
 		<div class="pair">
 			<label class="field">
 				Theme
@@ -144,7 +149,8 @@
 						type="checkbox"
 						aria-label={`${dial.title}: the theme’s own`}
 						checked={value === null}
-						onchange={(e) => set({ [dial.field]: e.currentTarget.checked ? null : dial.start })}
+						onchange={(e) =>
+							set({ [dial.field]: e.currentTarget.checked ? null : own[dial.field] })}
 					/>
 					The theme’s own
 				</label>
@@ -156,10 +162,11 @@
 						{max}
 						step="1"
 						disabled={value === null}
-						value={value ?? dial.start}
+						value={value ?? own[dial.field]}
 						oninput={(e) => set({ [dial.field]: e.currentTarget.valueAsNumber })}
 					/>
-					<output class="data" class:quiet={value === null}>{value ?? dial.start}{dial.unit}</output
+					<output class="data" class:quiet={value === null}
+						>{value ?? own[dial.field]}{dial.unit}</output
 					>
 				</span>
 			</fieldset>
