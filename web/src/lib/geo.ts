@@ -108,6 +108,23 @@ export function clustersInView(
 }
 
 /** Dot radius grows with the square root of the count, so area is proportional to photos. */
+/**
+ * The cluster closest to a point of the map. The map clusters again at every zoom, so a dot
+ * that was chosen is found again by where it was, not kept as the dot it used to be.
+ */
+export function nearestCluster(
+	clusters: readonly Cluster[],
+	at: { x: number; y: number }
+): Cluster | null {
+	let best: Cluster | null = null;
+	let bestDistance = Infinity;
+	for (const cluster of clusters) {
+		const distance = Math.hypot(cluster.x - at.x, cluster.y - at.y);
+		if (distance < bestDistance) [best, bestDistance] = [cluster, distance];
+	}
+	return best;
+}
+
 export function clusterRadius(count: number, unit = 2.5): number {
 	return unit * Math.sqrt(count);
 }

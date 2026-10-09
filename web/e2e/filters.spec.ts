@@ -113,6 +113,27 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
 });
 
+test('map: the heading counts the dot that is chosen now, after the map has zoomed in', async ({
+	page
+}) => {
+	await page.goto('/map');
+	await expect(page.getByText(/photos? with a location/)).toBeVisible();
+	// The dot with the most photos: choosing it zooms in, and on a wide map it splits.
+	const dots = page.getByRole('link', { name: /photos? here/ });
+	const counts = await dots.evaluateAll((links) =>
+		links.map((link) => parseInt(link.getAttribute('aria-label')!, 10))
+	);
+	const biggest = Math.max(...counts);
+	await dots.nth(counts.indexOf(biggest)).click();
+	const heading = page.locator('section.chosen h2 .quiet');
+	await expect(heading).toBeVisible();
+	const chosen = page.locator('a:has(circle.chosen)');
+	await expect(chosen).toHaveCount(1);
+	const shown = parseInt((await chosen.getAttribute('aria-label'))!, 10);
+	await expect(heading).toHaveText(String(shown));
+	await expect(page.locator('section.chosen .tile')).toHaveCount(shown);
+});
+
 test('hiding the filters, a real click on "Filters" brings them back', async ({ page }) => {
 	test.skip(isPhone(page), 'the filter panel is a sheet on phones');
 	const panel = page.getByRole('complementary', { name: 'Filters' });
