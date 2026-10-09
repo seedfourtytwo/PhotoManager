@@ -201,6 +201,9 @@ fixed now so nothing in M1–M5 makes it harder (data folder layout, DB snapshot
 | 9b.10 | **Guided setup in the web app**: pick a disk, folder or cloud remote; space check; the app makes the key and insists on a saved copy; first backup starts at once | Must | ✅ |
 | 9b.11 | **Proven restores**: an automatic restore test after the first backup and every week; a failed proof raises the banner | Must | ✅ |
 | 9b.12 | **Off-site copy on Proton Drive** (issue 14): a local backup is also copied, encrypted, to a Proton Drive folder after every run, through Proton's own CLI (no Proton password in the app); a failed copy raises the banner; restore steps in the backup guide | Should | ✅ |
+| 9b.13 | **A place that is not connected is skipped, not failed**: an unplugged disk or unreachable remote is recorded as "skipped", the other places still run, it is looked for again every 15 minutes and backed up when it returns (at once if overdue, otherwise in its quiet window); a repository is never re-created for a place that has had a successful backup | Must | ✅ |
+| 9b.14 | **Two-places rule**: a place is an enabled backup target or the Proton Drive copy of one; "protected" means at least two places are up to date; the Backups page says "Protected in 2 places" or "Only 1 of 2 …" and lists one row per place | Must | ✅ |
+| 9b.15 | **Warning banner on every page** for admins when the library is not protected or a place needs attention; it cannot be dismissed and goes when the problem is fixed. No alert outside the app yet (email/phone) | Must | ✅ |
 
 ## 10. Web and phone app
 

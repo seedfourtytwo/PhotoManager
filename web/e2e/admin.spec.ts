@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import {
 	expect,
 	expectAccessible,
+	MEMBER,
 	REAL_BACKEND,
 	resetMock,
 	signIn,
@@ -166,7 +167,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'the mock simulates the disks and the runs (real restic: API tests)');
-	await expect(page.getByRole('alert')).toContainText(/backup needs attention/i);
+	await expect(page.getByRole('alert')).toContainText(/Home server: the last backup failed/);
 	const backups = page.getByRole('region', { name: 'Backups' });
 	await expect(backups.getByText('Home server')).toBeVisible();
 	await expect(backups.getByText(/repository not reachable/)).toBeVisible();
@@ -176,6 +177,8 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 	await expect(dialog.getByText(/full copy of the library \(38\.4 GB\)/)).toBeVisible();
 	await expect(dialog.getByLabel(/Tiny stick/)).toBeChecked();
 	await expect(dialog.getByLabel('Name')).toHaveValue('Tiny stick');
+	// Axe must not measure contrast while the dialog is still fading in.
+	await expect(dialog).toHaveCSS('opacity', '1');
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Check this place' }).click();
 	await expect(dialog.getByRole('alert')).toContainText('Not enough room');
@@ -195,6 +198,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 	await dialog.getByRole('button', { name: 'Check this place' }).click();
 	await expect(dialog.getByText(/It fits\. The library is 38\.4 GB, and\s+500 GB is free there/)).toBeVisible(); // prettier-ignore
 	await expect(dialog.getByLabel('How often')).toHaveValue('daily 02:30');
+	await expect(dialog).toHaveCSS('opacity', '1'); // the next step is a new dialog fading in
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Start the backup' }).click();
 
@@ -206,6 +210,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 		'photo-backup-recovery-USB disk.txt'
 	);
 	await expect(key.getByRole('button', { name: 'Done' })).toBeDisabled();
+	await expect(key).toHaveCSS('opacity', '1');
 	await expectAccessible(page);
 	await key.getByRole('button', { name: 'Later' }).click();
 
@@ -592,6 +597,8 @@ test('folder picker: a folder that is not there yet can be created on the spot',
 	await page.getByRole('button', { name: 'Add folder' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
 	const field = dialog.getByLabel('Folder', { exact: true });
+	// Wait for the first listing: it would otherwise land over what is typed.
+	await expect(field).toHaveValue('/home/c');
 	await field.fill('/home/c/missing drop box');
 	await field.press('Enter');
 	await expect(dialog.getByRole('alert')).toContainText(/folder not found/i);
@@ -630,12 +637,44 @@ test('backups: keep a copy on Proton Drive in a folder made on the spot, then st
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	await expect(dialog.getByText('My files / Photo backup')).toBeVisible();
 	await dialog.getByRole('button', { name: 'Keep a copy here' }).click();
-	await expect(row.getByText(/Proton copy: My files \/ Photo backup/)).toBeVisible();
+	await expect(row.getByText(/Copy on Proton Drive · My files \/ Photo backup/)).toBeVisible();
 	await expect(row.getByText(/first copy after the next backup/)).toBeVisible();
 
 	await row.getByRole('button', { name: 'Copy to Proton' }).click();
 	await dialog.getByRole('button', { name: 'Stop copying' }).click();
-	await expect(row.getByText(/Proton copy/)).toHaveCount(0);
+	await expect(row.getByText(/Copy on Proton Drive/)).toHaveCount(0);
+});
+
+test('backups: an admin sees the warning on every page, with one row per place', async ({
+	page
+}) => {
+	test.skip(REAL_BACKEND, 'the mock holds one failing backup place');
+	await page.goto('/');
+	const banner = page.getByRole('alert');
+	await expect(banner).toContainText('Home server: the last backup failed');
+	await expect(banner).toContainText('and 1 more');
+	await expectAccessible(page);
+	// The warning is a line, not a cover: the navigation stays reachable beside or below it.
+	await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+	const width = await page.evaluate(() => [
+		document.documentElement.scrollWidth,
+		document.documentElement.clientWidth
+	]);
+	expect(width[0]).toBeLessThanOrEqual(width[1]);
+	await banner.getByRole('link', { name: 'Backups' }).click();
+	await expect(page).toHaveURL(/\/admin#a-backups$/);
+
+	const backups = page.getByRole('region', { name: 'Backups' });
+	await expect(backups.getByText('Only 0 of 1 places up to date')).toBeVisible();
+	await expect(backups.getByRole('img', { name: 'needs attention' })).toBeVisible();
+});
+
+test('backups: a member sees no backup warning', async ({ page }) => {
+	await page.context().clearCookies();
+	await signIn(page, '/', MEMBER);
+	await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Backups' })).toHaveCount(0);
 });
 
 test('a finished import that left files behind says so in the folder’s row', async ({ page }) => {

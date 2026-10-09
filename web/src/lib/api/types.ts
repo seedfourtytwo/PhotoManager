@@ -340,7 +340,8 @@ export type PrintedPdf = { blob: Blob; filename: string; warnings: number };
 export type BackupRun = {
 	id: Id;
 	kind: 'backup' | 'check' | 'restore_test' | 'mirror';
-	status: 'running' | 'succeeded' | 'failed';
+	/** `skipped`: the place was not connected; `error` says so in plain words. */
+	status: 'running' | 'succeeded' | 'failed' | 'skipped';
 	started_at: string;
 	finished_at: string | null;
 	snapshot_id: string | null;
@@ -377,6 +378,23 @@ export type BackupTarget = {
 	mirror_error: string | null;
 	/** Drives the warning banner. */
 	needs_attention: boolean;
+	/** The latest run was skipped because the place is not connected: when that began. */
+	skipped_since: string | null;
+	/** The Proton copy has no fresh success. */
+	mirror_overdue: boolean;
+};
+export type BackupProblem = {
+	severity: 'alert' | 'warning';
+	message: string;
+	/** Null: about the library as a whole. */
+	target_id: Id | null;
+};
+/** Are two backup places healthy, and what is wrong with the rest; alerts come first. */
+export type BackupHealth = {
+	protected: boolean;
+	places_ok: number;
+	places_total: number;
+	problems: BackupProblem[];
 };
 /** The sub-folders of one folder on the server (admin), to pick a folder without typing. */
 export type FolderListing = {

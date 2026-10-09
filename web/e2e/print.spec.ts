@@ -34,7 +34,7 @@ test('print an album: choose size and theme, see every page, warnings, then the 
 	if (REAL_BACKEND) return; // the synthetic server library may print sharply
 	await expect(issues.getByText(/too small to print sharply|may look soft/).first()).toBeVisible();
 	await page.getByRole('button', { name: 'Download PDF' }).click();
-	await expect(page.getByRole('alert')).toContainText(/too small/);
+	await expect(page.getByRole('alert').filter({ hasText: /too small/ })).toBeVisible();
 	await page.getByLabel(/Print anyway/).check();
 	const download = page.waitForEvent('download');
 	await page.getByRole('button', { name: 'Download PDF' }).click();

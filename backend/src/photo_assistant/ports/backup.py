@@ -79,6 +79,13 @@ class SnapshotInfo:
 
 
 class BackupEngine(Protocol):
+    def probe(self, repo: RepositoryRef) -> str | None:
+        """None when the repository can be opened. Otherwise why it is out of reach right
+        now (disk not plugged in, server not reachable). Never creates anything. Raises
+        BackupError for problems waiting will not fix: wrong password, unreadable password
+        file, a lock, restic not installed."""
+        ...
+
     def ensure_repository(self, repo: RepositoryRef) -> bool:
         """Create the repository if it does not exist yet. True if it was created."""
         ...
@@ -163,6 +170,12 @@ class MirrorReport:
 
 class RepositoryMirror(Protocol):
     """A second, off-site copy of a local backup repository (already encrypted)."""
+
+    def probe(self, repository: Path, remote_folder: str) -> str | None:
+        """None when a mirror run can start. Otherwise why not right now (backup folder not
+        there, Proton Drive not reachable). Raises MirrorSignInError when not signed in and
+        MirrorError when the remote folder is gone."""
+        ...
 
     def mirror(self, repository: Path, remote_folder: str, state_file: Path) -> MirrorReport:
         """Make ``<remote_folder>/<repository's name>`` hold exactly the repository's files.

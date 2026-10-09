@@ -228,6 +228,53 @@ describe('backups, devices and remote sources', () => {
 		await expect(member.backupRecovery(target.id)).rejects.toMatchObject({ status: 403 });
 	});
 
+	it('reports backup health: nothing set up', async () => {
+		const api = await h.signedIn();
+		h.mock.state.backups.length = 0;
+		expect(await api.backupHealth()).toEqual({
+			protected: false,
+			places_ok: 0,
+			places_total: 0,
+			problems: [expect.objectContaining({ severity: 'warning', target_id: null })]
+		});
+	});
+
+	it('reports backup health: one failing place, to admins only', async () => {
+		const api = await h.signedIn();
+		const health = await api.backupHealth();
+		expect(health).toMatchObject({ protected: false, places_ok: 0, places_total: 1 });
+		expect(health.problems.map((p) => p.severity)).toEqual(['alert', 'warning']);
+		expect(health.problems[0]).toMatchObject({ target_id: 1 });
+		expect(health.problems[0].message).toContain('Home server: the last backup failed');
+		const [target] = await api.backups();
+		expect(target).toMatchObject({ skipped_since: null, mirror_overdue: false });
+		const member = await h.signedIn('partner', '2345');
+		await expect(member.backupHealth()).rejects.toMatchObject({ status: 403 });
+	});
+
+	it('counts two healthy places as protected', async () => {
+		const api = await h.signedIn();
+		const { target } = await api.setUpBackup({ label: 'USB disk', place: '/media/c/USB disk' });
+		await api.confirmBackupKey(target.id);
+		h.clock.now += 60_000; // the first backup finishes
+		const health = await api.backupHealth();
+		expect(health).toMatchObject({ places_ok: 1, places_total: 2, protected: false });
+		await api.runBackup(1); // the seeded server's last backup failed: a good run mends it
+		h.clock.now += 60_000;
+		expect(await api.backupHealth()).toEqual({
+			protected: true,
+			places_ok: 2,
+			places_total: 2,
+			problems: []
+		});
+		await api.updateBackup(1, { enabled: false });
+		const one = await api.backupHealth();
+		expect(one).toMatchObject({ places_ok: 1, places_total: 1 });
+		expect(one.problems.map((p) => p.message)).toEqual([
+			expect.stringContaining('Only one backup place')
+		]);
+	});
+
 	it('adds a backup target, runs it, and lists the runs', async () => {
 		const api = await h.signedIn();
 		const [existing] = await api.backups();

@@ -198,6 +198,28 @@ a copy (`backup_target.key_saved_at`, migration `0018`). The recovery guarantee 
 `restore_proof_due`: a restore test after the first successful backup, then weekly, a day
 after a failed one; a failed proof or an unconfirmed key raises the banner.
 
+Absent places: `_backup` first calls `BackupEngine.probe` (`restic cat config`, no lock; exit 10
+means "no repository") for a target that has had a successful backup, and never runs `init` for
+it. If the repository is not there the run is recorded as `skipped` (`BackupRunStatus.SKIPPED`)
+and the loop moves on to the next target. For a local folder, wrong password, lock and every other
+fault stay `failed`; for an rclone place, `probe` treats any failure except wrong password,
+unreadable password file, lock or missing tool as "cannot be reached" and the run is skipped. A
+skipped run is not an attempt: while the latest run is skipped, `run_due` probes the place at most
+every `SKIP_RETRY` (15 min), writes nothing while it stays away, and backs up at once if overdue,
+otherwise when the quiet window allows. A skipped Proton copy is also re-checked at most every
+15 min (`_catch_up_copy`), with no overdue check and no quiet window: it runs as soon as Proton
+Drive and the backup folder can be reached. Known limit: the
+guard only covers a target that has had a successful backup. Until its first backup has
+succeeded (a new target, or one whose attempts have only failed) the repository may be created on
+any run, so an empty folder left behind by an unplugged disk gets one; start the first backup
+with the disk connected and check it succeeded.
+
+`protection()` (pure) turns the target statuses into `places_ok / places_total` plus problems; a
+place is an enabled target or its Proton copy, "protected" is two or more ok. `GET
+/api/backups/health` serves it to admins and the root layout shows `BackupBanner` from it on
+every page. `backup run-due` exits 1 when a run failed or a skipped place is overdue, not for a
+fresh skip.
+
 ### Phone inbox
 `data/inbox/<user id>/` is each user's inbox: a normal `source`, private to its owner by
 default. Files only arrive through the upload API below (there is no WebDAV share and no file

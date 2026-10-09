@@ -243,11 +243,13 @@ test('print: a refused plan keeps the form, so another choice can fix it', async
 	const size = page.getByRole('combobox', { name: 'Size' });
 	await expect(page.getByText(/\d+ pages/).first()).toBeVisible();
 	await size.selectOption({ label: 'Square 20 cm' });
-	await expect(page.getByRole('alert')).toContainText('This album cannot be laid out square');
+	await expect(
+		page.getByRole('alert').filter({ hasText: 'This album cannot be laid out square' })
+	).toBeVisible();
 	await expect(size).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeDisabled();
 	await size.selectOption({ index: 0 });
-	await expect(page.getByRole('alert')).toHaveCount(0);
+	await expect(page.getByRole('alert').filter({ hasText: /cannot be laid out/ })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeEnabled();
 });
 
@@ -369,7 +371,8 @@ test.describe('a double click sends one request', () => {
 		await page.getByRole('button', { name: 'Change PIN' }).dblclick();
 		await expect(page.getByRole('status')).toContainText('PIN changed');
 		expect(posts.count).toBe(1);
-		await expect(page.getByRole('alert')).toHaveCount(0);
+		// the backup warning is an alert on every page: look for one about the PIN
+		await expect(page.getByRole('alert').filter({ hasText: /PIN/ })).toHaveCount(0);
 	});
 
 	test('Analyse photos queues once', async ({ page }) => {

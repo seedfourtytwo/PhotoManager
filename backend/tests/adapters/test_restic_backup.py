@@ -188,6 +188,58 @@ def test_missing_password_file_and_missing_restic(
         ResticBackup(binary="restic-not-installed").ensure_repository(repo)
 
 
+def test_probe_says_an_empty_folder_holds_no_repository(
+    engine: ResticBackup, repo: RepositoryRef
+) -> None:
+    Path(repo.location).mkdir(parents=True)
+    reason = engine.probe(repo)
+    assert reason is not None and "no backup repository" in reason
+    assert list(Path(repo.location).iterdir()) == [], "a probe never creates anything"
+
+
+def test_probe_finds_an_existing_repository_without_locking_it(
+    engine: ResticBackup, repo: RepositoryRef
+) -> None:
+    _ready(engine, repo)
+    locks = Path(repo.location) / "locks"
+    before = locks.stat().st_mtime_ns
+    locks.chmod(0o555)  # a read-only repository: any attempt to take a lock would fail
+    try:
+        assert engine.probe(repo) is None
+    finally:
+        locks.chmod(0o755)
+    assert list(locks.iterdir()) == [] and locks.stat().st_mtime_ns == before
+
+
+def test_probe_raises_on_a_wrong_password(
+    engine: ResticBackup, repo: RepositoryRef, tmp_path: Path
+) -> None:
+    _ready(engine, repo)
+    wrong = tmp_path / "wrong"
+    wrong.write_text("nope\n")
+    with pytest.raises(WrongPasswordError):
+        engine.probe(RepositoryRef(repo.location, wrong))
+
+
+def _failing_restic(tmp_path: Path, exit_code: int, message: str) -> ResticBackup:
+    script = tmp_path / "restic-fails"
+    script.write_text(f"#!/bin/sh\necho '{message}' >&2\nexit {exit_code}\n")
+    script.chmod(0o755)
+    return ResticBackup(binary=str(script))
+
+
+def test_probe_treats_an_unanswering_remote_as_out_of_reach(tmp_path: Path) -> None:
+    engine = _failing_restic(tmp_path, 1, "Fatal: unable to open repository: connection refused")
+    reason = engine.probe(RepositoryRef("rclone:nas:photos", tmp_path / "pw"))
+    assert reason is not None and "connection refused" in reason
+
+
+def test_probe_raises_on_a_generic_failure_of_a_local_repository(tmp_path: Path) -> None:
+    engine = _failing_restic(tmp_path, 1, "Fatal: something broke")
+    with pytest.raises(BackupError, match="something broke"):
+        engine.probe(RepositoryRef(str(tmp_path / "disk" / "photos"), tmp_path / "pw"))
+
+
 def test_nothing_to_back_up(engine: ResticBackup, repo: RepositoryRef, tmp_path: Path) -> None:
     with pytest.raises(BackupError, match="nothing to back up"):
         engine.backup(repo, tmp_path / "empty", BACKUP_FOLDERS)

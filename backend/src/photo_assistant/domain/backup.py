@@ -1,12 +1,20 @@
 """Backup targets, runs and retention (FEATURES 9b). Pure data and rules, no I/O."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
 from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.library_paths import DATABASE_FILE, LIBRARY_FOLDERS
-from photo_assistant.domain.schedule import Schedule, parse_schedule, parse_window
+from photo_assistant.domain.schedule import (
+    Every,
+    QuietWindow,
+    Schedule,
+    is_due,
+    parse_schedule,
+    parse_window,
+)
 
 # What a backup contains, relative to the data root (FEATURES 9b.4). ``derived/`` (thumbnails,
 # previews) is rebuildable and skipped; ``db-snapshot/`` is a consistent copy of library.db
@@ -20,6 +28,7 @@ MB = 1000**2
 HEADROOM = 1.2  # a new backup place should hold the library and 20 % more
 PROOF_EVERY = timedelta(days=7)  # how often a restore test proves each backup
 PROOF_RETRY = timedelta(days=1)  # after a failed restore test
+SKIP_RETRY = timedelta(minutes=15)  # how soon to look again for a place that was not connected
 
 
 class InvalidBackupTargetError(InvalidError, ValueError):
@@ -43,6 +52,7 @@ class BackupRunStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    SKIPPED = "skipped"  # the place was not connected; nothing was attempted
 
 
 def target_kind(repository: str) -> TargetKind:
@@ -177,6 +187,8 @@ class TargetStatus:
     restore_failing: bool = False  # the last restore test did not
     last_mirror_at: datetime | None = None  # the off-site copy was last brought up to date
     mirror_error: str | None = None  # why the last copy run failed
+    skipped_since: datetime | None = None  # start of the latest backup run when it is skipped
+    mirror_overdue: bool = False  # the copy has no fresh success
 
     @property
     def mirror_failing(self) -> bool:
@@ -304,3 +316,177 @@ def restore_proof_due(
         return False
     wait = PROOF_RETRY if last_test.status is BackupRunStatus.FAILED else PROOF_EVERY
     return now - last_test.started_at >= wait
+
+
+def backup_due(
+    schedule: Schedule,
+    last_attempt: datetime,
+    now: datetime,
+    window: QuietWindow | None,
+    *,
+    catching_up: bool,
+) -> bool:
+    """Is a scheduled backup due? A place that just came back after being overdue does not
+    wait for its quiet window: it catches up at once."""
+    return is_due(schedule, last_attempt, now, None if catching_up else window)
+
+
+def probe_allowed(last_probe: datetime | None, now: datetime) -> bool:
+    """May we look again for a place that was not connected? Not more often than SKIP_RETRY."""
+    return last_probe is None or now - last_probe >= SKIP_RETRY
+
+
+# --- is the library safe? (two healthy places) -----------------------------------------------
+
+
+class Severity(StrEnum):
+    ALERT = "alert"  # the photos are less safe than they should be right now
+    WARNING = "warning"  # something to fix, nothing is lost yet
+
+
+@dataclass(frozen=True, slots=True)
+class Problem:
+    severity: Severity
+    message: str
+    target_id: int | None = None  # None: about the library as a whole
+
+
+@dataclass(frozen=True, slots=True)
+class Protection:
+    places_ok: int
+    places_total: int
+    problems: tuple[Problem, ...]  # alerts first, then warnings, each in target order
+
+    @property
+    def protected(self) -> bool:
+        return self.places_ok >= 2
+
+
+def _manual_and_away(status: TargetStatus) -> bool:
+    """A place on a manual schedule is never overdue, so a skipped latest run is the only
+    sign that it has not been backed up."""
+    return status.skipped_since is not None and status.target.parsed_schedule.every is Every.MANUAL
+
+
+def _place_flags(status: TargetStatus) -> tuple[bool, ...]:
+    """One flag per backup place the target provides: the repository, then its Proton copy."""
+    repository = (
+        status.last_success_at is not None
+        and not status.overdue
+        and not status.failing
+        and not status.restore_failing
+        and not _manual_and_away(status)
+    )
+    if status.target.mirror_path is None:
+        return (repository,)
+    copy = (
+        status.last_mirror_at is not None
+        and not status.mirror_overdue
+        and not status.mirror_failing
+    )
+    return (repository, copy)
+
+
+def _library_problem(places_ok: int, places_total: int) -> Problem | None:
+    if places_total == 0:
+        return Problem(
+            Severity.WARNING,
+            "No backup is set up: the photos exist only on this computer. Add two backup places.",
+        )
+    if places_total == 1:
+        return Problem(
+            Severity.WARNING,
+            "Only one backup place is set up: add a second, "
+            "so one lost disk is not the end of the photos.",
+        )
+    if places_ok < 2:
+        return Problem(
+            Severity.ALERT, f"Only {places_ok} of {places_total} backup places is up to date."
+        )
+    return None
+
+
+def _lateness_problem(status: TargetStatus) -> Problem | None:
+    """Why the backup is not on time, when it is not: away, or just late."""
+    label, tid = status.target.label, status.target.id
+    if status.skipped_since is not None and status.overdue:
+        return Problem(
+            Severity.WARNING,
+            f"{label} has not been connected since {status.skipped_since:%d %b %Y}: "
+            "connect it and the backup starts by itself.",
+            tid,
+        )
+    if _manual_and_away(status):
+        return Problem(
+            Severity.WARNING,
+            f"{label} was not connected at its last backup: connect it and run the backup again.",
+            tid,
+        )
+    if status.overdue and not status.failing:
+        return Problem(Severity.WARNING, f"{label}: the backup is overdue.", tid)
+    return None
+
+
+def _target_problems(status: TargetStatus) -> list[Problem]:
+    label, tid = status.target.label, status.target.id
+    found = []
+    if status.failing:
+        reason = status.last_run.error if status.last_run else None
+        found.append(
+            Problem(
+                Severity.ALERT,
+                f"{label}: the last backup failed: {reason or 'no reason given'}",
+                tid,
+            )
+        )
+    if status.restore_failing:
+        found.append(
+            Problem(
+                Severity.ALERT,
+                f"{label}: the last restore test failed. Open Backups and run it again.",
+                tid,
+            )
+        )
+    if status.mirror_failing:
+        found.append(
+            Problem(
+                Severity.ALERT,
+                f"{label}: the copy on Proton Drive failed: {status.mirror_error}",
+                tid,
+            )
+        )
+    late = _lateness_problem(status)
+    if late is not None:
+        found.append(late)
+    if status.mirror_overdue and not status.mirror_failing:
+        found.append(
+            Problem(
+                Severity.WARNING,
+                f"{label}: the copy on Proton Drive is out of date; "
+                "it catches up when this computer is online.",
+                tid,
+            )
+        )
+    if status.key_unsaved:
+        found.append(
+            Problem(
+                Severity.WARNING,
+                f"{label}: the recovery key is not saved yet. "
+                "Without it this backup cannot be read.",
+                tid,
+            )
+        )
+    return found
+
+
+def protection(statuses: Sequence[TargetStatus]) -> Protection:
+    """Are there two healthy backup places, and what is wrong with the rest? Each enabled
+    target is a place; its Proton Drive copy, when it has one, is another."""
+    enabled = [s for s in statuses if s.target.enabled]
+    flags = [flag for s in enabled for flag in _place_flags(s)]
+    places_ok, places_total = sum(flags), len(flags)
+    problems = [p for p in [_library_problem(places_ok, places_total)] if p]
+    for status in enabled:
+        problems.extend(_target_problems(status))
+    problems.sort(key=lambda p: p.severity is Severity.WARNING)  # stable: alerts first
+    return Protection(places_ok, places_total, tuple(problems))

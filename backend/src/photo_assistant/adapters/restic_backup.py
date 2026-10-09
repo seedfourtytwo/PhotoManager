@@ -185,6 +185,26 @@ class ResticBackup:
 
     # --- BackupEngine ----------------------------------------------------------------------
 
+    def probe(self, repo: RepositoryRef) -> str | None:
+        try:
+            self._run(repo, ["--no-lock", "cat", "config"])  # reading needs no lock; write nothing
+        except RepositoryNotFoundError as exc:
+            return str(exc)
+        except (
+            WrongPasswordError,
+            PasswordFileError,
+            RepositoryLockedError,
+            BackupToolMissingError,
+        ):
+            raise
+        except BackupError as exc:
+            # a remote that does not answer has no exit code of its own; a local one that fails
+            # any other way is a real fault
+            if target_kind(repo.location) is TargetKind.RCLONE:
+                return str(exc)
+            raise
+        return None
+
     def ensure_repository(self, repo: RepositoryRef) -> bool:
         try:
             self._run(repo, ["cat", "config"])

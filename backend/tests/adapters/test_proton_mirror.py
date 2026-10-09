@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from photo_assistant.adapters.proton_drive import ProtonDrive
 from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.ports.backup import MirrorError, MirrorReport, MirrorSignInError
 from tests.conftest import snapshot_tree
@@ -207,3 +208,38 @@ def test_only_a_folder_in_my_files_can_hold_the_copy(world: World, remote: str) 
 def test_a_backup_folder_that_is_not_there_is_refused(world: World, tmp_path: Path) -> None:
     with pytest.raises(MirrorError, match="not found"):
         world.mirror.mirror(tmp_path / "nope", REMOTE, world.state)
+
+
+def test_probe_with_the_backup_folder_missing_asks_proton_nothing(
+    world: World, tmp_path: Path
+) -> None:
+    reason = world.mirror.probe(tmp_path / "nope", REMOTE)
+    assert reason is not None and "backup folder not found" in reason
+    assert world.cloud.calls() == []
+
+
+def test_probe_is_satisfied_when_proton_answers_and_writes_nothing(world: World) -> None:
+    before = world.cloud.state_file.read_text()
+    assert world.mirror.probe(world.repo, REMOTE) is None
+    assert world.verbs() == {("filesystem", "list")}
+    assert world.cloud.state_file.read_text() == before
+
+
+def test_probe_raises_when_not_signed_in(world: World) -> None:
+    world.cloud.state["signed_in"] = False
+    world.cloud.save()
+    with pytest.raises(MirrorSignInError, match="proton-drive auth login"):
+        world.mirror.probe(world.repo, REMOTE)
+
+
+def test_probe_raises_when_the_remote_folder_is_gone(world: World) -> None:
+    with pytest.raises(MirrorError, match="/my-files/Nope"):
+        world.mirror.probe(world.repo, "/my-files/Nope")
+
+
+def test_probe_gives_a_reason_when_the_tool_fails_some_other_way(
+    world: World, tmp_path: Path
+) -> None:
+    mirror = ProtonMirror(ProtonDrive(str(tmp_path / "no-such-tool")))
+    reason = mirror.probe(world.repo, REMOTE)
+    assert reason is not None and "not installed" in reason

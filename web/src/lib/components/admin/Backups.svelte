@@ -1,14 +1,15 @@
 <script lang="ts">
-	import type { BackupRecovery, BackupRun, BackupTarget } from '$lib/api';
+	import type { BackupHealth, BackupRecovery, BackupRun, BackupTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
+	import { copyPlaceState, placeState, protonCopyState } from '$lib/backups';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import BackupSetup from './BackupSetup.svelte';
 	import ProtonCopy from './ProtonCopy.svelte';
 	import RecoveryKey from './RecoveryKey.svelte';
 
-	type Props = { targets: BackupTarget[]; onchange: () => void };
-	let { targets, onchange }: Props = $props();
+	type Props = { targets: BackupTarget[]; health: BackupHealth | null; onchange: () => void };
+	let { targets, health, onchange }: Props = $props();
 
 	let adding = $state(false);
 	let busy = $state<number | null>(null);
@@ -28,11 +29,28 @@
 		const run = t.last_run;
 		if (!run) return 'never run yet';
 		if (run.status === 'running') return `${KIND[run.kind]} running since ${formatWhen(run.started_at)}`;
+		if (run.status === 'skipped')
+			return `not connected since ${formatWhen(t.skipped_since ?? run.started_at)}`;
 		const when = formatWhen(run.finished_at ?? run.started_at);
 		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when} · failed: ${run.error ?? 'no reason given'}`;
 		const added = run.bytes_added !== null ? ` · ${formatBytes(run.bytes_added)} added` : '';
 		return `last ${KIND[run.kind]} ${when} · succeeded${added}`;
 	} // prettier-ignore
+
+	function protonLine(t: BackupTarget): string {
+		switch (protonCopyState(t)) {
+			case 'failed':
+				return `failed: ${t.mirror_error}`;
+			case 'waiting':
+				return 'waiting to go online';
+			case 'not made':
+				return 'first copy not made yet';
+			case 'up to date':
+				return `up to date ${formatWhen(t.last_mirror_at)}`;
+			default:
+				return 'first copy after the next backup';
+		}
+	}
 
 	async function act(target: BackupTarget, what: 'run' | 'restore' | 'toggle') {
 		if (busy !== null) return;
@@ -85,6 +103,12 @@
 		<h2 id="a-backups">Backups</h2>
 		<button type="button" onclick={() => (adding = true)}>Add backup</button>
 	</header>
+	{#if health && health.places_total > 0}
+		<p class="quiet small health">
+			{#if health.protected}Protected in {health.places_ok} places{:else}Only {health.places_ok} of {health.places_total}
+				places up to date{/if}
+		</p>
+	{/if}
 	{#if targets.length === 0}
 		<p class="quiet">
 			No backups yet: the library exists only on this computer. Add one; it takes a minute.
@@ -94,6 +118,8 @@
 		{#each targets as t (t.id)}
 			<li class:off={!t.enabled}>
 				<div class="name">
+					<span class="dot {placeState(t).replace(' ', '-')}" role="img" aria-label={placeState(t)}
+					></span>
 					<span>{t.label}</span>
 					<span class="quiet small">{t.repository}</span>
 				</div>
@@ -108,11 +134,13 @@
 					{t.overdue ? 'overdue · ' : ''}{lastLine(t)}{#if proofLine(t)}&nbsp;· {proofLine(t)}{/if}
 				</p>
 				{#if t.mirror_path}
-					<p class="small status" class:attention={!!t.mirror_error && t.enabled}>
-						Proton copy: {protonPlaceName(t.mirror_path)} ·
-						{#if t.mirror_error}failed: {t.mirror_error}{:else if t.last_mirror_at}up to date {formatWhen(
-								t.last_mirror_at
-							)}{:else}first copy after the next backup{/if}
+					<p class="small status copy" class:attention={!!t.mirror_error && t.enabled}>
+						<span
+							class="dot {copyPlaceState(t).replace(' ', '-')}"
+							role="img"
+							aria-label={copyPlaceState(t)}
+						></span>
+						Copy on Proton Drive · {protonPlaceName(t.mirror_path)} · {protonLine(t)}
 					</p>
 				{/if}
 				{#if !t.key_saved}
@@ -145,10 +173,10 @@
 						<thead><tr><th>Started</th><th>What</th><th>Result</th></tr></thead>
 						<tbody>
 							{#each runs as run (run.id)}
-								<tr>
+								<tr class:attention={run.status === 'failed'}>
 									<td>{formatWhen(run.started_at)}</td>
 									<td>{KIND[run.kind]}</td>
-									<td class="quiet">
+									<td class:quiet={run.status !== 'failed'}>
 										{run.status}{#if run.error}: {run.error}{:else if run.details}: {run.details}{:else if run.bytes_added !== null}:
 											{formatBytes(run.bytes_added)} added{/if}
 									</td>
@@ -198,7 +226,7 @@
 	li p {
 		margin: var(--s-1) 0 0;
 	}
-	li.off .name span:first-child {
+	li.off .name span:nth-child(2) {
 		color: var(--ink-2);
 	}
 	.name {
@@ -208,8 +236,37 @@
 		flex-wrap: wrap;
 		overflow-wrap: anywhere;
 	}
-	.name span:first-child {
+	.name span:nth-child(2) {
 		font-weight: 600;
+	}
+	.health {
+		margin: 0 0 var(--s-2);
+	}
+	/* The place's state as a shape, so it reads without colour: filled, ring, or square. */
+	.dot {
+		display: inline-block;
+		flex: none;
+		align-self: center;
+		box-sizing: border-box;
+		width: 0.625rem;
+		height: 0.625rem;
+		border-radius: 50%;
+		background: var(--ink);
+	}
+	.dot.not-connected {
+		background: transparent;
+		border: 2px solid var(--ink);
+	}
+	.dot.needs-attention {
+		border-radius: 0;
+		transform: rotate(45deg);
+	}
+	.copy {
+		margin-left: var(--s-5);
+	}
+	.copy .dot {
+		margin-right: var(--s-2);
+		vertical-align: middle;
 	}
 	.name .small {
 		font-family: var(--font-mono);
@@ -241,6 +298,13 @@
 		color: var(--ink-2);
 		padding: 0 var(--s-4) var(--s-1) 0;
 		border-bottom: 1px solid var(--hairline);
+	}
+	tr.attention td {
+		color: var(--ink);
+	}
+	tr.attention td:first-child {
+		border-left: 2px solid var(--ink);
+		padding-left: var(--s-2);
 	}
 	td {
 		padding: var(--s-1) var(--s-4) var(--s-1) 0;

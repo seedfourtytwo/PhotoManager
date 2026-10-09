@@ -28,6 +28,19 @@ class ProtonMirror:
         self._drive = drive
         self._upload_timeout = upload_timeout
 
+    def probe(self, repository: Path, remote_folder: str) -> str | None:
+        if not repository.is_dir():
+            return f"backup folder not found: {repository}"
+        try:
+            self._drive.run(["filesystem", "list", remote_folder, "--json"], _QUICK, remote_folder)
+        except SyncAuthError as exc:
+            raise MirrorSignInError(str(exc)) from exc
+        except SyncNotFoundError as exc:
+            raise MirrorError(str(exc)) from exc
+        except SyncError as exc:
+            return str(exc)
+        return None
+
     def mirror(self, repository: Path, remote_folder: str, state_file: Path) -> MirrorReport:
         try:
             if remote_folder == PROTON_PHOTOS:

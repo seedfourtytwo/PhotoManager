@@ -16,6 +16,8 @@ from photo_assistant.domain.backup import (
     BackupPlan,
     BackupRun,
     NewBackupTarget,
+    Problem,
+    Protection,
     Retention,
     TargetSettings,
     TargetStatus,
@@ -133,6 +135,8 @@ class TargetOut(BaseModel):
     last_mirror_at: datetime | None  # that copy was last brought up to date
     mirror_error: str | None  # why the last copy failed
     needs_attention: bool  # drives the warning banner
+    skipped_since: datetime | None  # the latest run was skipped (disk not connected); its start
+    mirror_overdue: bool  # the Proton copy has no fresh success
 
     @classmethod
     def of(cls, s: TargetStatus) -> "TargetOut":
@@ -158,6 +162,38 @@ class TargetOut(BaseModel):
             last_mirror_at=s.last_mirror_at,
             mirror_error=s.mirror_error,
             needs_attention=s.needs_attention,
+            skipped_since=s.skipped_since,
+            mirror_overdue=s.mirror_overdue,
+        )
+
+
+class ProblemOut(BaseModel):
+    severity: str  # "alert" or "warning"
+    message: str
+    target_id: int | None  # None: about the library as a whole
+
+    @classmethod
+    def of(cls, problem: Problem) -> "ProblemOut":
+        return cls(
+            severity=problem.severity.value,
+            message=problem.message,
+            target_id=problem.target_id,
+        )
+
+
+class HealthOut(BaseModel):
+    protected: bool  # at least two backup places are healthy
+    places_ok: int
+    places_total: int
+    problems: list[ProblemOut]
+
+    @classmethod
+    def of(cls, protection: Protection) -> "HealthOut":
+        return cls(
+            protected=protection.protected,
+            places_ok=protection.places_ok,
+            places_total=protection.places_total,
+            problems=[ProblemOut.of(p) for p in protection.problems],
         )
 
 
@@ -246,6 +282,12 @@ def _known(service: BackupService, target_id: int) -> None:
 @router.get("")
 def list_backups(service: BackupDep) -> list[TargetOut]:
     return [TargetOut.of(s) for s in service.status()]
+
+
+@router.get("/health")
+def health(service: BackupDep) -> HealthOut:
+    """Are the photos in at least two healthy places? Read-only; what is wrong, if not."""
+    return HealthOut.of(service.protection())
 
 
 @router.get("/places")
