@@ -67,6 +67,23 @@ test('a search typed just before leaving the page does not follow you there', as
 	await expect(page).toHaveURL(/\/collections$/);
 });
 
+test('a "To" before the "From" is the same range the other way round, everywhere', async ({
+	page
+}) => {
+	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
+	const panel = page.getByRole('complementary', { name: 'Filters' });
+	await panel.getByLabel('From').fill('2019-08-01');
+	await expect(page).toHaveURL(/from=2019-08-01/);
+	await panel.getByLabel('To', { exact: true }).fill('2019-07-01');
+	await expect(page).toHaveURL(/from=2019-07-01&to=2019-08-01/);
+	await expect(panel.getByLabel('From')).toHaveValue('2019-07-01');
+	await expect(panel.getByLabel('To', { exact: true })).toHaveValue('2019-08-01');
+	await expect(page.locator('header .meta')).toContainText('1 Jul 2019 – 1 Aug 2019');
+	// A link written the wrong way round opens the same view.
+	await page.goto('/?from=2019-08-01&to=2019-07-01');
+	await expect(page.locator('header .meta')).toContainText('1 Jul 2019 – 1 Aug 2019');
+});
+
 test('calendar: click a day to open the filtered library', async ({ page }) => {
 	test.slow(); // axe walks every day of every year
 	await page.goto('/calendar');

@@ -62,14 +62,25 @@ function bool(value: string | null): boolean | undefined {
 	return value === 'true' ? true : value === 'false' ? false : undefined;
 }
 
-/** Parse filters, silently dropping anything malformed (a bad link still opens the library). */
+/**
+ * A range whose end lies before its start is the same two days the other way round: what was
+ * meant is plain, so it is put right rather than dropped (ISO days compare as text).
+ */
+function inOrder(filters: AssetFilters): AssetFilters {
+	if (!filters.from || !filters.to || filters.from <= filters.to) return filters;
+	return { ...filters, from: filters.to, to: filters.from };
+}
+
+/**
+ * Parse filters, silently dropping anything malformed and putting right what can be (a bad
+ * link still opens the library).
+ */
 export function filtersFromParams(params: URLSearchParams): AssetFilters {
 	const filters: AssetFilters = {};
 	for (const key of ['from', 'to'] as const) {
 		const value = params.get(key);
 		if (value && isDay(value)) filters[key] = value;
 	}
-	if (filters.from && filters.to && filters.to < filters.from) delete filters.to;
 	const year = int(params.get('year'), 1800, 2200);
 	if (year !== undefined) {
 		filters.year = year;
@@ -89,7 +100,7 @@ export function filtersFromParams(params: URLSearchParams): AssetFilters {
 		const value = bool(params.get(key));
 		if (value !== undefined) filters[key] = value;
 	}
-	return filters;
+	return inOrder(filters);
 }
 
 /** A copy with one filter set (or removed when `value` is undefined/empty). */
@@ -105,7 +116,7 @@ export function withFilter<K extends Key>(
 	} else {
 		next[key] = value;
 	}
-	return next;
+	return inOrder(next);
 }
 
 export function activeFilterCount(filters: AssetFilters): number {

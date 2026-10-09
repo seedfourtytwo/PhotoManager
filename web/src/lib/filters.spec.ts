@@ -68,9 +68,10 @@ describe('filtersFromParams', () => {
 		});
 	});
 
-	it('drops a `to` that lies before `from`', () => {
+	it('turns a `to` that lies before `from` the right way round', () => {
 		expect(filtersFromParams(new URLSearchParams('from=2020-05-10&to=2020-05-01'))).toEqual({
-			from: '2020-05-10'
+			from: '2020-05-01',
+			to: '2020-05-10'
 		});
 		expect(filtersFromParams(new URLSearchParams('from=2020-05-10&to=2020-05-10'))).toEqual({
 			from: '2020-05-10',
@@ -84,6 +85,17 @@ describe('withFilter', () => {
 		const base = { year: 2019, place: 'Paris' };
 		expect(withFilter(base, 'place', undefined)).toEqual({ year: 2019 });
 		expect(withFilter(base, 'camera', 'X')).toEqual({ year: 2019, place: 'Paris', camera: 'X' });
+	});
+
+	it('keeps the two days of a range in order, whichever is set last', () => {
+		expect(withFilter({ from: '2020-05-10' }, 'to', '2020-05-01')).toEqual({
+			from: '2020-05-01',
+			to: '2020-05-10'
+		});
+		expect(withFilter({ to: '2020-05-10' }, 'from', '2020-06-01')).toEqual({
+			from: '2020-05-10',
+			to: '2020-06-01'
+		});
 	});
 
 	it('clears the month when the year goes', () => {
