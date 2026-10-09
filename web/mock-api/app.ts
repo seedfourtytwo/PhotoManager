@@ -25,18 +25,8 @@ import { isPin } from '../src/lib/api/types.ts';
 import { filtersFromParams } from '../src/lib/filters.ts';
 import { LookError, parseLook, readLook, type Look } from '../src/lib/look/sheet.ts';
 import { v11Routes } from './v11.ts';
-import {
-	makeAsset,
-	makeState,
-	noWrongPins,
-	PLACES,
-	rng,
-	type MockAlbum,
-	type MockAsset,
-	type MockSource,
-	type MockState,
-	type MockUser
-} from './data.ts';
+import { makeAsset, makeState, noWrongPins, PLACES, rng } from './data.ts';
+import type { MockAlbum, MockAsset, MockSource, MockState, MockUser } from './types.ts';
 import { editedSize, iconSvg, renderAsset } from './images.ts';
 import { zip } from './zip.ts';
 import {

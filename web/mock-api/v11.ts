@@ -14,7 +14,7 @@ import type {
 	PrintPlan,
 	PrintRequest
 } from '../src/lib/api/types.ts';
-import type { MockAlbum, MockAsset, MockBackup, MockState, MockUser } from './data.ts';
+import type { MockAlbum, MockAsset, MockBackup, MockState, MockUser } from './types.ts';
 import { renderAsset } from './images.ts';
 import {
 	admin,

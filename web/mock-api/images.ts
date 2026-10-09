@@ -4,7 +4,8 @@
  */
 import type { Recipe } from '../src/lib/api/types.ts';
 import { coverScale, rotatedAspect } from '../src/lib/crop.ts';
-import { rng, type MockAsset } from './data.ts';
+import { rng } from './data.ts';
+import type { MockAsset } from './types.ts';
 
 function mix(hex: string, other: string, t: number): string {
 	const a = parseInt(hex.slice(1), 16);

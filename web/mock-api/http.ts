@@ -1,6 +1,6 @@
 /** Small HTTP vocabulary shared by the mock's route tables. */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { MockUser } from './data.ts';
+import type { MockUser } from './types.ts';
 
 export class HttpError extends Error {
 	readonly status: number;
