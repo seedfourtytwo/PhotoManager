@@ -116,6 +116,71 @@ describe('Timeline', () => {
 		expect(clicked).toHaveBeenCalledOnce();
 	});
 
+	it('the window narrows under a held lasso: it selects the photos now under the rectangle', async () => {
+		// The whole library is loaded: no page arrives to make the lasso look again.
+		const loader = new TimelineLoader(async () => ({
+			items: Array.from({ length: 10 }, (_, i) =>
+				makeAsset(i + 1, '2020-12-01T00:00:00', 4, 3, { thumb: { url: pixel } })
+			),
+			next_cursor: null
+		}));
+		await loader.reset({});
+		const onselect = vi.fn();
+		const { container } = render(Timeline, {
+			loader,
+			selection: EMPTY,
+			onopen: () => {},
+			ontoggle: () => {},
+			onselect
+		});
+		const heading = page.getByRole('heading', { name: /December 2020/ });
+		await expect.element(heading).toBeInTheDocument();
+		const wrapper = heading.element().closest('.timeline') as HTMLElement;
+		wrapper.setPointerCapture = () => {};
+		const mouse = (type: string, x: number, y: number) =>
+			wrapper.dispatchEvent(
+				new PointerEvent(type, {
+					pointerType: 'mouse',
+					pointerId: 1,
+					button: 0,
+					clientX: x,
+					clientY: y,
+					bubbles: true
+				})
+			);
+		const tiles = () => [...wrapper.querySelectorAll<HTMLElement>('.tile')];
+		await vi.waitFor(() => expect(tiles().length).toBe(10));
+		const box = wrapper.getBoundingClientRect();
+		const rect = { x1: box.left + 2, y1: box.top + 2, x2: box.left + 300, y2: box.top + 300 };
+		/** The photos whose tiles the rectangle is over on the screen, as the eye has it. */
+		const under = () =>
+			tiles()
+				.filter((tile) => {
+					const t = tile.getBoundingClientRect();
+					return t.left < rect.x2 && t.right > rect.x1 && t.top < rect.y2 && t.bottom > rect.y1;
+				})
+				.map((tile) => Number(tile.dataset.id))
+				.sort((a, b) => a - b);
+		const selected = () => [...onselect.mock.lastCall![0].ids].sort((a, b) => a - b);
+		mouse('pointerdown', rect.x1, rect.y1);
+		mouse('pointermove', rect.x2, rect.y2);
+		await vi.waitFor(() => expect(onselect).toHaveBeenCalled());
+		const wide = under();
+		expect(selected()).toEqual(wide);
+		// Same photos, half the room: every tile moves, and the rectangle is over other ones.
+		const first = tiles()[0].getBoundingClientRect().width;
+		container.style.width = `${box.width / 2}px`;
+		await vi.waitFor(() =>
+			expect(tiles()[0].getBoundingClientRect().width).not.toBeCloseTo(first, 0)
+		);
+		expect(under()).not.toEqual(wide);
+		onselect.mockClear();
+		mouse('pointermove', rect.x2, rect.y2 + 1);
+		await vi.waitFor(() => expect(onselect).toHaveBeenCalled());
+		expect(selected()).toEqual(under());
+		mouse('pointercancel', rect.x2, rect.y2);
+	});
+
 	it('a finished lasso swallows only the click that ends it', async () => {
 		const { fetchPage } = yearOfPages();
 		const loader = new TimelineLoader(fetchPage);

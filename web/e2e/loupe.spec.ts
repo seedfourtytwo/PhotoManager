@@ -321,6 +321,43 @@ test.describe('photo view', () => {
 		await expectOnTop(page);
 	});
 
+	test('phone: with the time ruler out, a toast in the photo view is one slip under Close', async ({
+		page
+	}) => {
+		test.skip(
+			!isPhone(page),
+			'the lying ruler, and the toast rule that goes with it, are the phone’s'
+		);
+		await expect(page.locator('.tile').first()).toBeVisible();
+		await page.evaluate(() => window.scrollBy(0, 600));
+		const ruler = page.getByRole('slider', { name: 'Jump to date' });
+		await expect(ruler).toHaveCSS('opacity', '1');
+		await page.locator('.tile').nth(8).click();
+		await expect(loupe(page)).toBeVisible();
+		// The ruler stays on the page under the viewer, so the rule that lifts the toast over it
+		// still matches.
+		await expect(ruler).toHaveAttribute('aria-orientation', 'horizontal');
+		await page.route('**/api/assets/*/state', (route) =>
+			route.fulfill({ status: 500, json: { detail: 'the library is busy, try again' } })
+		);
+		await loupe(page).getByRole('button', { name: 'Favourite' }).click();
+		await expect(toast(page)).toContainText(/the library is busy, try again/i);
+		await expectOnTop(page);
+		const slip = (await toast(page).boundingBox())!;
+		const close = (await loupe(page).getByRole('button', { name: 'Close' }).boundingBox())!;
+		const bar = (await loupe(page).locator('.bar').boundingBox())!;
+		// One line of words on its slip: not stretched from under Close down to the dock.
+		expect(slip.height).toBeLessThan(60);
+		expect(slip.y).toBeGreaterThanOrEqual(close.y + close.height);
+		expect(slip.y).toBeLessThan(close.y + close.height + 24);
+		expect(slip.y + slip.height).toBeLessThan(bar.y);
+		// And nothing asks it to: only being a popover (height: fit-content) kept it one slip
+		// while the rule that clears the ruler still gave it a bottom as well as a top.
+		expect(
+			await toast(page).evaluate((el) => el.computedStyleMap().get('bottom')?.toString())
+		).toBe('auto');
+	});
+
 	test('a toast that is showing when a photo opens moves on top of the photo view', async ({
 		page
 	}) => {

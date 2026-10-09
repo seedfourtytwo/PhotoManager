@@ -155,7 +155,6 @@
 		const from = items.findIndex((a) => a.id === dragged);
 		const to = dropIndex(from, index, after);
 		if (to !== null) onmove?.(dragged, to);
-		dragged = null;
 	}
 </script>
 
@@ -198,6 +197,11 @@
 					e.dataTransfer?.setData('text/plain', String(item.id));
 				}}
 				ondragover={(e) => arrange && e.preventDefault()}
+				ondragend={() => {
+					// However the drag ended (a drop, Esc, let go elsewhere): a later drop of
+					// something else must not move this photo.
+					dragged = null;
+				}}
 				ondrop={(e) => ondrop(e, i)}
 			>
 				{#if item.thumb && failed.get(item.id) !== item}

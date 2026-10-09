@@ -175,6 +175,7 @@
 		wrapper: () => wrapper,
 		selection: () => selection,
 		count: () => loader.items.length,
+		layout: () => gridTops, // measured anew after every layout change
 		placed: () => {
 			const boxes = globalBoxes();
 			return loader.items.map((a, i) => ({ id: a.id, ...boxes[i] }));

@@ -216,14 +216,16 @@
 	.notice:not(.shown) {
 		display: none;
 	}
-	/* While photos are selected the pill has the bottom centre: the toast sits above it. */
-	:global(body:has([role='toolbar'][data-selection-pill])) .notice {
-		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
-	}
 	/* In the photo view the bottom belongs to its bar: the toast sits under Close and Info. */
-	:global(dialog[aria-label='Photo viewer']) > .notice {
+	:global(dialog[data-photo-view]) > .notice {
 		top: calc(env(safe-area-inset-top) + var(--s-3) + var(--target) + var(--s-2));
 		bottom: auto;
+	}
+	/* While photos are selected the pill has the bottom centre: the toast sits above it. Not
+	   the toast in the photo view (the pill stays on the page under it): that one has no bottom. */
+	:global(body:has([role='toolbar'][data-selection-pill]))
+		.notice:not(:global([data-photo-view] > *)) {
+		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
 	@media (max-width: 1023px) {
 		.app,
@@ -237,18 +239,11 @@
 		.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
 		}
-		/* The pill and the lying time ruler share the strip above the dock; the toast clears both. */
-		:global(
-				body:has(
-					[role='toolbar'][data-selection-pill],
-					[role='slider'][aria-orientation='horizontal']
-				)
-			)
-			.notice {
+		/* The pill and the lying time ruler (`data-ruler`, TimeRuler.svelte) share the strip above
+		   the dock; the toast clears both. The ruler too stays on the page under the photo view. */
+		:global(body:has([role='toolbar'][data-selection-pill], [data-ruler='horizontal']))
+			.notice:not(:global([data-photo-view] > *)) {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--pill) + var(--s-3));
-		}
-		:global(dialog[aria-label='Photo viewer']) > .notice {
-			bottom: auto;
 		}
 	}
 </style>

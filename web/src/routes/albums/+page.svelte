@@ -3,6 +3,7 @@
 	import { ALBUM_TITLE_MAX, type AlbumSummary } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import { photos } from '$lib/format';
 
 	let albums = $state<AlbumSummary[] | null>(null);
 	let creating = $state(false);
@@ -65,8 +66,7 @@
 					</span>
 					<span class="title">{album.title}</span>
 					<span class="quiet small">
-						{album.count} photo{album.count === 1 ? '' : 's'}{#if album.role !== 'owner'}&nbsp;·
-							shared with you ({album.role}){/if}
+						{photos(album.count)}{#if album.role !== 'owner'}&nbsp;· shared with you ({album.role}){/if}
 					</span>
 				</a>
 			</li>

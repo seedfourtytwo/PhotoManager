@@ -248,6 +248,25 @@ describe('CalendarHeatmap', () => {
 			.toBeInTheDocument();
 		expect(page.getByRole('link').elements()).toHaveLength(2);
 	});
+
+	it('a year and a day with one photo say "1 photo"; a big year groups its thousands', async () => {
+		render(CalendarHeatmap, {
+			days: [
+				{ day: '2020-07-04', count: 1204 },
+				{ day: '2018-01-01', count: 1 }
+			],
+			hrefFor: (day: string) => `/?from=${day}&to=${day}`
+		});
+		await expect
+			.element(page.getByRole('link', { name: '1 Jan 2018: 1 photo', exact: true }))
+			.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('region', { name: '2018: 1 photo', exact: true }))
+			.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('link', { name: '4 Jul 2020: 1,204 photos', exact: true }))
+			.toBeInTheDocument();
+	});
 });
 
 describe('SelectionBar', () => {

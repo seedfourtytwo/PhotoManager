@@ -5,7 +5,7 @@
 export type Point = { x: number; y: number; t: number };
 export type Gesture = 'tap' | 'double-tap' | 'previous' | 'next' | 'details' | 'close';
 
-/** A finger that moved less than this has not moved. Shared with the grid's long press (press.ts). */
+/** A finger that moved no further than this has not moved. Shared with the grid's long press (press.ts). */
 export const SLOP = 10;
 const TAP_MS = 500;
 /** A second tap this soon, and this close to the first, makes a double tap. */
@@ -24,7 +24,7 @@ export function recognise(
 ): Gesture | null {
 	const dx = up.x - down.x;
 	const dy = up.y - down.y;
-	if (Math.hypot(dx, dy) < SLOP) {
+	if (Math.hypot(dx, dy) <= SLOP) {
 		if (up.t - down.t >= TAP_MS) return null;
 		const again =
 			lastTap !== null &&
@@ -48,7 +48,7 @@ export function recognise(
 export function pull(down: Point, now: Point): { x: number; y: number } {
 	const dx = now.x - down.x;
 	const dy = now.y - down.y;
-	if (Math.hypot(dx, dy) < SLOP) return { x: 0, y: 0 };
+	if (Math.hypot(dx, dy) <= SLOP) return { x: 0, y: 0 };
 	if (Math.abs(dx) > Math.abs(dy)) return { x: dx, y: 0 };
 	return { x: 0, y: Math.max(0, dy) };
 }

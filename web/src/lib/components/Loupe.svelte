@@ -198,8 +198,10 @@
 <svelte:window {onkeydown} />
 
 <!-- A native modal dialog: the page behind becomes inert for keyboard and screen readers. -->
+<!-- `data-photo-view`: the layout puts a toast under Close and Info by it. -->
 <dialog
 	class="loupe"
+	data-photo-view
 	class:info
 	class:idle={chrome.idle}
 	bind:this={root}
