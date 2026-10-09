@@ -1,20 +1,22 @@
 <script lang="ts">
 	import '$lib/tokens.css';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import BackupBanner from '$lib/components/BackupBanner.svelte';
+	import LookTrial from '$lib/components/LookTrial.svelte';
 	import {
-		applyTheme,
 		backupWatch,
 		isFilterable,
 		isPublicRoute,
+		loadLook,
 		notice,
 		session,
 		settings
 	} from '$lib/app.svelte';
+	import { look } from '$lib/look';
 
 	let { children } = $props();
 
@@ -22,9 +24,24 @@
 	const filterable = $derived(isFilterable(page.url.pathname));
 
 	onMount(() => {
-		applyTheme(settings.theme);
+		look.show();
 		if (!bare) void session.load();
 	});
+
+	// Each account has its own look: fetch it for whoever is signed in now. A look an admin
+	// was trying ends with their session, so the next person here never gets it.
+	const signedInAs = $derived(session.user?.id);
+	$effect(() => {
+		if (signedInAs !== undefined) void loadLook();
+		else untrack(() => look.stopTrying());
+	});
+
+	function cameBack() {
+		if (document.visibilityState !== 'visible') return;
+		void session.retry();
+		// an admin may have saved a new look for this account meanwhile
+		if (session.user) void loadLook();
+	}
 
 	// Admins see the backup warning on every page: ask again on each navigation, and
 	// forget it for anyone who is not (or no longer) an admin.
@@ -36,9 +53,7 @@
 
 <!-- Could not reach the server on opening: try again when the network or the tab comes back. -->
 <svelte:window ononline={() => void session.retry()} />
-<svelte:document
-	onvisibilitychange={() => document.visibilityState === 'visible' && void session.retry()}
-/>
+<svelte:document onvisibilitychange={cameBack} />
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
@@ -56,6 +71,7 @@
 	<div class="app" class:filters={filterable && settings.filtersOpen}>
 		<Nav />
 		<main id="main" tabindex="-1">
+			<LookTrial />
 			<BackupBanner health={session.isAdmin ? backupWatch.health : null} />
 			{@render children()}
 		</main>

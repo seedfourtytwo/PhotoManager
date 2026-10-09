@@ -3,6 +3,7 @@
  * events at a handful of places, several cameras and sources. No real photos anywhere —
  * images are drawn as SVG scenes (see images.ts) from each photo's palette and seed.
  */
+import type { Look } from '../src/lib/look/sheet.ts';
 import type {
 	Access,
 	AlbumMember,
@@ -125,6 +126,8 @@ export type MockUser = {
 	/** Wrong PINs since the last good sign-in: 30 lock the account. */
 	failedPins: number;
 	locked: boolean;
+	/** The account's look sheet; none means the defaults. */
+	look?: Look;
 };
 
 export type MockAlbum = {

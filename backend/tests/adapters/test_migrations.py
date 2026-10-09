@@ -80,7 +80,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 26
+    assert _latest() == 27
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -430,4 +430,36 @@ def test_faces_from_before_0026_come_through_with_no_clustering_pass_kept(tmp_pa
     )
     upgraded.execute("DELETE FROM asset WHERE id = 1")
     assert upgraded.execute("SELECT COUNT(*) FROM face_cluster_mark").fetchone()[0] == 0
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
+
+
+def test_accounts_from_before_0027_come_through_with_no_look(tmp_path: Path) -> None:
+    """0027: an account's look is a nullable sheet on the user row; null reads as the
+    defaults, so existing accounts look as they did."""
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 27)
+    for number, sql in _migrations():
+        if number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO user (id, username, display_name, password_hash, role, disabled)
+            VALUES (1, 'c', 'C', 'x', 'admin', 0), (2, 'lea', 'Lea', 'y', 'member', 0);
+        """
+    )
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    rows = upgraded.execute("SELECT username, look FROM user ORDER BY id")
+    assert [tuple(r) for r in rows] == [("c", None), ("lea", None)]
+    repo = SqliteRepository(Database(upgraded, db))
+    assert repo.stored_look(2) is None
+    repo.store_look(2, '{"mode": "light"}')
+    assert (repo.stored_look(1), repo.stored_look(2)) == (None, '{"mode": "light"}')
+    assert repo.stored_look(99) is None, "no such account: nothing stored"
+    assert [u.username for u in repo.list_users()] == ["c", "lea"], "accounts are untouched"
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1

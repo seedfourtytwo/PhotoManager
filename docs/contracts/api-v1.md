@@ -79,6 +79,44 @@ from signing in: locked after 30, or waiting out the 15 minutes after 10. Only t
 routes carry it: `User` (login, `/api/auth/me`), `/api/auth/accounts` and
 `/api/users/directory` never say whether an account is locked.
 
+## Look (v1.5)
+
+Each account has a look: one sheet of named values, never CSS (`docs/adr/0001`). The account
+itself chooses only its `mode`; an admin sets the whole sheet of any account.
+
+| GET | `/api/me/look` | – | `Look` of the signed-in account (every role) |
+|---|---|---|---|
+| PUT | `/api/me/look` | `{mode}` and nothing else | `Look`; every role, guests included. Any other field, or none, is `422` |
+| GET | `/api/admin/accounts/{id}/look` | – | `Look` (admin); `404` unknown id |
+| PUT | `/api/admin/accounts/{id}/look` | `Look`, any fields left out | `Look` as stored (admin). A field left out goes back to its default, so `{}` resets the look. `404` unknown id |
+
+`Look`, always answered whole:
+
+| Field | Values | Default |
+|---|---|---|
+| `theme` | `"safelight"`, `"album"` | `"safelight"` |
+| `mode` | `"system"` (follow the device), `"dark"`, `"light"` | `"dark"` |
+| `accentHue` | whole number 0–360, or `null` (the theme's own) | `null` |
+| `corners` | whole number 0–22 (px), or `null` | `null` |
+| `photoGap` | whole number 0–8 (px), or `null` | `null` |
+| `textScale` | 0.9–1.25, two decimals | `1` |
+| `thumbSize` | `"small"`, `"medium"`, `"large"` | `"medium"` |
+| `showToday` | `true` / `false` | `true` |
+| `startPage` | `"today"`, `"library"` | `"today"` |
+| `collectionsRows` | one to three of `"people"`, `"places"`, `"albums"`, each once, in the order shown | all three, in that order |
+| `dockLabels` | `true` / `false` | `true` |
+
+Rules (`backend/src/photo_assistant/domain/look.py` is the source; `web/src/lib/look/sheet.ts`
+mirrors it by hand):
+
+- A field that is not in the table is `422`; `detail` names it. So is a value of the wrong
+  kind (`"big"` for a number, `1` for a switch) and a choice that does not exist.
+- A number outside its range is **clamped**, not refused; a fraction is rounded as the table says.
+- `showToday: false` forces `startPage: "library"`.
+- An account with no stored look, or with a stored sheet that no longer passes these rules,
+  has the defaults. Nothing a sheet holds can make the app unusable.
+- `showToday` and `startPage` are stored and answered but have no effect until the Today page exists.
+
 ## Sources (existing, plus access)
 
 Existing M1 routes stay: `GET/POST /api/sources`, `PATCH /api/sources/{id}`,
@@ -407,3 +445,13 @@ is also written next to its route above.
 | Upload | Files arriving while the disk is under its free-space floor are `rejected` with a reason (status stays `200`). | Show each file's `reason`. |
 | Print | Caps on `PrintRequest`: pages, photos a page, text and id lengths (`422`). | None: the editor cannot build a larger request. |
 | Backups | `POST /api/backups` refuses a `password_file` outside the key folder (`422`); the recovery sheet answers `409` for a key outside it. | None: guided setup makes its keys in that folder. |
+
+---
+
+# v1.5 changes (per-account look, issue 11)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Look | New: `GET/PUT /api/me/look` and `GET/PUT /api/admin/accounts/{id}/look` (see "Look" above). | The mode switch in Settings saves on the account (`api.setMyMode`); Admin → People has a "Look" form per account (`api.accountLook`, `api.setAccountLook`). The browser's old `pa.theme` setting is sent as the mode once, then removed. |

@@ -180,3 +180,27 @@ describe('Users: Unlock', () => {
 		await vi.waitFor(() => expect(notice.text).toBe('User not found.'));
 	});
 });
+
+describe('Users: Look', () => {
+	it('each person has a Look button that opens their look, and closing it asks nothing more', async () => {
+		const calls = stubFetch((call) =>
+			call.url.endsWith('/look') ? { json: { theme: 'album' } } : { json: people }
+		);
+		render(Users);
+		await rowOf('admin').getByRole('button', { name: 'Look', exact: true }).click();
+		await page
+			.getByRole('dialog', { name: 'Look for C' })
+			.getByRole('button', { name: 'Cancel' })
+			.click();
+		await rowOf('partner').getByRole('button', { name: 'Look', exact: true }).click();
+		const dialog = page.getByRole('dialog', { name: 'Look for Partner' });
+		await expect
+			.element(dialog.getByRole('combobox', { name: 'Theme', exact: true }))
+			.toHaveValue('album');
+		await expect.element(dialog.getByRole('button', { name: 'Save for Partner' })).toBeEnabled();
+		expect(calls.filter((c) => c.url.endsWith('/look')).map((c) => c.url)).toEqual([
+			'/api/admin/accounts/1/look',
+			'/api/admin/accounts/2/look'
+		]);
+	});
+});

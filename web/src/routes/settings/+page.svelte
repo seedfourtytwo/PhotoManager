@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { isPin, PIN_LENGTH } from '$lib/api';
-	import { api, notice, session, settings, type Density, type Theme } from '$lib/app.svelte';
+	import { api, chooseMode, notice, session, settings, type Density } from '$lib/app.svelte';
+	import { look, type Mode } from '$lib/look';
 	import Devices from '$lib/components/Devices.svelte';
 	import { errorMessage } from '$lib/format';
 	import { PIN_FIELD } from '$lib/pin';
@@ -39,10 +40,10 @@
 		}
 	}
 
-	const themes: [Theme, string][] = [
+	const modes: [Mode, string][] = [
 		['dark', 'Dark (best for photos)'],
 		['light', 'Light'],
-		['system', 'Like the system']
+		['system', 'Like the device']
 	];
 	const densities: [Density, string][] = [
 		['compact', 'Small'],
@@ -59,15 +60,15 @@
 	<section aria-labelledby="s-look">
 		<h2 id="s-look">Look</h2>
 		<fieldset>
-			<legend>Theme</legend>
-			{#each themes as [value, label] (value)}
+			<legend>Mode</legend>
+			{#each modes as [value, label] (value)}
 				<label class="choice">
 					<input
 						type="radio"
-						name="theme"
+						name="mode"
 						{value}
-						checked={settings.theme === value}
-						onchange={() => settings.setTheme(value)}
+						checked={look.saved.mode === value}
+						onchange={() => chooseMode(value)}
 					/>
 					{label}
 				</label>

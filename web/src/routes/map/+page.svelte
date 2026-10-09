@@ -131,7 +131,7 @@
 			chosenItems.map((a) => aspect(a)),
 			gridWidth,
 			rowHeightFor(viewport.width, settings.density),
-			3
+			settings.gap
 		)
 	);
 	const loupeId = $derived(openPhotoId(page));

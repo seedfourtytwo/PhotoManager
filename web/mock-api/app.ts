@@ -23,6 +23,7 @@ import type {
 } from '../src/lib/api/types.ts';
 import { isPin } from '../src/lib/api/types.ts';
 import { filtersFromParams } from '../src/lib/filters.ts';
+import { LookError, parseLook, readLook, type Look } from '../src/lib/look/sheet.ts';
 import { v11Routes } from './v11.ts';
 import {
 	makeAsset,
@@ -77,6 +78,16 @@ const LOCK_AFTER_WRONG_PINS = 30;
 
 function forgiveWrongPins(user: MockUser) {
 	Object.assign(user, noWrongPins());
+}
+
+/** A sheet as the backend reads one: its refusal is a 422 with the sheet's own sentence. */
+function sentLook(sheet: unknown): Look {
+	try {
+		return parseLook(sheet);
+	} catch (error) {
+		if (error instanceof LookError) throw new HttpError(422, error.message);
+		throw error;
+	}
 }
 
 function checkPin(pin: unknown) {
@@ -518,6 +529,12 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		locked: u.locked || wrongPinsInWindow(u).length >= MAX_RECENT_WRONG_PINS
 	});
 
+	function accountOf(ctx: Ctx): MockUser {
+		const user = state.users.find((u) => u.id === idParam(ctx));
+		if (!user) throw new HttpError(404, 'no such user');
+		return user;
+	}
+
 	function sessionUser(req: IncomingMessage): MockUser | null {
 		const cookie = req.headers.cookie ?? '';
 		const token = /(?:^|;\s*)pa_session=([^;]+)/.exec(cookie)?.[1];
@@ -791,6 +808,40 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				if (user.role === 'guest') throw new HttpError(403, "Guests can't share albums.");
 				const shown = state.users.filter((u) => user.role === 'admin' || !u.disabled);
 				return ok(shown.map((u) => ({ id: u.id, display_name: u.display_name })));
+			}
+		],
+
+		// look (v1.5)
+		['GET', /^\/api\/me\/look$/, (ctx) => ok(readLook(me(ctx).look))],
+		[
+			'PUT',
+			/^\/api\/me\/look$/,
+			(ctx) => {
+				const user = me(ctx);
+				const sheet = ctx.body as Record<string, unknown> | null;
+				if (typeof sheet !== 'object' || sheet === null || Object.keys(sheet).join() !== 'mode')
+					throw new HttpError(
+						422,
+						'you can change only your mode: send {"mode": "dark"}, "light" or "system"; ' +
+							'an admin sets the rest of your look'
+					);
+				user.look = { ...readLook(user.look), mode: sentLook(sheet).mode };
+				return ok(user.look);
+			}
+		],
+		[
+			'GET',
+			/^\/api\/admin\/accounts\/(\d+)\/look$/,
+			(ctx) => (admin(ctx), ok(readLook(accountOf(ctx).look)))
+		],
+		[
+			'PUT',
+			/^\/api\/admin\/accounts\/(\d+)\/look$/,
+			(ctx) => {
+				admin(ctx);
+				const user = accountOf(ctx);
+				user.look = sentLook(ctx.body);
+				return ok(user.look);
 			}
 		],
 

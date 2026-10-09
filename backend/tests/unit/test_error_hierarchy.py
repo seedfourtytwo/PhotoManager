@@ -43,6 +43,7 @@ NOT_DOMAIN_ERRORS = {
     "ports.accounts.NoActiveAdminError": SIGNAL + " (Accounts raises LastAdminError)",
     "adapters.ollama_ai._BadOutputError": SIGNAL + " (one retry, then AIUnavailableError)",
     "domain.album_plan.PlanFormatError": SIGNAL + " (the AI adapter's answer check)",
+    "domain.look.LookError": SIGNAL + " (Accounts raises InvalidLookError)",
     "domain.library_paths.InvalidLibraryPathError": "a broken invariant (a bug), not a request",
     "ports.printing.PrintRenderError": "the print engine failed on a job we built: a bug, a 500",
     "adapters.sqlite_database.NewerDatabaseError": "stops the app at start; no request yet",

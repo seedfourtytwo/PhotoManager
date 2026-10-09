@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { api, library, session } from '$lib/app.svelte';
+	import { look } from '$lib/look';
 	import { PLACES, accountItems, initialOf } from '$lib/nav';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
@@ -26,7 +27,7 @@
 <!-- Laptop: one glass bar on top. Phone: a floating dock, Search and the account beside it. -->
 <nav aria-label="Main">
 	<span class="mark" aria-hidden="true">Photos</span>
-	<ul class="places">
+	<ul class="places" class:wordless={!look.shown.dockLabels}>
 		{#each PLACES as place (place.href)}
 			<li>
 				<a href={place.href} aria-current={place.match(path) ? 'page' : undefined}>
@@ -195,6 +196,8 @@
 			padding: 0;
 			justify-content: center;
 		}
+		/* Still read out: the look's "dock labels" switch only takes the words off the screen. */
+		.places.wordless span,
 		.search span {
 			position: absolute;
 			width: 1px;
