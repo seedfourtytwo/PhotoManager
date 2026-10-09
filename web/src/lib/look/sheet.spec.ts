@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK, LOOK_RANGES, LookError, parseLook, readLook, type Look } from './sheet';
+import table from '../../../../docs/contracts/look-cases.json?raw';
+import {
+	DEFAULT_LOOK,
+	LOOK_RANGES,
+	LookError,
+	parseLook,
+	readLook,
+	sameLook,
+	type Look
+} from './sheet';
+
+/**
+ * The table both sides run (backend/tests/unit/test_look.py reads the same file). Parsed
+ * here as a browser parses a body, so a number too large for JavaScript arrives as Infinity.
+ */
+const CASES = JSON.parse(table) as {
+	sent: { sheet: unknown; gives: Partial<Look> }[];
+	stored: { sheet: unknown; reads: Partial<Look> }[];
+};
+const named = <T extends { sheet: unknown }>(cases: T[]): [string, T][] =>
+	cases.map((c, at) => [`${at + 1}: ${JSON.stringify(c.sheet).slice(0, 40)}`, c]);
 
 /** The same sheets as backend/tests/unit/test_look.py: the two sides must agree. */
 const EVERYTHING: Look = {
@@ -66,6 +86,22 @@ describe('parseLook (a sheet someone sends)', () => {
 		});
 	});
 
+	it.each(named(CASES.sent))('reads %s as the shared table says', (_, { sheet, gives }) => {
+		expect(parseLook(sheet)).toEqual({ ...DEFAULT_LOOK, ...gives });
+	});
+
+	it('rounds a half up and clamps a number beyond every range, whatever its size', () => {
+		expect(parseLook({ accentHue: 0.5, corners: 2.5, textScale: 1.125 })).toMatchObject({
+			accentHue: 1,
+			corners: 3,
+			textScale: 1.13
+		});
+		expect(parseLook({ accentHue: Infinity, textScale: -Infinity })).toMatchObject({
+			accentHue: 360,
+			textScale: 0.9
+		});
+	});
+
 	it.each(['accentHue', 'corners', 'photoGap'])('leaves %s to the theme when null', (field) => {
 		expect(parseLook({ [field]: null })).toMatchObject({ [field]: null });
 	});
@@ -77,7 +113,7 @@ describe('parseLook (a sheet someone sends)', () => {
 		['textScale', null],
 		['textScale', '1.1'],
 		['textScale', NaN],
-		['accentHue', Infinity],
+		['accentHue', NaN],
 		['showToday', 'yes'],
 		['dockLabels', 1],
 		['theme', 3],
@@ -119,12 +155,23 @@ describe('readLook (a sheet that was stored or received)', () => {
 		expect(readLook(EVERYTHING)).toEqual(EVERYTHING);
 	});
 
-	it.each([null, undefined, [], 'x', { mode: 'light', css: 'x' }, { textScale: 'big' }])(
+	it.each([null, undefined, [], 'x', { css: 'x' }, { textScale: 'big' }])(
 		'reads %j as the defaults',
 		(raw) => {
 			expect(readLook(raw)).toEqual(DEFAULT_LOOK);
 		}
 	);
+
+	it.each(named(CASES.stored))('reads %s as the shared table says', (_, { sheet, reads }) => {
+		expect(readLook(sheet)).toEqual({ ...DEFAULT_LOOK, ...reads });
+	});
+
+	it('drops only the fields that do not pass, and the ones this build does not know', () => {
+		// a newer backend with a theme and a field this open tab has never heard of
+		const newer = { ...EVERYTHING, theme: 'gone-in-a-later-version', addedLater: true };
+		expect(readLook(newer)).toEqual({ ...EVERYTHING, theme: 'safelight' });
+		expect(() => parseLook(newer)).toThrow(LookError); // sending it is still refused
+	});
 
 	it('never hands out the defaults themselves to be changed', () => {
 		const first = readLook(null);
@@ -132,5 +179,21 @@ describe('readLook (a sheet that was stored or received)', () => {
 		first.mode = 'light';
 		expect(readLook(null)).toEqual(DEFAULT_LOOK);
 		expect(DEFAULT_LOOK.collectionsRows).toEqual(['people', 'places', 'albums']);
+	});
+});
+
+describe('sameLook', () => {
+	it('is true for two sheets holding the same values, whatever made them', () => {
+		expect(sameLook(parseLook({}), DEFAULT_LOOK)).toBe(true);
+		expect(sameLook(readLook({ ...EVERYTHING }), EVERYTHING)).toBe(true);
+	});
+
+	it.each<Partial<Look>>([
+		{ mode: 'light' },
+		{ accentHue: 0 },
+		{ collectionsRows: ['places', 'people', 'albums'] },
+		{ dockLabels: false }
+	])('is false when %j differs', (change) => {
+		expect(sameLook({ ...DEFAULT_LOOK, ...change }, DEFAULT_LOOK)).toBe(false);
 	});
 });

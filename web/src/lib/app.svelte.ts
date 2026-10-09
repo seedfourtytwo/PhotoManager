@@ -11,7 +11,17 @@ import {
 	type Source,
 	type User
 } from '$lib/api';
-import { forgetOldMode, look, oldMode, type Mode, type ThumbSize } from '$lib/look';
+import {
+	DEFAULT_LOOK,
+	forgetOldMode,
+	look,
+	oldMode,
+	readLook,
+	sameLook,
+	themeDials,
+	type Mode,
+	type ThumbSize
+} from '$lib/look';
 
 const PUBLIC_ROUTES = ['/login', '/setup'];
 
@@ -52,10 +62,14 @@ class Session {
 		return this.user !== null && this.user.role !== 'guest';
 	}
 
-	/** Any 401: forget the user and go to the sign-in page, coming back here afterwards. */
+	/**
+	 * Any 401: forget the user and go to the sign-in page, coming back here afterwards. Their
+	 * look goes with them: the next person at this device gets the defaults, not theirs.
+	 */
 	lost() {
 		this.user = null;
 		library.forget();
+		look.belongsTo(null);
 		if (isPublicRoute(location.pathname)) return;
 		void goto(`/login?next=${encodeURIComponent(currentPath())}`, { replaceState: true });
 	}
@@ -100,6 +114,7 @@ class Session {
 		await api.logout().catch(() => undefined);
 		this.user = null;
 		library.forget();
+		look.belongsTo(null);
 		await goto('/login', { replaceState: true });
 	}
 }
@@ -220,8 +235,6 @@ const DENSITY_OF: Record<ThumbSize, Density> = {
 	medium: 'comfortable',
 	large: 'large'
 };
-/** The gap between photos in a grid when the look leaves it to the theme (px). */
-const PHOTO_GAP = 3;
 
 class Settings {
 	/** The photo size chosen on this device in Settings, if one was. */
@@ -234,9 +247,10 @@ class Settings {
 	get density(): Density {
 		return this.#density ?? DENSITY_OF[look.shown.thumbSize];
 	}
-	/** The gap between photos in the grids, in px, from the account's look. */
+	/** The gap between photos in the grids, in px: the account's look, else its theme's own. */
 	get gap(): number {
-		return look.shown.photoGap ?? PHOTO_GAP;
+		const { photoGap, theme, mode } = look.shown;
+		return photoGap ?? themeDials(theme, mode).photoGap;
 	}
 
 	setDensity(density: Density) {
@@ -253,38 +267,47 @@ export const settings = new Settings();
 
 // --- the account's look ------------------------------------------------------------------
 
-/** Counts the look requests, so an answer overtaken by a newer one is dropped. */
-let lookAsked = 0;
-
 /**
  * Fetch the signed-in account's look and show it: after signing in, and whenever the tab
  * comes back to the foreground (an admin may have changed it meanwhile). Never rejects: with
- * no answer the look already on screen stays. A browser that still holds the old per-device
- * `pa.theme` setting hands it to the account as its mode, once.
+ * no answer this account's look already on screen stays, and another account's does not.
+ * Which answer counts when several requests cross is `look`'s rule ($lib/look/look.svelte).
+ *
+ * A browser that still holds the old per-device `pa.theme` setting hands it over as the mode,
+ * once, and only to an account that has no look yet. The API does not say whether a look was
+ * ever stored, so "none yet" is read as "still the defaults": a mode chosen on another
+ * device, or a look an admin has set, is never overwritten; the old setting is just dropped.
  */
 export async function loadLook(): Promise<void> {
-	const asked = ++lookAsked;
-	const old = oldMode();
+	const user = session.user;
+	if (!user) return;
+	look.belongsTo(user.id);
+	const asked = look.reading();
 	try {
-		const sheet = old ? await api.setMyMode(old) : await api.myLook();
-		if (old) forgetOldMode();
-		if (asked === lookAsked) look.receive(sheet);
+		let sheet = await api.myLook();
+		const old = oldMode();
+		if (old) {
+			const untouched = sameLook(readLook(sheet), DEFAULT_LOOK);
+			if (untouched && old !== sheet.mode) sheet = await api.setMyMode(old);
+			forgetOldMode();
+		}
+		asked.answer(sheet);
 	} catch {
 		// offline or refused: asked again the next time the tab comes back
 	}
 }
 
-/** The one part of its look an account sets itself. Shown at once; undone if it is refused. */
+/**
+ * The one part of its look an account sets itself. Shown at once; if it is refused, the
+ * screen goes back to what the server last answered, not to an earlier choice still unsaved.
+ */
 export async function chooseMode(mode: Mode): Promise<void> {
-	const asked = ++lookAsked;
-	const before = look.saved;
 	forgetOldMode(); // a choice made here outranks one made before the look moved to the account
-	look.receive({ ...before, mode });
+	const asked = look.changing({ ...look.saved, mode });
 	try {
-		const sheet = await api.setMyMode(mode);
-		if (asked === lookAsked) look.receive(sheet);
+		asked.answer(await api.setMyMode(mode));
 	} catch (error) {
-		if (asked === lookAsked) look.receive(before);
+		asked.fail();
 		notice.error(error);
 	}
 }

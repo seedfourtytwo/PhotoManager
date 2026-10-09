@@ -1,5 +1,7 @@
 """Accounts use case: setup, login, sessions, rate limit, user admin (FEATURES 8.1, 11.10)."""
 
+import threading
+from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
@@ -18,6 +20,7 @@ from photo_assistant.app.accounts import (
 from photo_assistant.domain import errors
 from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, Role
 from photo_assistant.domain.errors import NotFoundError
+from photo_assistant.domain.look import Look, Mode, dump_look, parse_look, read_look
 from tests.fakes import FakeClock
 
 GOOD = "1234"
@@ -532,3 +535,61 @@ def test_an_unknown_user_is_the_one_not_found_error_and_still_an_account_error(
             refused()
         assert isinstance(missing.value, AccountError) and missing.value.status == 404
     assert NotFoundError is errors.NotFoundError
+
+
+# --- look: an account's own mode against an admin's save ---------------------------------------
+
+
+class SaveLandsMidChange:
+    """The real store, but while an account's stored look is being changed, another request
+    (an admin's save, on its own thread) arrives. It has to wait for the change, not slip in
+    between its read and its write and be overwritten."""
+
+    def __init__(self, repo: SqliteRepository, sheet: str) -> None:
+        self._repo = repo
+        self._sheet = sheet
+        self.saving: threading.Thread | None = None
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._repo, name)
+
+    def _arrives(self, user_id: int) -> None:
+        self.saving = threading.Thread(target=self._repo.store_look, args=(user_id, self._sheet))
+        self.saving.start()
+        self.saving.join(timeout=0.1)
+
+    def change_look(self, user_id: int, change: Callable[[str | None], str]) -> str:
+        def interrupted(stored: str | None) -> str:
+            self._arrives(user_id)
+            return change(stored)
+
+        return self._repo.change_look(user_id, interrupted)
+
+
+def test_a_mode_chosen_while_an_admin_saves_does_not_undo_the_admins_save(
+    repo: SqliteRepository, clock: FakeClock
+) -> None:
+    warm = parse_look({"theme": "album", "accentHue": 30})
+    store = SaveLandsMidChange(repo, dump_look(warm))
+    accounts = Accounts(store, FakeHasher(), clock)  # type: ignore[arg-type]
+    user, _ = accounts.setup("c", "C", GOOD)
+
+    accounts.choose_mode(user, {"mode": "light"})
+
+    assert store.saving is not None
+    store.saving.join()
+    assert read_look(repo.stored_look(user.id)) == warm, "the save came second and is whole"
+
+
+def test_choosing_a_mode_keeps_the_stored_fields_that_still_pass(
+    accounts: Accounts, repo: SqliteRepository
+) -> None:
+    user, _ = accounts.setup("c", "C", GOOD)
+    repo.store_look(user.id, '{"theme": "gone-in-a-later-version", "accentHue": 200, "corners": 4}')
+    assert accounts.look_of(user.id) == Look(accent_hue=200, corners=4)
+
+    chosen = accounts.choose_mode(user, {"mode": "light"})
+
+    assert chosen == Look(mode=Mode.LIGHT, accent_hue=200, corners=4)
+    assert accounts.look_of(user.id) == chosen
+    assert repo.stored_look(user.id) == dump_look(chosen), "and the field that failed is gone"
