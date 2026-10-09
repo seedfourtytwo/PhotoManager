@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 import {
 	expect,
 	isPhone,
+	loupeAction,
 	openAccountMenu,
 	resetMock,
 	selectionAction,
@@ -28,6 +29,7 @@ const LIGHT = new Set([
 	'03-library',
 	'04-loupe',
 	'04b-loupe-info',
+	'04c-loupe-more',
 	'05-filters',
 	'06-selection',
 	'07-download',
@@ -83,7 +85,10 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: '4:5', exact: true }).click();
 	await shot(page, '13-editor', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
-	await page.getByRole('button', { name: 'Fix date' }).click();
+	await page.getByRole('button', { name: 'More' }).click();
+	await shot(page, '04c-loupe-more', p);
+	await page.keyboard.press('Escape');
+	await loupeAction(page, 'Fix date');
 	await page.getByLabel('Direction').selectOption({ label: 'earlier' });
 	await page.getByRole('spinbutton').nth(1).fill('1');
 	await shot(page, '17-fix-date', p);

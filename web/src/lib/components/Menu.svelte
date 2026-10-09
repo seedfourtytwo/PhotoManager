@@ -8,21 +8,36 @@
 		countLabel?: string;
 		current?: boolean;
 		run?: () => void;
+		/** An action that is a switch: whether it is on. */
+		pressed?: boolean;
 	};
 </script>
 
 <script lang="ts">
+	import type { IconName } from '$lib/icons';
+	import Icon from './Icon.svelte';
+
 	type Props = {
 		label: string;
 		text: string;
+		/** In an action bar: the button is this icon over its word, not a round button. */
+		icon?: IconName;
 		badge?: number;
 		badgeLabel?: string;
 		items: MenuItem[];
+		open?: boolean;
 	};
-	let { label, text, badge = 0, badgeLabel, items }: Props = $props();
+	let {
+		label,
+		text,
+		icon,
+		badge = 0,
+		badgeLabel,
+		items,
+		open = $bindable(false)
+	}: Props = $props();
 
 	const id = $props.id();
-	let open = $state(false);
 	let root: HTMLDivElement;
 	let button: HTMLButtonElement;
 
@@ -55,13 +70,14 @@
 	<button
 		bind:this={button}
 		type="button"
-		class="trigger"
+		class={icon ? 'action' : 'trigger'}
 		aria-label={label}
 		aria-expanded={open}
 		aria-controls={open ? id : undefined}
 		aria-describedby={badge > 0 && badgeLabel ? `${id}-badge` : undefined}
 		onclick={() => (open = !open)}
 	>
+		{#if icon}<Icon name={icon} />{/if}
 		<span aria-hidden="true">{text}</span>
 		{#if badge > 0}<span class="badge data" aria-hidden="true">{badge > 99 ? '99+' : badge}</span
 			>{/if}
@@ -88,6 +104,7 @@
 					{:else}
 						<button
 							type="button"
+							aria-pressed={item.pressed}
 							onclick={() => {
 								close(true);
 								item.run?.();
@@ -161,6 +178,13 @@
 	}
 	.panel a[aria-current='page'] {
 		font-weight: 600;
+	}
+	.panel button[aria-pressed='true']::after {
+		content: '';
+		width: var(--s-4);
+		height: var(--s-4);
+		background: var(--ink);
+		mask: var(--check) center / contain no-repeat;
 	}
 	.count {
 		font-size: var(--fs-12);

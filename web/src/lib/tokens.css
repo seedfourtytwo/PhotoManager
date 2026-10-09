@@ -239,6 +239,28 @@ button.primary:disabled {
 	color: var(--ink-3);
 }
 
+/* An action in a bar over photos: its icon above its word (rule 3). */
+.action {
+	display: inline-grid;
+	justify-items: center;
+	align-content: center;
+	gap: var(--gutter);
+	min-width: var(--target);
+	min-height: var(--target);
+	padding: var(--s-1) var(--s-2);
+	font-size: var(--fs-12);
+	font-weight: 500;
+	color: var(--ink-2);
+	white-space: nowrap;
+}
+.action[aria-pressed='true'],
+.action[aria-expanded='true'] {
+	color: var(--ink);
+}
+.action[aria-pressed='true'] svg {
+	fill: currentColor;
+}
+
 /* Touch screens: every control is at least 44 px tall. */
 @media (pointer: coarse) {
 	button,

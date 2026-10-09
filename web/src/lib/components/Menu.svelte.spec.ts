@@ -107,3 +107,29 @@ it('closes when keyboard focus leaves the menu', async () => {
 	await expect.element(button).toHaveAttribute('aria-expanded', 'false');
 	outside.remove();
 });
+
+it('shows an icon over its word when given one', async () => {
+	render(Menu, { label: 'More', text: 'More', icon: 'more', items: items() });
+	const button = page.getByRole('button', { name: 'More' });
+	await expect.element(button).toHaveTextContent('More');
+	expect(button.element().querySelector('svg')).not.toBeNull();
+	expect(button.element().classList.contains('action')).toBe(true);
+});
+
+it('a pressed row says so', async () => {
+	render(Menu, {
+		label: 'More',
+		text: 'More',
+		items: [
+			{ label: 'Private', run: () => {}, pressed: true },
+			{ label: 'Fix date', run: () => {} }
+		]
+	});
+	await page.getByRole('button', { name: 'More' }).click();
+	await expect
+		.element(page.getByRole('button', { name: 'Private' }))
+		.toHaveAttribute('aria-pressed', 'true');
+	await expect
+		.element(page.getByRole('button', { name: 'Fix date' }))
+		.not.toHaveAttribute('aria-pressed');
+});

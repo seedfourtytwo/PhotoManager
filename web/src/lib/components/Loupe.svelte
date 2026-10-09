@@ -6,11 +6,16 @@
 	import { dateSourceLabel, formatTaken } from '$lib/dates';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
+	import { DOUBLE_TAP_MS, pull, recognise, type Point } from '$lib/gesture';
 	import { modal } from '$lib/modal';
+	import { readout } from '$lib/readout';
 	import { describePhoto } from './PhotoGrid.svelte';
+	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
 	import Editor from './Editor.svelte';
 	import FixDateDialog from './FixDateDialog.svelte';
+	import Icon from './Icon.svelte';
+	import Menu, { type MenuItem } from './Menu.svelte';
 
 	type Props = {
 		items: AssetOut[];
@@ -30,6 +35,8 @@
 		$props();
 
 	const IDLE_MS = 2500;
+	/** The frame's shape when a photo's size is not known. */
+	const DEFAULT_RATIO = 1.5;
 	const trash = $derived(onrestore !== undefined);
 	const asset = $derived(items[index]);
 	let detail = $state<AssetDetail | null>(null);
@@ -39,7 +46,8 @@
 	let toolbarFocus = $state(false);
 	/** The press that brings hidden chrome back must not also press what it uncovers. */
 	let waking = $state(false);
-	let dialog = $state<'download' | 'date' | 'edit' | null>(null);
+	let dialog = $state<'download' | 'date' | 'edit' | 'album' | null>(null);
+	let more = $state(false);
 	let root: HTMLDialogElement | undefined = $state();
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
 	let similarReady = $state(false);
@@ -54,6 +62,15 @@
 	const viewOnly = $derived(detail?.level === 'view');
 	// v1.2: marking a photo private needs edit on it (from a source, or as an admin).
 	const canPrivate = $derived(!trash && canEdit);
+	const lines = $derived(asset ? readout(asset, detail) : ['', '']);
+	/** What does not fit among the bar's five actions. */
+	const moreItems = $derived<MenuItem[]>([
+		...(canPrivate
+			? [{ label: 'Private', pressed: asset?.private, run: () => void toggle('private') }]
+			: []),
+		...(canEdit ? [{ label: 'Fix date', run: () => (dialog = 'date') }] : []),
+		...(similarReady && !trash ? [{ label: 'More like this', run: moreLikeThis }] : [])
+	]);
 
 	onMount(() => {
 		library
@@ -93,7 +110,8 @@
 	function wake() {
 		idle = false;
 		clearTimeout(idleTimer);
-		idleTimer = setTimeout(() => (idle = true), IDLE_MS);
+		// An open menu is being read: it does not fade away under the eyes.
+		idleTimer = setTimeout(() => (more ? wake() : (idle = true)), IDLE_MS);
 	}
 	function onchromedown(e: PointerEvent) {
 		if ((e.target as HTMLElement).closest('.stage')) return;
@@ -131,6 +149,17 @@
 		if (asset) void goto(`/search?like=${asset.id}`);
 	}
 
+	/** The details again, after something about the photo changed. */
+	async function refresh(target: AssetOut, changed: boolean) {
+		try {
+			const fresh = await api.asset(target.id);
+			detail = fresh;
+			if (changed) onchanged(fresh);
+		} catch (e) {
+			notice.error(e);
+		}
+	}
+
 	function onkeydown(event: KeyboardEvent) {
 		if (dialog || event.defaultPrevented) return;
 		const target = event.target as HTMLElement;
@@ -149,13 +178,19 @@
 		wake();
 	}
 
-	// --- gestures on the photo: tap toggles the chrome; swipes step, show info or close ----
+	// --- gestures on the photo (lib/gesture.ts says what each one means) --------------------
 	// touch-action: none on the stage, so the browser never claims a vertical swipe as a
 	// scroll and cancels it.
-	let press: { x: number; y: number; t: number; wasIdle: boolean; id: number } | null = null;
+	let press: (Point & { wasIdle: boolean; id: number }) | null = null;
+	let lastTap: Point | null = null;
+	let tapTimer: ReturnType<typeof setTimeout> | undefined;
+	/** How far the finger has pulled the photo; it eases back when let go. */
+	let pulled = $state({ x: 0, y: 0 });
+
+	const point = (e: PointerEvent): Point => ({ x: e.clientX, y: e.clientY, t: performance.now() });
 
 	function onstagedown(e: PointerEvent) {
-		press = { x: e.clientX, y: e.clientY, t: performance.now(), wasIdle: idle, id: e.pointerId };
+		press = { ...point(e), wasIdle: idle, id: e.pointerId };
 		try {
 			(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		} catch {
@@ -163,25 +198,34 @@
 		}
 	}
 
+	function onstagemove(e: PointerEvent) {
+		if (press?.id === e.pointerId && e.pointerType === 'touch') pulled = pull(press, point(e));
+	}
+
+	function endPress() {
+		press = null;
+		pulled = { x: 0, y: 0 };
+	}
+
 	function onstageup(e: PointerEvent) {
 		if (!press || press.id !== e.pointerId) return;
-		const dx = e.clientX - press.x;
-		const dy = e.clientY - press.y;
-		const quick = performance.now() - press.t < 500;
+		const up = point(e);
 		const wasIdle = press.wasIdle;
-		press = null;
-		if (Math.hypot(dx, dy) < 10) {
-			if (quick) {
-				if (wasIdle) wake();
-				else hideChrome();
-			}
-			return;
-		}
-		if (e.pointerType !== 'touch') return;
-		if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
-		else if (dy < -60) info = true;
-		else if (dy > 80 && info) info = false;
-		else if (dy > 80) onclose();
+		const gesture = recognise(press, up, lastTap, e.pointerType === 'touch');
+		endPress();
+		clearTimeout(tapTimer);
+		lastTap = gesture === 'tap' ? up : null;
+		if (gesture === 'tap') {
+			// It may be the first half of a double tap: the chrome waits to find out.
+			tapTimer = setTimeout(() => (wasIdle ? wake() : hideChrome()), DOUBLE_TAP_MS);
+		} else if (gesture === 'double-tap') {
+			wake();
+			if (!trash) void toggle('favourite');
+		} else if (gesture === 'next') go(1);
+		else if (gesture === 'previous') go(-1);
+		else if (gesture === 'details') info = true;
+		else if (gesture === 'close' && info) info = false;
+		else if (gesture === 'close') onclose();
 	}
 
 	onMount(() => {
@@ -191,6 +235,7 @@
 	});
 	onDestroy(() => {
 		clearTimeout(idleTimer);
+		clearTimeout(tapTimer);
 		if (document.fullscreenElement) void document.exitFullscreen();
 		// `use:modal` hands the focus back to where it was; the page then moves it to the tile
 		// of the photo that was open (it knows where).
@@ -216,14 +261,28 @@
 	{#if asset}
 		<div
 			class="stage"
+			class:held={pulled.x !== 0 || pulled.y !== 0}
 			role="presentation"
+			style:--pull-x={`${pulled.x}px`}
+			style:--pull-y={`${pulled.y}px`}
 			onpointerdown={onstagedown}
+			onpointermove={onstagemove}
 			onpointerup={onstageup}
-			onpointercancel={() => (press = null)}
+			onpointercancel={endPress}
 		>
 			{#key asset.id}
-				{#if asset.thumb}<img class="under" src={asset.thumb.url} alt="" aria-hidden="true" />{/if}
-				<img class="photo" src={previewOf(asset)} alt={describePhoto(asset)} draggable="false" />
+				<div
+					class="frame"
+					style:--ratio={asset.width && asset.height ? asset.width / asset.height : DEFAULT_RATIO}
+				>
+					{#if asset.thumb}<img
+							class="under"
+							src={asset.thumb.url}
+							alt=""
+							aria-hidden="true"
+						/>{/if}
+					<img class="photo" src={previewOf(asset)} alt={describePhoto(asset)} draggable="false" />
+				</div>
 			{/key}
 		</div>
 
@@ -252,56 +311,68 @@
 			onfocusin={(e) => (toolbarFocus = (e.target as HTMLElement).matches(':focus-visible'))}
 			onfocusout={() => (toolbarFocus = false)}
 		>
-			<button type="button" onclick={onclose}>Close</button>
-			<span class="spacer"></span>
-			<div class="actions">
-				{#if trash}
-					<button type="button" onclick={() => onrestore?.(asset)}>Restore</button>
-				{:else}
-					<button
-						type="button"
-						aria-pressed={asset.favourite}
-						aria-busy={busy === 'favourite'}
-						onclick={() => toggle('favourite')}
-					>
-						{#if asset.favourite}<svg class="heart" viewBox="0 0 16 16" aria-hidden="true"
-								><path
-									d="M8 13.6S2.2 10.1 2.2 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.8 1.2c0 4-5.8 7.5-5.8 7.5z"
-								/></svg
-							>{/if}Favourite
-					</button>
-					{#if canPrivate}
-						<button
-							type="button"
-							aria-pressed={asset.private}
-							aria-busy={busy === 'private'}
-							title="Hidden from people who see it only through your folders or albums"
-							onclick={() => toggle('private')}>Private</button
-						>
-					{/if}
-					{#if viewOnly}
-						<button type="button" disabled aria-describedby="loupe-why">Download</button>
-						<span class="why" id="loupe-why" title="Downloading needs access to the photo's folder"
-							>view only</span
+			<button type="button" class="pill glass" onclick={onclose}><Icon name="close" />Close</button>
+			<div class="bar glass">
+				<p class="readout data">
+					<b>{lines[0]}</b>
+					{#if lines[1]}<span>{lines[1]}</span>{/if}
+				</p>
+				<div class="acts">
+					{#if trash}
+						<button type="button" class="action" onclick={() => onrestore?.(asset)}
+							><Icon name="restore" />Restore</button
 						>
 					{:else}
-						<button type="button" disabled={!detail} onclick={() => (dialog = 'download')}
-							>Download</button
+						<button
+							type="button"
+							class="action"
+							aria-pressed={asset.favourite}
+							aria-busy={busy === 'favourite'}
+							onclick={() => toggle('favourite')}><Icon name="favourite" />Favourite</button
 						>
+						{#if viewOnly}
+							<button type="button" class="action" disabled aria-describedby="loupe-why"
+								><Icon name="download" />Download</button
+							>
+							<span
+								class="why"
+								id="loupe-why"
+								title="Downloading needs access to the photo's folder">view only</span
+							>
+						{:else}
+							<button
+								type="button"
+								class="action"
+								disabled={!detail}
+								onclick={() => (dialog = 'download')}><Icon name="download" />Download</button
+							>
+						{/if}
+						{#if session.canEdit}
+							<button type="button" class="action" onclick={() => (dialog = 'album')}
+								><Icon name="album" />Album</button
+							>
+						{/if}
+						{#if canEdit}
+							<button type="button" class="action" onclick={() => (dialog = 'edit')}
+								><Icon name="edit" />Edit</button
+							>
+						{/if}
+						{#if moreItems.length}
+							<Menu label="More" text="More" icon="more" items={moreItems} bind:open={more} />
+						{/if}
 					{/if}
-					{#if canEdit}
-						<button type="button" onclick={() => (dialog = 'edit')}>Edit</button>
-						<button type="button" onclick={() => (dialog = 'date')}>Fix date</button>
-					{/if}
-					{#if similarReady}
-						<button type="button" onclick={moreLikeThis}>More like this</button>
-					{/if}
+				</div>
+			</div>
+			<div class="right">
+				<button type="button" class="pill glass" aria-pressed={info} onclick={() => (info = !info)}
+					><Icon name="info" />Info</button
+				>
+				{#if canFullscreen}
+					<button type="button" class="pill glass fullscreen" onclick={toggleFullscreen}
+						>Full screen</button
+					>
 				{/if}
 			</div>
-			<button type="button" aria-pressed={info} onclick={() => (info = !info)}>Info</button>
-			{#if canFullscreen}
-				<button type="button" class="fullscreen" onclick={toggleFullscreen}>Full screen</button>
-			{/if}
 		</div>
 
 		{#if info}
@@ -372,26 +443,29 @@
 			ondates?.();
 		}}
 	/>
+{:else if asset && dialog === 'album'}
+	<AddToAlbumDialog
+		ids={[asset.id]}
+		onclose={() => (dialog = null)}
+		ondone={() => {
+			dialog = null;
+			void refresh(asset, false);
+		}}
+	/>
 {:else if asset && dialog === 'edit'}
 	<Editor
 		{asset}
 		onclose={() => (dialog = null)}
-		onsaved={async () => {
+		onsaved={() => {
 			dialog = null;
-			try {
-				const fresh = await api.asset(asset.id);
-				detail = fresh;
-				onchanged(fresh);
-			} catch (e) {
-				notice.error(e);
-			}
+			void refresh(asset, true);
 		}}
 	/>
 {/if}
 
 <style>
-	/* The loupe: the photo takes everything but one quiet band of words above it (and, on a
-	   phone, one below it, in thumb reach). Nothing is drawn over the photo. */
+	/* The loupe: the photo takes the whole screen. Its chrome floats over it as glass (Close and
+	   Info at the top, one bar at the bottom) and fades when idle. */
 	.loupe {
 		position: fixed;
 		inset: 0;
@@ -407,22 +481,35 @@
 		background: var(--bg);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr);
 		outline: none;
 	}
 	.loupe.info {
 		grid-template-columns: minmax(0, 1fr) var(--margin);
 	}
 	.stage {
-		position: relative;
-		grid-row: 2;
-		grid-column: 1;
+		grid-area: 1 / 1;
 		min-width: 0;
-		margin: 0 var(--s-6) var(--s-4);
+		margin: var(--s-4) var(--s-6);
+		display: grid;
+		place-items: center;
+		container-type: size;
 		/* Every gesture on the photo is ours (swipes); nothing scrolls behind a modal anyway. */
 		touch-action: none;
 	}
-	.stage img {
+	/* The photo's own shape, as large as the stage allows: what the finger moves is the photo,
+	   not the empty space around it. */
+	.frame {
+		position: relative;
+		width: min(100cqw, 100cqh * var(--ratio));
+		aspect-ratio: var(--ratio);
+		transform: translate(var(--pull-x), var(--pull-y));
+		transition: transform var(--motion) var(--ease);
+	}
+	.held .frame {
+		transition: none;
+	}
+	.frame img {
 		position: absolute;
 		inset: 0;
 		width: 100%;
@@ -433,7 +520,6 @@
 	}
 	.edge {
 		position: absolute;
-		grid-row: 2;
 		top: 50%;
 		transform: translateY(-50%);
 		width: var(--s-6);
@@ -471,43 +557,88 @@
 	.info .next {
 		right: var(--margin);
 	}
+	/* The chrome is one layer over the stage; only its pieces take the pointer. */
 	.top {
-		grid-row: 1;
-		grid-column: 1;
-		display: flex;
-		align-items: center;
-		gap: 2px;
-		padding: var(--s-2) var(--s-3);
-		min-height: 3rem;
-		box-sizing: border-box;
+		grid-area: 1 / 1;
+		position: relative;
+		z-index: 2;
+		pointer-events: none;
 		transition: opacity var(--motion) var(--ease);
 	}
-	.actions {
-		display: contents;
+	.pill,
+	.right,
+	.bar {
+		position: absolute;
+		pointer-events: auto;
 	}
-	.top button {
+	.pill {
+		top: var(--s-3);
+		left: var(--s-3);
 		display: inline-flex;
 		align-items: center;
 		gap: var(--s-1);
+		padding: var(--s-1) var(--s-3) var(--s-1) var(--s-2);
+		border-radius: var(--r-pill);
 		white-space: nowrap;
 	}
-	.top button[aria-pressed='true'] {
+	.right {
+		top: var(--s-3);
+		right: var(--s-3);
+		display: flex;
+		gap: var(--s-2);
+	}
+	.right .pill {
+		position: static;
+	}
+	.pill.fullscreen {
+		padding-left: var(--s-3);
+	}
+	.pill[aria-pressed='true'] {
 		text-decoration: underline;
 		text-underline-offset: 0.35em;
 		text-decoration-thickness: 1px;
 	}
-	.heart {
-		width: 13px;
-		height: 13px;
-		fill: currentColor;
+	.bar {
+		left: 50%;
+		bottom: var(--s-4);
+		transform: translateX(-50%);
+		width: min(calc(var(--margin) * 2), 100% - 2 * var(--s-2));
+		box-sizing: border-box;
+		display: grid;
+		gap: var(--s-2);
+		padding: var(--s-3) var(--s-4) var(--s-1);
+		border-radius: var(--r-2);
+	}
+	.readout {
+		display: grid;
+		gap: var(--gutter);
+		margin: 0;
+		font-size: var(--fs-12);
+		color: var(--ink-2);
+	}
+	.readout b,
+	.readout span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.readout b {
+		font-weight: 500;
+		color: var(--ink);
+	}
+	.acts {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-top: var(--s-1);
+		border-top: 1px solid var(--hairline);
+		/* The bar sits at the bottom: its menu opens upwards. */
+		--menu-top: auto;
+		--menu-bottom: calc(100% + var(--s-2));
 	}
 	.why {
 		font-size: var(--fs-12);
-		margin: 0 var(--s-2) 0 calc(-1 * var(--s-1));
 		color: var(--ink-2);
-	}
-	.spacer {
-		flex: 1;
 	}
 	/* Chrome fades when idle; any touch, key or mouse movement brings it back, and keyboard
 	   focus keeps it (a tapped button's plain focus does not). */
@@ -517,8 +648,7 @@
 	}
 	/* The sidenote: a margin caption, set like the words under a print in an album. */
 	.sidenote {
-		grid-row: 1 / 3;
-		grid-column: 2;
+		grid-area: 1 / 2;
 		overflow-y: auto;
 		padding: var(--s-7) var(--s-4) var(--s-4);
 		border-left: 1px solid var(--hairline);
@@ -564,46 +694,31 @@
 			grid-template-columns: minmax(0, 1fr);
 		}
 		.stage {
-			margin: 0 0 calc(var(--dock) + env(safe-area-inset-bottom));
+			margin: 0;
 		}
-		.top {
-			padding: env(safe-area-inset-top) var(--s-1) 0;
+		.pill,
+		.right {
+			top: calc(env(safe-area-inset-top) + var(--s-2));
+		}
+		.bar {
+			bottom: calc(env(safe-area-inset-bottom) + var(--s-3));
 		}
 		.info .next {
 			right: 0;
 		}
-		/* Phone: the actions in a bar at the bottom, in thumb reach; one line, scrolling
-		   sideways if a long label ever needs it. */
-		.actions {
+		/* Phone: the details are a sheet over the lower part of the photo and the bar. */
+		.sidenote {
+			grid-area: auto;
 			position: fixed;
 			left: 0;
 			right: 0;
 			bottom: 0;
-			z-index: 2;
-			display: flex;
-			justify-content: space-between;
-			gap: 0;
-			padding: 0 var(--s-1) env(safe-area-inset-bottom);
-			min-height: var(--dock);
-			background: var(--bg);
-			overflow-x: auto;
-			scrollbar-width: none;
-		}
-		.why {
-			align-self: center;
-		}
-		/* Phone: info is a sheet over the lower part of the photo, above the actions. */
-		.sidenote {
-			position: fixed;
-			left: 0;
-			right: 0;
-			bottom: calc(var(--dock) + env(safe-area-inset-bottom));
+			z-index: 3;
 			max-height: 50dvh;
 			background: var(--raised);
 			border-left: 0;
 			border-radius: var(--r-2) var(--r-2) 0 0;
-			padding: var(--s-4) var(--s-4) var(--s-4);
-			z-index: 1;
+			padding: var(--s-4) var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom));
 		}
 		.edge {
 			width: var(--target);
@@ -614,7 +729,7 @@
 			height: 18px;
 		}
 		.keys,
-		.top .fullscreen {
+		.fullscreen {
 			display: none;
 		}
 	}
