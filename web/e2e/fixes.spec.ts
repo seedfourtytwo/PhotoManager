@@ -53,6 +53,10 @@ test('a double click on Move to trash trashes once', async ({ page }) => {
 test('the two Hide buttons have different names', async ({ page }) => {
 	test.skip(isPhone(page), 'the filter panel is a sheet on phones');
 	await selectTiles(page, [0]);
+	await page
+		.getByRole('toolbar', { name: 'Selected photos' })
+		.getByRole('button', { name: 'More' })
+		.click();
 	await expect(page.getByRole('button', { name: 'Hide', exact: true })).toHaveCount(1);
 	await expect(page.getByRole('button', { name: 'Hide filters' })).toHaveCount(1);
 });

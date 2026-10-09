@@ -129,8 +129,13 @@
 		<SelectionBar
 			count={selection.ids.size}
 			actions={[
-				{ label: 'Restore', run: () => restore([...selection.ids]) },
-				{ label: 'Delete for good', run: () => (confirmEmpty = true), hidden: !session.isAdmin }
+				{ label: 'Restore', icon: 'restore', run: () => restore([...selection.ids]) },
+				{
+					label: 'Delete for good',
+					icon: 'trash',
+					run: () => (confirmEmpty = true),
+					hidden: !session.isAdmin
+				}
 			]}
 			onclear={() => (selection = EMPTY)}
 		/>

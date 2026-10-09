@@ -6,11 +6,13 @@ import {
 	expectAccessible,
 	isPhone,
 	resetMock,
+	selectTiles,
 	signIn,
 	test,
 	toast,
 	touchDown,
-	touchSwipe
+	touchSwipe,
+	transitionOver
 } from './helpers.ts';
 
 const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
@@ -30,6 +32,7 @@ test.describe('photo view', () => {
 		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
 		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
 		const photo = await centre(loupe(page).locator('img.photo'));
+		await transitionOver(page);
 		await page.touchscreen.tap(photo.x, photo.y);
 		await page.touchscreen.tap(photo.x, photo.y);
 		await expect(favourite).toHaveAttribute('aria-pressed', 'true');
@@ -135,6 +138,33 @@ test.describe('photo view', () => {
 			await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
 	});
 
+	test('opening and closing run a view transition between the tile and the photo', async ({
+		page
+	}) => {
+		await page.addInitScript(() => {
+			const real = document.startViewTransition.bind(document);
+			const seen = window as unknown as { transitions: number };
+			seen.transitions = 0;
+			document.startViewTransition = (...args: Parameters<typeof real>) => {
+				seen.transitions++;
+				return real(...args);
+			};
+		});
+		await page.goto('/');
+		const transitions = () =>
+			page.evaluate(() => (window as unknown as { transitions: number }).transitions);
+		const tile = page.locator('.tile').first();
+		await tile.click();
+		await expect(loupe(page).locator('.frame')).toHaveCSS('view-transition-name', 'photo');
+		expect(await transitions()).toBe(1);
+		await loupe(page).getByRole('button', { name: 'Close' }).click();
+		await expect(loupe(page)).toHaveCount(0);
+		expect(await transitions()).toBe(2);
+		// The tile only borrows the name for the length of the transition.
+		await expect(tile).not.toHaveAttribute('style', /view-transition-name/);
+		await expect(tile).toBeFocused();
+	});
+
 	test('Escape closes More, not the photo view', async ({ page }) => {
 		test.skip(isPhone(page), 'keyboard');
 		await page.locator('.tile').first().click();
@@ -146,5 +176,112 @@ test.describe('photo view', () => {
 		await expect(loupe(page)).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(loupe(page)).toHaveCount(0);
+	});
+});
+
+test.describe('time ruler', () => {
+	const ruler = (page: Page) => page.getByRole('slider', { name: 'Jump to date' });
+
+	test('laptop: the ruler is a column of years at the right edge with the needle on the month in view', async ({
+		page
+	}) => {
+		test.skip(isPhone(page), 'the phone has it lying above the dock');
+		await expect(ruler(page)).toHaveAttribute('aria-orientation', 'vertical');
+		const box = (await ruler(page).boundingBox())!;
+		expect(box.height).toBeGreaterThan(box.width * 4);
+		// The needle's tag reads the month whose photos are at the top, in the data face.
+		const month = (await ruler(page).getAttribute('aria-valuetext'))!;
+		await expect(page.locator('section h2').first()).toContainText(month);
+		const tag = ruler(page).locator('.tag');
+		await expect(tag).toHaveText(`${month.slice(0, 3)} ${month.slice(-4)}`);
+		await expect(tag).toHaveCSS('font-family', /Martian Mono/);
+		// A tap on a written year goes there.
+		await ruler(page).getByText('2019', { exact: true }).click();
+		await expect(page.locator('section h2', { hasText: '2019' }).first()).toBeInViewport();
+		await expect(ruler(page)).toHaveAttribute('aria-valuetext', /2019$/);
+		await expectAccessible(page);
+	});
+
+	test('phone: the time ruler shows while scrolling, fades when idle, and a drag along it jumps', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'the laptop has it upright, always in sight');
+		await expect(page.locator('.tile').first()).toBeVisible();
+		await expect(ruler(page)).toHaveAttribute('aria-orientation', 'horizontal');
+		await expect(ruler(page)).toHaveCSS('opacity', '0');
+		await page.evaluate(() => window.scrollBy(0, 600));
+		await expect(ruler(page)).toHaveCSS('opacity', '1');
+		await expectAccessible(page);
+		// The check above took its time: scroll again, so the ruler is there to be dragged.
+		await page.evaluate(() => window.scrollBy(0, 200));
+		await expect(ruler(page)).toHaveCSS('opacity', '1');
+		// It lies above the dock (56 px, plus the gap under it).
+		const box = (await ruler(page).boundingBox())!;
+		expect(box.width).toBeGreaterThan(box.height * 4);
+		expect(box.y + box.height).toBeLessThan(page.viewportSize()!.height - 56);
+		// Time runs left to right: a drag to the left end goes to the oldest photos.
+		const y = box.y + box.height / 2;
+		await touchSwipe(page, { x: box.x + box.width - 12, y }, { x: box.x + 2, y });
+		await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
+		await expect(ruler(page)).toHaveCSS('opacity', '0', { timeout: 10_000 });
+	});
+});
+
+test.describe('selection pill', () => {
+	const pill = (page: Page) => page.getByRole('toolbar', { name: 'Selected photos' });
+
+	test('the selection bar is a floating pill at the bottom centre', async ({ page }) => {
+		await selectTiles(page, [0, 1]);
+		await expect(pill(page)).toHaveCSS('position', 'fixed');
+		await expect(pill(page)).toHaveCSS('border-radius', '999px');
+		const box = (await pill(page).boundingBox())!;
+		const { width, height } = page.viewportSize()!;
+		expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThan(2);
+		expect(box.x).toBeGreaterThan(4);
+		const below = height - (box.y + box.height);
+		expect(below).toBeGreaterThan(8);
+		expect(below).toBeLessThan(isPhone(page) ? 120 : 60);
+		await expect(pill(page).getByRole('status')).toHaveText('2 selected');
+		await expectAccessible(page);
+	});
+
+	test('the pill offers Add to album, Download, Fix date, Move to trash and More', async ({
+		page
+	}) => {
+		await selectTiles(page, [0]);
+		const actions = pill(page).locator('.actions > button');
+		// A phone has room for three; the fourth joins the rest under More.
+		const onBar = ['Add to album', 'Download', 'Fix date', 'Move to trash'].slice(
+			0,
+			isPhone(page) ? 3 : 4
+		);
+		await expect(actions).toHaveText([...onBar, 'More']);
+		await expect(actions.locator('svg')).toHaveCount(onBar.length + 1);
+		const more = pill(page).getByRole('button', { name: 'More' });
+		await more.click();
+		for (const name of ['Favourite', 'Hide', 'Make private'])
+			await expect(pill(page).getByRole('button', { name, exact: true })).toBeVisible();
+		await expect(pill(page).getByRole('button', { name: 'Move to trash' })).toBeVisible();
+		// Escape closes More first, then clears the selection.
+		await page.keyboard.press('Escape');
+		await expect(more).toHaveAttribute('aria-expanded', 'false');
+		await expect(pill(page)).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(pill(page)).toHaveCount(0);
+		await expect(page.locator('.tile.selected')).toHaveCount(0);
+	});
+
+	test('phone: long-press then drag selects a run of photos', async ({ page }) => {
+		test.skip(!isPhone(page), 'touch only');
+		const tiles = page.locator('.tile');
+		const from = await centre(tiles.nth(0));
+		const to = await centre(tiles.nth(3));
+		const lift = await touchDown(page, from, to, { hold: 600 });
+		await expect(page.getByText('4 selected')).toBeVisible();
+		await lift();
+		// The page stayed put under the finger, and lifting it changes nothing.
+		expect(await page.evaluate(() => window.scrollY)).toBe(0);
+		await expect(page.getByText('4 selected')).toBeVisible();
+		await expect(page.locator('.tile.selected')).toHaveCount(4);
 	});
 });

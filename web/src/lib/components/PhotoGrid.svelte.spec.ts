@@ -88,4 +88,46 @@ describe('PhotoGrid', () => {
 		expect(ontoggle).toHaveBeenCalledTimes(1);
 		expect(onopen).not.toHaveBeenCalled();
 	});
+
+	/** A touch pointer event on the first photo, at the centre of the photo taken at `over`. */
+	function finger(type: string, over: RegExp) {
+		const first = page.getByRole('button', { name: /18:30/ }).element();
+		const rect = page.getByRole('button', { name: over }).element().getBoundingClientRect();
+		// A touch stays captured by the element it went down on: the events keep that target.
+		first.dispatchEvent(
+			new PointerEvent(type, {
+				pointerType: 'touch',
+				bubbles: true,
+				clientX: rect.left + rect.width / 2,
+				clientY: rect.top + rect.height / 2
+			})
+		);
+	}
+
+	it('long-press then drag selects up to the photo under the finger', async () => {
+		const { ontoggle } = setup();
+		finger('pointerdown', /18:30/);
+		await new Promise((r) => setTimeout(r, 550));
+		expect(ontoggle.mock.calls).toEqual([[1, false]]);
+		finger('pointermove', /18:31/);
+		finger('pointermove', /18:31/);
+		finger('pointermove', /18:32/);
+		finger('pointerup', /18:32/);
+		// Once per photo the finger reaches, as a range from the pressed one.
+		expect(ontoggle.mock.calls).toEqual([
+			[1, false],
+			[2, true],
+			[3, true]
+		]);
+	});
+
+	it('a drag before the long press has fired selects nothing', async () => {
+		const { ontoggle } = setup();
+		finger('pointerdown', /18:30/);
+		finger('pointermove', /18:32/);
+		await new Promise((r) => setTimeout(r, 550));
+		finger('pointermove', /18:31/);
+		finger('pointerup', /18:31/);
+		expect(ontoggle).not.toHaveBeenCalled();
+	});
 });

@@ -170,6 +170,10 @@
 	.notice:not(.shown) {
 		display: none;
 	}
+	/* While photos are selected the pill has the bottom centre: the toast sits above it. */
+	:global(body:has([role='toolbar'][aria-label='Selected photos'])) .notice {
+		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
+	}
 	@media (max-width: 1023px) {
 		.app,
 		.app.filters {
@@ -181,6 +185,9 @@
 		}
 		.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
+		}
+		:global(body:has([role='toolbar'][aria-label='Selected photos'])) .notice {
+			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--pill) + var(--s-3));
 		}
 	}
 </style>

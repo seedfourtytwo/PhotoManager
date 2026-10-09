@@ -87,6 +87,8 @@
 	let longPressAt = -Infinity;
 	let longPressId: Id | null = null;
 	let pressFired = false;
+	/** After a long press: the photo the finger was last over, so each one is taken once. */
+	let pressOver: Id | null = null;
 	let dragged: Id | null = null;
 
 	function onclick(event: MouseEvent, id: Id) {
@@ -104,6 +106,7 @@
 		pressTimer = setTimeout(() => {
 			pressFired = true;
 			longPressId = id;
+			pressOver = id;
 			navigator.vibrate?.(10);
 			ontoggle(id, false);
 		}, LONG_PRESS_MS);
@@ -111,8 +114,36 @@
 
 	function onpointermove(event: PointerEvent) {
 		if (!pressStart) return;
-		if (Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y) > 10) cancelPress();
+		if (pressFired) dragSelect(event);
+		else if (Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y) > 10)
+			cancelPress();
 	}
+
+	/** Long-press then drag: the run from the pressed photo to the one now under the finger. */
+	function dragSelect(event: PointerEvent) {
+		// A touch stays captured by the tile it went down on, so the tile is looked up by place;
+		// it may belong to another month's grid.
+		const tile = document
+			.elementFromPoint(event.clientX, event.clientY)
+			?.closest<HTMLElement>('.tile[data-id]');
+		const id = tile ? Number(tile.dataset.id) : null;
+		if (id === null || id === pressOver) return;
+		pressOver = id;
+		ontoggle(id, true);
+	}
+
+	// Only a touchmove listener that is not passive can keep the page from scrolling under a
+	// finger, and it has to be there before the touch starts. It lets everything scroll until
+	// a long press has fired.
+	$effect(() => {
+		const element = grid;
+		if (!element) return;
+		const hold = (event: TouchEvent) => {
+			if (pressFired && event.cancelable) event.preventDefault();
+		};
+		element.addEventListener('touchmove', hold, { passive: false });
+		return () => element.removeEventListener('touchmove', hold);
+	});
 
 	function cancelPress() {
 		clearTimeout(pressTimer);
