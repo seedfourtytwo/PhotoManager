@@ -35,7 +35,7 @@
 			items.map((a) => aspect(a)),
 			width,
 			rowHeightFor(viewport.width, settings.density),
-			3
+			settings.gap
 		)
 	);
 	const order = $derived(items.map((a) => a.id));

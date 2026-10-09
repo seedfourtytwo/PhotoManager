@@ -27,7 +27,7 @@
 	};
 	let { loader, selection, onopen, ontoggle, onselect, onmonth }: Props = $props();
 
-	const GAP = 3;
+	const gap = $derived(settings.gap); // from the account's look
 	/** Tiles render within this many screens above and below the viewport. */
 	const OVERSCAN = 1.5;
 	/** Space taken by the sticky month label at the top of the screen. */
@@ -52,14 +52,14 @@
 				(h, a) => (h * 31 + (a.width ?? 0) * 7 + (a.height ?? 0)) % 1e9,
 				0
 			);
-			const key = `${g.key}|${g.items.length}|${sizes}|${width}|${rowHeight}`;
+			const key = `${g.key}|${g.items.length}|${sizes}|${width}|${rowHeight}|${gap}`;
 			const layout =
 				cache.get(key) ??
 				justify(
 					g.items.map((a) => aspect(a)),
 					width,
 					rowHeight,
-					GAP
+					gap
 				);
 			next.set(key, layout);
 			return layout;

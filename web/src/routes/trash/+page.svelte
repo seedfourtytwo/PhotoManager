@@ -29,7 +29,7 @@
 			list.map((a) => aspect(a)),
 			width,
 			rowHeightFor(viewport.width, settings.density),
-			3
+			settings.gap
 		)
 	);
 
