@@ -69,7 +69,7 @@
 		backdrop-filter: var(--backdrop);
 		border-bottom: 1px solid var(--hairline);
 		/* Frosted glass where the browser can blur and the person has not asked for less;
-		   a solid bar otherwise (the same rule as .glass in tokens.css). */
+		   a solid bar otherwise (the same rule as .glass in utilities.css). */
 		--fill: var(--raised);
 		--backdrop: none;
 	}
