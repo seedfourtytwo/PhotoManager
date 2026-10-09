@@ -69,7 +69,8 @@
 	}
 	/* Phone: a bottom sheet, in thumb reach. */
 	@media (max-width: 639px) {
-		dialog {
+		dialog,
+		dialog.wide {
 			margin: auto 0 0;
 			width: 100vw;
 			max-width: 100vw;
