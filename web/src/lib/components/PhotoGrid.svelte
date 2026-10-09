@@ -10,7 +10,7 @@
 
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { NAV_KEYS, letterboxed, neighbour, type Layout, type NavKey } from '$lib/timeline';
 
 	type Props = {
@@ -74,8 +74,11 @@
 		return out;
 	});
 	let grid: HTMLElement | undefined = $state();
-	/** Thumbnails that did not load, by address: their tiles stay plain instead of broken. */
-	const failed = new SvelteSet<string>();
+	/**
+	 * Photos whose thumbnail did not load: their tiles stay plain instead of broken. Kept as
+	 * the very item that failed, so the same photo loaded anew (a reload) is tried again.
+	 */
+	const failed = new SvelteMap<Id, AssetOut>();
 
 	async function focusTile(id: Id) {
 		own = id;
@@ -238,15 +241,14 @@
 				ondragover={(e) => arrange && e.preventDefault()}
 				ondrop={(e) => ondrop(e, i)}
 			>
-				{#if item.thumb && !failed.has(item.thumb.url)}
-					{@const url = item.thumb.url}
+				{#if item.thumb && failed.get(item.id) !== item}
 					<img
 						class:whole={letterboxed(item)}
 						src={item.thumb.url}
 						alt={describePhoto(item)}
 						loading="lazy"
 						decoding="async"
-						onerror={() => failed.add(url)}
+						onerror={() => failed.set(item.id, item)}
 					/>
 				{:else if item.thumb}
 					<span class="visually-hidden">{describePhoto(item)} (preview missing)</span>

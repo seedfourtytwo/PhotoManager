@@ -73,6 +73,25 @@ describe('PhotoGrid', () => {
 		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:31')).toBeInTheDocument();
 	});
 
+	it('a thumbnail that failed is asked for again when the photos are loaded anew', async () => {
+		const bad = 'data:image/png;base64,AAAA';
+		const fresh = () => [makeAsset(1, '2019-07-04T18:30:00', 400, 300, { thumb: { url: bad } })];
+		const { view } = setup({ items: fresh(), layout: justify([4 / 3], 600, 150, 3) });
+		const tile = page.getByRole('button', { name: /18:30/ });
+		await expect.element(tile).toHaveTextContent(/preview missing/);
+		// Every picture put into the tile from here on: a new try is a new <img>.
+		let tries = 0;
+		const watch = new MutationObserver((records) => {
+			for (const record of records)
+				for (const node of record.addedNodes) if (node.nodeName === 'IMG') tries++;
+		});
+		watch.observe(tile.element(), { childList: true, subtree: true });
+		await view.rerender({ items: fresh() });
+		await vi.waitFor(() => expect(tries).toBe(1));
+		await expect.element(tile).toHaveTextContent(/preview missing/);
+		watch.disconnect();
+	});
+
 	it('describes each photo in words for screen readers', async () => {
 		setup();
 		await expect.element(page.getByAltText('Photo, 4 Jul 2019, 18:31, Paris')).toBeInTheDocument();
