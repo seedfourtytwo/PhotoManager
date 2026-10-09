@@ -39,8 +39,7 @@ const LIGHT = new Set([
 	'16-settings',
 	'19-people',
 	'20-print',
-	'22-look-form',
-	'23-look-trial'
+	'22-look-form'
 ]);
 
 test.beforeEach(async ({ page }) => {
