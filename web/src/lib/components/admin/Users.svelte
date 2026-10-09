@@ -3,10 +3,12 @@
 	import { api, notice, session } from '$lib/app.svelte';
 	import { PIN_FIELD } from '$lib/pin';
 	import Dialog from '../Dialog.svelte';
+	import LookForm from './LookForm.svelte';
 
 	let users = $state<ManagedUser[]>([]);
 	let creating = $state(false);
 	let resetting = $state<ManagedUser | null>(null);
+	let styling = $state<ManagedUser | null>(null);
 	let form = $state({ username: '', display_name: '', pin: '', role: 'member' as Role });
 	let newPin = $state('');
 
@@ -128,6 +130,9 @@
 						{:else}<span class="quiet">· you</span>{/if}
 					</td>
 					<td>
+						<button type="button" disabled={pending !== null} onclick={() => (styling = user)}
+							>Look</button
+						>
 						<button type="button" disabled={pending !== null} onclick={() => (resetting = user)}
 							>Reset PIN</button
 						>
@@ -188,6 +193,10 @@
 			>
 		{/snippet}
 	</Dialog>
+{:else if styling}
+	{#key styling.id}
+		<LookForm user={styling} onclose={() => (styling = null)} />
+	{/key}
 {/if}
 
 <style>
