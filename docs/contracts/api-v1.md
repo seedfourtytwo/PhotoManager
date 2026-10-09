@@ -107,14 +107,21 @@ itself chooses only its `mode`; an admin sets the whole sheet of any account.
 | `dockLabels` | `true` / `false` | `true` |
 
 Rules (`backend/src/photo_assistant/domain/look.py` is the source; `web/src/lib/look/sheet.ts`
-mirrors it by hand):
+mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases.json`):
 
 - A field that is not in the table is `422`; `detail` names it. So is a value of the wrong
   kind (`"big"` for a number, `1` for a switch) and a choice that does not exist.
-- A number outside its range is **clamped**, not refused; a fraction is rounded as the table says.
+- A number outside its range is **clamped**, not refused, however far outside it is (`1e400`
+  is the top of the range). It is clamped first and then rounded as the table says, a half
+  going up: `2.5` is `3`, a text scale of `1.125` is `1.13`.
 - `showToday: false` forces `startPage: "library"`.
-- An account with no stored look, or with a stored sheet that no longer passes these rules,
-  has the defaults. Nothing a sheet holds can make the app unusable.
+- An account with no stored look has the defaults. A stored sheet is read field by field: a
+  field that no longer passes these rules (a theme removed in a later version) is answered as
+  its default, the rest of the sheet stays, and the account's next mode change keeps it.
+  Something stored that is no sheet at all is the defaults. Nothing a sheet holds can make
+  the app unusable.
+- `PUT /api/me/look` changes the mode of the sheet as it is stored at that moment, in one
+  step: an admin's save at the same time is never half undone.
 - `showToday` and `startPage` are stored and answered but have no effect until the Today page exists.
 
 ## Sources (existing, plus access)
@@ -454,4 +461,4 @@ Additions only.
 
 | Area | Change | Web impact |
 |---|---|---|
-| Look | New: `GET/PUT /api/me/look` and `GET/PUT /api/admin/accounts/{id}/look` (see "Look" above). | The mode switch in Settings saves on the account (`api.setMyMode`); Admin → People has a "Look" form per account (`api.accountLook`, `api.setAccountLook`). The browser's old `pa.theme` setting is sent as the mode once, then removed. |
+| Look | New: `GET/PUT /api/me/look` and `GET/PUT /api/admin/accounts/{id}/look` (see "Look" above). | The mode switch in Settings saves on the account (`api.setMyMode`); Admin → People has a "Look" form per account (`api.accountLook`, `api.setAccountLook`). The browser's old `pa.theme` setting is removed after the first `GET /api/me/look` that answers; it is sent as the mode first only when that answer is still the defaults (the API does not say whether a look was ever stored, so a sheet equal to the defaults counts as none). |

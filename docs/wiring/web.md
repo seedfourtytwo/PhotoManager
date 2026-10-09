@@ -125,11 +125,18 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 - **Look**: each account has a look sheet (theme, mode, dials, switches; contract v1.5,
   `docs/adr/0001`). `web/src/lib/look/` holds it and imports nothing from the app: `sheet.ts`
   (the rules, mirrored from `domain/look.py`), `apply.ts` (root attributes and CSS
-  variables), `cache.ts` (`pa.look` in localStorage), `look.svelte.ts` (the account's sheet
-  and a trial sheet). `app.svelte.ts` fetches it after sign-in and when the tab comes back;
-  a small script in `app.html` paints the cached sheet before the app loads. Dark by
-  default; Settings offers the mode (Dark, Light, Like the device), saved on the account.
-  The earlier per-browser `pa.theme` key is sent as the mode once, then removed.
+  variables, and what each theme itself gives the dials), `cache.ts` (`pa.look` in
+  localStorage: the sheet with the id of the account it belongs to), `look.svelte.ts` (the
+  account's sheet and a trial sheet, and which answer counts when requests cross: the rule
+  is at the top of that file). `app.svelte.ts` fetches it after sign-in and when the tab
+  comes back; a small script in `app.html` paints the cached sheet before the app loads.
+  Signing out or losing the session clears the cache and shows the defaults, and a look
+  cached for another account is dropped at sign-in: on a shared device nobody gets the last
+  person's look. A sheet that was stored, cached or received is read field by field, so one
+  field this build cannot read (or does not know) costs only itself. Dark by default;
+  Settings offers the mode (Dark, Light, Like the device), saved on the account.
+  The earlier per-browser `pa.theme` key becomes the mode of an account that still has the
+  defaults, once; for an account that already has a look it is only removed.
 
 ## Performance (library grid, 10 000-photo mock, phone 390×844, CPU ×4)
 
