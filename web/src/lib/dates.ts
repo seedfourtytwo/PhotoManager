@@ -48,6 +48,41 @@ export function previewDateChange(
 	}));
 }
 
+// What the server accepts (backend domain/date_fix.py), so a refusal is said in the dialog
+// before anything is sent. The server still decides: its clock, not this device's, is the law.
+const CALENDAR_START = -62_135_596_800_000; // 0001-01-01T00:00:00
+const CALENDAR_END = 253_402_300_799_000; // 9999-12-31T23:59:59
+const EARLIEST_PLAUSIBLE = Date.UTC(1826, 0, 1); // the first surviving photograph
+const FUTURE_SLACK = 24 * 60 * 60_000; // "now" somewhere on Earth may be a day ahead
+
+/** This device's wall-clock time as UTC milliseconds, like every time in this module. */
+function wallClockNow(): number {
+	const now = new Date();
+	return now.getTime() - now.getTimezoneOffset() * 60_000;
+}
+
+/**
+ * Why these photos cannot be given this date, as a sentence; null when they can. It never
+ * throws, whatever number was typed: a shift too large to be a date is one of the reasons.
+ */
+export function dateProblem(
+	items: readonly Pick<AssetOut, 'taken_at'>[],
+	change: DateChangeSpec,
+	now: number = wallClockNow()
+): string | null {
+	const times =
+		'set' in change
+			? [toUtcMillis(change.set)]
+			: items.map((item) => toUtcMillis(item.taken_at) + change.shift_minutes * 60_000);
+	if (times.some((t) => !(t >= CALENDAR_START && t <= CALENDAR_END)))
+		return 'That date is out of range: the shift moves a photo out of the calendar.';
+	if (times.some((t) => t < EARLIEST_PLAUSIBLE))
+		return 'Dates must be after 1826: photography began then.';
+	if (times.some((t) => t > now + FUTURE_SLACK))
+		return "A photo can't be taken in the future: pick a date up to today.";
+	return null;
+}
+
 /**
  * The requests that undo a date change: a shift goes back by the same amount; an exact date
  * puts every photo back to its own previous time (one request per distinct time).

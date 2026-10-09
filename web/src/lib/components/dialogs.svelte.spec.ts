@@ -41,6 +41,35 @@ describe('FixDateDialog', () => {
 		});
 	});
 
+	it('a shift out of the calendar says so in a sentence, and nothing breaks', async () => {
+		const failures: unknown[] = [];
+		const onerror = (event: ErrorEvent) => failures.push(event.error);
+		window.addEventListener('error', onerror);
+		stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		await page.getByRole('spinbutton', { name: 'days' }).fill('99999999');
+		await expect.element(page.getByRole('alert')).toHaveTextContent(/out of range/);
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+		// Put right, the preview and the button are back.
+		await page.getByRole('spinbutton', { name: 'days' }).fill('1');
+		await expect.element(page.getByRole('cell', { name: '5 Jul 2019, 18:30' })).toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeEnabled();
+		window.removeEventListener('error', onerror);
+		expect(failures).toEqual([]);
+	});
+
+	it('a date in the future is refused in the dialog, before anything is sent', async () => {
+		const sent = stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		await page.getByRole('radio', { name: 'Set exactly' }).click();
+		await page.getByLabelText('Date and time').fill('2999-01-01T12:00');
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent("A photo can't be taken in the future: pick a date up to today.");
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+		expect(sent).toEqual([]);
+	});
+
 	it('cannot save a no-op', async () => {
 		stubFetch(() => ({}));
 		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
