@@ -144,3 +144,6 @@ export type MockState = {
 	/** The mock Proton Drive: each folder of "My files" and the folders inside it. */
 	protonTree: Record<string, string[]>;
 };
+
+/** The mock's world: its state (a reset swaps in a new one) and its clock. */
+export type World = { state: () => MockState; now: () => number };

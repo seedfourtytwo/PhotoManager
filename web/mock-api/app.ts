@@ -4,41 +4,39 @@
  * Mock-only extras live under /__mock/ and are never used by the app itself.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { randomBytes } from 'node:crypto';
 import type {
 	Access,
-	AlbumSummary,
-	AssetDetail,
 	AssetFilters,
-	AssetOut,
 	DownloadRequest,
-	Level,
-	ManagedUser,
 	Outcome,
 	Recipe,
 	Role,
 	Source,
-	SourcePatch,
-	User
+	SourcePatch
 } from '../src/lib/api/types.ts';
-import { isPin } from '../src/lib/api/types.ts';
-import { filtersFromParams } from '../src/lib/filters.ts';
 import { LookError, parseLook, readLook, type Look } from '../src/lib/look/sheet.ts';
-import { v11Routes } from './v11.ts';
+import { live, rank, setFor } from './access.ts';
+import { checkPin, forgiveWrongPins, LOCK_AFTER_WRONG_PINS, publicUser } from './accounts.ts';
 import { makeState, noWrongPins } from './data.ts';
-import { makeAsset, PLACES, rng } from './library.ts';
+import { countBy } from './filters.ts';
+import { createHelpers } from './helpers.ts';
+import { renderAsset } from './images.ts';
+import { makeAsset, rng } from './library.ts';
 import type { MockAlbum, MockAsset, MockSource, MockState, MockUser } from './types.ts';
-import { editedSize, renderAsset } from './images.ts';
+import { v11Routes } from './v11.ts';
 import { zip } from './zip.ts';
 import {
 	admin,
 	HttpError,
 	idParam,
+	ids,
 	me,
 	noContent,
 	nowIso,
 	ok,
+	readBody,
 	requireFields,
+	send,
 	type Ctx,
 	type Result,
 	type Route
@@ -48,28 +46,6 @@ import {
 const RECHECK_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
 /** An import report lists what needs a look first (backend: domain/model.py REPORT_ORDER). */
 const REPORT_ORDER: Outcome[] = ['failed', 'skipped', 'duplicate', 'already_known', 'imported'];
-const LEVELS: Level[] = ['view', 'download', 'edit'];
-const rank = (level: Level | null) => (level ? LEVELS.indexOf(level) : -1);
-const maxLevel = (a: Level | null, b: Level | null) => (rank(a) >= rank(b) ? a : b);
-
-function publicUser(u: MockUser): User {
-	return {
-		id: u.id,
-		username: u.username,
-		display_name: u.display_name,
-		role: u.role,
-		disabled: u.disabled
-	};
-}
-
-// Wrong PINs, as the server counts them (backend: domain/access.py, app/accounts.py).
-const WRONG_PIN_WINDOW = 15 * 60_000;
-const MAX_RECENT_WRONG_PINS = 10;
-const LOCK_AFTER_WRONG_PINS = 30;
-
-function forgiveWrongPins(user: MockUser) {
-	Object.assign(user, noWrongPins());
-}
 
 /** A sheet as the backend reads one: its refusal is a 422 with the sheet's own sentence. */
 function sentLook(sheet: unknown): Look {
@@ -81,11 +57,6 @@ function sentLook(sheet: unknown): Look {
 	}
 }
 
-function checkPin(pin: unknown) {
-	if (typeof pin !== 'string' || !isPin(pin))
-		throw new HttpError(422, 'PINs are exactly 4 digits.');
-}
-
 export type MockOptions = { now?: () => number };
 
 export function createMockApi(initial: MockState, options: MockOptions = {}) {
@@ -93,50 +64,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 	const initialCount = initial.assets.length;
 	const now = options.now ?? (() => Date.now());
 
-	// --- access -------------------------------------------------------------------------
-
-	function sourceLevel(user: MockUser, sourceId: number): Level | null {
-		if (user.role === 'admin') return 'edit';
-		const access = state.access.get(sourceId);
-		const source = state.sources.find((s) => s.id === sourceId);
-		if (!access || !source || !source.enabled) return null;
-		let level: Level | null = source.owner_id === user.id ? 'edit' : access.everyone;
-		for (const entry of access.users)
-			if (entry.user_id === user.id) level = maxLevel(level, entry.level);
-		return level;
-	}
-
-	function albumRole(user: MockUser, album: MockAlbum): AlbumSummary['role'] | null {
-		if (album.owner_id === user.id) return 'owner';
-		if (user.role === 'admin') return 'editor';
-		return album.members.find((m) => m.user_id === user.id)?.role ?? null;
-	}
-
-	function assetLevel(user: MockUser, asset: MockAsset): Level | null {
-		if (asset.private_owner !== null && asset.private_owner !== user.id) return null;
-		let level: Level | null = null;
-		for (const s of asset.sources) level = maxLevel(level, sourceLevel(user, s.source_id));
-		for (const album of state.albums) {
-			if (!album.items.includes(asset.id)) continue;
-			const role = albumRole(user, album);
-			// Albums grant view only; downloading and editing come from folder access.
-			if (role) level = maxLevel(level, 'view');
-		}
-		if (user.role === 'guest' && level === 'edit') level = 'download';
-		return level;
-	}
-
-	/** In the library: not in the trash, not held for review. */
-	const live = (a: MockAsset) => a.trashed_at === null && a.held === null;
-
-	function visible(user: MockUser): MockAsset[] {
-		return state.assets.filter((a) => live(a) && assetLevel(user, a) !== null);
-	}
-
-	const heldFor = (user: MockUser) =>
-		state.assets.filter(
-			(a) => a.trashed_at === null && a.held !== null && assetLevel(user, a) !== null
-		);
+	const h = createHelpers({ state: () => state, now });
+	// prettier-ignore
+	const {
+		albumRole, assetLevel, visible, heldFor, findAsset, needLevel, findAlbum, toOut, toDetail,
+		albumSummary, filtered, advanceJobs, queueScan, startSession, tryPin, managedUser, accountOf,
+		sessionUser
+	} = h;
 
 	/** `/__mock/reset` with `review`: one look-alike, two screenshots and a receipt wait. */
 	function holdSome() {
@@ -144,262 +78,6 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		alike.held = { reason: 'lookalike', like: original.id };
 		rest[0].held = rest[1].held = { reason: 'screenshot', like: null };
 		rest[2].held = { reason: 'receipt', like: null };
-	}
-
-	function findAsset(user: MockUser, id: number): MockAsset {
-		const asset = state.assets.find((a) => a.id === id && live(a));
-		if (!asset || assetLevel(user, asset) === null) throw new HttpError(404, 'Photo not found.');
-		return asset;
-	}
-
-	function needLevel(user: MockUser, asset: MockAsset, level: Level) {
-		if (rank(assetLevel(user, asset)) < rank(level))
-			throw new HttpError(403, `You need “${level}” access to this photo.`);
-	}
-
-	const setFor = (map: Map<number, Set<number>>, userId: number) => {
-		if (!map.has(userId)) map.set(userId, new Set());
-		return map.get(userId)!;
-	};
-
-	// --- shapes -------------------------------------------------------------------------
-
-	function toOut(user: MockUser, a: MockAsset): AssetOut {
-		const size = editedSize(a);
-		return {
-			id: a.id,
-			taken_at: a.taken_at,
-			tz_offset_minutes: a.tz_offset_minutes,
-			date_source: a.date_source,
-			width: size.width,
-			height: size.height,
-			kind: a.kind,
-			thumb: { url: `/api/assets/${a.id}/thumb?v=${a.edit_version}` },
-			preview_ready: true,
-			favourite: setFor(state.favourites, user.id).has(a.id),
-			hidden: setFor(state.hidden, user.id).has(a.id),
-			private: a.private_owner !== null,
-			place: a.place ? { ...a.place.place } : null,
-			edited: a.recipe !== null,
-			variant_of: a.variant_of,
-			group_id: a.group_id
-		};
-	}
-
-	function toDetail(user: MockUser, a: MockAsset): AssetDetail {
-		return {
-			...toOut(user, a),
-			byte_size: a.byte_size,
-			mime_type: a.mime_type,
-			camera_make: a.camera_make,
-			camera_model: a.camera_model,
-			latitude: a.place?.lat ?? null,
-			longitude: a.place?.lon ?? null,
-			imported_at: a.imported_at,
-			origins: a.sources.map((s) => ({
-				source_id: s.source_id,
-				source_label: state.sources.find((x) => x.id === s.source_id)?.label ?? '?',
-				relative_path: s.relative_path
-			})),
-			albums: state.albums
-				.filter((al) => al.items.includes(a.id) && albumRole(user, al))
-				.map((al) => ({ id: al.id, title: al.title })),
-			level: assetLevel(user, a) ?? 'view'
-		};
-	}
-
-	function albumSummary(user: MockUser, album: MockAlbum): AlbumSummary {
-		const items = album.items
-			.map((id) => state.assets.find((a) => a.id === id && live(a)))
-			.filter((a): a is MockAsset => !!a && assetLevel(user, a) !== null);
-		const cover = items.find((a) => a.id === album.cover_asset_id) ?? items[0];
-		return {
-			id: album.id,
-			title: album.title,
-			description: album.description,
-			cover: cover ? { url: `/api/assets/${cover.id}/thumb?v=${cover.edit_version}` } : null,
-			count: items.length,
-			owner_id: album.owner_id,
-			role: albumRole(user, album) ?? 'viewer',
-			updated_at: album.updated_at
-		};
-	}
-
-	// --- filters ------------------------------------------------------------------------
-
-	function matches(user: MockUser, a: MockAsset, f: AssetFilters): boolean {
-		const day = a.taken_at.slice(0, 10);
-		if (f.from && day < f.from) return false;
-		if (f.to && day > f.to) return false;
-		if (f.year !== undefined && Number(a.taken_at.slice(0, 4)) !== f.year) return false;
-		if (f.month !== undefined && Number(a.taken_at.slice(5, 7)) !== f.month) return false;
-		if (f.source_id && !a.sources.some((s) => f.source_id!.includes(s.source_id))) return false;
-		if (f.camera && a.camera_model !== f.camera) return false;
-		if (f.place) {
-			const p = a.place?.place;
-			const needle = f.place.toLowerCase();
-			if (!p || ![p.country, p.region, p.city].some((v) => v?.toLowerCase() === needle))
-				return false;
-		}
-		if (f.q) {
-			const needle = f.q.toLowerCase();
-			const hay = [
-				...a.sources.map((s) => s.relative_path),
-				a.place?.place.city,
-				a.place?.place.region,
-				a.place?.place.country,
-				a.camera_model,
-				a.camera_make,
-				...state.albums.filter((al) => al.items.includes(a.id)).map((al) => al.title)
-			]
-				.filter(Boolean)
-				.join(' ')
-				.toLowerCase();
-			if (!hay.includes(needle)) return false;
-		}
-		if (f.favourite && !setFor(state.favourites, user.id).has(a.id)) return false;
-		const isHidden = setFor(state.hidden, user.id).has(a.id);
-		if (f.hidden ? !isHidden : isHidden) return false;
-		if (f.guessed_date && a.date_source !== 'file_mtime') return false;
-		if (f.has_location !== undefined && (a.place !== null) !== f.has_location) return false;
-		return true;
-	}
-
-	const newestFirst = (a: MockAsset, b: MockAsset) =>
-		a.taken_at < b.taken_at ? 1 : a.taken_at > b.taken_at ? -1 : b.id - a.id;
-
-	function filtered(user: MockUser, params: URLSearchParams | AssetFilters): MockAsset[] {
-		const f = params instanceof URLSearchParams ? filtersFromParams(params) : params;
-		return visible(user)
-			.filter((a) => matches(user, a, f))
-			.sort(newestFirst);
-	}
-
-	function countBy<T>(items: T[], key: (t: T) => string | null | undefined) {
-		const counts = new Map<string, number>();
-		for (const item of items) {
-			const k = key(item);
-			if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
-		}
-		return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-	}
-
-	// --- jobs ---------------------------------------------------------------------------
-
-	/** Jobs advance with the clock: queued 0.8 s, running until 3 s, then done. */
-	function advanceJobs() {
-		const t = now();
-		for (const job of state.jobs) {
-			if (job.status === 'done' || job.status === 'failed' || job.run_at === 0) continue;
-			const age = t - job.run_at;
-			if (age < 800) job.status = 'queued';
-			else if (age < 3000) {
-				job.status = 'running';
-				if (job.kind === 'import') importProgress(Number(job.payload.source_id), age);
-			} else {
-				job.status = 'done';
-				if (job.kind === 'import') finishImport(Number(job.payload.source_id));
-			}
-		}
-	}
-
-	/** A running import run whose counts grow, like the real one's (live progress). */
-	function importProgress(sourceId: number, age: number) {
-		if (state.sources.find((s) => s.id === sourceId)?.path.includes('gone')) return;
-		const seen = Math.max(1, Math.round(((age - 800) / 2200) * 11));
-		let run = state.reports.find((r) => r.source_id === sourceId && r.status === 'running');
-		if (!run) {
-			run = {
-				id: state.nextId.run++,
-				source_id: sourceId,
-				status: 'running',
-				started_at: nowIso(),
-				finished_at: null,
-				message: null,
-				summary: { imported: 0, duplicate: 0, already_known: 0, skipped: 0, failed: 0, ignored: 0, files_seen: 0 }, // prettier-ignore
-				items: []
-			};
-			state.reports.unshift(run);
-		}
-		run.summary = { ...run.summary, files_seen: seen, imported: Math.max(0, seen - 2) };
-	}
-
-	function finishImport(sourceId: number) {
-		const source = state.sources.find((s) => s.id === sourceId);
-		if (!source) return;
-		state.reports = state.reports.filter(
-			(r) => !(r.source_id === sourceId && r.status === 'running')
-		);
-		if (source.path.includes('gone')) {
-			// A folder that was there when added and has gone since (an unplugged disk).
-			const zero = { imported: 0, duplicate: 0, already_known: 0, skipped: 0, failed: 0 };
-			state.reports.unshift({
-				id: state.nextId.run++,
-				source_id: sourceId,
-				status: 'failed',
-				started_at: nowIso(),
-				finished_at: nowIso(),
-				message: `folder not found on this machine: ${source.path}`,
-				summary: { ...zero, ignored: 0, files_seen: 0 },
-				items: []
-			});
-			return;
-		}
-		const r = rng(state.nextId.run * 7919);
-		const fresh = source.path.includes('empty') ? 0 : 6;
-		const added: MockAsset[] = [];
-		for (let i = 0; i < fresh; i++) {
-			const t = new Date(Date.UTC(2026, 8, 20 + (i % 5), 10 + i));
-			const asset = makeAsset(state.nextId.asset++, t, r.pick(PLACES), 'phone', r);
-			asset.sources = [{ source_id: sourceId, relative_path: `new/IMG_${asset.id}.HEIC` }];
-			added.push(asset);
-		}
-		state.assets.push(...added);
-		const items = [
-			...added.map((a) => ({
-				relative_path: a.sources[0].relative_path,
-				outcome: 'imported' as const,
-				reason: null,
-				asset_id: a.id
-			})),
-			{
-				relative_path: 'new/IMG_0501.MOV',
-				outcome: 'skipped' as const,
-				reason: 'video (not supported yet)',
-				asset_id: null
-			},
-			{
-				relative_path: 'new/broken.jpg',
-				outcome: 'failed' as const,
-				reason: 'file is corrupt: JPEG ends early',
-				asset_id: null
-			},
-			{
-				relative_path: 'new/copy of IMG_0001.JPG',
-				outcome: 'duplicate' as const,
-				reason: 'same content as IMG_0001.JPG (Phone)',
-				asset_id: 1
-			}
-		];
-		const summary = {
-			imported: added.length,
-			duplicate: 1,
-			already_known: 0,
-			skipped: 1,
-			failed: 1,
-			ignored: 2,
-			files_seen: added.length + 5
-		};
-		state.reports.unshift({
-			id: state.nextId.run++,
-			source_id: sourceId,
-			status: 'done',
-			started_at: nowIso(),
-			finished_at: nowIso(),
-			message: null,
-			summary,
-			items
-		});
 	}
 
 	/** A source as the API sends it: counted, its path for admins only (v1.2), its next check. */
@@ -459,99 +137,6 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			start = next;
 		}
 		return files;
-	}
-
-	function queueScan(sourceId: number) {
-		const job = {
-			id: state.nextId.job++,
-			kind: 'import',
-			payload: { source_id: sourceId },
-			status: 'queued' as const,
-			attempts: 0,
-			error: null,
-			run_after: null,
-			run_at: now()
-		};
-		state.jobs.push(job);
-		return { job_id: job.id, source_id: sourceId };
-	}
-
-	// --- sessions -----------------------------------------------------------------------
-
-	function startSession(user: MockUser): Record<string, string> {
-		const token = randomBytes(18).toString('base64url');
-		state.sessions.set(token, user.id);
-		return {
-			'set-cookie': `pa_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`
-		};
-	}
-
-	/**
-	 * One counted try at an account's PIN: is it right? Counted per account, whatever browser
-	 * it comes from, and before the PIN is looked at. Refused while the account is locked (423)
-	 * or has ten tries in the last 15 minutes (429); the caller forgives after a right PIN.
-	 */
-	function tryPin(user: MockUser, pin: string): boolean {
-		if (user.locked)
-			throw new HttpError(
-				423,
-				"This account is locked after too many wrong PINs; ask an admin to unlock it, or set a new PIN on the server with 'just set-pin'"
-			);
-		const recent = wrongPinsInWindow(user);
-		if (recent.length >= MAX_RECENT_WRONG_PINS) {
-			const minutes = Math.max(1, Math.ceil((recent[0] + WRONG_PIN_WINDOW - now()) / 60_000));
-			throw new HttpError(
-				429,
-				`Too many wrong PINs; wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again, or ask an admin to unlock this account`
-			);
-		}
-		user.recentWrongPins = [...recent, now()];
-		user.failedPins += 1;
-		user.locked = user.failedPins >= LOCK_AFTER_WRONG_PINS;
-		return user.pin === pin;
-	}
-
-	const wrongPinsInWindow = (user: MockUser) =>
-		user.recentWrongPins.filter((t) => now() - t < WRONG_PIN_WINDOW);
-
-	/** What only admins are told: the lock, or the 15-minute wait, that wrong PINs caused. */
-	const managedUser = (u: MockUser): ManagedUser => ({
-		...publicUser(u),
-		locked: u.locked || wrongPinsInWindow(u).length >= MAX_RECENT_WRONG_PINS
-	});
-
-	function accountOf(ctx: Ctx): MockUser {
-		const user = state.users.find((u) => u.id === idParam(ctx));
-		if (!user) throw new HttpError(404, 'no such user');
-		return user;
-	}
-
-	function sessionUser(req: IncomingMessage): MockUser | null {
-		const cookie = req.headers.cookie ?? '';
-		const token = /(?:^|;\s*)pa_session=([^;]+)/.exec(cookie)?.[1];
-		const userId = token ? state.sessions.get(token) : undefined;
-		const user = state.users.find((u) => u.id === userId);
-		return user && !user.disabled ? user : null;
-	}
-
-	// --- routes -------------------------------------------------------------------------
-
-	const ids = (body: unknown, key = 'ids'): number[] => {
-		const value = (body as Record<string, unknown> | null)?.[key];
-		if (!Array.isArray(value) || !value.every((v) => Number.isInteger(v)))
-			throw new HttpError(422, `${key} must be a list of photo ids.`);
-		return value as number[];
-	};
-
-	function findAlbum(ctx: Ctx, minimum: 'viewer' | 'editor' | 'owner' = 'viewer'): MockAlbum {
-		const album = state.albums.find((a) => a.id === idParam(ctx));
-		const role = album ? albumRole(me(ctx), album) : null;
-		if (!album || !role) throw new HttpError(404, 'Album not found.');
-		const order = ['viewer', 'editor', 'owner'];
-		const effective = me(ctx).role === 'admin' ? 'owner' : role;
-		if (order.indexOf(effective) < order.indexOf(minimum))
-			throw new HttpError(403, `You need to be the album's ${minimum}.`);
-		return album;
 	}
 
 	function downloadEntries(user: MockUser, request: DownloadRequest) {
@@ -1626,51 +1211,9 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		]
 	];
 
-	routes.push(
-		...v11Routes({
-			state: () => state,
-			now,
-			visible,
-			toOut,
-			filtered,
-			findAsset,
-			assetLevel,
-			findAlbum,
-			queueScan
-		})
-	);
+	routes.push(...v11Routes(h));
 
 	const PUBLIC = new Set(['/api/health', '/api/setup', '/api/auth/accounts', '/api/auth/login']);
-
-	async function readBody(req: IncomingMessage): Promise<unknown> {
-		const chunks: Buffer[] = [];
-		for await (const chunk of req) chunks.push(chunk as Buffer);
-		const type = req.headers['content-type'] ?? '';
-		if (type.startsWith('multipart/form-data')) return { multipart: Buffer.concat(chunks), type };
-		const text = Buffer.concat(chunks).toString('utf8');
-		if (!text) return undefined;
-		if (type.includes('application/x-www-form-urlencoded'))
-			return Object.fromEntries(new URLSearchParams(text));
-		try {
-			return JSON.parse(text);
-		} catch {
-			throw new HttpError(400, 'The request body is not valid JSON.');
-		}
-	}
-
-	function send(res: ServerResponse, result: Result) {
-		const headers: Record<string, string> = { 'cache-control': 'no-store', ...result.headers };
-		if ('raw' in result) {
-			res.writeHead(result.status, { ...headers, 'content-type': result.type });
-			res.end(result.raw);
-		} else if (result.json === undefined) {
-			res.writeHead(result.status, headers);
-			res.end();
-		} else {
-			res.writeHead(result.status, { ...headers, 'content-type': 'application/json' });
-			res.end(JSON.stringify(result.json));
-		}
-	}
 
 	async function mockRoute(url: URL, req: IncomingMessage): Promise<Result | null> {
 		if (url.pathname === '/__mock/reset' && req.method === 'POST') {
