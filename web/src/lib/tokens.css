@@ -53,6 +53,7 @@
 	--top: 56px; /* the top bar on a laptop; 0 on a phone. Sticky things offset by it. */
 	--dock: 56px; /* the floating dock on a phone */
 	--bar: calc(var(--dock) + var(--s-4)); /* room the dock takes at the bottom of a phone */
+	--pill: 52px; /* the selection pill; the toast steps over it */
 	--blur: blur(18px) saturate(1.4); /* the frosted-glass look of bars over photos */
 	--target: 44px; /* the smallest touch target; a promise in pixels, not in text size */
 	--page-x: var(--s-5); /* page side padding on a laptop */
@@ -578,6 +579,14 @@ legend {
 			backdrop-filter: var(--blur);
 		}
 	}
+}
+
+/* View transitions (the photo view opening from its tile) run on the sheets' clock. */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+	animation-duration: var(--motion-sheet);
+	animation-timing-function: var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {

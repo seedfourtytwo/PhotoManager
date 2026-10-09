@@ -505,6 +505,19 @@
 		aspect-ratio: var(--ratio);
 		transform: translate(var(--pull-x), var(--pull-y));
 		transition: transform var(--motion) var(--ease);
+		/* Opening and closing: the browser moves this one picture from and to its tile. */
+		view-transition-name: photo;
+	}
+	/* Browsers without view transitions: the viewer fades in. */
+	@supports not (view-transition-name: none) {
+		.loupe {
+			animation: fade-in var(--motion) var(--ease);
+		}
+	}
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+		}
 	}
 	.held .frame {
 		transition: none;

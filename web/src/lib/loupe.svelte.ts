@@ -6,10 +6,11 @@
  * `page.state.pushed` says this history entry was made by `openPhoto`, so Back closes the
  * loupe; it lives in the entry (not in a variable) so that leaving by a link forgets it.
  */
-import { untrack } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
 import type { AssetOut, Id } from './api/types';
+import { withTransition } from './motion';
 
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
@@ -32,8 +33,38 @@ export function openPhotoId(page: { state: App.PageState; url: URL }): Id | unde
 	return photoParam(page.url);
 }
 
+const tileOf = (id: Id) =>
+	typeof document === 'undefined'
+		? null
+		: document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
+
+/**
+ * The photo's tile takes the view-transition name the open photo has (Loupe.svelte), so the
+ * browser moves one picture between the two places. Returns what takes the name off again.
+ */
+function nameTile(id: Id): () => void {
+	const tile = tileOf(id);
+	tile?.style.setProperty('view-transition-name', 'photo');
+	return () => tile?.style.removeProperty('view-transition-name');
+}
+
+/** After `history.back()`: the earlier entry is the current one (or it is taking too long). */
+function wentBack(): Promise<void> {
+	if (typeof window === 'undefined') return Promise.resolve();
+	return new Promise((resolve) => {
+		window.addEventListener('popstate', () => resolve(), { once: true });
+		setTimeout(resolve, 300);
+	});
+}
+
+/** Opens from the photo's tile where the browser can show that. */
 export function openPhoto(id: Id) {
-	pushState(withPhoto(location.href, id), { photo: id, pushed: true });
+	const release = nameTile(id);
+	void withTransition(async () => {
+		release();
+		pushState(withPhoto(location.href, id), { photo: id, pushed: true });
+		await tick();
+	});
 }
 
 export function showPhoto(id: Id) {
@@ -41,15 +72,33 @@ export function showPhoto(id: Id) {
 	replaceState(withPhoto(location.href, id), state);
 }
 
+let closing = false;
+
+/** Closes back to the photo's tile, when it is on screen. */
 export function closePhoto() {
-	if (page.state.pushed) history.back();
-	else replaceState(withPhoto(location.href, null), { photo: null });
+	// Asked twice (Escape and the dialog's own close event): going back twice would leave the page.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- read once, not state
+	const id = photoParam(new URL(location.href));
+	if (closing || id === undefined) return;
+	closing = true;
+	let release = () => {};
+	void withTransition(async () => {
+		if (page.state.pushed) {
+			history.back();
+			await wentBack();
+		} else replaceState(withPhoto(location.href, null), { photo: null });
+		await tick();
+		release = nameTile(id);
+	}).then(() => {
+		release();
+		closing = false;
+	});
 }
 
 /** After closing the loupe over a plain grid: show and focus the photo that was open. */
 export function focusTile(id: Id) {
 	requestAnimationFrame(() => {
-		const tile = document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
+		const tile = tileOf(id);
 		tile?.scrollIntoView({ block: 'nearest' });
 		tile?.focus({ preventScroll: true });
 	});
