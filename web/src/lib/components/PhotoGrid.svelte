@@ -11,7 +11,13 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { dropIndex, shownTiles } from '$lib/grid';
+	import { longPress } from '$lib/press';
+	import { photoAt, tileOf } from '$lib/tiles';
 	import { NAV_KEYS, letterboxed, neighbour, type Layout, type NavKey } from '$lib/timeline';
+
+	/** The short buzz that says a long press took the photo. */
+	const BUZZ_MS = 10;
 
 	type Props = {
 		items: AssetOut[];
@@ -62,17 +68,7 @@
 				: (items[0]?.id ?? null)
 	);
 	/** Rendered tiles: the window, plus the tab stop so focus never falls off the page. */
-	const shown = $derived.by(() => {
-		const [start, end] = range ?? [0, items.length];
-		const out: { item: AssetOut; i: number }[] = [];
-		for (let i = start; i < Math.min(end, items.length); i++) out.push({ item: items[i], i });
-		const stop = tabStop === null ? -1 : items.findIndex((a) => a.id === tabStop);
-		if (stop >= 0 && (stop < start || stop >= end)) {
-			out.push({ item: items[stop], i: stop });
-			out.sort((a, b) => a.i - b.i);
-		}
-		return out;
-	});
+	const shown = $derived(shownTiles(items, range, tabStop));
 	let grid: HTMLElement | undefined = $state();
 	/**
 	 * Photos whose thumbnail did not load: their tiles stay plain instead of broken. Kept as
@@ -83,22 +79,22 @@
 	async function focusTile(id: Id) {
 		own = id;
 		await tick();
-		grid?.querySelector<HTMLElement>(`.tile[data-id="${id}"]`)?.focus();
+		if (grid) tileOf(id, grid)?.focus();
 	}
 
-	const LONG_PRESS_MS = 450;
-	let pressTimer: ReturnType<typeof setTimeout> | undefined;
-	let pressStart: { x: number; y: number } | null = null;
-	// A long press already toggled; the click some browsers send right after must not undo it.
-	let longPressAt = -Infinity;
-	let longPressId: Id | null = null;
-	let pressFired = false;
-	/** After a long press: the photo the finger was last over, so each one is taken once. */
-	let pressOver: Id | null = null;
+	/** Long-press then drag: the run from the pressed photo to the one now under the finger. */
+	const press = longPress({
+		onpress: (id) => {
+			navigator.vibrate?.(BUZZ_MS);
+			ontoggle(id, false);
+		},
+		onreach: (id) => ontoggle(id, true),
+		photoAt
+	});
 	let dragged: Id | null = null;
 
 	function onclick(event: MouseEvent, id: Id) {
-		if (id === longPressId && performance.now() - longPressAt < 500) return;
+		if (press.echoes(id)) return;
 		const onCheck = (event.target as HTMLElement).closest('.check');
 		if (onCheck || selecting || event.shiftKey || event.metaKey || event.ctrlKey)
 			ontoggle(id, event.shiftKey);
@@ -107,59 +103,23 @@
 
 	function onpointerdown(event: PointerEvent, id: Id) {
 		if (event.pointerType !== 'touch' || arrange) return;
-		pressStart = { x: event.clientX, y: event.clientY };
-		clearTimeout(pressTimer);
-		pressTimer = setTimeout(() => {
-			pressFired = true;
-			longPressId = id;
-			pressOver = id;
-			navigator.vibrate?.(10);
-			ontoggle(id, false);
-		}, LONG_PRESS_MS);
+		press.down(id, { x: event.clientX, y: event.clientY });
 	}
 
 	function onpointermove(event: PointerEvent) {
-		if (!pressStart) return;
-		if (pressFired) dragSelect(event);
-		else if (Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y) > 10)
-			cancelPress();
+		press.move({ x: event.clientX, y: event.clientY });
 	}
 
-	/** Long-press then drag: the run from the pressed photo to the one now under the finger. */
-	function dragSelect(event: PointerEvent) {
-		// A touch stays captured by the tile it went down on, so the tile is looked up by place;
-		// it may belong to another month's grid.
-		const tile = document
-			.elementFromPoint(event.clientX, event.clientY)
-			?.closest<HTMLElement>('.tile[data-id]');
-		const id = tile ? Number(tile.dataset.id) : null;
-		if (id === null || id === pressOver) return;
-		pressOver = id;
-		ontoggle(id, true);
-	}
-
-	// Only a touchmove listener that is not passive can keep the page from scrolling under a
-	// finger, and it has to be there before the touch starts. It lets everything scroll until
-	// a long press has fired.
+	// The listener that holds the page still has to be on the grid before a touch starts.
 	$effect(() => {
-		const element = grid;
-		if (!element) return;
-		const hold = (event: TouchEvent) => {
-			if (pressFired && event.cancelable) event.preventDefault();
-		};
-		element.addEventListener('touchmove', hold, { passive: false });
-		return () => element.removeEventListener('touchmove', hold);
+		if (!grid) return;
+		return press.holdStill(grid);
 	});
 
 	// Heard on the window, not on the tile: the windowed grid may take the pressed tile off the
 	// page before the finger lifts, and the press has to end all the same.
-	function cancelPress() {
-		clearTimeout(pressTimer);
-		pressStart = null;
-		if (pressFired) longPressAt = performance.now();
-		pressFired = false;
-	}
-	onDestroy(() => clearTimeout(pressTimer));
+	const cancelPress = press.end;
+	onDestroy(press.destroy);
 
 	function onkeydown(event: KeyboardEvent, id: Id, index: number) {
 		const plain = !event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
@@ -193,9 +153,8 @@
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		const after = event.clientX > rect.left + rect.width / 2;
 		const from = items.findIndex((a) => a.id === dragged);
-		let to = index + (after ? 1 : 0);
-		if (from < to) to--;
-		if (to !== from) onmove?.(dragged, to);
+		const to = dropIndex(from, index, after);
+		if (to !== null) onmove?.(dragged, to);
 		dragged = null;
 	}
 </script>
@@ -231,7 +190,7 @@
 				onpointerdown={(e) => onpointerdown(e, item.id)}
 				{onpointermove}
 				oncontextmenu={(e) => {
-					if (pressStart) e.preventDefault();
+					if (press.active) e.preventDefault();
 				}}
 				onkeydown={(e) => onkeydown(e, item.id, i)}
 				ondragstart={(e) => {
