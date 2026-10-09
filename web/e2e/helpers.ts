@@ -44,6 +44,12 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
+/** Where every Admin spec starts: a fresh library, signed in on the Admin page. */
+export async function openAdmin(page: Page) {
+	await resetMock();
+	await signIn(page, '/admin');
+}
+
 /** Opens the account menu (the button with the person's initial); returns the main nav. */
 export async function openAccountMenu(page: Page): Promise<Locator> {
 	const nav = page.getByRole('navigation', { name: 'Main' });
