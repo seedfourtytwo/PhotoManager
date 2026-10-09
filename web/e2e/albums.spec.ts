@@ -131,3 +131,36 @@ test('remove from album, then Undo puts the photos back where they were', async 
 		.poll(() => tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-id'))))
 		.toEqual(order);
 });
+
+test('New album: Enter in the title creates it; a title stops at 200 characters', async ({
+	page
+}) => {
+	await page.goto('/albums');
+	await page.getByRole('button', { name: 'New album' }).click();
+	const dialog = page.getByRole('dialog', { name: 'New album' });
+	const title = dialog.getByLabel('Title');
+	await title.fill('x'.repeat(250));
+	await expect(title).toHaveValue('x'.repeat(200));
+	await expect(dialog.getByText('A title can be up to 200 characters long.')).toBeVisible();
+	await title.fill('Typed and entered');
+	await title.press('Enter');
+	await expect(page).toHaveURL(/\/albums\/\d+$/);
+	await expect(page.getByRole('heading', { name: 'Typed and entered' })).toBeVisible();
+	await expect(toast(page)).not.toContainText(/String should have/);
+});
+
+test('Rename album: Enter saves; the title field stops at 200 characters', async ({ page }) => {
+	await page.goto('/albums');
+	await page.getByRole('button', { name: 'New album' }).click();
+	const create = page.getByRole('dialog', { name: 'New album' });
+	await create.getByLabel('Title').fill('Before');
+	await create.getByRole('button', { name: 'Create' }).click();
+	await expect(page.getByRole('heading', { name: 'Before' })).toBeVisible();
+	await page.getByRole('button', { name: 'Rename' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Rename album' });
+	await expect(dialog.getByLabel('Title')).toHaveAttribute('maxlength', '200');
+	await dialog.getByLabel('Title').fill('After');
+	await dialog.getByLabel('Title').press('Enter');
+	await expect(page.getByRole('heading', { name: 'After' })).toBeVisible();
+	await expect(dialog).toBeHidden();
+});

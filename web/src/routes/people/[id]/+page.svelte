@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
-	import { errorMessage } from '$lib/format';
+	import { errorMessage, photos, plural } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import {
 		LinkedPhoto,
@@ -129,7 +129,7 @@
 			<div>
 				<h1 class:quiet={!person.name}>{person.name ?? 'Someone'}</h1>
 				<p class="quiet small">
-					{count.format(person.asset_count)} photos · {count.format(person.face_count)} faces
+					{photos(person.asset_count)} · {plural(person.face_count, 'face')}
 				</p>
 				{#if session.canEdit}
 					<div class="tools">
@@ -147,20 +147,23 @@
 		</header>
 	{/if}
 
-	<Timeline
-		bind:this={timeline}
-		{loader}
-		{selection}
-		onopen={openPhoto}
-		ontoggle={(assetId, range) =>
-			(selection = applyClick(
-				selection,
-				assetId,
-				loader.items.map((a) => a.id),
-				{ shift: range, toggle: true }
-			))}
-		onselect={(next) => (selection = next)}
-	/>
+	<!-- A person who is not there has no photos to ask for: the one line above says it. -->
+	{#if !error}
+		<Timeline
+			bind:this={timeline}
+			{loader}
+			{selection}
+			onopen={openPhoto}
+			ontoggle={(assetId, range) =>
+				(selection = applyClick(
+					selection,
+					assetId,
+					loader.items.map((a) => a.id),
+					{ shift: range, toggle: true }
+				))}
+			onselect={(next) => (selection = next)}
+		/>
+	{/if}
 
 	<SelectionActions
 		{selected}

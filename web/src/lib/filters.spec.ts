@@ -68,9 +68,10 @@ describe('filtersFromParams', () => {
 		});
 	});
 
-	it('drops a `to` that lies before `from`', () => {
+	it('turns a `to` that lies before `from` the right way round', () => {
 		expect(filtersFromParams(new URLSearchParams('from=2020-05-10&to=2020-05-01'))).toEqual({
-			from: '2020-05-10'
+			from: '2020-05-01',
+			to: '2020-05-10'
 		});
 		expect(filtersFromParams(new URLSearchParams('from=2020-05-10&to=2020-05-10'))).toEqual({
 			from: '2020-05-10',
@@ -86,6 +87,17 @@ describe('withFilter', () => {
 		expect(withFilter(base, 'camera', 'X')).toEqual({ year: 2019, place: 'Paris', camera: 'X' });
 	});
 
+	it('keeps the two days of a range in order, whichever is set last', () => {
+		expect(withFilter({ from: '2020-05-10' }, 'to', '2020-05-01')).toEqual({
+			from: '2020-05-01',
+			to: '2020-05-10'
+		});
+		expect(withFilter({ to: '2020-05-10' }, 'from', '2020-06-01')).toEqual({
+			from: '2020-05-10',
+			to: '2020-06-01'
+		});
+	});
+
 	it('clears the month when the year goes', () => {
 		expect(withFilter({ year: 2019, month: 3 }, 'year', undefined)).toEqual({});
 	});
@@ -97,6 +109,11 @@ describe('activeFilterCount and describeFilters', () => {
 		expect(activeFilterCount(filters)).toBe(4);
 		expect(describeFilters(filters)).toBe('2019 · Paris · favourites · guessed dates');
 		expect(describeFilters({})).toBe('');
+	});
+
+	it('counts sources in words', () => {
+		expect(describeFilters({ source_id: [3] })).toBe('1 source');
+		expect(describeFilters({ source_id: [3, 4] })).toBe('2 sources');
 	});
 
 	it('names day ranges compactly', () => {

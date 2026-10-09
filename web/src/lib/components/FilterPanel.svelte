@@ -4,6 +4,8 @@
 	import { page } from '$app/state';
 	import type { AssetFilters, Facets } from '$lib/api';
 	import { api, library, settings, ui, viewport } from '$lib/app.svelte';
+	import { photos } from '$lib/format';
+	import { historyStep } from '$lib/history-step';
 	import {
 		activeFilterCount,
 		filtersFromParams,
@@ -82,13 +84,34 @@
 		if (ui.focusSearch > 0) queueMicrotask(() => search?.focus());
 	});
 
+	/** The address the last filter chosen in the open sheet gave the page. */
+	let chosen: string | null = null;
+
 	function apply(next: AssetFilters, replace = false) {
-		void goto(`${page.url.pathname}${filtersToQuery(next)}`, {
+		const to = `${page.url.pathname}${filtersToQuery(next)}`;
+		// In the open sheet a choice rewrites the sheet's own history entry (and keeps its
+		// mark), so the sheet stays open and closing it leaves one entry, not one per choice.
+		if (ui.sheet) chosen = to;
+		void goto(to, {
 			keepFocus: true,
 			noScroll: true,
-			replaceState: replace
+			replaceState: replace || ui.sheet,
+			state: ui.sheet ? page.state : undefined
 		});
 	}
+
+	// The sheet has a history step: Back closes it. Back also takes the address back to what
+	// it was before the sheet opened, so what was chosen in the sheet is put back as a step of
+	// its own: closed by Back or by Done, the filters stay, and the next Back undoes them.
+	$effect(() => {
+		if (!ui.sheet) return;
+		chosen = null;
+		return historyStep(() => {
+			ui.sheet = false;
+			if (chosen !== null && chosen !== `${page.url.pathname}${page.url.search}`)
+				void goto(chosen, { keepFocus: true, noScroll: true });
+		});
+	});
 
 	function set<K extends keyof AssetFilters>(key: K, value: AssetFilters[K] | undefined) {
 		apply(withFilter(filters, key, value));
@@ -192,7 +215,7 @@
 	</label>
 
 	{#if facets}
-		<p class="quiet total">{count.format(facets.total)} photos</p>
+		<p class="quiet total">{photos(facets.total)}</p>
 	{/if}
 
 	<section>

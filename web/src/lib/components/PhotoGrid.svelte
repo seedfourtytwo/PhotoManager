@@ -10,7 +10,8 @@
 
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import { NAV_KEYS, neighbour, type Layout, type NavKey } from '$lib/timeline';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { NAV_KEYS, letterboxed, neighbour, type Layout, type NavKey } from '$lib/timeline';
 
 	type Props = {
 		items: AssetOut[];
@@ -73,6 +74,11 @@
 		return out;
 	});
 	let grid: HTMLElement | undefined = $state();
+	/**
+	 * Photos whose thumbnail did not load: their tiles stay plain instead of broken. Kept as
+	 * the very item that failed, so the same photo loaded anew (a reload) is tried again.
+	 */
+	const failed = new SvelteMap<Id, AssetOut>();
 
 	async function focusTile(id: Id) {
 		own = id;
@@ -235,8 +241,17 @@
 				ondragover={(e) => arrange && e.preventDefault()}
 				ondrop={(e) => ondrop(e, i)}
 			>
-				{#if item.thumb}
-					<img src={item.thumb.url} alt={describePhoto(item)} loading="lazy" decoding="async" />
+				{#if item.thumb && failed.get(item.id) !== item}
+					<img
+						class:whole={letterboxed(item)}
+						src={item.thumb.url}
+						alt={describePhoto(item)}
+						loading="lazy"
+						decoding="async"
+						onerror={() => failed.set(item.id, item)}
+					/>
+				{:else if item.thumb}
+					<span class="visually-hidden">{describePhoto(item)} (preview missing)</span>
 				{:else}
 					<span class="visually-hidden">{describePhoto(item)} (preview not ready)</span>
 				{/if}
@@ -286,6 +301,10 @@
 		height: 100%;
 		object-fit: fill; /* the box already has the photo's true aspect ratio */
 		pointer-events: none;
+	}
+	/* A panorama or a tall strip gets a tile of a sane shape, and sits whole inside it. */
+	img.whole {
+		object-fit: contain;
 	}
 	/* Selection: the accent as an inset frame (a hairline of shade keeps it visible on any
 	   photo); the photo itself stays uncropped and undimmed. */

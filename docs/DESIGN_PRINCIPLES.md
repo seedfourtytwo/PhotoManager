@@ -9,7 +9,8 @@ more would hurt understanding.
 1. **Maximise photo ink.** Photos use as much of the screen as possible; no cards, drop shadows,
    rounded frames or gradients around them. Gutters are 2–4 px.
 2. **Never crop without consent.** Grids are *justified* (true aspect ratios). Crops only exist
-   inside album frames, chosen by the user.
+   inside album frames, chosen by the user. A panorama or a tall strip (wider than 4:1,
+   narrower than 0.4:1) gets a tile of that limit and sits whole inside it, never stretched.
 3. **Erase non-data ink.** No borders where whitespace works; one hairline (1 px, low-contrast)
    is the strongest divider on a page. Navigation and action bars use a small drawn icon
    **with** its word; an icon never stands alone where a word fits.
@@ -94,7 +95,8 @@ Three families, all self-hosted under `web/static/fonts` (SIL OFL; nothing fetch
 |---|---|---|
 | `--fs-12` | 12 px | metadata, counts, group labels, captions under thumbnails |
 | `--fs-14` | 14 px | interface text (the base) |
-| `--fs-16` | 16 px | reading text; every field on a phone (no zoom-on-focus) |
+| `--fs-16` | 16 px | reading text |
+| `--field-phone` | 16 px, in pixels on purpose | every field on a phone (no zoom-on-focus); grows with the look's text dial, never under 16 |
 | `--fs-20` | 20 px | section titles, month and year headings, dialog titles |
 | `--fs-28` | 28 px | page titles (`h1`) |
 | `--fs-40` | 40 px | display: album and person titles, Welcome / sign-in |
@@ -135,7 +137,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - **Sliders**: hairline track, small ink thumb; larger thumb on touch.
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
   right, Cancel left of the primary. On a phone every dialog, the filters and the loupe's info
-  become **bottom sheets** with rounded top corners and safe-area padding.
+  become **bottom sheets**, as wide as the screen, with rounded top corners and safe-area
+  padding. A dialog, the photo editor and the filter sheet each add a history step
+  (`lib/history-step.ts`), so Back closes them; what was chosen in the filter sheet stays.
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
   together. Escape or a press outside closes it. The account button shows the person's initial;
   a count that needs attention sits on it in full ink, never the accent.

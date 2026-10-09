@@ -67,6 +67,23 @@ test('a search typed just before leaving the page does not follow you there', as
 	await expect(page).toHaveURL(/\/collections$/);
 });
 
+test('a "To" before the "From" is the same range the other way round, everywhere', async ({
+	page
+}) => {
+	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
+	const panel = page.getByRole('complementary', { name: 'Filters' });
+	await panel.getByLabel('From').fill('2019-08-01');
+	await expect(page).toHaveURL(/from=2019-08-01/);
+	await panel.getByLabel('To', { exact: true }).fill('2019-07-01');
+	await expect(page).toHaveURL(/from=2019-07-01&to=2019-08-01/);
+	await expect(panel.getByLabel('From')).toHaveValue('2019-07-01');
+	await expect(panel.getByLabel('To', { exact: true })).toHaveValue('2019-08-01');
+	await expect(page.locator('header .meta')).toContainText('1 Jul 2019 – 1 Aug 2019');
+	// A link written the wrong way round opens the same view.
+	await page.goto('/?from=2019-08-01&to=2019-07-01');
+	await expect(page.locator('header .meta')).toContainText('1 Jul 2019 – 1 Aug 2019');
+});
+
 test('calendar: click a day to open the filtered library', async ({ page }) => {
 	test.slow(); // axe walks every day of every year
 	await page.goto('/calendar');
@@ -94,6 +111,27 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
 	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
+});
+
+test('map: the heading counts the dot that is chosen now, after the map has zoomed in', async ({
+	page
+}) => {
+	await page.goto('/map');
+	await expect(page.getByText(/photos? with a location/)).toBeVisible();
+	// The dot with the most photos: choosing it zooms in, and on a wide map it splits.
+	const dots = page.getByRole('link', { name: /photos? here/ });
+	const counts = await dots.evaluateAll((links) =>
+		links.map((link) => parseInt(link.getAttribute('aria-label')!, 10))
+	);
+	const biggest = Math.max(...counts);
+	await dots.nth(counts.indexOf(biggest)).click();
+	const heading = page.locator('section.chosen h2 .quiet');
+	await expect(heading).toBeVisible();
+	const chosen = page.locator('a:has(circle.chosen)');
+	await expect(chosen).toHaveCount(1);
+	const shown = parseInt((await chosen.getAttribute('aria-label'))!, 10);
+	await expect(heading).toHaveText(String(shown));
+	await expect(page.locator('section.chosen .tile')).toHaveCount(shown);
 });
 
 test('hiding the filters, a real click on "Filters" brings them back', async ({ page }) => {

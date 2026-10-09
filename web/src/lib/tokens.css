@@ -57,6 +57,9 @@
 	--pill: 52px; /* the selection pill; the toast steps over it */
 	--blur: blur(18px) saturate(1.4); /* the frosted-glass look of bars over photos */
 	--target: 44px; /* the smallest touch target; a promise in pixels, not in text size */
+	/* A field on a phone: iOS zooms into one set under 16 px, so this too is a promise in
+	   pixels. It grows with the look's text dial and never goes under 16. */
+	--field-phone: max(16px, calc(16px * var(--text-scale, 1)));
 	--page-x: var(--s-5); /* page side padding on a laptop */
 	--measure: 36rem; /* line length for prose */
 
@@ -292,12 +295,12 @@ textarea {
 	transition: border-color var(--motion) var(--ease);
 }
 
-/* Phones zoom into fields set smaller than 16 px; set them at 16. */
+/* Phones zoom into fields set smaller than 16 px; set them at 16, whatever the root size. */
 @media (max-width: 639px) {
 	input,
 	select,
 	textarea {
-		font-size: var(--fs-16) !important;
+		font-size: var(--field-phone) !important;
 	}
 }
 
