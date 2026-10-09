@@ -19,11 +19,17 @@
 	const LABEL_ROOM = 40;
 	/** Month ticks are drawn when each month has at least this many px. */
 	const TICK_ROOM = 4;
-	/** A press that moved less than this is a tap. */
+	/**
+	 * A press that moved less than this is a tap. Smaller than the photo's slop (lib/gesture.ts,
+	 * 10 px), and not shared with it: there a moved finger must go on for 50 px to mean anything,
+	 * here every px past the slop is a drag to the month under it.
+	 */
 	const TAP_SLOP = 6;
 	const IDLE_MS = 1500;
 	/** After a scroll the page reports its month within a frame or two; this is well past that. */
 	const SETTLE_MS = 150;
+	/** Page Up and Page Down step a year. */
+	const PAGE_MONTHS = 12;
 
 	let track: HTMLElement | undefined = $state();
 	let width = $state(0);
@@ -126,8 +132,8 @@
 			ArrowUp: -1,
 			ArrowLeft: 1,
 			ArrowRight: -1,
-			PageDown: 12,
-			PageUp: -12,
+			PageDown: PAGE_MONTHS,
+			PageUp: -PAGE_MONTHS,
 			Home: -Infinity,
 			End: Infinity
 		};

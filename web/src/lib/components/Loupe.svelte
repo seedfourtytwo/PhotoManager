@@ -38,6 +38,13 @@
 	const IDLE_MS = 2500;
 	/** The frame's shape when a photo's size is not known. */
 	const DEFAULT_RATIO = 1.5;
+	/** The photos around the open one whose previews are fetched ahead, as steps from it. */
+	const PRELOAD_STEPS = [-1, 1, 2];
+	/** This close to the end of the loaded list, the next page is asked for. */
+	const NEED_MORE_WITHIN = 3;
+	const MINUTES_PER_HOUR = 60;
+	/** Decimal places of a coordinate as written: about ten metres. */
+	const COORD_PLACES = 4;
 	const trash = $derived(onrestore !== undefined);
 	const asset = $derived(items[index]);
 	let detail = $state<AssetDetail | null>(null);
@@ -95,11 +102,11 @@
 
 	// Preload neighbours so stepping is instant.
 	$effect(() => {
-		for (const i of [index - 1, index + 1, index + 2]) {
-			const next = items[i];
+		for (const step of PRELOAD_STEPS) {
+			const next = items[index + step];
 			if (next) new Image().src = previewOf(next);
 		}
-		if (index >= items.length - 3) onneedmore?.();
+		if (index >= items.length - NEED_MORE_WITHIN) onneedmore?.();
 	});
 
 	// A step to the first or the last photo takes the edge button away from under the focus:
@@ -417,7 +424,7 @@
 					{dateSourceLabel(asset.date_source)}{#if asset.tz_offset_minutes !== null}&nbsp;· UTC{asset.tz_offset_minutes >=
 						0
 							? '+'
-							: '−'}{Math.abs(asset.tz_offset_minutes) / 60}{/if}
+							: '−'}{Math.abs(asset.tz_offset_minutes) / MINUTES_PER_HOUR}{/if}
 				</p>
 				{#if placeLabel(asset.place)}<p class="place">{placeLabel(asset.place)}</p>{/if}
 				{#if trash && 'trashed_at' in asset}
@@ -433,7 +440,7 @@
 				{#if detail}
 					{#if detail.latitude !== null && detail.longitude !== null}
 						<p class="quiet small">
-							{detail.latitude.toFixed(4)}, {detail.longitude.toFixed(4)}
+							{detail.latitude.toFixed(COORD_PLACES)}, {detail.longitude.toFixed(COORD_PLACES)}
 						</p>
 					{/if}
 					{#if detail.camera_model}

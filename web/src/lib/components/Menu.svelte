@@ -17,6 +17,9 @@
 	import type { IconName } from '$lib/icons';
 	import Icon from './Icon.svelte';
 
+	/** The badge has room for two figures; a larger count is written "99+". */
+	const BADGE_MAX = 99;
+
 	type Props = {
 		label: string;
 		text: string;
@@ -79,7 +82,8 @@
 	>
 		{#if icon}<Icon name={icon} />{/if}
 		<span aria-hidden="true">{text}</span>
-		{#if badge > 0}<span class="badge data" aria-hidden="true">{badge > 99 ? '99+' : badge}</span
+		{#if badge > 0}<span class="badge data" aria-hidden="true"
+				>{badge > BADGE_MAX ? `${BADGE_MAX}+` : badge}</span
 			>{/if}
 	</button>
 	{#if badge > 0 && badgeLabel}<span id={`${id}-badge`} class="visually-hidden">{badgeLabel}</span
