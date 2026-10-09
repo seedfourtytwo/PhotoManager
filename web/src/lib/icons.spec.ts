@@ -2,8 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { ICONS } from './icons';
 
 describe('icons', () => {
-	it('has the three the shell needs', () => {
-		expect(Object.keys(ICONS).sort()).toEqual(['collections', 'library', 'search']);
+	it('has the icons the shell and the action bars need', () => {
+		expect(Object.keys(ICONS).sort()).toEqual([
+			'album',
+			'close',
+			'collections',
+			'date',
+			'download',
+			'edit',
+			'favourite',
+			'info',
+			'library',
+			'more',
+			'restore',
+			'search',
+			'trash'
+		]);
 	});
 	it.each(Object.entries(ICONS))(
 		'%s is drawn from absolute paths inside the 24 grid',
