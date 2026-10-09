@@ -23,6 +23,12 @@ export type User = {
  */
 export type ManagedUser = User & { locked: boolean };
 
+/**
+ * One account's look sheet (contract v1.5). Defined with its rules in `$lib/look/sheet`, the
+ * hand-kept mirror of the backend's `domain/look.py`.
+ */
+export type { Look, Mode } from '../look/sheet';
+
 export type SetupState = { needs_admin: boolean };
 export type SetupBody = { username: string; display_name: string; pin: string };
 export type LoginBody = { username: string; pin: string };

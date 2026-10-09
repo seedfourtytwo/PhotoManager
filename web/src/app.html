@@ -4,6 +4,34 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<!-- First paint in the look this browser last showed, so the default look never flashes.
+		     Sets what applyLook sets (src/lib/look/apply.ts); boot.spec.ts keeps the two equal. -->
+		<script>
+			(function () {
+				var root = document.documentElement;
+				var look = {};
+				var old = null;
+				try {
+					old = localStorage.getItem('pa.theme');
+					look = JSON.parse(localStorage.getItem('pa.look')) || {};
+				} catch (e) {
+					look = {};
+				}
+				var mode = /^(system|dark|light)$/.test(old) ? old : look.mode || 'dark';
+				if (mode !== 'system') root.setAttribute('data-theme', mode);
+				if (look.theme === 'album') root.setAttribute('data-look', 'album');
+				var px = function (name, value) {
+					if (typeof value === 'number') root.style.setProperty(name, value + 'px');
+				};
+				if (typeof look.accentHue === 'number')
+					root.style.setProperty('--acc-h', String(look.accentHue));
+				px('--r-1', look.corners);
+				if (typeof look.corners === 'number') px('--r-2', Math.round((look.corners * 5) / 3));
+				px('--gutter', look.photoGap);
+				if (typeof look.textScale === 'number' && look.textScale !== 1)
+					root.style.setProperty('--text-scale', String(look.textScale));
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

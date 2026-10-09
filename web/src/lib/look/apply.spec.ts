@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { applyLook, rootLook, type LookRoot } from './apply';
 import { parseLook } from './sheet';
 
+const styles = Object.values(
+	import.meta.glob(['/src/**/*.svelte', '/src/**/*.css'], {
+		query: '?raw',
+		import: 'default',
+		eager: true
+	}) as Record<string, string>
+).join('\n');
+
 const NOTHING = {
 	'--acc-h': null,
 	'--r-1': null,
@@ -68,6 +76,12 @@ describe('rootLook', () => {
 			'--acc-h': '0',
 			'--gutter': '0px'
 		});
+	});
+});
+
+describe('the stylesheets', () => {
+	it.each(Object.keys(NOTHING))('read %s, so the dial does something', (name) => {
+		expect(styles).toContain(`var(${name}`);
 	});
 });
 

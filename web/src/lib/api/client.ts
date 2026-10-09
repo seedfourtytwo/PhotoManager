@@ -39,6 +39,8 @@ import type {
 	Id,
 	ImportReport,
 	ImportReportPage,
+	Look,
+	Mode,
 	UploadImportJob,
 	FolderListing,
 	ImportRun,
@@ -230,6 +232,13 @@ export function createApi(options: ApiOptions = {}) {
 			request<ManagedUser>('PATCH', `/api/users/${id}`, body),
 		/** Lift the wait (429) and the lock (423) that wrong PINs put on this account. */
 		unlockUser: (id: Id) => request<void>('POST', `/api/users/${id}/unlock`),
+		// look (v1.5): an account chooses its mode, an admin sets any account's whole sheet
+		myLook: () => get<Look>('/api/me/look'),
+		setMyMode: (mode: Mode) => request<Look>('PUT', '/api/me/look', { mode }),
+		accountLook: (id: Id) => get<Look>(`/api/admin/accounts/${id}/look`),
+		/** Fields left out go back to their default: `{}` resets the look. */
+		setAccountLook: (id: Id, sheet: Partial<Look>) =>
+			request<Look>('PUT', `/api/admin/accounts/${id}/look`, sheet),
 		/** v1.1: names to share albums with, for any member (not only admins). */
 		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
 		uploadUrl: `${base}/api/upload`,

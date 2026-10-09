@@ -11,6 +11,7 @@ import {
 	type Source,
 	type User
 } from '$lib/api';
+import { forgetOldMode, look, oldMode, type Mode, type ThumbSize } from '$lib/look';
 
 const PUBLIC_ROUTES = ['/login', '/setup'];
 
@@ -195,10 +196,9 @@ if (typeof document !== 'undefined')
 
 // --- viewer settings (per browser) -----------------------------------------------------
 
-export type Theme = 'system' | 'dark' | 'light';
 export type Density = 'compact' | 'comfortable' | 'large';
 
-function stored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+function stored<T extends string, F>(key: string, allowed: readonly T[], fallback: F): T | F {
 	try {
 		const value = localStorage.getItem(key);
 		return allowed.includes(value as T) ? (value as T) : fallback;
@@ -215,21 +215,32 @@ function store(key: string, value: string) {
 	}
 }
 
+const DENSITY_OF: Record<ThumbSize, Density> = {
+	small: 'compact',
+	medium: 'comfortable',
+	large: 'large'
+};
+/** The gap between photos in a grid when the look leaves it to the theme (px). */
+const PHOTO_GAP = 3;
+
 class Settings {
-	/** Dark by default: photos are judged best on a dark ground (DESIGN_PRINCIPLES §2). */
-	theme = $state<Theme>(stored('pa.theme', ['system', 'dark', 'light'], 'dark'));
-	density = $state<Density>(
-		stored('pa.density', ['compact', 'comfortable', 'large'], 'comfortable')
+	/** The photo size chosen on this device in Settings, if one was. */
+	#density = $state<Density | null>(
+		stored<Density, null>('pa.density', ['compact', 'comfortable', 'large'], null)
 	);
 	filtersOpen = $state(stored('pa.filters', ['open', 'closed'], 'open') === 'open');
 
-	setTheme(theme: Theme) {
-		this.theme = theme;
-		store('pa.theme', theme);
-		applyTheme(theme);
+	/** Photo size in the grids: this device's own choice, else what the account's look says. */
+	get density(): Density {
+		return this.#density ?? DENSITY_OF[look.shown.thumbSize];
 	}
+	/** The gap between photos in the grids, in px, from the account's look. */
+	get gap(): number {
+		return look.shown.photoGap ?? PHOTO_GAP;
+	}
+
 	setDensity(density: Density) {
-		this.density = density;
+		this.#density = density;
 		store('pa.density', density);
 	}
 	setFiltersOpen(open: boolean) {
@@ -238,12 +249,45 @@ class Settings {
 	}
 }
 
-export function applyTheme(theme: Theme) {
-	if (theme === 'system') delete document.documentElement.dataset.theme;
-	else document.documentElement.dataset.theme = theme;
+export const settings = new Settings();
+
+// --- the account's look ------------------------------------------------------------------
+
+/** Counts the look requests, so an answer overtaken by a newer one is dropped. */
+let lookAsked = 0;
+
+/**
+ * Fetch the signed-in account's look and show it: after signing in, and whenever the tab
+ * comes back to the foreground (an admin may have changed it meanwhile). Never rejects: with
+ * no answer the look already on screen stays. A browser that still holds the old per-device
+ * `pa.theme` setting hands it to the account as its mode, once.
+ */
+export async function loadLook(): Promise<void> {
+	const asked = ++lookAsked;
+	const old = oldMode();
+	try {
+		const sheet = old ? await api.setMyMode(old) : await api.myLook();
+		if (old) forgetOldMode();
+		if (asked === lookAsked) look.receive(sheet);
+	} catch {
+		// offline or refused: asked again the next time the tab comes back
+	}
 }
 
-export const settings = new Settings();
+/** The one part of its look an account sets itself. Shown at once; undone if it is refused. */
+export async function chooseMode(mode: Mode): Promise<void> {
+	const asked = ++lookAsked;
+	const before = look.saved;
+	forgetOldMode(); // a choice made here outranks one made before the look moved to the account
+	look.receive({ ...before, mode });
+	try {
+		const sheet = await api.setMyMode(mode);
+		if (asked === lookAsked) look.receive(sheet);
+	} catch (error) {
+		if (asked === lookAsked) look.receive(before);
+		notice.error(error);
+	}
+}
 
 // --- status line -------------------------------------------------------------------------
 

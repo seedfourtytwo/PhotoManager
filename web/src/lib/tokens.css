@@ -101,6 +101,11 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
+/* The look's text-size dial (lib/look/apply.ts). Sizes and spaces are in rem, so the whole
+   page follows the root; --target stays in pixels. */
+html {
+	font-size: calc(var(--fs-14) * var(--text-scale, 1));
+}
 
 ::selection {
 	background: var(--accent);
