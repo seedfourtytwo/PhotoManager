@@ -79,10 +79,6 @@
 		}
 	}
 
-	$effect(() => {
-		if (ui.focusSearch > 0) queueMicrotask(() => search?.focus());
-	});
-
 	/** The address the last filter chosen in the open sheet gave the page. */
 	let chosen: string | null = null;
 
@@ -495,7 +491,7 @@
 		display: none;
 	}
 
-	/* Phone and tablet: a bottom sheet opened from Search or the page's Filter button. */
+	/* Phone and tablet: a bottom sheet opened from the page's Filter button. */
 	@media (max-width: 1023px) {
 		.panel,
 		.panel.open {

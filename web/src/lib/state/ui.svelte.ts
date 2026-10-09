@@ -18,8 +18,6 @@ if (typeof window !== 'undefined')
 class Ui {
 	/** Phone: filter bottom sheet open. */
 	sheet = $state(false);
-	/** Bumped to ask the filter panel to focus its search field. */
-	focusSearch = $state(0);
 	/** The library's first thumbnails are in: secondary requests (facets) may start. */
 	gridReady = $state(false);
 }
