@@ -146,7 +146,8 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - **Selection**: a 3 px accent frame inset on the photo (with a 1 px shade so it reads on any
   photo) and a filled accent circle with a check. The actions come to the photos as a floating
   glass pill at the bottom centre: the count (the only accent text), Add to album, Download,
-  Fix date, Move to trash, and More for the rest. Escape clears.
+  Fix date, Move to trash, and More for the rest. What does not fit beside the count and Clear
+  (a narrow phone, large text, a long count) joins More: nothing leaves the glass. Escape clears.
 - **Focus**: 2 px accent outline, 2 px offset (inset on photo tiles).
 - **Icons**: a small set of 1.6 px-stroke SVGs drawn for this app, one component, no icon
   font. In navigation and action bars an icon carries its word beneath or beside it. Every
