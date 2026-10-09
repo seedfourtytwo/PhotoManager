@@ -155,6 +155,7 @@
 		tabindex="0"
 		aria-label="Jump to date"
 		aria-orientation={orientation}
+		data-ruler={orientation}
 		aria-valuemin={0}
 		aria-valuemax={months.length - 1}
 		aria-valuenow={months.length - 1 - monthIndex}
