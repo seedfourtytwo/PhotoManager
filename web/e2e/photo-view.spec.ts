@@ -219,8 +219,14 @@ test.describe('time ruler', () => {
 		const box = (await ruler(page).boundingBox())!;
 		expect(box.width).toBeGreaterThan(box.height * 4);
 		expect(box.y + box.height).toBeLessThan(page.viewportSize()!.height - 56);
-		// Time runs left to right: a drag to the left end goes to the oldest photos.
 		const y = box.y + box.height / 2;
+		// A flick up that starts on the ruler scrolls the page that far; it is not a jump.
+		const before = await page.evaluate(() => window.scrollY);
+		await touchSwipe(page, { x: box.x + 40, y }, { x: box.x + 44, y: y - 200 });
+		await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before + 100);
+		expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before + 400);
+		await expect(ruler(page)).toHaveCSS('opacity', '1');
+		// Time runs left to right: a drag to the left end goes to the oldest photos.
 		await touchSwipe(page, { x: box.x + box.width - 12, y }, { x: box.x + 2, y });
 		await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
 		await expect(ruler(page)).toHaveCSS('opacity', '0', { timeout: 10_000 });

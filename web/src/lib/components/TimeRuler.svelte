@@ -22,6 +22,8 @@
 	/** A press that moved less than this is a tap. */
 	const TAP_SLOP = 6;
 	const IDLE_MS = 1500;
+	/** After a scroll the page reports its month within a frame or two; this is well past that. */
+	const SETTLE_MS = 150;
 
 	let track: HTMLElement | undefined = $state();
 	let width = $state(0);
@@ -29,29 +31,50 @@
 	const length = $derived(orientation === 'vertical' ? height : width);
 	const monthsLong = $derived(span(months));
 	const marks = $derived(yearMarks(months, Math.floor(length / LABEL_ROOM)));
-	const currentIndex = $derived(
-		Math.max(
-			0,
-			months.findIndex((m) => m.key === current)
-		)
-	);
 
 	// While dragging only the needle follows the pointer; the jump (which may have to load
-	// many pages) happens once, where the drag ends.
+	// many pages) happens once, where the drag ends. The month that was asked for keeps the
+	// needle until the page says where it is now: by a new `current`, or by having scrolled.
 	let drag = $state<{ at: number; key: string } | null>(null);
+	let asked = $state<string | null>(null);
 	let press: { x: number; y: number; year: string | undefined } | null = null;
-	const needle = $derived(
-		drag ?? (current ? { at: position(months, current), key: current } : null)
+	const month = $derived(asked ?? current);
+	const needle = $derived(drag ?? (month ? { at: position(months, month), key: month } : null));
+	const monthIndex = $derived(
+		Math.max(
+			0,
+			months.findIndex((m) => m.key === month)
+		)
 	);
+	$effect(() => {
+		void current;
+		asked = null;
+	});
+
+	function ask(key: string) {
+		asked = key === current ? null : key;
+		onjump(key);
+	}
 
 	let idle = $state(true);
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+	let settleTimer: ReturnType<typeof setTimeout> | undefined;
 	function wake() {
 		idle = false;
 		clearTimeout(idleTimer);
-		idleTimer = setTimeout(() => (idle = true), IDLE_MS);
+		// A finger resting on the ruler is still using it.
+		idleTimer = setTimeout(() => (press ? wake() : (idle = true)), IDLE_MS);
 	}
-	onDestroy(() => clearTimeout(idleTimer));
+	function onscroll() {
+		if (fades) wake();
+		// The page has moved: once it has said which month is in view, that is where the needle is.
+		clearTimeout(settleTimer);
+		if (asked) settleTimer = setTimeout(() => (asked = null), SETTLE_MS);
+	}
+	onDestroy(() => {
+		clearTimeout(idleTimer);
+		clearTimeout(settleTimer);
+	});
 
 	/** The point of the ruler under the pointer: 0 at the newest end, 1 at the oldest. */
 	function pointAt(event: PointerEvent): { at: number; key: string } | null {
@@ -65,6 +88,7 @@
 	}
 
 	function onpointerdown(event: PointerEvent) {
+		if (event.button !== 0) return;
 		const year = (event.target as HTMLElement).closest<HTMLElement>('[data-key]');
 		press = { x: event.clientX, y: event.clientY, year: year?.dataset.key };
 		track?.setPointerCapture(event.pointerId);
@@ -80,11 +104,15 @@
 
 	function onpointerup(event: PointerEvent) {
 		if (!press) return;
-		const tapped = Math.hypot(event.clientX - press.x, event.clientY - press.y) < TAP_SLOP;
+		const dx = event.clientX - press.x;
+		const dy = event.clientY - press.y;
+		const tapped = Math.hypot(dx, dy) < TAP_SLOP;
+		// Lying, a finger that went mostly up or down was scrolling the page across the ruler.
+		const scrolled = orientation === 'horizontal' && !tapped && Math.abs(dy) > Math.abs(dx);
 		// A tap on a written year goes to that year; anything else to the month under the pointer.
-		const key = (tapped && press.year) || pointAt(event)?.key;
+		const key = scrolled ? null : (tapped && press.year) || pointAt(event)?.key;
 		endDrag();
-		if (key) onjump(key);
+		if (key) ask(key);
 	}
 
 	function endDrag() {
@@ -105,12 +133,13 @@
 		};
 		if (!(event.key in step)) return;
 		event.preventDefault();
-		const next = Math.min(Math.max(currentIndex + step[event.key], 0), months.length - 1);
-		if (months[next]) onjump(months[next].key);
+		// From the month asked for last, so keys pressed before the page has moved add up.
+		const next = Math.min(Math.max(monthIndex + step[event.key], 0), months.length - 1);
+		if (months[next]) ask(months[next].key);
 	}
 </script>
 
-<svelte:window onscroll={fades ? wake : undefined} />
+<svelte:window {onscroll} />
 
 {#if months.length > 1}
 	<div
@@ -127,8 +156,8 @@
 		aria-orientation={orientation}
 		aria-valuemin={0}
 		aria-valuemax={months.length - 1}
-		aria-valuenow={currentIndex}
-		aria-valuetext={current ? monthLabel(current) : undefined}
+		aria-valuenow={months.length - 1 - monthIndex}
+		aria-valuetext={month ? monthLabel(month) : undefined}
 		{onpointerdown}
 		{onpointermove}
 		{onpointerup}
@@ -248,6 +277,8 @@
 		border-radius: var(--r-1);
 		overflow: hidden;
 		cursor: ew-resize;
+		/* A swipe up or down that starts on the ruler scrolls the page; sideways is the ruler's. */
+		touch-action: pan-y;
 		transition: opacity var(--motion) var(--ease);
 		--towards: to left;
 	}

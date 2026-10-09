@@ -32,6 +32,34 @@ describe('TimeRuler', () => {
 		await userEvent.keyboard('{End}');
 		expect(onjump).toHaveBeenLastCalledWith('2018-01');
 	});
+
+	it('arrows pressed before the page has moved add up', async () => {
+		const onjump = vi.fn();
+		render(TimeRuler, { months, current: '2020-05', onjump, orientation: 'vertical' });
+		(page.getByRole('slider').element() as HTMLElement).focus();
+		await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+		expect(onjump.mock.calls).toEqual([['2019-12'], ['2018-01']]);
+		await userEvent.keyboard('{ArrowUp}');
+		expect(onjump).toHaveBeenLastCalledWith('2019-12');
+	});
+
+	it('as a slider its value rises towards now: Up and Right raise it', async () => {
+		const onjump = vi.fn();
+		const view = render(TimeRuler, { months, current: '2019-12', onjump, orientation: 'vertical' });
+		const slider = page.getByRole('slider');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '1');
+		(slider.element() as HTMLElement).focus();
+		await userEvent.keyboard('{ArrowUp}');
+		expect(onjump).toHaveBeenLastCalledWith('2020-05');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '2');
+		await expect.element(slider).toHaveAttribute('aria-valuetext', 'May 2020');
+		await view.rerender({ current: '2020-05' });
+		await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '0');
+		await userEvent.keyboard('{ArrowRight}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '1');
+		expect(onjump).toHaveBeenLastCalledWith('2019-12');
+	});
 });
 
 describe('TimeRuler: dragging', () => {
@@ -47,7 +75,7 @@ describe('TimeRuler: dragging', () => {
 		onjump: (key: string) => void,
 		orientation: 'vertical' | 'horizontal' = 'vertical'
 	) {
-		render(TimeRuler, { months, current: '2020-05', onjump, orientation });
+		const view = render(TimeRuler, { months, current: '2020-05', onjump, orientation });
 		const slider = page.getByRole('slider').element() as HTMLElement;
 		// The page gives it its size; here nothing does.
 		slider.style.height = orientation === 'vertical' ? '400px' : '48px';
@@ -55,16 +83,24 @@ describe('TimeRuler: dragging', () => {
 		// A synthetic event has no live pointer to capture.
 		slider.setPointerCapture = () => {};
 		const rect = slider.getBoundingClientRect();
-		const at = (type: string, fraction: number, target: Element = slider) =>
+		const at = (
+			type: string,
+			fraction: number,
+			target: Element = slider,
+			{ across = 0, ...extra }: PointerEventInit & { across?: number } = {}
+		) =>
 			target.dispatchEvent(
 				new PointerEvent(type, {
 					pointerId: 1,
 					bubbles: true,
-					clientX: orientation === 'vertical' ? rect.left + 5 : rect.left + rect.width * fraction,
-					clientY: orientation === 'vertical' ? rect.top + rect.height * fraction : rect.top + 5
+					clientX:
+						orientation === 'vertical' ? rect.left + 5 + across : rect.left + rect.width * fraction,
+					clientY:
+						orientation === 'vertical' ? rect.top + rect.height * fraction : rect.top + 5 + across,
+					...extra
 				})
 			);
-		return { at, slider };
+		return { at, slider, view };
 	}
 	const tag = () => page.getByText(/^[A-Z][a-z]{2} \d{4}$/);
 
@@ -113,6 +149,69 @@ describe('TimeRuler: dragging', () => {
 		await expect.element(tag()).toHaveTextContent('Jan 2018');
 		at('pointerup', 0.05);
 		expect(onjump.mock.calls).toEqual([['2018-01']]);
+	});
+
+	it('after the release the needle stays where it was let go until the page reports a month', async () => {
+		const onjump = vi.fn();
+		const { at, view } = ruler(onjump);
+		at('pointerdown', 0.1);
+		at('pointermove', 0.9);
+		at('pointerup', 0.9);
+		// The jump is loading its pages: `current` is still May 2020.
+		await new Promise((r) => setTimeout(r, 50));
+		await expect.element(tag()).toHaveTextContent('Jan 2018');
+		await view.rerender({ current: '2019-12' });
+		await expect.element(tag()).toHaveTextContent('Dec 2019');
+	});
+
+	it('only the main button drags: a right click neither moves the needle nor jumps', async () => {
+		const onjump = vi.fn();
+		const { at } = ruler(onjump);
+		at('pointerdown', 0.9, undefined, { button: 2 });
+		await expect.element(tag()).toHaveTextContent('May 2020');
+		at('pointerup', 0.9, undefined, { button: 2 });
+		expect(onjump).not.toHaveBeenCalled();
+	});
+
+	it('lying: a swipe up or down across the ruler scrolls the page, it does not jump', async () => {
+		const onjump = vi.fn();
+		const { at, slider } = ruler(onjump, 'horizontal');
+		// The browser may take a vertical pan for itself; a sideways one stays ours.
+		expect(getComputedStyle(slider).touchAction).toBe('pan-y');
+		at('pointerdown', 0.3);
+		at('pointermove', 0.31, undefined, { across: -30 });
+		at('pointerup', 0.31, undefined, { across: -60 });
+		expect(onjump).not.toHaveBeenCalled();
+		await expect.element(tag()).toHaveTextContent('May 2020');
+		// Sideways, with a finger's wobble, still jumps.
+		at('pointerdown', 0.95);
+		at('pointerup', 0.05, undefined, { across: -12 });
+		expect(onjump.mock.calls).toEqual([['2018-01']]);
+	});
+
+	it('upright: every drag on the ruler is its own', async () => {
+		const { slider } = ruler(() => {});
+		expect(getComputedStyle(slider).touchAction).toBe('none');
+	});
+
+	it('a fading ruler stays while a finger rests on it', async () => {
+		render(TimeRuler, {
+			months,
+			current: '2020-05',
+			onjump: () => {},
+			orientation: 'horizontal',
+			fades: true
+		});
+		const slider = page.getByRole('slider');
+		const el = slider.element() as HTMLElement;
+		el.setPointerCapture = () => {};
+		window.dispatchEvent(new Event('scroll'));
+		el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, bubbles: true }));
+		await new Promise((r) => setTimeout(r, 1700));
+		await expect.element(slider).not.toHaveClass(/idle/);
+		el.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, bubbles: true }));
+		await new Promise((r) => setTimeout(r, 1700));
+		await expect.element(slider).toHaveClass(/idle/);
 	});
 
 	it('a fading ruler is hidden until the page scrolls and hides again when idle', async () => {
