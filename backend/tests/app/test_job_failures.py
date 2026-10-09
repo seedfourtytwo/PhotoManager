@@ -6,14 +6,13 @@ waiting (the network, a locked repository, an unplugged disk, a slow tool) is ke
 hierarchy on purpose and is retried with a growing wait.
 """
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from photo_assistant.adapters.proton_drive import ProtonDrive
 from photo_assistant.adapters.rclone_sync import RcloneSync
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.tool_runner import ToolTimeoutError
 from photo_assistant.app.backup import BACKUP_JOB, UnknownTargetError
 from photo_assistant.app.worker import Worker
@@ -39,17 +38,7 @@ from photo_assistant.ports.sync import (
     SyncToolMissingError,
 )
 from tests.app.test_backup import World
-from tests.factories import NOW
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
-
-
-@pytest.fixture
-def repo() -> SqliteRepository:
-    return SqliteRepository(open_database(":memory:"))
+from tests.fakes import FakeClock
 
 
 def _run_once(repo: SqliteRepository, error: Exception) -> None:
@@ -57,7 +46,7 @@ def _run_once(repo: SqliteRepository, error: Exception) -> None:
         raise error
 
     repo.enqueue("job", {})
-    assert Worker(repo, {"job": fail}, FixedClock()).run_until_idle() == 1
+    assert Worker(repo, {"job": fail}, FakeClock()).run_until_idle() == 1
 
 
 @pytest.mark.parametrize(
@@ -65,6 +54,8 @@ def _run_once(repo: SqliteRepository, error: Exception) -> None:
     [
         UnknownTargetError("no backup target 7"),
         SyncToolMissingError("rclone is not installed on this machine"),
+        SyncAuthError("the login was refused"),
+        SyncNotFoundError("folder 'x' not found on 'mega'"),
         BackupToolMissingError("'restic' is not installed: sudo apt install restic"),
         ModelUnavailableError("model file clip.onnx is missing: run `just models`"),
         ModelFormatError("clip.onnx: expected 512 dimensions"),
@@ -82,8 +73,6 @@ def test_what_waiting_cannot_fix_fails_at_once(repo: SqliteRepository, error: Ex
     "error",
     [
         SyncError("pulling from 'mega' failed: connection reset"),
-        SyncAuthError("the login was refused"),
-        SyncNotFoundError("folder 'x' not found on 'mega'"),
         SyncRateLimitedError("the provider is throttling"),
         BackupError("restic did not answer within 5 min"),
         RepositoryLockedError("the repository is locked by another restic"),
@@ -109,7 +98,7 @@ def test_a_backup_job_for_a_target_deleted_meanwhile_fails_at_once(
 ) -> None:
     world = World(tmp_path)
     repo.enqueue(BACKUP_JOB, {"target_id": 99})
-    assert Worker(repo, world.service.job_handlers(), FixedClock()).run_until_idle() == 1
+    assert Worker(repo, world.service.job_handlers(), FakeClock()).run_until_idle() == 1
     (failed,) = repo.list_jobs("failed")
     assert failed["attempts"] == 1 and failed["error"] == "UnknownTargetError: no backup target 99"
 

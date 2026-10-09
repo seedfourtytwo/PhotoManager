@@ -69,6 +69,9 @@ def seed_people(services: Services, sources: dict[str, int], db: Path) -> None:
     repo.set_access(sources["old-hdd"], Level.VIEW, [(partner, Level.DOWNLOAD)])
     repo.set_source_owner(sources["partner"], partner)
     repo.set_access(sources["partner"], None, [(partner, Level.EDIT)])
+    # the folders were imported before any account existed: creating the admin gave them an owner
+    ownerless = [s.label for s in repo.list_sources() if s.owner_id is None]
+    assert not ownerless, f"folders without an owner in the seeded library: {ownerless}"
 
     conn = sqlite3.connect(db)
     summers = near(conn, DORDOGNE, 24)

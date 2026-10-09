@@ -51,7 +51,8 @@ faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, f
 `inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
 `taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
-admin (see Visibility in §7). `ANALYZE` runs after migrating, `PRAGMA
+admin (see Visibility in §7); `0026` keeps what the last global face-clustering pass saw
+(`face_cluster_pass`, `face_cluster_mark`). `ANALYZE` runs after migrating, `PRAGMA
 optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
@@ -91,6 +92,9 @@ backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, s
               quiet_window, retention_json, enabled, created_at)                     -- 0016
 backup_run(id, target_id → backup_target ON DELETE CASCADE, kind, status, started_at, …)
 ml_task, clip_embedding, face, person, tag, asset_tag, asset_ml_flag                 -- 0015
+face_cluster_pass(model PK, rule)   -- settings of the last finished global clustering pass (0026)
+face_cluster_mark(face_id PK → face ON DELETE CASCADE, person_id, cluster_state, created_at,
+                  fingerprint)      -- each face as that pass saw it (0026)
 ```
 
 Still planned (later milestones, first cut):
@@ -109,7 +113,20 @@ The SQLite adapter is one `SqliteRepository` composed of per-area mixins
 on the process's ONE `Database` (`adapters/sqlite_database.py`, B16/B26): a single writer
 connection behind a single lock for every write and transaction (transactions nest by joining
 the outer one), and a read-only WAL connection per thread for reads, so reads never wait for a
-write. A read inside a transaction uses the writer and sees its own rows. A source of any kind
+write. A read inside a transaction uses the writer and sees its own rows.
+
+**Commits are not flushed one by one.** The writer runs with `synchronous = NORMAL`: in WAL
+mode that cannot corrupt the database, and SQLite flushes the disk at checkpoints instead of
+at every commit (3.0 ms → 0.03 ms per commit, see `PERFORMANCE.md`). The price is that a power
+cut can take back the commits of the last seconds (until the operating system has written
+them out, about half a minute at most on Linux). What is lost that way comes back by itself:
+an import scans its folder again and finds the copied original by its hash, a queued job is
+queued again by its periodic task or the next scan, an upload's inbox is picked up by the
+hourly check. A change a person made in those seconds (a favourite, an album edit) has to be
+made again. Three writes that nothing would redo are flushed before they return
+(`Database.durable`): forgetting a purged photo, because its files are deleted right after;
+a new backup target, the only link between a repository and its key file; and the owner's
+confirmation that the key is kept. A source of any kind
 (folder, rclone, inbox) is created by one method, `SourceRegistry.add_source`, with the access
 the domain rule `default_source_access` gives its kind.
 
@@ -126,6 +143,15 @@ the domain rule `default_source_access` gives its kind.
 4. Enqueue `preview` (M1); later `embed`, `faces`, `geocode`, `phash` jobs.
 5. The job queue is a table; the worker polls it; each job is retryable and safe to rerun
    ("Jobs and lanes" below: retries wait, running jobs have an owner).
+
+**A file that changed in place** (a cut-off download later replaced by the whole file): the
+path's `asset_source` row goes to the photo the file holds now. The photo it held before is
+kept as long as another file holds it; if none does, the import moves it to the trash
+(`trashed_by` empty: not a person's act) and says so on the report item, because a photo
+without a source is hidden from every member while an admin keeps seeing it. From the trash it
+can be restored for 30 days (it then has no source: only admins see it, or an album shares
+it). If a file shows that content again, the import takes the photo back out; and purging it
+does not put its hash on the never-import-again list, which is for what a person deleted.
 
 ### Multiple sources
 Each `source` row is scanned independently (local path, or an rclone remote pulled read-only
@@ -157,7 +183,7 @@ libvips for loupe previews and downloads. Golden-image tests keep preview and ex
 ### Backup
 `BackupPort` with a restic adapter. Per target: `restic backup data/originals data/recipes
 data/db-snapshot` where the DB snapshot is taken first with SQLite's online backup API (never
-copy a live `.db` file). restic stores deduplicated, encrypted, versioned snapshots; its rclone
+copy a live `.db` file); what a crash left half-written (`*.partial`) is excluded. restic stores deduplicated, encrypted, versioned snapshots; its rclone
 backend reaches SMB/SFTP/cloud targets. There is no scheduler library: the periodic thread
 (`app/periodic.py`, one thread that runs each of its tasks every so many seconds) queues a
 `backup_due` job every `PA_BACKUP_POLL_SECONDS` (60 s); that job, on the worker's long lane,
@@ -247,17 +273,25 @@ claims only its kinds, atomically, so a backup or a big import never starves pre
 uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering,
 and a `scan_source` for each source whose automatic re-check is due: `app/recheck.py`, rule in
 `domain/recheck.py`) or runs cheap housekeeping (`PRAGMA optimize`, pruning finished jobs older than 7 days).
-ML jobs are planned only when their model files are installed.
+ML jobs are planned only when their model files are installed. The global face-clustering
+pass (nightly and at every start) looks only at waiting faces near a face that changed since
+the last finished pass; what that pass saw is kept in the library (0026), so a restart goes
+on from it. Every waiting face is stepped again only when no pass has finished yet for the
+face model with the current clustering settings.
 
 **Retries wait (0022).** Domain errors (`domain/errors.py`) fail a job at once, without
 retries: they say "the same job would fail the same way" (a folder that is gone, a tool or a
 model that is not installed, a backup target deleted meanwhile). So an error that may pass by
 waiting must never be a `DomainError`: `SyncError`, `BackupError` and `AIUnavailableError`
 stay outside the hierarchy for that reason (`tests/app/test_job_failures.py` pins both lists).
-Anything else gets 3 attempts, and a failed attempt sets the job's `run_after`: 1
-minute after the first failure, 5 after the second (`domain/job_queue.RETRY_DELAYS`; a third
-entry, 25 minutes, applies if `max_attempts` is ever raised). A claim skips jobs whose time has
-not come, so a network blip, a locked backup repository or an unplugged disk has ~6 minutes to
+A pull fails for both kinds, so `SyncError` is split: by itself (network, a throttling or slow
+provider, out of time) it is retried; its subclasses for what waiting cannot fix are a
+`DomainError` too and fail the job at once (`SyncAuthError`, `SyncNotFoundError`,
+`SyncToolMissingError`, `SyncUnsupportedError`, `SyncDiskFullError`: `ports/sync.py`).
+Anything else gets 4 attempts (`domain/job_queue.MAX_ATTEMPTS`: one more than the schedule
+has waits), and a failed attempt sets the job's `run_after`: 1 minute after the first failure,
+5 after the second, 25 after the third (`RETRY_DELAYS`). A claim skips jobs whose time has
+not come, so a network blip, a locked backup repository or an unplugged disk has ~31 minutes to
 pass before the job fails for good, instead of ~3 seconds. "Retry" on the admin screen clears
 the wait and the attempts: the job runs at the next poll. `run_until_idle` (CLI import, tests)
 returns once nothing is *due*; a waiting retry stays queued for the server's worker.
@@ -283,7 +317,7 @@ the next sweep decides.
 **Indexes (0022).** `job_waiting (kind, id) WHERE status = 'queued'` holds only waiting jobs:
 each lane's poll and `enqueue_once` seek to their own kinds instead of walking the 10k previews
 queued by an import. `asset_by_variant_of` serves the purge's variant lookup and the foreign-key
-check on every `DELETE FROM asset`.
+check on every `DELETE FROM asset`; `album_by_cover` (0025) does the same for album covers.
 
 ## 5. Performance budget (10k photos on the laptop)
 
@@ -345,8 +379,9 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   comparison needs an owner on the source, so every source has one: a folder or cloud (rclone,
   Proton Drive) source belongs to the admin who adds it, an upload inbox to its user, a folder
   imported from the command line to the first admin; migration `0023` gave the ownerless
-  cloud sources of older libraries to the first admin. Only a library with no account yet
-  has ownerless sources, and the first-run setup hands them to the first admin. Guests
+  cloud sources of older libraries to the first admin. Only a library with no admin yet
+  has ownerless sources; they go to the first admin when one is made, by the first-run setup
+  or by `create-user --role admin` (`Accounts.give_ownerless_sources_to_first_admin`). Guests
   are capped at download. The condition is correlated `EXISTS` per photo (C25), so a timeline
   page stops at its `LIMIT` on the timeline index; admins get a cheaper check (only someone
   else's private photos need a look). Timeline, facets, calendar, map, albums, detail, images,
@@ -355,7 +390,11 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   roles × trash) and `tests/adapters/test_visibility_rule.py` (random libraries checked against
   the previous set-based rule).
 - Sessions: random 256-bit token in the `pa_session` cookie (HttpOnly, SameSite=Strict, Secure
-  over HTTPS); only its SHA-256 is stored. Every `/api` route except health, setup and login
+  over HTTPS); only its SHA-256 is stored. A session ends 30 days after its last use; the
+  browser counts the cookie's 30 days from when it was set, so a session in use gets the same
+  cookie again every 15 days (`api/security.SessionCookieRenewal`). The server cannot see a
+  cookie's age: a second cookie, `pa_session_fresh`, is set alongside for 15 days, and a
+  request without it is the sign that half the time is over. Every `/api` route except health, setup and login
   needs a session; source, scan, import, job, access-list and user routes are admin-only.
   Upload routes take the session **or** a device token through one fail-closed dependency
   (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
@@ -367,16 +406,16 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   (409), `InvalidError` (422), `UnavailableError` (503); the three sign-in errors set their own
   (401, 423, 429). A use case or adapter raises a named subclass with the sentence the user
   reads (`PersonNotFoundError`, `InvalidBackupTargetError`, `SourceExistsError`), and the route
-  does nothing. Of the 80 exception classes, 50 are in the hierarchy (2026-10-08). Classes that
+  does nothing. Of the 83 exception classes, 55 are in the hierarchy (2026-10-08). Classes that
   were plain `ValueError`s before keep `ValueError` as a second base, so the command line and
   older `except ValueError` code still catch them.
-  - **Outside on purpose (30 classes, each listed with its reason in
+  - **Outside on purpose (28 classes, each listed with its reason in
     `tests/unit/test_error_hierarchy.py`, which fails for a new class that is neither):**
     what may pass by waiting (`SyncError`, `BackupError`, `AIUnavailableError`: see "Retries
-    wait"), signals caught where they are raised (`DuplicateAssetError`, `ToolMissingError`,
+    wait"; a `SyncError` met while answering a request is a 503 from a second, two-line
+    handler in `api/main.py`), signals caught where they are raised (`DuplicateAssetError`, `ToolMissingError`,
     `UploadTooLargeError`), and errors only the command line reports.
-  - **Routes that still translate by hand (12 blocks):** `SyncError` in the Proton and rclone
-    routes (404 for a missing folder, else 503: it is outside the hierarchy); a blocked print
+  - **Routes that still translate by hand (7 blocks):** a blocked print
     (its body also lists the photos); three whose sentence is the route's, not the error's
     (wrong current PIN, unknown backup target, photo not analysed yet); a too-long name on a
     people split (a bare `ValueError`, because the rename route lets the same error through

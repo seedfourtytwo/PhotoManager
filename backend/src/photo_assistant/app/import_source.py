@@ -11,8 +11,11 @@ import logging
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import tzinfo
 from pathlib import Path, PurePosixPath
 
+from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
+from photo_assistant.app.trash import TRASH_DAYS
 from photo_assistant.domain.capture_time import pick_capture_time
 from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.library_paths import derived_relpath, original_relpath
@@ -50,6 +53,9 @@ log = logging.getLogger(__name__)
 PREVIEW_JOB = "preview"
 PURGED_REASON = "deleted from the library earlier"
 PAUSED_REASON = "not processed: import paused because free disk space is low"
+# A file whose content changed since its last import: what became of the photo it held before.
+CHANGED_KEPT = "file changed since the last import; previous version kept"
+CHANGED_TRASHED = f"{CHANGED_KEPT} in the trash for {TRASH_DAYS} days"
 
 
 class SourceUnavailableError(UnavailableError):
@@ -61,6 +67,9 @@ class ImportSettings:
     min_free_bytes: int = 10 * 1000**3  # FEATURES 11.4: stop before the disk fills up
     thumb_edge: int = 640
     metadata_batch: int = 50
+    # Where a timestamp in a file name (FB_IMG_<milliseconds>) becomes local time, with the
+    # zone's offset on the photo's own day. None = this machine's zone.
+    local_tz: tzinfo | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,17 +301,40 @@ class ImportSource:
         if asset_id is None:
             return None
         self._repair_if_needed(asset_id, f)
-        already_linked = self._repo.asset_id_for_source_path(source.id, f.relative_path) == asset_id
+        before = self._repo.asset_id_for_source_path(source.id, f.relative_path)
         earlier = self._repo.previous_path_in_source(asset_id, source.id, exclude=f.relative_path)
-        self._repo.add_asset_source(asset_id, source.id, f.relative_path, f.fingerprint)
-        if already_linked:
+        changed = self._link(asset_id, source, f, before)
+        if before == asset_id:
             return ItemResult(f.relative_path, Outcome.ALREADY_KNOWN, asset_id=asset_id)
         reason = (
             f"same photo as {earlier} (renamed, moved or copied)"
             if earlier
             else "same photo already in the library"
         )
+        if changed:
+            reason = f"{reason}; {changed}"
         return ItemResult(f.relative_path, Outcome.DUPLICATE, reason, asset_id)
+
+    def _link(self, asset_id: int, source: Source, f: SourceFile, before: int | None) -> str | None:
+        """Record that the file at this path holds ``asset_id``. ``before``: the photo the
+        path held until now. Returns what to tell about that one, if the file changed."""
+        self._repo.add_asset_source(asset_id, source.id, f.relative_path, f.fingerprint)
+        if self._repo.restore_superseded(asset_id):  # a file holds it again
+            self._repo.enqueue_once(GROUP_JOB, FULL_REGROUP)
+        return self._superseded(before, asset_id)
+
+    def _superseded(self, before: int | None, now_holds: int) -> str | None:
+        """The path held photo ``before`` and its file now holds another one. A photo is
+        seen through its sources, so one that no file holds any more would be gone from
+        every member's view and stay in the library unseen: it goes to the trash instead,
+        where it can be restored for TRASH_DAYS."""
+        if before is None or before == now_holds:
+            return None
+        if not self._repo.trash_superseded(before, self._clock.now()):
+            return CHANGED_KEPT  # another file still holds it
+        self._repo.enqueue_once(GROUP_JOB, FULL_REGROUP)  # groups lose a member
+        log.info("superseded photo moved to the trash", extra={"asset_id": before})
+        return CHANGED_TRASHED
 
     def _repair_if_needed(self, asset_id: int, f: SourceFile) -> None:
         """A photo recorded without its thumbnail (e.g. by an older version or a crash) gets
@@ -377,16 +409,21 @@ class ImportSource:
                 c.file.fingerprint,
             )
         except DuplicateAssetError as dup:  # imported concurrently from elsewhere
-            self._repo.add_asset_source(dup.asset_id, source.id, path, c.file.fingerprint)
+            changed = self._link(dup.asset_id, source, c.file, replaced)
             reason = "same photo already in the library"
+            if changed:
+                reason = f"{reason}; {changed}"
             return ItemResult(path, Outcome.DUPLICATE, reason, dup.asset_id)
-        note = "file changed since the last import; previous version kept" if replaced else None
-        return ItemResult(path, Outcome.IMPORTED, note, asset_id)
+        return ItemResult(path, Outcome.IMPORTED, self._superseded(replaced, asset_id), asset_id)
 
     def _describe(self, c: _Candidate, meta: PhotoMetadata) -> NewAsset:
         name = PurePosixPath(c.file.relative_path)
         taken = pick_capture_time(
-            meta.dates, filename=name.name, file_mtime=c.file.mtime, now=self._clock.now()
+            meta.dates,
+            filename=name.name,
+            file_mtime=c.file.mtime,
+            now=self._clock.now(),
+            to_local=lambda moment: moment.astimezone(self._settings.local_tz),
         )
         width, height = meta.display_size or (None, None)
         return NewAsset(
@@ -416,10 +453,11 @@ class ImportSource:
         for d in deferred:
             asset_id = self._repo.find_asset_id_by_hash(d.content_hash)
             if asset_id is not None:
-                self._repo.add_asset_source(
-                    asset_id, source.id, d.file.relative_path, d.file.fingerprint
-                )
+                before = self._repo.asset_id_for_source_path(source.id, d.file.relative_path)
+                changed = self._link(asset_id, source, d.file, before)
                 reason = f"same photo as {d.first_path}"
+                if changed:
+                    reason = f"{reason}; {changed}"
                 report.add(ItemResult(d.file.relative_path, Outcome.DUPLICATE, reason, asset_id))
             elif paused:
                 report.add(ItemResult(d.file.relative_path, Outcome.SKIPPED, PAUSED_REASON))

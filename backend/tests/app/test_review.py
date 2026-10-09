@@ -2,10 +2,11 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.app.enrich import GroupSimilar
 from photo_assistant.app.review import Review
 from photo_assistant.domain.access import Role, Viewer
@@ -13,14 +14,10 @@ from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.ports import RenderedImage
 from tests.factories import NOW, new_asset
+from tests.fakes import FakeClock
 
 ADMIN = Viewer(1, Role.ADMIN)
 SAME = "0000000000000000"
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 class NamedHasher:
@@ -32,17 +29,17 @@ class NamedHasher:
 
 @pytest.fixture
 def repo() -> SqliteRepository:
-    repo = SqliteRepository(open_database(":memory:"))
+    repo = SqliteRepository(Database.open(":memory:"))
     repo.add_user("c", "C", "hash", Role.ADMIN)
     return repo
 
 
 @pytest.fixture
 def review(repo: SqliteRepository) -> Review:
-    return Review(repo, FixedClock())
+    return Review(repo, FakeClock())
 
 
-def photo(repo: SqliteRepository, n: int, look: str = "own", **kw: object) -> int:
+def photo(repo: SqliteRepository, n: int, look: str = "own", **kw: Any) -> int:
     asset_id = repo.add_asset(new_asset(n, **kw), NOW)
     repo.set_thumbnail(asset_id, RenderedImage(f"derived/thumb/{look}-{n}.webp", 1, 1))
     return asset_id
@@ -83,12 +80,38 @@ def test_look_alikes_within_one_import_are_a_burst_not_a_review(
     assert {v.group_id for v in repo.list_all_views(ADMIN, AssetFilter())} == {a}
 
 
+def test_two_frames_of_a_burst_hashed_by_two_jobs_are_grouped_not_held(
+    repo: SqliteRepository, review: Review
+) -> None:
+    """Phone uploads queue one scan per request, so a burst's frames are hashed job by job."""
+    a = photo(repo, 1, "same", taken_at=datetime(2019, 7, 1, 12, 0, 0))
+    grouper(repo, review)({})
+    b = photo(repo, 2, "same", taken_at=datetime(2019, 7, 1, 12, 0, 1))
+    grouper(repo, review)({})
+    c = photo(repo, 3, "same", taken_at=datetime(2019, 7, 1, 12, 10, 0))
+    grouper(repo, review)({})
+    assert library(repo) == {a, b, c} and waiting(review) == {}
+    assert {v.group_id for v in repo.list_all_views(ADMIN, AssetFilter())} == {a}
+
+
+def test_a_frame_of_a_new_burst_that_copies_an_old_photo_is_still_held_like_the_old_one(
+    repo: SqliteRepository, review: Review
+) -> None:
+    old = photo(repo, 1, "same", taken_at=datetime(2019, 7, 1, 12, 0, 0))
+    first = photo(repo, 2, "own", taken_at=datetime(2023, 1, 1, 9, 0, 0))
+    grouper(repo, review)({})
+    second = photo(repo, 3, "same", taken_at=datetime(2023, 1, 1, 9, 0, 1))
+    grouper(repo, review)({})
+    assert library(repo) == {old, first}
+    assert waiting(review) == {second: ("lookalike", old)}
+
+
 def test_a_held_photo_does_not_join_groups_until_it_is_kept(
     repo: SqliteRepository, review: Review
 ) -> None:
     old = photo(repo, 1, "same", taken_at=datetime(2019, 7, 1, 12, 0, 0))
-    grouper(repo, review)({})
     copy = photo(repo, 2, "same", taken_at=datetime(2019, 7, 1, 12, 0, 1))
+    assert review.hold_clutter(copy, [TagScore("screenshot", 0.08)]) is True
     grouper(repo, review)({})
     assert [v.group_id for v in repo.list_all_views(ADMIN, AssetFilter())] == [None]
     assert review.keep([copy]) == 1

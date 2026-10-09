@@ -6,7 +6,10 @@ job that fails forever. Jobs read the best rendition the library has: preview, e
 thumbnail, else the original — all orientation-corrected by the image loader.
 """
 
+import heapq
+import json
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import asdict
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -134,32 +137,71 @@ class DetectFaces(_AssetTask):
 
 class ClusterFaces:
     """``{"asset_id": n}``: first pass for that photo's new faces (queued by detect_faces).
-    ``{}``: every new face, then every deferred or unmatched face again (backfill, nightly)."""
+    ``{}``: every new face, then the deferred faces again (backfill, nightly, server start).
+
+    A deferred face that found nobody keeps finding nobody until a face within its reach is
+    added or placed with a person. So the store keeps what the last finished global pass saw
+    of each face, and a pass steps only the deferred faces near a face that changed since
+    (``face_changes``), in the same order as stepping all of them. That is kept in the
+    library, at the end of a pass and all at once: a server start goes on from it, and a
+    pass that failed or was cut off kept nothing, so what it placed is a change like any
+    other for the next one. Every deferred face is stepped only when no pass has finished
+    yet for this model with these settings (a new or upgraded library, a changed reach)."""
 
     def __init__(self, store: MlStore, model: str, params: ClusterParams) -> None:
         self._store, self._model, self._params = store, model, params
+        self._rule = json.dumps(asdict(params), sort_keys=True)
 
     def __call__(self, payload: dict[str, object]) -> None:
         asset_id = asset_id_of(payload) if "asset_id" in payload else None
         for face_id in self._store.faces_to_cluster(self._model, deferred=False, asset_id=asset_id):
             self._step(face_id, deferred=False)
         if asset_id is None:
-            for face_id in self._store.faces_to_cluster(self._model, deferred=True):
-                self._step(face_id, deferred=True)
+            self._deferred_pass()
 
-    def _step(self, face_id: int, *, deferred: bool) -> None:
-        reach, needed = self._params.max_distance, self._params.min_faces
-        matches = self._store.count_face_matches(face_id, reach, limit=needed)
-        person = self._store.nearest_person(face_id, reach)
-        decision = decide(matches, person, self._params, deferred=deferred)
+    def _deferred_pass(self) -> None:
+        # read before any deferred face is stepped: what this pass itself places is not in
+        # the marks it keeps, so it counts as changed in the next one
+        since = self._store.face_changes(self._model)
+        deferred = self._store.faces_to_cluster(self._model, deferred=True)
+        if since.rule == self._rule:
+            self._step_near(set(since.marks), deferred)
+        else:
+            for face_id in deferred:
+                self._step(face_id, deferred=True)
+        if since.marks or since.rule != self._rule:
+            self._store.keep_face_marks(self._model, self._rule, since.marks)
+
+    def _step_near(self, changed: set[int], deferred: Sequence[int]) -> None:
+        reach = self._params.max_distance
+        woken = set(self._store.deferred_faces_near(self._model, changed, reach))
+        todo = sorted(woken.union(changed.intersection(deferred)))
+        queued = set(todo)
+        while todo:
+            face_id = heapq.heappop(todo)
+            if not self._step(face_id, deferred=True):
+                continue
+            # placed: the deferred faces after it see that in this pass, like in a full one
+            for other in self._store.deferred_faces_near(self._model, [face_id], reach):
+                if other > face_id and other not in queued:
+                    queued.add(other)
+                    heapq.heappush(todo, other)
+
+    def _step(self, face_id: int, *, deferred: bool) -> bool:
+        """True when the face was placed with a person."""
+        found = self._store.face_matches(face_id, self._params.max_distance)
+        decision = decide(found.count, found.person_id, self._params, deferred=deferred)
         if decision.action is Action.ASSIGN and decision.person_id is not None:
             self._store.assign_face(face_id, decision.person_id)
         elif decision.action is Action.NEW_PERSON:
             self._store.create_person(face_id)
-        elif not deferred:
-            # Deferred or unmatched: stays in the queue of the next global pass, so a face
-            # whose look-alikes arrive later still finds its person.
-            self._store.mark_deferred(face_id)
+        else:
+            if not deferred:
+                # Deferred or unmatched: waits for a global pass, so a face whose
+                # look-alikes arrive later still finds its person.
+                self._store.mark_deferred(face_id)
+            return False
+        return True
 
 
 class AutoTag:

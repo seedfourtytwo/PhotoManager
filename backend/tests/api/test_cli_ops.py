@@ -10,6 +10,7 @@ import pytest
 from photo_assistant import __main__ as cli
 from photo_assistant.api import cli_ops
 from photo_assistant.api.cli_ops import human_bytes
+from photo_assistant.api.ops_services import RcloneTool, build_backup_service
 from photo_assistant.api.settings import Settings
 from tests.library_builder import build_library, settings_for
 
@@ -223,8 +224,8 @@ def test_backup_from_the_command_line_uses_the_configured_rclone(
     run from the command line must reach an rclone remote the same way."""
     settings.integrations.rclone_binary = "/opt/rclone/rclone"
     settings.integrations.rclone_config = tmp_path / "rclone.conf"
-    seen: list[cli_ops.RcloneTool] = []
-    real = cli_ops.build_backup_service
+    seen: list[RcloneTool] = []
+    real = build_backup_service
 
     def spy(*args: object, **kwargs: object) -> object:
         seen.append(kwargs["rclone"])  # type: ignore[arg-type]
@@ -234,4 +235,4 @@ def test_backup_from_the_command_line_uses_the_configured_rclone(
         patch.setattr(cli_ops, "build_backup_service", spy)
         code, _ = run(capsys, settings, "backup", "list")
     assert code == 0
-    assert seen == [cli_ops.RcloneTool("/opt/rclone/rclone", tmp_path / "rclone.conf")]
+    assert seen == [RcloneTool("/opt/rclone/rclone", tmp_path / "rclone.conf")]

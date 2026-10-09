@@ -3,6 +3,7 @@
 	import type { BackupTarget, Job, MlStatus, Stats } from '$lib/api';
 	import { api, backupWatch, library, notice, session } from '$lib/app.svelte';
 	import { formatBytes } from '$lib/format';
+	import { queueText, retryText } from '$lib/jobs';
 	import { Poller } from '$lib/poller';
 	import Backups from '$lib/components/admin/Backups.svelte';
 	import Sources from '$lib/components/admin/Sources.svelte';
@@ -10,6 +11,8 @@
 
 	let stats = $state<Stats | null>(null);
 	let failed = $state<Job[]>([]);
+	/** Failed once and waiting for their next attempt: shown with its time, nothing to press. */
+	let retrying = $state<Job[]>([]);
 	let backups = $state<BackupTarget[]>([]);
 	let ml = $state<MlStatus | null>(null);
 	let refresh = $state(0);
@@ -17,6 +20,7 @@
 	const count = new Intl.NumberFormat('en-GB');
 
 	const active = $derived(stats ? stats.jobs.queued + stats.jobs.running : 0);
+	const work = $derived(stats ? queueText(stats.jobs) : '');
 	const backingUp = $derived(backups.some((b) => b.last_run?.status === 'running'));
 
 	/**
@@ -29,14 +33,16 @@
 				api.stats(),
 				api.jobs('failed'),
 				api.backups().catch(() => []),
+				api.jobs('waiting'),
 				backupWatch.load()
 			]),
 		(answer) => {
 			const wasActive = active > 0 || backingUp;
-			[stats, failed, backups] = answer;
+			[stats, failed, backups, retrying] = answer;
 			if (active > 0 || wasActive) refresh++;
 			if (wasActive && active === 0) library.changed();
-			return active > 0 || backingUp;
+			// a job waiting for its retry will run: keep looking until it has
+			return active > 0 || backingUp || retrying.length > 0;
 		},
 		{ every: 1500, onerror: (e) => notice.error(e) }
 	);
@@ -88,9 +94,7 @@
 		<p class="quiet status" aria-live="polite">
 			{#if stats}
 				{count.format(stats.assets)} photos · {formatBytes(stats.free_bytes)} free on the library disk
-				{#if active}&nbsp;· <span class="working"
-						>working: {stats.jobs.running} running, {stats.jobs.queued} queued</span
-					>
+				{#if work}&nbsp;· <span class="working">{work}</span>
 				{/if}
 			{/if}
 		</p>
@@ -101,7 +105,8 @@
 			<h2 id="a-jobs">Problems</h2>
 			{#if failed.length === 0}
 				<p class="quiet">No failed jobs.</p>
-			{:else}
+			{/if}
+			{#if failed.length || retrying.length}
 				<ul>
 					{#each failed as job (job.id)}
 						<li>
@@ -112,6 +117,14 @@
 								>{job.error} · {job.attempts} attempt{job.attempts === 1 ? '' : 's'}</span
 							>
 							<button type="button" onclick={() => retry(job)}>Retry</button>
+						</li>
+					{/each}
+					{#each retrying as job (job.id)}
+						<li>
+							<span
+								>{job.kind}{#if job.payload.asset_id}&nbsp;· photo {job.payload.asset_id}{/if}</span
+							>
+							<span class="quiet">{job.error} · {retryText(job.run_after)}</span>
 						</li>
 					{/each}
 				</ul>

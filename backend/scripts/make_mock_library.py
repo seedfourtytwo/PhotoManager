@@ -73,10 +73,10 @@ def scene(rng: random.Random, place: Place, when: datetime, w: int, h: int) -> p
     """A simple landscape: sky gradient, ground, sun/moon, a few soft shapes."""
     sky, ground = place.palette
     dusk = 1.0 - min(1.0, abs(when.hour - 13) / 9)
-    sky = tuple(int(c * (0.55 + 0.45 * dusk)) for c in sky)
+    sky_at_this_hour = [int(c * (0.55 + 0.45 * dusk)) for c in sky]
     y = pyvips.Image.xyz(w, h)[1]
     t = y / h
-    sky_img = (t * -60 + list(sky)).cast("uchar")  # darker towards the horizon
+    sky_img = (t * -60 + sky_at_this_hour).cast("uchar")  # darker towards the horizon
     horizon = int(h * rng.uniform(0.5, 0.7))
     ground_img = (pyvips.Image.black(w, h, bands=3) + list(ground)).cast("uchar")
     mask = (y > horizon + (pyvips.Image.xyz(w, h)[0] / w * math.pi * 4).sin() * 12).ifthenelse(

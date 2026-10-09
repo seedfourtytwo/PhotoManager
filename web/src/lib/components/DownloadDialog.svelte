@@ -63,7 +63,7 @@
 		scopeLabel,
 		singleFileName
 	} from '$lib/download';
-	import { formatBytes } from '$lib/format';
+	import { errorMessage, formatBytes } from '$lib/format';
 	import Dialog from './Dialog.svelte';
 
 	type Props = {
@@ -96,7 +96,7 @@
 				.estimateDownload(body)
 				.then((e) => !stale && (estimate = e))
 				.catch((e: unknown) => {
-					if (!stale) estimateError = e instanceof Error ? e.message : 'Could not estimate.';
+					if (!stale) estimateError = errorMessage(e, 'Could not estimate.');
 				});
 		}, 200);
 		return () => {
@@ -157,7 +157,7 @@
 				return;
 			}
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not start the download.';
+			error = errorMessage(e, 'Could not start the download.');
 			return;
 		} finally {
 			busy = false;

@@ -57,6 +57,7 @@ lint:
     cd backend && uv run lint-imports
     cd web && pnpm lint
 
+# mypy strict on the package, its tests and the scripts (pyproject.toml says which); svelte-check.
 types:
     cd backend && uv run mypy
     cd web && pnpm check

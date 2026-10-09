@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import type { AssetOut } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import {
 		formatShort,
 		isValidLocal,
@@ -63,7 +64,7 @@
 			});
 			ondone();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not change the date.';
+			error = errorMessage(e, 'Could not change the date.');
 		} finally {
 			busy = false;
 		}

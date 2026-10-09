@@ -1,4 +1,4 @@
-"""Local-ML endpoints (docs/wiring/ml.md) through the real app.
+"""Local-ML endpoints (docs/contracts/api-v1.md, "Local ML") through the real app.
 
 Without model files everything still answers: search falls back to the core text search and
 says why, status reports "models not installed". With (fake) models the semantic path ranks

@@ -38,6 +38,8 @@ import type {
 	Health,
 	Id,
 	ImportReport,
+	ImportReportPage,
+	UploadImportJob,
 	FolderListing,
 	ImportRun,
 	Job,
@@ -231,6 +233,7 @@ export function createApi(options: ApiOptions = {}) {
 		/** v1.1: names to share albums with, for any member (not only admins). */
 		userDirectory: () => get<DirectoryEntry[]>('/api/users/directory'),
 		uploadUrl: `${base}/api/upload`,
+		uploadJob: (id: Id) => get<UploadImportJob>(`/api/upload/jobs/${id}`),
 
 		// sources, imports, jobs
 		sources: () => get<Source[]>('/api/sources'),
@@ -246,8 +249,10 @@ export function createApi(options: ApiOptions = {}) {
 		setSourceAccess: (id: Id, body: Access) =>
 			request<Access>('PUT', `/api/sources/${id}/access`, body),
 		imports: (sourceId?: Id) => get<ImportRun[]>(query('/api/imports', { source_id: sourceId })),
-		importReport: (id: Id) => get<ImportReport>(`/api/imports/${id}`),
-		jobs: (status?: JobStatus) => get<Job[]>(query('/api/jobs', { status })),
+		importReport: (id: Id, page: ImportReportPage = {}) =>
+			get<ImportReport>(query(`/api/imports/${id}`, page)),
+		/** `waiting`: the queued jobs that wait for their next attempt (`run_after` set). */
+		jobs: (status?: JobStatus | 'waiting') => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),
 

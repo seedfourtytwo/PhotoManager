@@ -6,6 +6,9 @@ folder must leave it byte-identical. Import tests (M1) take this fixture.
 `no_settings_from_the_shell` keeps the developer's own `.env` out: `just` exports it into every
 recipe, and the environment beats a test's own values.
 
+`db`, `conn`, `repo` and `clock` are the in-memory library and the fake clock most tests start
+from; a test file that needs a different one defines its own under the same name.
+
 `PA_REQUIRE_TOOLS=1` (CI sets it) turns a skip for a missing external tool into a failure, so
 a machine that is meant to have every tool can't go green with those tests left out.
 """
@@ -13,10 +16,15 @@ a machine that is meant to have every tool can't go green with those tests left 
 import hashlib
 import os
 import shutil
+import sqlite3
 from collections.abc import Generator, Iterator
 from pathlib import Path
 
 import pytest
+
+from photo_assistant.adapters.sqlite_database import Database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from tests.fakes import FakeClock
 
 pytest_plugins = ["pytester"]  # tests/unit/test_require_tools.py runs the hooks below
 
@@ -80,3 +88,27 @@ def source_guard(tmp_path: Path) -> Iterator[Path]:
     yield source
     after = snapshot_tree(source)
     assert after == before, "a source folder was modified — originals are sacred"
+
+
+@pytest.fixture
+def db() -> Iterator[Database]:
+    """An empty, migrated library database in memory."""
+    database = Database.open(":memory:")
+    yield database
+    database.close()
+
+
+@pytest.fixture
+def conn(db: Database) -> sqlite3.Connection:
+    """The connection of ``db``, for a test that reads or prepares rows with plain SQL."""
+    return db.writer
+
+
+@pytest.fixture
+def repo(db: Database) -> SqliteRepository:
+    return SqliteRepository(db)
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()

@@ -1,7 +1,7 @@
 """The ML composition helper, end to end with the real Worker, SQLite and synthetic models."""
 
-from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,13 +13,9 @@ from photo_assistant.api.settings import MlSettings, Settings
 from photo_assistant.app.ml_jobs import AUTO_TAG, DETECT_FACES, EMBED_CLIP, TaskStatus
 from photo_assistant.app.worker import Worker
 from tests.factories import NOW, new_asset
+from tests.fakes import FakeClock
 from tests.ml.test_face_adapters import buffalo, red_image
 from tests.ml.test_onnx_clip import make_clip_folder, save_png
-
-
-class Clock:
-    def now(self) -> datetime:
-        return NOW
 
 
 def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,7 +35,7 @@ def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
     assert custom.tag_params().max_tags == 3
 
 
-def setup(root: Path, ml: MlSettings) -> tuple:
+def setup(root: Path, ml: MlSettings) -> tuple[Any, ...]:
     db = Database.open(root / "library.db")  # one Database for both stores, as in the app
     repo = SqliteRepository(db)
     library = DiskLibraryStore(root)
@@ -57,7 +53,7 @@ def test_without_models_jobs_record_model_missing(tmp_path: Path) -> None:
     assert repo.list_jobs() == [], "C31: nothing queued without the model files"
     for task in (EMBED_CLIP, DETECT_FACES, AUTO_TAG):  # e.g. queued before the files went away
         repo.enqueue(task, {"asset_id": asset})
-    Worker(repo, services.handlers, Clock()).run_until_idle()
+    Worker(repo, services.handlers, FakeClock()).run_until_idle()
     for task, model in [(EMBED_CLIP, "ViT-B-32__openai"), (DETECT_FACES, "buffalo_l"),
                         (AUTO_TAG, "ViT-B-32__openai")]:  # fmt: skip
         assert services.store.task_status(asset, task, model) == TaskStatus.MODEL_MISSING
@@ -74,7 +70,7 @@ def test_with_models_photos_are_embedded_tagged_and_people_found(tmp_path: Path)
     ml = MlSettings(_env_file=None, clip_model="tiny", face_min_faces=1, provider="cpu")  # type: ignore[call-arg]
     repo, services, asset = setup(tmp_path, ml)
     services.planner.after(lambda payload: None)({"asset_id": asset})
-    Worker(repo, services.handlers, Clock()).run_until_idle()
+    Worker(repo, services.handlers, FakeClock()).run_until_idle()
 
     assert not repo.list_jobs("failed")
     assert services.store.clip_vector(asset, "tiny") is not None

@@ -96,8 +96,17 @@ export type ImportReport = {
 	status: RunStatus;
 	message: string | null;
 	summary: ImportSummary;
+	/** One page: what needs a look first (failed, skipped, duplicates), then the rest. */
 	items: ImportItem[];
+	/** Files of the run (of the asked outcome), over all pages. */
+	total: number;
+	limit: number;
+	offset: number;
+	/** The offset of the next page; null on the last one. */
+	next_offset: number | null;
 };
+/** Default page: the first 500 files; `limit` at most 2000. */
+export type ImportReportPage = { outcome?: Outcome; limit?: number; offset?: number };
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 export type Job = {
@@ -267,6 +276,11 @@ export type UploadedFile = {
 };
 /** POST /api/upload (multipart, any field name, many files). */
 export type UploadResult = { files: UploadedFile[]; import_job_id: Id | null };
+/**
+ * GET /api/upload/jobs/{import_job_id}: the import your own upload queued (any other job is a
+ * 404). `run_after` is set while a failed import waits for its next attempt.
+ */
+export type UploadImportJob = { id: Id; status: JobStatus; run_after: string | null };
 
 // --- local ML: search, similar, people (v1.1) ----------------------------------------------
 

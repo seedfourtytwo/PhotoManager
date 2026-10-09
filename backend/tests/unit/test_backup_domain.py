@@ -60,7 +60,8 @@ def test_target_kind_follows_the_repository() -> None:
     ],
 )
 def test_new_targets_are_validated(overrides: dict[str, str], error: type[Exception]) -> None:
-    values = {"label": "Disk", "repository": "/r", "password_file": "/p"} | overrides
+    values: dict[str, Any] = {"label": "Disk", "repository": "/r", "password_file": "/p"}
+    values |= overrides
     with pytest.raises(error):
         NewBackupTarget(**values)
 

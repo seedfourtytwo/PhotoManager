@@ -363,7 +363,7 @@ def test_an_admin_pin_reset_ends_every_session_and_revokes_device_tokens(
     assert admin.patch(f"/api/users/{lea_id}", json={"pin": NEW_PIN}).is_success
 
     assert lea.get("/api/auth/me").status_code == 401
-    fresh = TestClient(admin.app, base_url=BASE)  # type: ignore[arg-type]
+    fresh = TestClient(admin.app, base_url=BASE)
     assert fresh.post("/api/upload/check", json={"hashes": []}, headers=bearer).status_code == 401
     lea_again = login(admin.app, "lea", NEW_PIN)  # type: ignore[arg-type]
     assert [d["revoked"] for d in lea_again.get("/api/devices").json()] == [True]

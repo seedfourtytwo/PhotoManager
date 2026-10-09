@@ -14,6 +14,7 @@ import type {
 	DownloadRequest,
 	Level,
 	ManagedUser,
+	Outcome,
 	Recipe,
 	Role,
 	Source,
@@ -53,6 +54,8 @@ import {
 
 /** How long a source that checks itself waits between checks. */
 const RECHECK_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
+/** An import report lists what needs a look first (backend: domain/model.py REPORT_ORDER). */
+const REPORT_ORDER: Outcome[] = ['failed', 'skipped', 'duplicate', 'already_known', 'imported'];
 const LEVELS: Level[] = ['view', 'download', 'edit'];
 const rank = (level: Level | null) => (level ? LEVELS.indexOf(level) : -1);
 const maxLevel = (a: Level | null, b: Level | null) => (rank(a) >= rank(b) ? a : b);
@@ -655,7 +658,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 			/^\/api\/stats$/,
 			(ctx) => {
 				const counts = { queued: 0, waiting: 0, running: 0, done: 0, failed: 0 };
-				for (const j of state.jobs) counts[j.status]++;
+				for (const j of state.jobs)
+					counts[j.status === 'queued' && j.run_after !== null ? 'waiting' : j.status]++;
 				return ok({
 					assets: visible(me(ctx)).length,
 					sources: state.sources.length,
@@ -672,7 +676,11 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const status = ctx.url.searchParams.get('status');
 				return ok(
 					state.jobs
-						.filter((j) => !status || j.status === status)
+						.filter((j) =>
+							status === 'waiting'
+								? j.status === 'queued' && j.run_after !== null
+								: !status || j.status === status
+						)
 						.map(({ run_at: _runAt, ...job }) => job)
 				);
 			}
@@ -822,6 +830,22 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					status: 'done' as const, attempts: 1, error: null, run_after: null, run_at: 0 }; // prettier-ignore
 				state.jobs.push(job);
 				return ok({ files, import_job_id: job.id });
+			}
+		],
+		// the import an upload of the caller queued; any other job is "not found"
+		[
+			'GET',
+			/^\/api\/upload\/jobs\/(\d+)$/,
+			(ctx) => {
+				const user = me(ctx);
+				if (user.role === 'guest')
+					throw new HttpError(403, 'Guests can view and download, not upload.');
+				const job = state.jobs.find((j) => j.id === idParam(ctx));
+				const source = state.sources.find((s) => s.id === Number(job?.payload.source_id));
+				const mine = source?.kind === 'inbox' && source.owner_id === user.id;
+				if (!job || job.kind !== 'import' || !mine)
+					throw new HttpError(404, 'No import of an upload of yours with that id.');
+				return ok({ id: job.id, status: job.status, run_after: job.run_after });
 			}
 		],
 		[
@@ -1019,13 +1043,29 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				const report = state.reports.find((r) => r.id === idParam(ctx));
 				if (!report) throw new HttpError(404, 'Import run not found.');
 				const outcome = ctx.url.searchParams.get('outcome');
+				const limit = Number(ctx.url.searchParams.get('limit') ?? 500);
+				const offset = Number(ctx.url.searchParams.get('offset') ?? 0);
+				if (!Number.isInteger(limit) || limit < 1 || limit > 2000)
+					throw new HttpError(422, 'limit must be between 1 and 2000.');
+				if (!Number.isInteger(offset) || offset < 0)
+					throw new HttpError(422, 'offset must not be negative.');
+				// what needs a look first; within an outcome, in the order of the run
+				const wanted = REPORT_ORDER.flatMap((o) =>
+					!outcome || o === outcome ? report.items.filter((i) => i.outcome === o) : []
+				);
+				const items = wanted.slice(offset, offset + limit);
+				const end = offset + items.length;
 				return ok({
 					id: report.id,
 					source_id: report.source_id,
 					status: report.status,
 					message: report.message,
 					summary: report.summary,
-					items: report.items.filter((i) => !outcome || i.outcome === outcome)
+					items,
+					total: wanted.length,
+					limit,
+					offset,
+					next_offset: end < wanted.length ? end : null
 				});
 			}
 		],

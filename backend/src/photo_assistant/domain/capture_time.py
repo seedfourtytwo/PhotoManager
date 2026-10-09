@@ -9,6 +9,7 @@ because most cameras don't record a timezone and converting would shift photos a
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -175,13 +176,26 @@ def _plausible(value: datetime, now: datetime) -> bool:
     return EARLIEST_PLAUSIBLE <= value <= now.replace(tzinfo=None) + FUTURE_TOLERANCE
 
 
+# An absolute moment as local time with the offset that applied *at that moment* (summer or
+# winter time). Given by the caller, which knows the zone: the domain looks nothing up.
+ToLocal = Callable[[datetime], datetime]
+
+
 def pick_capture_time(
-    dates: MetadataDates, *, filename: str, file_mtime: datetime, now: datetime
+    dates: MetadataDates,
+    *,
+    filename: str,
+    file_mtime: datetime,
+    now: datetime,
+    to_local: ToLocal | None = None,
 ) -> CaptureTime:
     """Apply the fallback chain.
 
     ``file_mtime`` must be timezone-aware *in the zone the file was saved in* (the adapter
-    gives the machine's local zone); ``now`` must be timezone-aware."""
+    gives the machine's local zone); ``now`` must be timezone-aware. ``to_local`` turns the
+    moment in a file name's timestamp into local time. Without it the offset of
+    ``file_mtime`` is used, which is the offset of the day the file was saved: an hour off
+    for a photo taken in winter and saved in summer."""
     candidates = [
         (dates.date_time_original, DateSource.EXIF),
         (dates.create_date, DateSource.EXIF_CREATE),
@@ -198,19 +212,22 @@ def pick_capture_time(
 
     epoch = _epoch_from_filename(PurePath(filename).stem)
     if epoch is not None and _plausible(epoch.replace(tzinfo=None), now):
-        return _in_zone_of(epoch, file_mtime, DateSource.FILENAME)
+        return _in_zone_of(epoch, file_mtime, DateSource.FILENAME, to_local)
     not_after = min(now.replace(tzinfo=None) + FUTURE_TOLERANCE, FILENAME_LATEST)
     from_name = date_from_filename(filename, not_after)
     if from_name and _plausible(from_name, now):
         return CaptureTime(from_name, None, DateSource.FILENAME)
 
-    return _from_mtime(file_mtime, now)
+    return _from_mtime(file_mtime, now, to_local)
 
 
-def _in_zone_of(moment: datetime, reference: datetime, source: DateSource) -> CaptureTime:
-    """Express an absolute moment as wall-clock time in the reference's zone (the machine's
-    local zone): a photo saved at 00:30 on 1 January must not land in December."""
-    local = moment.astimezone(reference.tzinfo)
+def _in_zone_of(
+    moment: datetime, reference: datetime, source: DateSource, to_local: ToLocal | None
+) -> CaptureTime:
+    """Express an absolute moment as wall-clock time in the local zone: a photo saved at
+    00:30 on 1 January must not land in December. ``to_local`` knows the zone's offset at
+    that moment; without it the reference's fixed offset has to do."""
+    local = to_local(moment) if to_local else moment.astimezone(reference.tzinfo)
     offset = local.utcoffset()
     minutes = int(offset.total_seconds() // 60) if offset is not None else None
     # whole seconds, like every other source (an mtime has nanoseconds; QA A12)
@@ -218,5 +235,5 @@ def _in_zone_of(moment: datetime, reference: datetime, source: DateSource) -> Ca
     return CaptureTime(wall, minutes, source)
 
 
-def _from_mtime(file_mtime: datetime, now: datetime) -> CaptureTime:
-    return _in_zone_of(min(file_mtime, now), file_mtime, DateSource.FILE_MTIME)
+def _from_mtime(file_mtime: datetime, now: datetime, to_local: ToLocal | None) -> CaptureTime:
+    return _in_zone_of(min(file_mtime, now), file_mtime, DateSource.FILE_MTIME, to_local)

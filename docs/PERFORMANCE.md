@@ -95,9 +95,106 @@ its *own* kind still reads each (no caller does that: the ML backfill reads the 
 A heartbeat thread per running job costs 0.08 ms to start and stop.
 
 The table was measured before `asset_by_held_like` was added to the same migration: with it
-the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Not fixed
-here: the same `DELETE` checks `clip_embedding` and `album.cover_asset_id` without a usable index
-(not measured: the synthetic library has no embeddings).
+the look-alike row no longer scans `asset` (asserted by query plan, not re-timed). Migration
+`0025` added `album_by_cover` for the same `DELETE`'s check of `album.cover_asset_id` (asserted
+by query plan, not timed) and `clip_embedding_by_asset` for its check of `clip_embedding`:
+without planner statistics for that table the check scanned it, 46 ms per purged photo at 50k
+embeddings, 0.06 ms with the index (measured with the ML work; here asserted by query plan).
+
+## Commits without a disk flush each (`synchronous = NORMAL`)
+
+400 single-statement commits (`INSERT INTO job`) on a library database file, ext4 on NVMe,
+development machine, SQLite 3.45.1, two runs each:
+
+| ms per commit | median | mean |
+|---|---|---|
+| WAL + `synchronous = FULL` (before) | 3.00 / 3.02 | 2.86 / 3.16 |
+| WAL + `synchronous = NORMAL` (after) | **0.02 / 0.03** | 0.05 / 0.06 |
+
+An imported photo is at least 5 commits, each under the one write lock, so about 15 ms of
+waiting for the disk per photo is gone (2.5 min in 10k photos), and the other writers
+(previews recording their paths, the job queue) no longer queue behind those flushes. Not
+re-timed end to end. The trade-off and the three writes that still flush are in
+`ARCHITECTURE.md` §3.
+
+## Faces, people and look-alikes (ML and review)
+
+Synthetic rows only, in a temp-file database on the development machine (16 cores, other work
+running: single timings move by ±30 %): 25,000 photos, 50,000 faces of 512 numbers each
+(60 people, 20,000 strangers that stay deferred), 25,000 CLIP vectors; an admin, a member and a
+guest who see 25,000 / 16,667 / 8,333 photos through three sources. "Before" is `a1c0a0e`
+(clustering: `5463926`).
+
+**Nightly face clustering** (the global `cluster_faces {}` pass, also run at every start):
+
+| | before | after |
+|---|---|---|
+| one deferred face: how many faces match, who is nearest | 184 + 226 ms (two scans) | 129–190 ms (one scan) |
+| global pass, nothing added or placed since the last one | ≈ 137 min (20,000 × 410 ms, projected) | **0.24 s** |
+| global pass after 100 new faces (strangers) | ≈ 138 min (projected) | **30 s** (200 steps + one comparison of the 100 with the 20,000) |
+| first global pass after a server start | ≈ 137 min (projected) | ≈ 43–63 min (20,000 × one scan, projected); see "across a restart" below |
+
+One statement now answers both questions with one distance per other face. The handler keeps
+what the last global pass saw per face (person, state, creation time, start of the embedding;
+about 0.15 s to read) and steps only the deferred faces within reach of a face that was added,
+detected again or placed since — by clustering, or by a person on the People screen — in the
+same id order, so the people are the ones a pass over every deferred face gives
+(`tests/ml/test_ml_jobs.py`, random days against the old pass). Which deferred faces are near
+N changed faces costs 20,000 × N distances in one statement: 0.08 s for 1, 2.9 s for 100, 20 s
+for 500.
+
+**The same pass across a restart** (migration 0026). That memory lived in the process, so the
+first pass after every start stepped every deferred face once. It is now kept in the library:
+`face_cluster_mark` holds each face as the last finished pass saw it, `face_cluster_pass` the
+clustering settings of that pass. Measured on a second synthetic library of the same shape
+(50,000 faces, 20,000 deferred; one scan took 99 ms that day, so "before" is 20,000 × 99 ms):
+
+| first global pass after a server start | before | after |
+|---|---|---|
+| nothing added or placed since the last pass | ≈ 33 min (projected) | **0.09 s**, 0 rows written |
+| 100 new faces (strangers) since the last pass | ≈ 33 min (projected) | **23 s** (200 steps 20 s, the 100 against the 20,000 2.1 s) |
+| a library no pass has finished on (an upgrade, a changed reach or group size) | ≈ 33 min | the same, once; then as above |
+
+A pass reads only the faces that differ from their mark (one statement, 0.07 s; 0.14 s when
+nothing is kept yet) and at its end writes one row per face that differed plus one for the
+pass, in one transaction: 101 rows in 0.02 s after 100 new faces, 1,001 rows in 0.008 s, 50,001
+rows in 0.22 s for the first pass of a library (3.1 MB in the file, about 63 bytes a face).
+Nothing changed: nothing written. A pass that fails or is cut off has written no mark, so the
+next one sees everything it placed as a change and goes on from there; it steps every
+deferred face only when `face_cluster_pass` has no row for the face model or one with other
+settings. A mark goes with its face (foreign key), and holds the creation time and the start
+of the embedding because a face id is used again (`tests/ml/test_ml_jobs.py`: the random days
+now include restarts, passes cut off half way and a restart right after one).
+
+**People and similar photos** (ms, median of 7; admin / member / guest):
+
+| | before | after |
+|---|---|---|
+| `GET /people` (60 people) | 170 / 195 / 142 | 148 / 137 / 84 |
+| `GET /people/{id}` (one of ~500 faces) | 59 / 67 / 50 | **2.6 / 3.9 / 3.2** |
+| `GET /people/{id}/assets` (first 200) | 89 / 85 / 60 | **4.4 / 6.5 / 5.6** |
+| rename (`PATCH /people/{id}`) | 93 / 82 / 61 | **7.4 / 7.1 / 6.5** |
+| similar photos (`/assets/{id}/similar`) | 115 / 104 / 85 | 81 / 87 / 62 |
+
+Measured at the use-case level (`People`, `SimilarPhotos`) without HTTP. Before, each request
+listed every photo the viewer may see and copied the ids into a temp table; now the ML store
+gets the viewer and puts the library's rule into its own statement: looked up for one person's
+faces only, once per photo for whole-library reads (`/people`, similar photos). Those two still
+check the rule for every photo with a face or a vector, which is what is left of their time
+besides the 25,000 distances.
+
+**Look-alikes held for review** (`domain.review.lookalikes`, pure Python, random hashes, a
+tenth of the new photos within 4 bits of a library photo): 20,000 new photos against a
+30,000-photo library took **58 s** (6 × 10⁸ comparisons; 1,000 timed, × 20) and now **0.38 s**:
+library hashes are indexed by 5 bands of bits and a new photo meets only the hashes sharing a
+band. Real hashes are less evenly spread than random ones, so expect more candidates per photo.
+
+**Purging a photo with 50,000 embeddings stored**: the cascade into `clip_embedding` looks the
+photo up by `asset_id`, but the table's only index starts with `model`. With planner statistics
+for that table SQLite skips over the one model: 0.07 ms per delete. Without them (a library
+whose `ANALYZE` ran before the first embedding existed) it reads the whole table, vectors
+included: **46 ms** per delete. `CREATE INDEX clip_embedding_by_asset ON clip_embedding
+(asset_id)` makes it 0.06 ms in both cases; not added here (it needs a migration).
 
 ## Import and previews (C28)
 

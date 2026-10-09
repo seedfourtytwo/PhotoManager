@@ -32,7 +32,7 @@ jobs:
         run: uv run ruff check . && uv run ruff format --check .
       - name: Layer contracts
         run: uv run lint-imports
-      - name: Types
+      - name: Types (the package, its tests and the scripts)
         run: uv run mypy
       - name: Tests (a test skipped for a missing tool fails here)
         run: uv run pytest --cov

@@ -1,12 +1,11 @@
 """Semantic search, similar photos and people use cases — always within the visible set."""
 
 import math
-import sqlite3
 
 import pytest
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.people import FaceNotFoundError, People, PersonNotFoundError
 from photo_assistant.app.search import (
     NotIndexedError,
@@ -18,21 +17,6 @@ from photo_assistant.domain.faces import BoundingBox, Face
 from photo_assistant.domain.vectors import Vector
 from tests.factories import NOW, new_asset
 from tests.ml.fakes import FakeClip
-
-
-@pytest.fixture
-def conn() -> sqlite3.Connection:
-    return open_database(":memory:")
-
-
-@pytest.fixture
-def repo(conn: sqlite3.Connection) -> SqliteRepository:
-    return SqliteRepository(conn)
-
-
-@pytest.fixture
-def store(conn: sqlite3.Connection) -> SqliteMlStore:
-    return SqliteMlStore(conn)
 
 
 def angle(deg: float) -> Vector:
@@ -149,7 +133,7 @@ def test_person_assets_are_limited_to_visible_ones(
     store: SqliteMlStore, family: dict[str, int]
 ) -> None:
     assets = People(store).assets(family["lea"], visible(family))
-    assert assets == [family["a"], family["b"]]
+    assert assets == [family["b"], family["a"]], "newest first; same moment: highest id first"
 
 
 def test_merge(store: SqliteMlStore, family: dict[str, int]) -> None:

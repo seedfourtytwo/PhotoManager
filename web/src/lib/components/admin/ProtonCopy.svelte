@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { BackupTarget, ProtonStatus } from '$lib/api';
 	import { api } from '$lib/app.svelte';
+	import { errorMessage } from '$lib/format';
 	import { PROTON_FILES, protonPlaceName } from '$lib/proton';
 	import Dialog from '../Dialog.svelte';
 	import ProtonFolders, { type PickedFolder } from './ProtonFolders.svelte';
@@ -18,7 +19,7 @@
 		try {
 			status = await api.proton();
 		} catch (e) {
-			status = { ready: false, problem: e instanceof Error ? e.message : 'Could not ask.' };
+			status = { ready: false, problem: errorMessage(e, 'Could not ask.') };
 		}
 	}
 	$effect(() => void check());
@@ -31,7 +32,7 @@
 			onchange();
 			onclose();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not save that.';
+			error = errorMessage(e, 'Could not save that.');
 		} finally {
 			saving = false;
 		}

@@ -18,7 +18,6 @@ import logging
 import re
 import sqlite3
 import threading
-import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -86,6 +85,11 @@ def open_database(path: str | Path, backup_dir: Path | None = None) -> sqlite3.C
     conn.execute("PRAGMA foreign_keys = ON")
     if is_file:
         conn.execute("PRAGMA journal_mode = WAL")
+        # In WAL mode a commit is safe from corruption without flushing the disk; NORMAL only
+        # flushes at checkpoints (3 ms -> 0.03 ms per commit, each under the write lock). The
+        # price: a power cut can lose the commits of the last seconds. Imports and jobs get
+        # those back by scanning again; the few writes nothing brings back use ``durable``.
+        conn.execute("PRAGMA synchronous = NORMAL")
         conn.execute("PRAGMA busy_timeout = 5000")
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     known = migrations()
@@ -135,9 +139,6 @@ class WriteLock:
         return bool(getattr(self._local, "depth", 0))
 
 
-_WRAPPED: "weakref.WeakValueDictionary[int, Database]" = weakref.WeakValueDictionary()
-
-
 class Database:
     def __init__(self, writer: sqlite3.Connection, path: Path | None) -> None:
         writer.row_factory = sqlite3.Row
@@ -154,24 +155,6 @@ class Database:
         """Open and migrate the library database (see ``open_database``)."""
         conn = open_database(path, backup_dir)
         return cls(conn, None if str(path) == ":memory:" else Path(path))
-
-    @classmethod
-    def of(cls, conn: sqlite3.Connection) -> "Database":
-        """The Database around a bare connection: one per connection, so stores handed the
-        same connection still share one lock.
-
-        The app never needs this: it opens the Database and hands that to every store. It is
-        here for the many tests (and scripts/perf/bench_repo.py) that build a store straight
-        on ``open_database(...)``; once they open a Database instead, this and ``_WRAPPED``
-        can go, and the stores can take a Database only."""
-        found = _WRAPPED.get(id(conn))
-        if found is not None and found.writer is conn:
-            return found
-        row = conn.execute("PRAGMA database_list").fetchone()
-        file = row[2] if row is not None else ""
-        database = cls(conn, Path(file) if file else None)
-        _WRAPPED[id(conn)] = database
-        return database
 
     @property
     def path(self) -> Path | None:
@@ -220,6 +203,26 @@ class Database:
                 if self.writer.in_transaction:
                     self.writer.execute("ROLLBACK")
                 raise
+
+    @contextmanager
+    def durable(self) -> Iterator[sqlite3.Connection]:
+        """A transaction that is on the disk when it returns (one flush, ~3 ms): for a write
+        that a power cut must not take back because nothing would redo it, e.g. forgetting a
+        photo right before its files are deleted. Never inside another transaction: SQLite
+        cannot change the flush level there, and the outer commit would not be flushed."""
+        with self.lock:
+            if self.writer.in_transaction:
+                raise RuntimeError("a durable write cannot start inside a transaction")
+            if self._path is None:  # in memory: nothing to flush
+                with self.transaction() as conn:
+                    yield conn
+                return
+            self.writer.execute("PRAGMA synchronous = FULL")
+            try:
+                with self.transaction() as conn:
+                    yield conn
+            finally:
+                self.writer.execute("PRAGMA synchronous = NORMAL")
 
     def close(self) -> None:
         """Close every connection. Idempotent: every store sharing it may call it."""

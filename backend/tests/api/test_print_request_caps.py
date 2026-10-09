@@ -14,7 +14,7 @@ from photo_assistant.api.routes.printing import (
 from photo_assistant.domain.print_layout import LAYOUTS
 
 BIGGEST = max(lay.capacity for lay in LAYOUTS.values())
-TEXT_PAGE = {"layout_id": "text", "asset_ids": [], "text": "Day 1"}
+TEXT_PAGE: dict[str, Any] = {"layout_id": "text", "asset_ids": [], "text": "Day 1"}
 
 
 def test_the_largest_real_request_is_accepted() -> None:

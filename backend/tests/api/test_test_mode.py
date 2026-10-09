@@ -5,6 +5,7 @@ start unless the server only listens on and answers to loopback names, and only 
 requests coming from this machine.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -39,10 +40,10 @@ def test_test_mode_refuses_to_start_beyond_this_machine(
 
 
 @pytest.fixture
-def test_app(tmp_path: Path) -> TestClient:
+def test_app(tmp_path: Path) -> Iterator[TestClient]:
     app = create_app(make_settings(tmp_path / "data", test_mode=True))
     with TestClient(app, base_url=BASE, client=LOCAL) as client:
-        yield client  # type: ignore[misc]
+        yield client
 
 
 def _snapshot(client: TestClient, name: str) -> None:

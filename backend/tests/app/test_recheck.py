@@ -7,13 +7,9 @@ from photo_assistant.app.recheck import ScheduledChecks
 from photo_assistant.domain.model import Source
 from photo_assistant.domain.recheck import Recheck
 from tests.factories import NOW
+from tests.fakes import FakeClock
 
 HOUR = timedelta(hours=1)
-
-
-class FixedClock:
-    def now(self) -> datetime:
-        return NOW
 
 
 @dataclass
@@ -55,14 +51,14 @@ def test_queues_one_scan_job_for_each_source_that_is_due() -> None:
         ],
         attempts={1: NOW - 2 * HOUR, 2: NOW - 2 * HOUR, 4: NOW - 900 * HOUR},
     )
-    checks = ScheduledChecks(store, FixedClock())
+    checks = ScheduledChecks(store, FakeClock())
     assert checks.queue_due() == [1, 3]
     assert store.queued == [("scan_source", {"source_id": 1}), ("scan_source", {"source_id": 3})]
 
 
 def test_a_source_whose_check_is_waiting_or_running_is_not_queued_again() -> None:
     store = FakeStore([_source(1, Recheck.HOURLY), _source(2, Recheck.HOURLY)], checking={2})
-    checks = ScheduledChecks(store, FixedClock())
+    checks = ScheduledChecks(store, FakeClock())
     assert checks.queue_due() == [1]
     assert checks.queue_due() == [], "the first look's job is still waiting"
     assert len(store.queued) == 1
@@ -78,7 +74,7 @@ def test_next_checks_tells_when_each_source_checks_itself_next() -> None:
         ],
         attempts={1: NOW - HOUR, 2: NOW, 3: NOW},
     )
-    assert ScheduledChecks(store, FixedClock()).next_checks() == {
+    assert ScheduledChecks(store, FakeClock()).next_checks() == {
         1: NOW + 23 * HOUR,
         2: None,
         3: None,

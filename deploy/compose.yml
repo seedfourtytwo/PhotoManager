@@ -1,6 +1,7 @@
 # Photo Assistant on the home server (docs/guides/move-to-server.md).
 #
-# !! UNTESTED until built on the server (no Docker daemon where this was written).
+# !! The image builds and runs (deploy/Dockerfile); this compose file itself (volumes, env
+# !! file, limits) is UNTESTED until run on the server.
 #
 #   cp deploy/server.env.example deploy/server.env     # then edit it
 #   docker compose -f deploy/compose.yml up -d --build

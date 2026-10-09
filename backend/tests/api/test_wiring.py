@@ -96,7 +96,10 @@ def test_housekeeping_prunes_the_tables_that_only_ever_grew(
 ) -> None:
     services = services_of(admin)
     repo, now = services.repo, services.clock.now()
-    count = lambda table: services.db.writer.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: E731
+
+    def count(table: str) -> object:
+        return services.db.writer.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
     old_failure = now - LOGIN_FAILURES_KEPT - timedelta(hours=1)
     repo.record_login_attempt("nobody", "10.0.0.9", old_failure, old_failure)
     repo.record_login_attempt(
@@ -150,7 +153,7 @@ def test_housekeeping_rescans_upload_inboxes_without_piling_up(admin: TestClient
 
     services.ops.periodic.tick()
     assert waiting() == [], "nothing in the inbox is waiting: no scan, no empty import report"
-    inbox = repo.get_source(claimed.payload["source_id"])
+    inbox = repo.get_source(claimed.payload["source_id"])  # type: ignore[arg-type]
     assert inbox is not None
     stranded = Path(inbox.root) / "2026-10" / "b.jpg"
     stranded.parent.mkdir(parents=True)

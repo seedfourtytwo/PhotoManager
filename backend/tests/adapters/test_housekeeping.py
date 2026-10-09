@@ -4,24 +4,12 @@ per-file rows of old import runs."""
 import sqlite3
 from datetime import timedelta
 
-import pytest
-
 from photo_assistant.adapters.sqlite_integrations import SqliteAILog
-from photo_assistant.adapters.sqlite_repository import SqliteRepository, open_database
+from photo_assistant.adapters.sqlite_repository import Database, SqliteRepository
 from photo_assistant.domain.access import Role
 from photo_assistant.domain.model import ImportReport, ItemResult, Outcome, RunStatus
 from photo_assistant.ports.ai import AICall
 from tests.factories import NOW
-
-
-@pytest.fixture
-def conn() -> sqlite3.Connection:
-    return open_database(":memory:")
-
-
-@pytest.fixture
-def repo(conn: sqlite3.Connection) -> SqliteRepository:
-    return SqliteRepository(conn)
 
 
 def _count(conn: sqlite3.Connection, table: str) -> int:
@@ -58,8 +46,8 @@ def test_sessions_idle_for_longer_than_the_limit_are_deleted(repo: SqliteReposit
     assert repo.session_user("on the limit") is not None, "not expired yet: left alone"
 
 
-def test_the_ai_log_keeps_only_recent_calls(conn: sqlite3.Connection) -> None:
-    log = SqliteAILog(conn)
+def test_the_ai_log_keeps_only_recent_calls(db: Database, conn: sqlite3.Connection) -> None:
+    log = SqliteAILog(db)
     for _ in range(3):
         log.record(AICall("caption", "m", {}, {}, True, 1, None, 1))
     conn.execute("UPDATE ai_log SET created_at = '2026-06-01T08:00:00.000Z' WHERE id = 1")
