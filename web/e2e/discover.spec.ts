@@ -26,10 +26,8 @@ test('search without models: word matches, and a calm note that leads an admin t
 	const note = page.getByRole('note');
 	await expect(note).toContainText('Search by what is in a photo is not set up yet');
 	await expect(note).not.toContainText('just models');
-	await expect(note.getByRole('link', { name: 'Set it up in Admin' })).toHaveAttribute(
-		'href',
-		'/admin#a-ml'
-	);
+	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
+	await expect(note.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
 	await box.fill('sarlat');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
@@ -63,9 +61,10 @@ test('without models, People leads an admin to where faces are set up', async ({
 	const note = page.getByRole('note');
 	await expect(note).toContainText('New faces are not being found yet');
 	await expect(note.locator('code')).toHaveCount(0);
-	await note.getByRole('link', { name: 'Set it up in Admin' }).click();
-	await expect(page).toHaveURL(/\/admin#a-ml$/);
-	await expect(page.getByRole('heading', { name: 'Search and faces' })).toBeInViewport();
+	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
+	await note.getByRole('link', { name: 'Admin' }).click();
+	await expect(page).toHaveURL(/\/admin$/);
+	await expect(page.getByRole('heading', { name: 'Search and faces' })).toBeVisible();
 });
 
 test('search with models ranks by meaning; facets are read back', async ({ page }) => {

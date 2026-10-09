@@ -19,6 +19,50 @@ export const DEFAULT_OPTIONS: DownloadOptions = {
 	folders: 'flat'
 };
 
+/**
+ * The plain choices the dialog opens on. Each one is a format and a size; every other
+ * option, and every other format and size, is under "More options".
+ */
+export type Simple = 'full' | 'edited' | 'small';
+type Shape = Pick<DownloadOptions, 'format' | 'max_edge'>;
+
+const SIMPLE: Record<Simple, Shape> = {
+	full: { format: 'original', max_edge: null },
+	edited: { format: 'jpeg', max_edge: null },
+	small: { format: 'jpeg', max_edge: 2048 }
+};
+
+/** `edited`: the photos have edits, which only a made file carries (the original never does). */
+export function simpleChoices(edited: boolean): { value: Simple; label: string; about: string }[] {
+	return [
+		{
+			value: 'full',
+			label: 'Full size',
+			about: edited ? 'The file as it was taken, without the edits.' : 'The file as it was taken.'
+		},
+		...(edited
+			? [{ value: 'edited' as const, label: 'With edits', about: 'A full-size JPEG.' }]
+			: []),
+		{
+			value: 'small',
+			label: 'Smaller',
+			about: `A lighter JPEG, quick to send.${edited ? ' Edits included.' : ''}`
+		}
+	];
+}
+
+/** The plain choice these options amount to, or null when they were set by hand to something else. */
+export function simpleOf(options: DownloadOptions): Simple | null {
+	const found = (Object.keys(SIMPLE) as Simple[]).find(
+		(key) => SIMPLE[key].format === options.format && SIMPLE[key].max_edge === options.max_edge
+	);
+	return found ?? null;
+}
+
+export function applySimple(options: DownloadOptions, choice: Simple): DownloadOptions {
+	return { ...options, ...SIMPLE[choice] };
+}
+
 /** Quality only matters for lossy formats; keep it within the contract's 1..100. */
 function normaliseOptions(options: DownloadOptions): DownloadOptions {
 	const quality = Math.round(Math.min(Math.max(options.quality, 1), 100));

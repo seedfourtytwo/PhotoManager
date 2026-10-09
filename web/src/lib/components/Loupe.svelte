@@ -9,7 +9,7 @@
 	import { placeLabel } from '$lib/geo';
 	import { DOUBLE_TAP_MS, pull, recognise, type Point } from '$lib/gesture';
 	import { modal } from '$lib/modal';
-	import { readout } from '$lib/readout';
+	import { cameFrom, readout } from '$lib/readout';
 	import { describePhoto } from './PhotoGrid.svelte';
 	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
@@ -446,10 +446,10 @@
 							detail.byte_size
 						)}{#if asset.edited}&nbsp;· edited{/if}
 					</p>
-					<h3>Sources</h3>
+					<h3>Came from</h3>
 					<ul>
-						{#each detail.origins as origin (`${origin.source_id}:${origin.relative_path}`)}
-							<li>{origin.source_label} <span class="quiet small">{origin.relative_path}</span></li>
+						{#each cameFrom(detail, session.isAdmin) as origin (origin.key)}
+							<li>{origin.label} <span class="quiet small">{origin.file}</span></li>
 						{/each}
 					</ul>
 					{#if detail.albums.length}
