@@ -28,3 +28,31 @@ describe('shape and motion tokens', () => {
 		expect(literals).toEqual([]);
 	});
 });
+
+describe('glass', () => {
+	const rules = readBlocks(css, true);
+	const canBlur =
+		'@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))';
+
+	// Safari does not know `prefers-reduced-transparency`, and a question a browser does not
+	// know is false even when negated: glass must not wait for an answer to it.
+	it('is frosted wherever the browser can blur, whatever else it knows', () => {
+		expect(rules.get(`${canBlur} | .glass`)).toMatchObject({
+			background: 'var(--glass)',
+			'-webkit-backdrop-filter': 'var(--blur)',
+			'backdrop-filter': 'var(--blur)'
+		});
+	});
+	it('is solid where the browser cannot blur', () => {
+		expect(rules.get('.glass')).toMatchObject({ background: 'var(--raised)' });
+	});
+	it('turns solid when the device asks for less transparency', () => {
+		expect(
+			rules.get(`${canBlur} | @media (prefers-reduced-transparency: reduce) | .glass`)
+		).toMatchObject({
+			background: 'var(--raised)',
+			'-webkit-backdrop-filter': 'none',
+			'backdrop-filter': 'none'
+		});
+	});
+});

@@ -22,6 +22,14 @@ describe('style guard', () => {
 		expect(offenders).toEqual([]);
 	});
 
+	it('no stylesheet makes glass wait for "not (prefers-reduced-transparency …)"', () => {
+		// Unknown to Safari, so false there even when negated: the bars would be solid on every iPhone.
+		const offenders = Object.entries(sources)
+			.filter(([, text]) => /not\s*\(\s*prefers-reduced-transparency/.test(text))
+			.map(([path]) => path);
+		expect(offenders).toEqual([]);
+	});
+
 	it('every font file is used and every used font file exists', () => {
 		const used = [...fonts.matchAll(/url\('\/fonts\/([^']+)'\)/g)].map((match) => match[1]).sort();
 		const present = readdirSync('static/fonts')

@@ -74,10 +74,14 @@
 		--backdrop: none;
 	}
 	@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-		@media not (prefers-reduced-transparency: reduce) {
+		nav {
+			--fill: var(--glass);
+			--backdrop: var(--blur);
+		}
+		@media (prefers-reduced-transparency: reduce) {
 			nav {
-				--fill: var(--glass);
-				--backdrop: var(--blur);
+				--fill: var(--raised);
+				--backdrop: none;
 			}
 		}
 	}
