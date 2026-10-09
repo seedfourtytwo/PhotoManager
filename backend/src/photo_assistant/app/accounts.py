@@ -21,6 +21,7 @@ from photo_assistant.domain.access import (
     username_problem,
 )
 from photo_assistant.domain.errors import ConflictError, InvalidError, NotFoundError
+from photo_assistant.domain.look import Look, LookError, dump_look, parse_look, read_look
 from photo_assistant.ports import Clock
 from photo_assistant.ports.accounts import (
     AccountStore,
@@ -101,6 +102,10 @@ class UserNotFoundError(NotFoundError, AccountError):
         super().__init__("no such user")
 
 
+class InvalidLookError(AccountError):
+    """A look sheet that was refused; the sentence names the field and what it may hold."""
+
+
 @dataclass(frozen=True, slots=True)
 class UserPatch:
     display_name: str | None = None
@@ -124,6 +129,13 @@ def _check_new_account(username: str, pin: str) -> None:
     if problem:
         raise AccountError(problem)
     _check_pin(pin)
+
+
+def _parsed_look(sheet: object) -> Look:
+    try:
+        return parse_look(sheet)
+    except LookError as exc:
+        raise InvalidLookError(str(exc)) from exc
 
 
 class Accounts:
@@ -230,6 +242,37 @@ class Accounts:
         if user is None:
             raise UserNotFoundError()
         self._store.forgive_wrong_pins(user.username)
+
+    # --- look ------------------------------------------------------------------------------
+
+    def look_of(self, user_id: int) -> Look:
+        """The account's look; the defaults while it has none, or a stored one no longer
+        passes. Raises UserNotFoundError."""
+        if self._store.get_user(user_id) is None:
+            raise UserNotFoundError()
+        return read_look(self._store.stored_look(user_id))
+
+    def set_look(self, user_id: int, sheet: object) -> Look:
+        """An admin's whole sheet for an account; fields left out go back to their default,
+        so an empty sheet resets the look. Raises UserNotFoundError, InvalidLookError."""
+        if self._store.get_user(user_id) is None:
+            raise UserNotFoundError()
+        return self._keep_look(user_id, _parsed_look(sheet))
+
+    def choose_mode(self, user: User, sheet: object) -> Look:
+        """The one thing an account sets for itself: a sheet holding ``mode`` and nothing
+        else. The rest of its look stays. Raises InvalidLookError."""
+        if not isinstance(sheet, dict) or sheet.keys() != {"mode"}:
+            raise InvalidLookError(
+                'you can change only your mode: send {"mode": "dark"}, "light" or "system"; '
+                "an admin sets the rest of your look"
+            )
+        current = read_look(self._store.stored_look(user.id))
+        return self._keep_look(user.id, replace(current, mode=_parsed_look(sheet).mode))
+
+    def _keep_look(self, user_id: int, look: Look) -> Look:
+        self._store.store_look(user_id, dump_look(look))
+        return look
 
     def _guard_last_admin(self, user: User, patch: UserPatch) -> None:
         is_active_admin = user.role is Role.ADMIN and not user.disabled

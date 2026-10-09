@@ -52,13 +52,15 @@ faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, f
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
 `taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
 admin (see Visibility in §7); `0026` keeps what the last global face-clustering pass saw
-(`face_cluster_pass`, `face_cluster_mark`). `ANALYZE` runs after migrating, `PRAGMA
-optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+(`face_cluster_pass`, `face_cluster_mark`); `0027` gives each account its look
+(`user.look`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
      disabled, created_at,
-     failed_pins, locked_at)        -- wrong PINs since the last good sign-in; 30 → locked (0024)
+     failed_pins, locked_at,        -- wrong PINs since the last good sign-in; 30 → locked (0024)
+     look)                          -- NULL = defaults; else the look sheet as JSON, read through
+                                    -- domain/look.py, which answers the defaults for a broken one (0027)
 session(token_hash PK sha256, user_id, created_at, last_seen_at)      -- 30 days idle
 login_failure(username, ip, at)       -- 10 per account in 15 min → 429; pruned after a day
 

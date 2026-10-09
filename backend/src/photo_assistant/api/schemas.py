@@ -4,11 +4,21 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic.alias_generators import to_camel
 
 from photo_assistant.domain.access import Role, User
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
+from photo_assistant.domain.look import (
+    CollectionsRow,
+    Look,
+    Mode,
+    StartPage,
+    Theme,
+    ThumbSize,
+    look_sheet,
+)
 from photo_assistant.domain.model import MAX_ID, Source
 from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports.library import AlbumInfo, AssetView
@@ -50,6 +60,29 @@ class ManagedUserOut(UserOut):
     @classmethod
     def of(cls, u: User) -> "ManagedUserOut":
         return cls(**UserOut.of(u).model_dump(), locked=u.locked)
+
+
+class LookOut(BaseModel):
+    """One account's look sheet, every field present (``domain/look.py`` says what each may
+    hold). On the wire the names are the sheet's own, in camel case, as it is stored."""
+
+    model_config = ConfigDict(alias_generator=to_camel)
+
+    theme: Theme
+    mode: Mode
+    accent_hue: int | None
+    corners: int | None
+    photo_gap: int | None
+    text_scale: float
+    thumb_size: ThumbSize
+    show_today: bool
+    start_page: StartPage
+    collections_rows: list[CollectionsRow]
+    dock_labels: bool
+
+    @classmethod
+    def of(cls, look: Look) -> "LookOut":
+        return cls.model_validate(look_sheet(look))
 
 
 class AccountName(BaseModel):
