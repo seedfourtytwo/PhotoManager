@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import { Idle } from '$lib/idle.svelte';
 	import { monthAt, monthTag, position, span, yearMarks, type RulerMonth } from '$lib/ruler';
 	import { monthLabel } from '$lib/timeline';
 
@@ -62,23 +63,17 @@
 		onjump(key);
 	}
 
-	let idle = $state(true);
-	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+	// A finger resting on the ruler is still using it.
+	const rest = new Idle(IDLE_MS, { idle: true, inUse: () => press !== null });
 	let settleTimer: ReturnType<typeof setTimeout> | undefined;
-	function wake() {
-		idle = false;
-		clearTimeout(idleTimer);
-		// A finger resting on the ruler is still using it.
-		idleTimer = setTimeout(() => (press ? wake() : (idle = true)), IDLE_MS);
-	}
 	function onscroll() {
-		if (fades) wake();
+		if (fades) rest.wake();
 		// The page has moved: once it has said which month is in view, that is where the needle is.
 		clearTimeout(settleTimer);
 		if (asked) settleTimer = setTimeout(() => (asked = null), SETTLE_MS);
 	}
 	onDestroy(() => {
-		clearTimeout(idleTimer);
+		rest.stop();
 		clearTimeout(settleTimer);
 	});
 
@@ -99,13 +94,13 @@
 		press = { x: event.clientX, y: event.clientY, year: year?.dataset.key };
 		track?.setPointerCapture(event.pointerId);
 		drag = pointAt(event);
-		wake();
+		rest.wake();
 	}
 
 	function onpointermove(event: PointerEvent) {
 		if (!press) return;
 		drag = pointAt(event);
-		wake();
+		rest.wake();
 	}
 
 	function onpointerup(event: PointerEvent) {
@@ -151,7 +146,7 @@
 	<div
 		class={['ruler', orientation, { glass: orientation === 'horizontal' }]}
 		class:ticks={monthsLong > 0 && length / monthsLong >= TICK_ROOM}
-		class:idle={fades && idle}
+		class:idle={fades && rest.idle}
 		style:--months={monthsLong}
 		bind:this={track}
 		bind:clientWidth={width}

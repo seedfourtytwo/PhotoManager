@@ -8,6 +8,7 @@
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
 	import { DOUBLE_TAP_MS, pull, recognise, type Point } from '$lib/gesture';
+	import { Idle } from '$lib/idle.svelte';
 	import type { MenuItem } from '$lib/menu';
 	import { modal } from '$lib/modal';
 	import { readout } from '$lib/readout';
@@ -50,13 +51,11 @@
 	const asset = $derived(items[index]);
 	let detail = $state<AssetDetail | null>(null);
 	let info = $state(viewport.desktop);
-	let idle = $state(false);
 	/** The press that brings hidden chrome back must not also press what it uncovers. */
 	let waking = false;
 	let dialog = $state<'download' | 'date' | 'edit' | 'album' | null>(null);
 	let more = $state(false);
 	let root: HTMLDialogElement | undefined = $state();
-	let idleTimer: ReturnType<typeof setTimeout> | undefined;
 	let similarReady = $state(false);
 	/** Actions in flight, each for its own photo: a second click while one runs is ignored. */
 	const busy = new SvelteSet<string>();
@@ -124,29 +123,22 @@
 	}
 
 	// --- chrome: fades when idle, comes back on any touch, key or mouse movement ----------
-	function wake() {
-		idle = false;
-		clearTimeout(idleTimer);
-		// An open menu is being read: it does not fade away under the eyes.
-		idleTimer = setTimeout(() => (more ? wake() : (idle = true)), IDLE_MS);
-	}
+	// An open menu is being read: it does not fade away under the eyes.
+	const chrome = new Idle(IDLE_MS, { idle: false, inUse: () => more });
+
 	// Hidden chrome stays where it is for a screen reader. A press on it brings it back, and the
 	// click of that same press is dropped; a press that ends without a click is forgotten by
 	// the next one.
 	function onchromedown(e: PointerEvent) {
 		const target = e.target as HTMLElement;
-		waking = idle && target.closest('.top') !== null;
-		if (!target.closest('.stage')) wake();
+		waking = chrome.idle && target.closest('.top') !== null;
+		if (!target.closest('.stage')) chrome.wake();
 	}
 	function onchromeclick(e: MouseEvent) {
 		if (!waking) return;
 		waking = false;
 		e.stopPropagation();
 		e.preventDefault();
-	}
-	function hideChrome() {
-		clearTimeout(idleTimer);
-		idle = true;
 	}
 
 	async function toggleFullscreen() {
@@ -203,7 +195,7 @@
 			event.preventDefault();
 			action();
 		}
-		wake();
+		chrome.wake();
 	}
 
 	// --- gestures on the photo (lib/gesture.ts says what each one means) --------------------
@@ -229,7 +221,7 @@
 			endPress();
 			return;
 		}
-		press = { ...point(e), wasIdle: idle, id: e.pointerId };
+		press = { ...point(e), wasIdle: chrome.idle, id: e.pointerId };
 		try {
 			(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		} catch {
@@ -267,9 +259,9 @@
 		lastTap = gesture === 'tap' ? up : null;
 		if (gesture === 'tap') {
 			// It may be the first half of a double tap: the chrome waits to find out.
-			tapTimer = setTimeout(() => (wasIdle ? wake() : hideChrome()), DOUBLE_TAP_MS);
+			tapTimer = setTimeout(() => (wasIdle ? chrome.wake() : chrome.hide()), DOUBLE_TAP_MS);
 		} else if (gesture === 'double-tap') {
-			wake();
+			chrome.wake();
 			if (!trash) void toggle('favourite');
 		} else if (gesture === 'next') go(1);
 		else if (gesture === 'previous') go(-1);
@@ -281,10 +273,10 @@
 	onMount(() => {
 		// `use:modal` has opened it by now: the viewer itself takes the focus, not its first button.
 		root?.focus();
-		wake();
+		chrome.wake();
 	});
 	onDestroy(() => {
-		clearTimeout(idleTimer);
+		chrome.stop();
 		clearTimeout(tapTimer);
 		if (document.fullscreenElement) void document.exitFullscreen();
 		// `use:modal` hands the focus back to where it was; the page then moves it to the tile
@@ -298,11 +290,11 @@
 <dialog
 	class="loupe"
 	class:info
-	class:idle
+	class:idle={chrome.idle}
 	bind:this={root}
 	aria-label="Photo viewer"
 	tabindex="-1"
-	onpointermove={(e) => e.pointerType === 'mouse' && wake()}
+	onpointermove={(e) => e.pointerType === 'mouse' && chrome.wake()}
 	onpointerdown={onchromedown}
 	onclickcapture={onchromeclick}
 	use:modal={onclose}
