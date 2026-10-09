@@ -422,6 +422,76 @@ test.describe('time ruler', () => {
 		await expect(ruler(page)).toHaveCSS('opacity', '0', { timeout: 10_000 });
 	});
 
+	test('laptop: the needle’s tag stays in the ruler’s column, off the page’s own buttons', async ({
+		page
+	}) => {
+		test.skip(isPhone(page), 'the phone has it lying above the dock');
+		await expect(page.locator('.tile').first()).toBeVisible();
+		const tag = (await ruler(page).locator('.tag').boundingBox())!;
+		const column = (await ruler(page).boundingBox())!;
+		expect(tag.x).toBeGreaterThanOrEqual(column.x);
+		for (const button of await page.locator('main button:visible').all()) {
+			const box = (await button.boundingBox())!;
+			const apart =
+				box.x + box.width <= tag.x ||
+				box.y + box.height <= tag.y ||
+				box.y >= tag.y + tag.height ||
+				box.x >= tag.x + tag.width;
+			expect(apart, await button.innerText()).toBe(true);
+		}
+	});
+
+	test('at the very end of the library the needle is on the last month', async ({ page }) => {
+		await expect(page.locator('.tile').first()).toBeVisible();
+		const last = () =>
+			page.evaluate(() =>
+				window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight)
+			);
+		// Scrolled there: every page loads on the way, then the page is at its end.
+		await expect(async () => {
+			await last();
+			await expect(page.getByRole('button', { name: 'Select all', exact: true })).toBeVisible({
+				timeout: 500
+			});
+			await last();
+			await expect(ruler(page)).toHaveAttribute('aria-valuenow', '0', { timeout: 500 });
+		}).toPass({ timeout: 15_000 });
+		await expect(ruler(page)).toHaveAttribute('aria-valuetext', /2012$/);
+		if (isPhone(page)) return;
+		// By the End key as well, from the top, and it stays there once the page has settled.
+		await page.evaluate(() => window.scrollTo(0, 0));
+		await expect(ruler(page)).not.toHaveAttribute('aria-valuenow', '0');
+		await ruler(page).focus();
+		await page.keyboard.press('End');
+		await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
+		await page.waitForTimeout(500);
+		await expect(ruler(page)).toHaveAttribute('aria-valuenow', '0');
+	});
+
+	test('phone: the needle’s tag does not cover the years written beside it', async ({ page }) => {
+		test.skip(!isPhone(page), 'the laptop writes its years in a column');
+		await expect(page.locator('.tile').first()).toBeVisible();
+		await page.evaluate(() => window.scrollBy(0, 600));
+		await expect(ruler(page)).toHaveCSS('opacity', '1');
+		const covered = await ruler(page).evaluate((el) => {
+			const tag = el.querySelector('.tag')!.getBoundingClientRect();
+			return [...el.querySelectorAll('.year.written')]
+				.filter((year) => {
+					const range = document.createRange();
+					range.selectNodeContents(year);
+					const text = range.getBoundingClientRect();
+					return (
+						text.right > tag.left &&
+						text.left < tag.right &&
+						text.bottom > tag.top &&
+						text.top < tag.bottom
+					);
+				})
+				.map((year) => year.textContent);
+		});
+		expect(covered).toEqual([]);
+	});
+
 	test('phone: a toast sits above the lying ruler, not on it', async ({ page }) => {
 		test.skip(!isPhone(page), 'the laptop has the ruler at the right edge');
 		await selectTiles(page, [0]);

@@ -265,10 +265,15 @@
 		height: var(--fine);
 		margin-top: calc(var(--fine) / -2);
 	}
+	/* Month over year: on one line the tag would reach out of the column, over the page. */
 	.vertical .tag {
 		top: 50%;
 		right: var(--s-3);
 		transform: translateY(-50%);
+		width: min-content;
+		white-space: normal;
+		text-align: right;
+		line-height: var(--lh-tight);
 	}
 
 	/* Phone: lying above the dock, time running left to right; it fades when idle. */
@@ -308,8 +313,9 @@
 		width: var(--fine);
 		margin-left: calc(var(--fine) / -2);
 	}
+	/* Under the row the years are written in, so it covers none of them. */
 	.horizontal .tag {
-		top: var(--s-1);
+		bottom: var(--s-2);
 		right: var(--s-1);
 	}
 	/* Near the old end the tag would leave the ruler: it changes sides. */

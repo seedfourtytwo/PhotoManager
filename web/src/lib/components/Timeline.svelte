@@ -112,6 +112,10 @@
 				break;
 			}
 		}
+		// At the very end of the library the last months are all on screen, and the label can no
+		// longer reach them: the month in view is the last one.
+		const atEnd = loader.done && window.scrollY + vh >= document.documentElement.scrollHeight - 1;
+		if (atEnd && groups.length) month = groups[groups.length - 1].key;
 		if (month && month !== lastMonth) {
 			lastMonth = month;
 			onmonth?.(month);
