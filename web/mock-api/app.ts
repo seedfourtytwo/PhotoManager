@@ -1645,12 +1645,10 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 	async function readBody(req: IncomingMessage): Promise<unknown> {
 		const chunks: Buffer[] = [];
 		for await (const chunk of req) chunks.push(chunk as Buffer);
-		const type0 = req.headers['content-type'] ?? '';
-		if (type0.startsWith('multipart/form-data'))
-			return { multipart: Buffer.concat(chunks), type: type0 };
+		const type = req.headers['content-type'] ?? '';
+		if (type.startsWith('multipart/form-data')) return { multipart: Buffer.concat(chunks), type };
 		const text = Buffer.concat(chunks).toString('utf8');
 		if (!text) return undefined;
-		const type = req.headers['content-type'] ?? '';
 		if (type.includes('application/x-www-form-urlencoded'))
 			return Object.fromEntries(new URLSearchParams(text));
 		try {
