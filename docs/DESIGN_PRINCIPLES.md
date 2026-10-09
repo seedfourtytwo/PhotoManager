@@ -119,6 +119,7 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--top` | 56 px top bar on a laptop; 0 on a phone. Everything sticky offsets by it |
 | `--dock` | 56 px: the floating dock on a phone, and the photo view's action bar |
 | `--bar` | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock |
+| `--pill` | 52 px: the least height of the selection pill; the toast steps over it by this much |
 | `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
 | `--margin` | 224 px (16rem) right margin for notes and filters on a laptop |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
@@ -162,7 +163,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   the exception: the stylesheet asks `(prefers-reduced-transparency: reduce)` and never its
   negation, because Safari does not know the question and would then show no glass at all.
 - **The look form** (Admin → People → Look): one control per field of the sheet, each with
-  its range or its choices, so nothing can be entered that the server would refuse. "Try on
+  its range or its choices, so nothing can be entered that the server would refuse. The
+  exceptions are `showToday` and `startPage`: they have no control until the Today page
+  exists. "Try on
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
   quiet line at the top of every page says whose look is being tried and offers Stop trying.
 - **Collections rows** show what is behind them, not a sentence about it: people as round
