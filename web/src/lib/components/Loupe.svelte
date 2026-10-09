@@ -535,11 +535,9 @@
 		/* Opening and closing: the browser moves this one picture from and to its tile. */
 		view-transition-name: photo;
 	}
-	/* Browsers without view transitions: the viewer fades in. */
-	@supports not (view-transition-name: none) {
-		.loupe {
-			animation: fade-in var(--motion) var(--ease);
-		}
+	/* The viewer fades in under the photo the transition moves (or by itself, without one). */
+	.loupe {
+		animation: fade-in var(--motion-sheet) var(--ease);
 	}
 	@keyframes fade-in {
 		from {

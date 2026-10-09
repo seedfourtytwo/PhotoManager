@@ -590,6 +590,16 @@ legend {
 	animation-timing-function: var(--ease);
 }
 
+/* Only the photo is in the transition, not the page: a page that is part of the picture takes
+   no touch while it runs, and a tap or a swipe made just after opening was lost. The picture
+   itself lets touches through to what is under it. */
+:root {
+	view-transition-name: none;
+}
+::view-transition {
+	pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	* {
 		transition: none !important;

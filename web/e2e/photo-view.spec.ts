@@ -13,8 +13,7 @@ import {
 	test,
 	toast,
 	touchDown,
-	touchSwipe,
-	transitionOver
+	touchSwipe
 } from './helpers.ts';
 
 const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
@@ -34,7 +33,6 @@ test.describe('photo view', () => {
 		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
 		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
 		const photo = await centre(loupe(page).locator('img.photo'));
-		await transitionOver(page);
 		await page.touchscreen.tap(photo.x, photo.y);
 		await page.touchscreen.tap(photo.x, photo.y);
 		await expect(favourite).toHaveAttribute('aria-pressed', 'true');
@@ -147,7 +145,6 @@ test.describe('photo view', () => {
 		const viewer = loupe(page);
 		const was = await alt(viewer);
 		const mid = await centre(viewer.locator('.stage'));
-		await transitionOver(page);
 		const cdp = await page.context().newCDPSession(page);
 		const fingers = (spread: number, lift = 0) =>
 			[
@@ -323,6 +320,35 @@ test.describe('photo view', () => {
 		// The tile only borrows the name for the length of the transition.
 		await expect(tile).not.toHaveAttribute('style', /view-transition-name/);
 		await expect(tile).toBeFocused();
+	});
+
+	test('phone: touches made while the photo view is still opening count', async ({ page }) => {
+		test.skip(!isPhone(page), 'touch only');
+		// The transition, made long enough to be touched for certain.
+		await page.addStyleTag({
+			content: `::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
+				animation-duration: 4s !important;
+			}`
+		});
+		const opening = () =>
+			page.evaluate(() => document.documentElement.matches(':active-view-transition'));
+		const viewer = loupe(page);
+		// A tap on Close.
+		await page.locator('.tile').first().click();
+		await expect(viewer).toBeVisible();
+		const close = await centre(viewer.getByRole('button', { name: 'Close' }));
+		expect(await opening()).toBe(true);
+		await page.touchscreen.tap(close.x, close.y);
+		await expect(viewer).toHaveCount(0);
+		await expect.poll(opening).toBe(false);
+		// A swipe to the next photo.
+		await page.locator('.tile').first().click();
+		await expect(viewer).toBeVisible();
+		const first = await alt(viewer);
+		const photo = await centre(viewer.locator('.stage'));
+		expect(await opening()).toBe(true);
+		await touchSwipe(page, photo, { x: photo.x - 200, y: photo.y });
+		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
 	});
 
 	test('Escape closes More, not the photo view', async ({ page }) => {
