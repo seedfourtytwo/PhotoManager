@@ -28,12 +28,12 @@
 		if (!bare) void session.load();
 	});
 
-	// Each account has its own look: fetch it for whoever is signed in now. A look an admin
-	// was trying ends with their session, so the next person here never gets it.
+	// Each account has its own look: fetch it for whoever is signed in now. (Leaving takes the
+	// look away again, a trial included: session.lost and session.signOut.) Untracked: only
+	// who is signed in starts a fetch, not the look it changes.
 	const signedInAs = $derived(session.user?.id);
 	$effect(() => {
-		if (signedInAs !== undefined) void loadLook();
-		else untrack(() => look.stopTrying());
+		if (signedInAs !== undefined) untrack(() => void loadLook());
 	});
 
 	function cameBack() {
