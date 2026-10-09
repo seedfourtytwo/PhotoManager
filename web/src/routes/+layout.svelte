@@ -181,7 +181,7 @@
 		width: auto;
 		height: auto;
 		clip-path: none;
-		z-index: 100;
+		z-index: var(--z-skip);
 		background: var(--raised);
 		padding: var(--s-2) var(--s-3);
 		border-radius: var(--r-1);
@@ -193,7 +193,7 @@
 		inset: auto auto var(--s-5) 50%;
 		transform: translateX(-50%);
 		margin: 0;
-		z-index: 60;
+		z-index: var(--z-toast);
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);

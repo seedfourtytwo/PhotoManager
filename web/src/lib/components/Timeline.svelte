@@ -355,7 +355,7 @@
 	}
 	.lasso {
 		position: fixed;
-		z-index: 30;
+		z-index: var(--z-lasso);
 		border: 1px solid var(--accent);
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		pointer-events: none;

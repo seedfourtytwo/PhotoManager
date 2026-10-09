@@ -128,7 +128,7 @@
 		border-bottom: 1px solid var(--hairline);
 	}
 	.path {
-		font-family: var(--font-mono);
+		font-family: var(--font-data);
 		font-stretch: 80%;
 		overflow-wrap: anywhere;
 	}

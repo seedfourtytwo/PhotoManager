@@ -148,7 +148,7 @@
 		left: 50%;
 		bottom: var(--s-5);
 		transform: translateX(-50%);
-		z-index: 25;
+		z-index: var(--z-selection);
 		display: flex;
 		align-items: center;
 		gap: var(--s-1);

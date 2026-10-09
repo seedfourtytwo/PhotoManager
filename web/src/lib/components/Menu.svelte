@@ -152,7 +152,7 @@
 		top: var(--menu-top, calc(100% + var(--s-2)));
 		bottom: var(--menu-bottom, auto);
 		right: 0;
-		z-index: 30;
+		z-index: var(--z-menu);
 		min-width: calc(var(--margin) * 0.75);
 		margin: 0;
 		padding: var(--s-1);

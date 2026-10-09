@@ -55,7 +55,9 @@ reworked. The `--ok` / `--fail` colours exist; the System page's status dots are
 yet (issue #10), so the checklist items about them apply once they are.
 
 The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefaces) and
-`tokens.css` (everything else); the tables below mirror them for Safelight.
+`tokens.css` (everything else); the tables below mirror them for Safelight. The rules that use
+the tokens are beside them, one file per subject and all imported by `tokens.css`: `base.css`
+(elements), `buttons.css`, `fields.css`, `utilities.css` (small shared classes, glass, transitions).
 
 ### Colour
 
@@ -73,6 +75,8 @@ The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefac
 | `--glass` | raised at 74 % + blur | same | floating bars over photos |
 | `--ok` / `--fail` | #7BD3A0 / #FF7A6B | #1F7A4A / #B3261E | status dots on the System page only |
 | `--scrim` | near-black 66 % | cool grey 38 % | behind dialogs and sheets |
+| `--on-photo` / `--on-photo-90` | #FFFFFF / white at 90 % | same | marks drawn on a photo: the selection circle, the favourite mark, the crop handles / the crop frame |
+| `--photo-shade-18` / `-20` / `-25` / `-55` | black at 18 · 20 · 25 · 55 % | same | the shade that keeps those marks readable on any photo: inside the empty selection circle · the hairline round it · the hairline inside the selection frame · behind the favourite mark and over what a crop cuts away |
 
 `themes.spec.ts` checks every theme in both modes: text ≥ 7:1, secondary text and status
 colours ≥ 4.5:1, and the accent ≥ 4.5:1 at every hue (its lightness is fixed per mode, only
@@ -123,6 +127,22 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
 | `--margin` | 224 px (16rem) right margin for notes and filters on a laptop |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
+
+Layers, lowest first (a number of 1 to 5 inside one component orders its own pieces and is
+not a token):
+
+| Token | Value | What |
+|---|---|---|
+| `--z-ruler` | 4 | the time ruler beside the photos |
+| `--z-bar` | 20 | the top bar on a laptop |
+| `--z-selection` | 25 | the selection pill |
+| `--z-dock` | 28 | the dock on a phone (over the pill, so its open menu is not covered) |
+| `--z-menu` / `--z-lasso` | 30 | an open menu / the rectangle drawn while selecting with the mouse |
+| `--z-sheet-backdrop` / `--z-sheet` | 35 / 40 | the filter sheet on a phone and the scrim under it |
+| `--z-loupe` | 50 | the photo view |
+| `--z-toast` | 60 | the toast |
+| `--z-editor` | 70 | the editor, over the photo view it opens from |
+| `--z-skip` | 100 | the skip link, when focused |
 
 ### Component rules
 
@@ -226,6 +246,6 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - [ ] Charts: zero-based, directly labelled, no chartjunk?
 - [ ] Works at 375 px wide and at 1440 px wide?
 - [ ] Keyboard reachable, visible focus, AA contrast, reduced motion respected?
-- [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`, `themes.css` and `fonts.css`?
+- [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`, `themes.css`, `fonts.css` and the shared rules `tokens.css` imports?
 - [ ] Phone: 44 px targets, nothing wraps to a second toolbar line, safe areas respected?
 - [ ] Checked in both themes, and with the look's dials at their ends (text size 125 %, corners 0 and 22, gap 0 and 8)?

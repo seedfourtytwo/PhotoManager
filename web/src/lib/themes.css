@@ -1,5 +1,6 @@
 /*
  * Themes: the colour of each theme in each mode, and nothing else (docs/DESIGN_PRINCIPLES.md §2).
+ * The one exception sits in the first block: the colours of marks drawn on a photo.
  * The theme is chosen by data-look on the root element (absent = Safelight), the mode by
  * data-theme (absent = follow the device). A light variant appears under two selectors that
  * must stay identical; themes.spec.ts checks that, and the contrast of every variant.
@@ -25,6 +26,16 @@
 	--fail: #ff7a6b;
 	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%230d0f12' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 	color-scheme: dark;
+
+	/* Marks drawn on a photo. A photo is neither theme nor mode, so these are set once, here,
+	   and no other block changes them: white for the mark, black at the named strength (in
+	   percent) for the shade that keeps it readable on any picture. */
+	--on-photo: #fff;
+	--on-photo-90: rgb(255 255 255 / 0.9); /* the crop frame */
+	--photo-shade-18: rgb(0 0 0 / 0.18); /* inside the empty selection circle */
+	--photo-shade-20: rgb(0 0 0 / 0.2); /* the hairline round that circle */
+	--photo-shade-25: rgb(0 0 0 / 0.25); /* the hairline inside the selection frame */
+	--photo-shade-55: rgb(0 0 0 / 0.55); /* behind the favourite mark; what a crop cuts away */
 }
 
 /* Safelight, light. */

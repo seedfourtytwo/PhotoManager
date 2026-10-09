@@ -314,7 +314,7 @@
 		inset: 0;
 		box-shadow:
 			inset 0 0 0 3px var(--accent),
-			inset 0 0 0 4px rgb(0 0 0 / 0.25);
+			inset 0 0 0 4px var(--photo-shade-25);
 	}
 	.check {
 		position: absolute;
@@ -324,19 +324,17 @@
 		height: 20px;
 		border-radius: 50%;
 		box-sizing: border-box;
-		border: 1.5px solid #fff;
-		background: rgb(0 0 0 / 0.18) center / 14px no-repeat;
-		box-shadow: 0 0 0 1px rgb(0 0 0 / 0.2);
+		border: 1.5px solid var(--on-photo);
+		background: var(--photo-shade-18) center / 14px no-repeat;
+		box-shadow: 0 0 0 1px var(--photo-shade-20);
 		opacity: 0;
 		transition: opacity var(--motion) var(--ease);
 	}
 	/* The circle appears where it helps — under the mouse or keyboard focus — and stays on
 	   selected photos; unselected photos stay clean while selecting. */
 	@media (hover: hover) {
-		@media (hover: hover) {
-			.tile:hover .check {
-				opacity: 1;
-			}
+		.tile:hover .check {
+			opacity: 1;
 		}
 	}
 	.tile:focus-visible .check {
@@ -354,8 +352,8 @@
 		bottom: var(--s-1);
 		width: 14px;
 		height: 14px;
-		fill: #fff;
-		filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.55));
+		fill: var(--on-photo);
+		filter: drop-shadow(0 0 1.5px var(--photo-shade-55));
 	}
 	@media (hover: none) {
 		.check {

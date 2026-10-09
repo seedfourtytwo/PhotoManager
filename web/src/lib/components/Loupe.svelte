@@ -512,7 +512,7 @@
 		padding: 0;
 		border: 0;
 		color: var(--ink);
-		z-index: 50;
+		z-index: var(--z-loupe);
 		background: var(--bg);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);

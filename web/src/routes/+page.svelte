@@ -241,7 +241,7 @@
 		right: 0;
 		width: calc(var(--s-8) - var(--s-1));
 		height: calc(100vh - var(--top));
-		z-index: 4;
+		z-index: var(--z-ruler);
 	}
 	.ruler.shift {
 		right: var(--margin);

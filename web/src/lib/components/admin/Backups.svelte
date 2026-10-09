@@ -269,7 +269,7 @@
 		vertical-align: middle;
 	}
 	.name .small {
-		font-family: var(--font-mono);
+		font-family: var(--font-data);
 		font-stretch: 80%;
 	}
 	.status {

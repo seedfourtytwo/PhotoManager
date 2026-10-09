@@ -199,7 +199,7 @@
 		color: var(--ink-2);
 	}
 	.token {
-		font-family: var(--font-mono);
+		font-family: var(--font-data);
 		font-stretch: 80%;
 		font-size: var(--fs-12) !important;
 		color: var(--ink);
