@@ -22,7 +22,6 @@
 		'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 	--font-serif: 'Newsreader', 'Iowan Old Style', 'Charter', Georgia, serif;
 	--font-data: 'Martian Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-	--font-mono: var(--font-data);
 	--font-title: var(--font-ui);
 	--title-weight: 720;
 	--voice-style: normal; /* descriptions and opening lines: upright in the sans, italic in the Album serif */

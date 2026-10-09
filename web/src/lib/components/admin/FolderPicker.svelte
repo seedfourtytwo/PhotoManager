@@ -128,7 +128,7 @@
 		margin-bottom: var(--s-2);
 	}
 	.field input {
-		font-family: var(--font-mono);
+		font-family: var(--font-data);
 		font-stretch: 80%;
 	}
 </style>

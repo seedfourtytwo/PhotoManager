@@ -243,7 +243,7 @@
 		font-weight: 600;
 	}
 	.path {
-		font-family: var(--font-mono);
+		font-family: var(--font-data);
 		font-stretch: 80%;
 		overflow-wrap: anywhere;
 	}
