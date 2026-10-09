@@ -154,7 +154,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   icon button has the accessible name of the action.
 - **Glass** (`.glass`): only for bars that float over photos (dock, top bar, photo actions,
   selection, time ruler). It turns solid `--raised` where blur is unavailable, under
-  "reduce transparency", or if it costs the 60 fps scroll budget.
+  "reduce transparency", or if it costs the 60 fps scroll budget. Glass is the rule and solid
+  the exception: the stylesheet asks `(prefers-reduced-transparency: reduce)` and never its
+  negation, because Safari does not know the question and would then show no glass at all.
 - **The look form** (Admin → People → Look): one control per field of the sheet, each with
   its range or its choices, so nothing can be entered that the server would refuse. "Try on
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one

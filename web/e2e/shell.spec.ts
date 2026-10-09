@@ -35,6 +35,22 @@ test('shell: two places, one search, and the rest behind the account button', as
 	await expect(nav.getByRole('link', { name: 'Trash', exact: true })).toBeHidden();
 });
 
+test('shell: the bar is frosted glass, and solid when the device asks for less transparency', async ({
+	page
+}) => {
+	await signIn(page);
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	// A laptop frosts the bar itself, a phone the pieces of the dock.
+	const bar = isPhone(page) ? nav.getByRole('list') : nav;
+	const backdrop = () => bar.evaluate((el) => getComputedStyle(el).backdropFilter);
+	expect(await backdrop()).toContain('blur');
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send('Emulation.setEmulatedMedia', {
+		features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }]
+	});
+	await expect.poll(backdrop).toBe('none');
+});
+
 test('shell: Collections leads to people, places and albums', async ({ page }) => {
 	await signIn(page);
 	const nav = page.getByRole('navigation', { name: 'Main' });

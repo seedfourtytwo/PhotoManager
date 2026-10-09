@@ -567,17 +567,24 @@ legend {
 	white-space: nowrap;
 }
 
-/* Floating bars over photos. Solid when blur is unavailable or the device asks for less. */
+/* Floating bars over photos. Solid when blur is unavailable or the device asks for less.
+   The device is asked straight, never as "not (…)": Safari does not know the question, and a
+   question a browser does not know is false even when negated. */
 .glass {
 	background: var(--raised);
 	border: 1px solid var(--hairline);
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-	@media not (prefers-reduced-transparency: reduce) {
+	.glass {
+		background: var(--glass);
+		-webkit-backdrop-filter: var(--blur);
+		backdrop-filter: var(--blur);
+	}
+	@media (prefers-reduced-transparency: reduce) {
 		.glass {
-			background: var(--glass);
-			-webkit-backdrop-filter: var(--blur);
-			backdrop-filter: var(--blur);
+			background: var(--raised);
+			-webkit-backdrop-filter: none;
+			backdrop-filter: none;
 		}
 	}
 }
