@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 	await signIn(page);
 });
 
-test('the date scrubber jumps to an older year', async ({ page }) => {
+test('the time ruler jumps to an older year', async ({ page }) => {
 	test.skip(isPhone(page), 'desktop only');
 	const scrubber = page.getByRole('slider', { name: 'Jump to date' });
 	await scrubber.focus();
@@ -26,7 +26,9 @@ test('the date scrubber jumps to an older year', async ({ page }) => {
 	await expect(page.locator('section h2', { hasText: '2012' }).last()).toBeInViewport();
 });
 
-test('the scrubber lands at the start of a month, also when jumping back up', async ({ page }) => {
+test('the time ruler lands at the start of a month, also when jumping back up', async ({
+	page
+}) => {
 	test.skip(isPhone(page), 'desktop only');
 	const scrubber = page.getByRole('slider', { name: 'Jump to date' });
 	await scrubber.focus();

@@ -187,7 +187,7 @@ export async function viewOnlyPhoto(page: Page): Promise<number> {
 	throw new Error('no view-only photo for this user');
 }
 
-/** Run an action of the selection bar; on a phone the later ones are under "More". */
+/** Run an action of the selection pill; on a phone the later ones are under "More". */
 export async function selectionAction(page: Page, name: string) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
 	const button = bar.getByRole('button', { name, exact: true });

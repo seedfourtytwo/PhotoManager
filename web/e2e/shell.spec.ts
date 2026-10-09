@@ -123,7 +123,7 @@ test('shell: nothing on the page hides under the bar', async ({ page }) => {
 test('shell: with a selection, every account menu row is the top thing at its centre', async ({
 	page
 }) => {
-	test.skip(!isPhone(page), 'the selection bar sits over the dock on phones');
+	test.skip(!isPhone(page), 'the selection pill sits over the dock on phones');
 	await signIn(page);
 	await selectTiles(page, [0]);
 	const nav = await openAccountMenu(page);

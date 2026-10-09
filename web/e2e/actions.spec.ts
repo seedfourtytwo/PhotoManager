@@ -291,7 +291,7 @@ test('trash: “Delete for good” for a selection and “Empty trash” both as
 test.describe('selection pill', () => {
 	const pill = (page: Page) => page.getByRole('toolbar', { name: 'Selected photos' });
 
-	test('the selection bar is a floating pill at the bottom centre', async ({ page }) => {
+	test('the selection pill floats at the bottom centre', async ({ page }) => {
 		await selectTiles(page, [0, 1]);
 		await expect(pill(page)).toHaveCSS('position', 'fixed');
 		await expect(pill(page)).toHaveCSS('border-radius', '999px');
