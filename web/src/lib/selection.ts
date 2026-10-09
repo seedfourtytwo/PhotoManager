@@ -42,6 +42,19 @@ export function selectMany(selection: Selection, ids: Iterable<Id>, additive: bo
 	return { ids: next, anchor: selection.anchor };
 }
 
+/**
+ * The selection without the photos that are no longer loaded (a reload dropped them); the same
+ * object when none left, so assigning it back changes nothing.
+ */
+export function keepLoaded(selection: Selection, order: readonly Id[]): Selection {
+	const loaded = new Set(order);
+	const ids = new Set([...selection.ids].filter((id) => loaded.has(id)));
+	if (ids.size === selection.ids.size) return selection;
+	const anchor =
+		selection.anchor !== null && loaded.has(selection.anchor) ? selection.anchor : null;
+	return { ids, anchor };
+}
+
 export function selectAll(order: readonly Id[]): Selection {
 	return { ids: new Set(order), anchor: order[0] ?? null };
 }

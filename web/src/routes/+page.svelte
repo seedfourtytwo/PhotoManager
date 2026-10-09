@@ -17,6 +17,7 @@
 		EMPTY,
 		TOO_MANY_SELECTED,
 		applyClick,
+		keepLoaded,
 		limitSelection,
 		selectAll,
 		selectAllLabel,
@@ -84,6 +85,12 @@
 
 	const order = $derived(loader.items.map((a) => a.id));
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
+	// Only loaded photos are ever selected: what a reload (an upload, Undo) no longer brings
+	// leaves the selection, so the pill, the tiles, Escape and the ruler speak of the same photos.
+	$effect(() => {
+		const kept = keepLoaded(selection, order);
+		if (kept !== selection) selection = kept;
+	});
 	const described = $derived(describeFilters(filters));
 
 	// --- the loupe follows ?photo=<id> -------------------------------------------------------
@@ -209,7 +216,11 @@
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
 		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
-		ondates={reloadAll}
+		ondates={() => {
+			// Its new date may put it beyond what is loaded: it stays open all the same.
+			linked.hold(shown.items[shown.index]);
+			reloadAll();
+		}}
 	/>
 {/if}
 

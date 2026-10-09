@@ -5,6 +5,7 @@ import {
 	expect,
 	expectAccessible,
 	isPhone,
+	loupeAction,
 	resetMock,
 	selectTiles,
 	selectionAction,
@@ -267,6 +268,36 @@ test.describe('photo view', () => {
 		await expectOnTop(page);
 	});
 
+	test('fixing the date of the open photo keeps the photo view open', async ({ page }) => {
+		await page.locator('.tile').nth(2).click();
+		const viewer = loupe(page);
+		await expect(viewer).toBeVisible();
+		const url = page.url();
+		// The very same viewer afterwards, not one that closed and opened again.
+		await viewer.evaluate((el) => ((el as HTMLElement).dataset.kept = 'yes'));
+		const removed = page.evaluate(
+			() =>
+				new Promise<boolean>((resolve) => {
+					const dialog = document.querySelector('dialog[aria-label="Photo viewer"]')!;
+					new MutationObserver(() => !dialog.isConnected && resolve(true)).observe(document.body, {
+						childList: true,
+						subtree: true
+					});
+					setTimeout(() => resolve(false), 2500);
+				})
+		);
+		await loupeAction(page, 'Fix date');
+		const dialog = page.getByRole('dialog', { name: 'Fix date' });
+		await dialog.getByLabel('Set exactly').check();
+		await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+		await dialog.getByRole('button', { name: 'Change date' }).click();
+		await expect(toast(page)).toContainText('Changed the date of 1 photo');
+		await expect(viewer.locator('.readout')).toContainText('2001-02-03 · 04:05');
+		expect(await removed).toBe(false);
+		await expect(viewer).toHaveAttribute('data-kept', 'yes');
+		expect(page.url()).toBe(url);
+	});
+
 	test('opening and closing run a view transition between the tile and the photo', async ({
 		page
 	}) => {
@@ -418,6 +449,39 @@ test.describe('selection pill', () => {
 		await page.keyboard.press('Escape');
 		await expect(pill(page)).toHaveCount(0);
 		await expect(page.locator('.tile.selected')).toHaveCount(0);
+	});
+
+	test('a selected photo that is gone after a reload leaves the selection', async ({ page }) => {
+		// Hiding a photo leaves a toast whose Undo reloads the library.
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Hide');
+		await expect(toast(page)).toContainText('Hid 1 photo');
+		await expect(pill(page)).toHaveCount(0);
+		await selectTiles(page, [0]);
+		const gone = await page.locator('.tile.selected').getAttribute('data-id');
+		// Meanwhile the selected photo goes to the trash on another device.
+		await page.request.delete('/api/assets', { data: { ids: [Number(gone)] } });
+		await toast(page).getByRole('button', { name: 'Undo' }).click();
+		await expect(page.locator(`.tile[data-id="${gone}"]`)).toHaveCount(0);
+		// Nothing is selected any more, anywhere: no pill, and a press opens a photo again.
+		await expect(pill(page)).toHaveCount(0);
+		await page.locator('.tile').first().click();
+		await expect(loupe(page)).toBeVisible();
+	});
+
+	test('with the filter sheet open, Escape closes the sheet and keeps the selection', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'the laptop has its filters in the margin');
+		await selectTiles(page, [0]);
+		await page.getByRole('button', { name: 'Filter', exact: true }).click();
+		const sheet = page.getByRole('complementary', { name: 'Filters' });
+		await expect(sheet).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(sheet).toBeHidden();
+		await expect(pill(page).getByRole('status')).toHaveText('1 selected');
+		await page.keyboard.press('Escape');
+		await expect(pill(page)).toHaveCount(0);
 	});
 
 	// From the narrowest phone up: what does not fit goes under More, nothing leaves the glass.
