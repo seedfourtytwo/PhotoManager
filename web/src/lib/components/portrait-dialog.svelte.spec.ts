@@ -14,7 +14,8 @@ const face = (face_id: number, extra: Partial<Portrait> = {}): Portrait => ({
 	cy: 0.4,
 	size: 0.5,
 	chosen: false,
-	url: `/api/faces/${face_id}/portrait?v=a${face_id}`,
+	// A picture that loads: one that fails is taken away again, which a slow machine sees.
+	url: `data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==#${face_id}`,
 	...extra
 });
 const FACES = [face(1), face(2), face(3)];
