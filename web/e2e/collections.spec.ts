@@ -68,6 +68,26 @@ test('collections: a place opens the library filtered by that place', async ({ p
 	await expect(page.locator('.tile').first()).toBeVisible();
 });
 
+test('collections: a name too long for one line takes a second and is read whole', async ({
+	page
+}) => {
+	await signIn(page, '/collections');
+	const name = row(page, 'Albums').locator('.name', { hasText: 'Summers at the house' });
+	await expect(name).toBeVisible();
+	// In lines of text: a descender may reach a pixel past its line, a cut line is a whole one.
+	const cut = await name.evaluate((el) => {
+		const line = parseFloat(getComputedStyle(el).lineHeight);
+		return {
+			across: el.scrollWidth - el.clientWidth,
+			linesHidden: Math.round((el.scrollHeight - el.clientHeight) / line),
+			lines: Math.round(el.clientHeight / line)
+		};
+	});
+	expect(cut.across).toBeLessThanOrEqual(0);
+	expect(cut.linesHidden).toBe(0);
+	expect(cut.lines).toBeLessThanOrEqual(2);
+});
+
 test('collections: nothing on the page is wider than the screen', async ({ page }) => {
 	await signIn(page, '/collections');
 	await expect(row(page, 'Places').locator('.rail a').first()).toBeVisible();

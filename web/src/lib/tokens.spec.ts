@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import base from './base.css?raw';
+import fields from './fields.css?raw';
 import css from './tokens.css?raw';
 import utilities from './utilities.css?raw';
 import { readBlocks } from './testing/css-blocks';
@@ -44,6 +45,18 @@ describe('the root text size', () => {
 	});
 	it('keeps the laptop side column at 224 px: 14 rem of a 16 px root', () => {
 		expect(root['--margin']).toBe('14rem');
+	});
+});
+
+describe('fields', () => {
+	// The browser keeps room for a search field's clear button even while it is hidden: in the
+	// laptop's 224 px column that room cut the hint short.
+	it('an empty search field keeps no room for its clear button', () => {
+		expect(
+			readBlocks(fields, true).get(
+				"input[type='search']:placeholder-shown::-webkit-search-cancel-button"
+			)
+		).toEqual({ display: 'none' });
 	});
 });
 
