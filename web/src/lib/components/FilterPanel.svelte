@@ -13,9 +13,11 @@
 		mergeFacets,
 		withFilter
 	} from '$lib/filters';
+	import DateField from './DateField.svelte';
 	import FilterFrame from './FilterFrame.svelte';
 	import YearBars from './YearBars.svelte';
 
+	const uid = $props.id();
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let facets = $state<Facets | null>(null);
 	let search: HTMLInputElement | undefined = $state();
@@ -167,22 +169,16 @@
 
 	<section>
 		<h3 id="f-dates">Dates</h3>
-		<label class="row">
-			From
-			<input
-				type="date"
-				value={filters.from ?? ''}
-				onchange={(e) => set('from', e.currentTarget.value || undefined)}
-			/>
-		</label>
-		<label class="row">
-			To
-			<input
-				type="date"
-				value={filters.to ?? ''}
-				onchange={(e) => set('to', e.currentTarget.value || undefined)}
-			/>
-		</label>
+		{#each [['from', 'From'], ['to', 'To']] as const as [key, label] (key)}
+			<div class="row">
+				<label for="{uid}-{key}">{label}</label>
+				<DateField
+					id="{uid}-{key}"
+					value={filters[key] ?? null}
+					onchange={(day) => set(key, day ?? undefined)}
+				/>
+			</div>
+		{/each}
 	</section>
 
 	<section>
