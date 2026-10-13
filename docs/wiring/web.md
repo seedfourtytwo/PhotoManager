@@ -107,9 +107,11 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 - **Loupe**: `?photo=<id>` in the URL (reload/share reopens it; Back closes it; closing scrolls
   the grid to that photo and focuses its tile). Chrome fades after 2.5 s and returns on any
   touch, key or mouse movement; a tap on the photo toggles it (after 300 ms, in case it is
-  the first half of a double tap, which favourites). The photo area has `touch-action: none`,
-  so vertical swipes (up = info, down = close) are not taken by the browser; `lib/gesture.ts`
-  says what each press means. Favourite/Private are optimistic and single-flight. View-only
+  the first half of a double tap, which zooms). The photo area has `touch-action: none`,
+  so vertical swipes (up = info, down = close) and two fingers are not taken by the browser;
+  `lib/gesture.ts` says what each press means, `lib/zoom.ts` how large the photo is and where
+  it sits (double tap, two fingers, one finger on a zoomed photo; the Zoom pill and Z do what
+  a double tap does). Favourite/Private are optimistic and single-flight. View-only
   photos show a disabled Download with the reason; Edit/Fix date/Private need `edit` (contract
   v1.2); Private, Fix date and More like this sit behind More. Opening and closing run through
   `withTransition` (`lib/motion.ts`); the page takes no input while a view transition runs.

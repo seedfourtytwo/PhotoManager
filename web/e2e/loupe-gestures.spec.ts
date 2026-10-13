@@ -61,6 +61,7 @@ test.describe('photo view', () => {
 		const frame = viewer.locator('.frame');
 		const was = await alt(viewer);
 		const mid = await centre(viewer.locator('.stage'));
+		const fit = (await frame.boundingBox())!.width;
 		await viewer.getByRole('button', { name: 'Zoom' }).click();
 		await expect(viewer.getByRole('button', { name: 'Zoom' })).toHaveAttribute(
 			'aria-pressed',
@@ -68,7 +69,8 @@ test.describe('photo view', () => {
 		);
 		const screen = page.viewportSize()!.width;
 		const box = async () => (await frame.boundingBox())!;
-		await expect.poll(async () => (await box()).width).toBeGreaterThan(screen * 2);
+		// Zoomed all the way in and come to rest, before anything is measured from it.
+		await expect.poll(async () => (await box()).width).toBeCloseTo(fit * 2.5, 0);
 		const rest = (await box()).x;
 		await touchSwipe(page, mid, { x: mid.x - 120, y: mid.y });
 		await expect.poll(async () => Math.round((await box()).x)).toBe(Math.round(rest - 120));
