@@ -4,6 +4,7 @@ import {
 	expectAccessible,
 	GUEST,
 	loupe,
+	MEMBER,
 	REAL_BACKEND,
 	resetMock,
 	signIn,
@@ -11,7 +12,7 @@ import {
 	toast
 } from './helpers.ts';
 
-test('search without models: word matches and a calm note on how to get AI search', async ({
+test('search without models: word matches, and a calm note that leads an admin to the setup', async ({
 	page
 }) => {
 	await resetMock();
@@ -23,7 +24,11 @@ test('search without models: word matches and a calm note on how to get AI searc
 	await expect(page).toHaveURL(/\/search$/);
 	const box = page.getByRole('searchbox', { name: 'Search' });
 	await expect(box).toBeFocused();
-	await expect(page.getByRole('note')).toContainText('run just models on the server');
+	const note = page.getByRole('note');
+	await expect(note).toContainText('Search by what is in a photo is not set up yet');
+	await expect(note).not.toContainText('just models');
+	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
+	await expect(note.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
 	await box.fill('sarlat');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
@@ -32,6 +37,35 @@ test('search without models: word matches and a calm note on how to get AI searc
 	await expectAccessible(page);
 	await page.locator('.tile').first().click();
 	await expect(loupe(page)).toBeVisible();
+});
+
+test('without models, a member reads plain words on Search and People: no command, no way in to Admin', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page, '/search', MEMBER);
+	const note = page.getByRole('note');
+	await expect(note).toContainText('Search by what is in a photo is not set up yet');
+	await expect(note).toContainText('words match file names, places, cameras and album titles');
+	await expect(note.locator('code')).toHaveCount(0);
+	await expect(note.getByRole('link')).toHaveCount(0);
+
+	await page.goto('/people');
+	await expect(note).toContainText('New faces are not being found yet');
+	await expect(note.locator('code')).toHaveCount(0);
+	await expect(note.getByRole('link')).toHaveCount(0);
+});
+
+test('without models, People leads an admin to where faces are set up', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/people');
+	const note = page.getByRole('note');
+	await expect(note).toContainText('New faces are not being found yet');
+	await expect(note.locator('code')).toHaveCount(0);
+	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
+	await note.getByRole('link', { name: 'Admin' }).click();
+	await expect(page).toHaveURL(/\/admin$/);
+	await expect(page.getByRole('heading', { name: 'Search and faces' })).toBeVisible();
 });
 
 test('search with models ranks by meaning; facets are read back', async ({ page }) => {
