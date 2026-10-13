@@ -3,7 +3,16 @@
  * choosing the round portrait.
  */
 import type { Page } from '@playwright/test';
-import { expect, GUEST, REAL_BACKEND, resetMock, signIn, test, toast } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	GUEST,
+	REAL_BACKEND,
+	resetMock,
+	signIn,
+	test,
+	toast
+} from './helpers.ts';
 
 test.beforeEach(async () => {
 	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
@@ -133,6 +142,9 @@ test('the portrait itself opens the dialog, and a drag moves the photo under the
 	await page.getByRole('button', { name: 'Change portrait of Léa' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Change portrait' });
 	await expect(dialog.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
+	// Axe must not measure contrast while the dialog is still fading in.
+	await expect(dialog).toHaveCSS('opacity', '1');
+	await expectAccessible(page);
 	const stage = dialog.getByRole('group', { name: /^Portrait/ });
 	const photo = stage.locator('img');
 	const start = await photo.boundingBox();
