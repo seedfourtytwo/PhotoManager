@@ -200,6 +200,10 @@ not a token):
   of round keys (1 to 9, then 0 with the word Delete to its right), set in the middle of the
   screen where the thumb is, and no system keyboard; a laptop has no pad and types. The
   fourth digit signs in; a wrong PIN empties the dots, which shake once, and says why.
+- **The whole screen of a phone** is the page's (`viewport-fit=cover`): photos and glass run
+  under the clock, the notch and the home bar, and nothing to read or press does. Every fixed
+  or sticky piece adds the device's own inset (`env(safe-area-inset-*)`) on the side it
+  touches, on both sides when the phone lies on its side; `--top` is that inset on a phone.
 - **Words for whoever is reading**: a terminal command and a folder path are for an admin, on
   the Admin page. Anyone else reads what it means for them ("New faces are not being found
   yet"); an admin reading the same note is also told where to set it up. A photo's details
