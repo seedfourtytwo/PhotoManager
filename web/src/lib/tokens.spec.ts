@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import base from './base.css?raw';
 import css from './tokens.css?raw';
 import utilities from './utilities.css?raw';
 import { readBlocks } from './testing/css-blocks';
@@ -28,6 +29,21 @@ describe('shape and motion tokens', () => {
 			/#[0-9a-f]{3,8}\b|rgb\(/i.test(value)
 		);
 		expect(literals).toEqual([]);
+	});
+});
+
+describe('the root text size', () => {
+	const size = readBlocks(base, true).get('html')?.['font-size'];
+
+	// 1rem on the root is the browser's own text size (16 px unless the reader chose another),
+	// so every rem token renders at the pixels the design table states. A size in px there
+	// would overrule the reader's setting.
+	it("is the browser's size times the look's text dial, never a size in pixels", () => {
+		expect(root['--fs-16']).toBe('1rem');
+		expect(size).toBe('calc(var(--fs-16) * var(--text-scale, 1))');
+	});
+	it('keeps the laptop side column at 224 px: 14 rem of a 16 px root', () => {
+		expect(root['--margin']).toBe('14rem');
 	});
 });
 

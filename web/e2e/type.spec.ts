@@ -61,3 +61,34 @@ test('phone: fields grow with the text dial and never go under 16 px', async ({ 
 	await page.getByRole('button', { name: 'New album' }).click();
 	expect(await fontSize(title)).toBeGreaterThanOrEqual(16);
 });
+
+const px = (target: Locator, property: 'fontSize' | 'marginTop') =>
+	target.evaluate((el, name) => parseFloat(getComputedStyle(el)[name]), property);
+
+test('type and space render at the sizes the design table states', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	const signOut = page.getByRole('button', { name: 'Sign out' });
+
+	expect(await px(page.locator('html'), 'fontSize')).toBe(16); // 1rem: the browser's own size
+	expect(await px(signOut, 'fontSize')).toBe(14); // interface text, --fs-14
+	expect(await px(page.getByText(/^Library server/), 'fontSize')).toBe(12); // .small, --fs-12
+	expect(await px(page.getByRole('heading', { name: 'Settings', level: 1 }), 'fontSize')).toBe(28);
+	expect(await px(page.getByRole('heading', { name: 'Look', level: 2 }), 'fontSize')).toBe(20);
+	expect(await px(signOut, 'marginTop')).toBe(16); // --s-4
+});
+
+test('the text dial multiplies the table: 125 % and 90 % of every size', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	const title = page.getByRole('heading', { name: 'Settings', level: 1 });
+
+	// After a reload the stylesheet arrives a moment after the page: the sizes are polled.
+	await setTextScale(page, 1.25);
+	await expect.poll(() => px(page.locator('html'), 'fontSize')).toBeCloseTo(20, 1);
+	await expect.poll(() => px(title, 'fontSize')).toBeCloseTo(35, 1);
+
+	await setTextScale(page, 0.9);
+	await expect.poll(() => px(page.locator('html'), 'fontSize')).toBeCloseTo(14.4, 1);
+	await expect.poll(() => px(title, 'fontSize')).toBeCloseTo(25.2, 1);
+});
