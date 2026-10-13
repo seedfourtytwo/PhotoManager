@@ -24,18 +24,37 @@ _MAX_DECODE_EDGE = 100_000
 WEBP_EFFORT = 2
 
 
+_PROFILE = "icc-profile-data"
+
+
+def _for_saving(image: pyvips.Image, spec: RenderSpec) -> tuple[pyvips.Image, bool]:
+    """The image to hand a saver and its ``strip``. ``strip`` removes the colour profile too,
+    so "no metadata, but the profile" drops every other field here and saves unstripped
+    (libvips 8.15 has ``keep="icc"`` for this; the server image ships 8.14)."""
+    if spec.keep_metadata or not spec.keep_profile or _PROFILE not in image.get_fields():
+        return image, not spec.keep_metadata
+    bare = image.copy()
+    for field in bare.get_fields():
+        if field.startswith(("exif", "xmp", "iptc", "jpeg-thumbnail")) or field == "orientation":
+            bare.remove(field)
+    return bare, False
+
+
 def _save_webp(image: pyvips.Image, path: str, spec: RenderSpec) -> None:
-    image.webpsave(path, Q=spec.quality, strip=not spec.keep_metadata, effort=WEBP_EFFORT)
+    image, strip = _for_saving(image, spec)
+    image.webpsave(path, Q=spec.quality, strip=strip, effort=WEBP_EFFORT)
 
 
 def _save_jpeg(image: pyvips.Image, path: str, spec: RenderSpec) -> None:
     if image.hasalpha():
         image = image.flatten(background=[255, 255, 255])
-    image.jpegsave(path, Q=spec.quality, strip=not spec.keep_metadata, optimize_coding=True)
+    image, strip = _for_saving(image, spec)
+    image.jpegsave(path, Q=spec.quality, strip=strip, optimize_coding=True)
 
 
 def _save_png(image: pyvips.Image, path: str, spec: RenderSpec) -> None:
-    image.pngsave(path, strip=not spec.keep_metadata)
+    image, strip = _for_saving(image, spec)
+    image.pngsave(path, strip=strip)
 
 
 _SAVERS: dict[str, Callable[[pyvips.Image, str, RenderSpec], None]] = {

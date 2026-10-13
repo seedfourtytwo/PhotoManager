@@ -117,6 +117,7 @@ class Downloads:
                 format=fmt,
                 quality=options.quality,
                 keep_metadata=not options.strip_all_metadata,
+                keep_profile=True,  # stripped or not, the colours stay right
             )
             self._renderer.render_variant(source, temp, spec)
         if options.strip_all_metadata and fmt == "original":

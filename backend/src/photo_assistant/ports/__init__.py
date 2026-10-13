@@ -78,6 +78,9 @@ class RenderSpec:
     format: str = "webp"  # webp | jpeg | png
     quality: int = 80
     keep_metadata: bool = False  # EXIF/XMP carried over (orientation reset); else stripped
+    # with the metadata stripped, still carry the colour profile: without it a wide-gamut
+    # photo (every recent phone) comes out with the wrong colours
+    keep_profile: bool = False
 
 
 class ImageRenderer(Protocol):
