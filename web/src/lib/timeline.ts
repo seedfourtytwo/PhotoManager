@@ -1,4 +1,5 @@
 import type { AssetOut } from './api/types';
+import type { ThumbSize } from './look';
 
 export type MonthGroup = { key: string; label: string; items: AssetOut[] };
 
@@ -93,10 +94,10 @@ export function justify(aspects: number[], width: number, target: number, gap: n
 	return { boxes, height: Math.max(0, y - gap) };
 }
 
-/** Target row height for a container width and a density setting (DESIGN_PRINCIPLES §3). */
-export function rowHeightFor(width: number, density: 'compact' | 'comfortable' | 'large'): number {
+/** Target row height for a container width and the look's photo size (DESIGN_PRINCIPLES §3). */
+export function rowHeightFor(width: number, size: ThumbSize): number {
 	const base = width < 640 ? 110 : 220;
-	return Math.round(base * { compact: 0.75, comfortable: 1, large: 1.4 }[density]);
+	return Math.round(base * { small: 0.75, medium: 1, large: 1.4 }[size]);
 }
 
 /**

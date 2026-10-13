@@ -108,6 +108,11 @@ test('every screen', async ({ page }, info) => {
 	await page.getByLabel('Direction').selectOption({ label: 'earlier' });
 	await page.getByRole('spinbutton').nth(1).fill('1');
 	await shot(page, '17-fix-date', p);
+	// A date copied from an American page: tidied, and the dialog says how it read it.
+	await page.getByLabel('Set exactly').check();
+	await page.getByLabel('Date and time').fill('7/25/2019 6:30 PM');
+	await page.getByLabel('Date and time').blur();
+	await shot(page, '17b-fix-date-exact', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Close' }).click();
 
