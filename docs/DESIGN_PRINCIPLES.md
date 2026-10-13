@@ -204,6 +204,13 @@ not a token):
   of round keys (1 to 9, then 0 with the word Delete to its right), set in the middle of the
   screen where the thumb is, and no system keyboard; a laptop has no pad and types. The
   fourth digit signs in; a wrong PIN empties the dots, which shake once, and says why.
+- **Words for whoever is reading**: a terminal command and a folder path are for an admin, on
+  the Admin page. Anyone else reads what it means for them ("New faces are not being found
+  yet"); an admin reading the same note is also told where to set it up. A photo's details
+  say which folder it came from and what the file is called; only an admin reads the path.
+- **A dialog opens on the few choices most people want**, each with one quiet line saying what
+  you get (Download: Full size, Smaller, and With edits when there are edits). Formats,
+  pixel sizes and file naming wait under "More options"; picking a plain choice again wins.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
