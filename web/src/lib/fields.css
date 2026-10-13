@@ -63,6 +63,10 @@ input[type='search']::-webkit-search-cancel-button {
 input[type='search']::-webkit-search-cancel-button:hover {
 	background: var(--ink);
 }
+/* Nothing typed, nothing to clear: the hint has the whole field. */
+input[type='search']:placeholder-shown::-webkit-search-cancel-button {
+	display: none;
+}
 
 select {
 	cursor: pointer;
