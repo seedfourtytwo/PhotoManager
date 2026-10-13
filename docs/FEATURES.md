@@ -52,7 +52,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | 2.5b | **To review** (issue 8): a newly imported photo that looks like one already in the library, or that the auto-tagger sees as a screenshot, document, receipt or meme, is copied in but held out of the library. A grouped review screen offers Keep (joins the library, never held again) or Discard (30-day trash). Applies to every source | Should | M2 ✅ |
 | 2.6 | Quality signals: blur, exposure, eyes-closed (from face landmarks) → used for "best of" picks | Could | M3 |
 | 2.7 | Semantic embeddings (CLIP-family) for every photo | Must | M3 |
-| 2.8 | Face detection + clustering into people; user names clusters; merge/split | Should | M3 |
+| 2.8 | Face detection + clustering into people; user names clusters; merge/split; **hide** a person you do not want listed (a stranger in the background): they leave People, their faces stay grouped so they do not come back as a new "Someone", and a "Hidden" list brings them back (issue 53) | Should | M3 |
 | 2.9 | Auto-tags from embeddings against a fixed vocabulary (beach, snow, food, document, screenshot…) | Should | M3 ✅ (API) |
 | 2.10 | Screenshot / document / meme detection → filtered out of "memories" by default | Should | M3 |
 | 2.11 | Captions from local vision LLM (via AI socket) | Could | M5 |

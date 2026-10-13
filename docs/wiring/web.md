@@ -116,7 +116,7 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 - **Time ruler** (`TimeRuler`, `lib/ruler.ts`): linear in time, from the newest month with
   photos to the oldest (`GET /api/calendar`). It jumps once, where a drag ends.
 - **Grid**: one Tab stop; arrow keys, Home/End move between photos across months.
-- **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename,
+- **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename, hide,
   merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
   faces**, **Settings → Phones and devices**.
 - **Collections** (`/collections`, `CollectionRows`): each row of the account's look shows what
