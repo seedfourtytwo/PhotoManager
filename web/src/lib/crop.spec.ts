@@ -11,7 +11,8 @@ import {
 	previewTransform,
 	resizeCrop,
 	rotateRecipe,
-	rotatedAspect
+	rotatedAspect,
+	sameRecipe
 } from './crop';
 
 const close = (a: object, b: object) =>
@@ -135,5 +136,39 @@ describe('outputAspect and isIdentity', () => {
 		expect(isIdentity(IDENTITY_RECIPE)).toBe(true);
 		expect(isIdentity({ ...IDENTITY_RECIPE, crop: { x: 0, y: 0, w: 1, h: 1 } })).toBe(true);
 		expect(isIdentity({ ...IDENTITY_RECIPE, straighten: 1 })).toBe(false);
+	});
+});
+
+describe('sameRecipe (is there anything to save?)', () => {
+	const saved: Recipe = {
+		...IDENTITY_RECIPE,
+		rotate: 90,
+		crop: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }
+	};
+
+	it('a recipe is the same as its copy', () => {
+		expect(sameRecipe(saved, { ...saved, crop: { ...saved.crop! } })).toBe(true);
+		expect(sameRecipe(IDENTITY_RECIPE, { ...IDENTITY_RECIPE })).toBe(true);
+	});
+
+	it.each<[string, Partial<Recipe>]>([
+		['a quarter turn', { rotate: 180 }],
+		['a flip', { flip_horizontal: true }],
+		['the other flip', { flip_vertical: true }],
+		['half a degree of straightening', { straighten: 0.5 }],
+		['a crop moved', { crop: { x: 0.2, y: 0.1, w: 0.5, h: 0.5 } }],
+		['a crop taken away', { crop: null }]
+	])('%s is a change', (_, change) => {
+		expect(sameRecipe(saved, { ...saved, ...change })).toBe(false);
+	});
+
+	it('no crop and a crop of the whole photo are the same thing', () => {
+		const whole = { ...IDENTITY_RECIPE, crop: { x: 0, y: 0, w: 1, h: 1 } };
+		expect(sameRecipe(IDENTITY_RECIPE, whole)).toBe(true);
+		expect(sameRecipe(whole, IDENTITY_RECIPE)).toBe(true);
+	});
+
+	it('turned right and back left is no change', () => {
+		expect(sameRecipe(saved, rotateRecipe(rotateRecipe(saved, 1), -1))).toBe(true);
 	});
 });

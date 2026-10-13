@@ -63,10 +63,56 @@ describe('FixDateDialog', () => {
 		const sent = stubFetch(() => ({}));
 		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
 		await page.getByRole('radio', { name: 'Set exactly' }).click();
-		await page.getByLabelText('Date and time').fill('2999-01-01T12:00');
+		await page.getByLabelText('Date and time').fill('01/01/2999 12:00');
 		await expect
 			.element(page.getByRole('alert'))
 			.toHaveTextContent("A photo can't be taken in the future: pick a date up to today.");
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+		expect(sent).toEqual([]);
+	});
+
+	it('a date before photography is refused too', async () => {
+		stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		await page.getByRole('radio', { name: 'Set exactly' }).click();
+		await page.getByLabelText('Date and time').fill('31/12/1825');
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('Dates must be after 1826: photography began then.');
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+	});
+
+	it('“Set exactly” starts from the first photo, day first, and previews what is typed', async () => {
+		const sent = stubFetch(() => ({ updated: 2 }));
+		const ondone = vi.fn();
+		render(FixDateDialog, { items, onclose: () => {}, ondone });
+		await page.getByRole('radio', { name: 'Set exactly' }).click();
+		const field = page.getByLabelText('Date and time');
+		await expect.element(field).toHaveValue('04/07/2019 18:30:00');
+		// A time alone keeps the day; the preview follows while it is typed.
+		await field.fill('6:45 pm');
+		await expect
+			.element(page.getByRole('cell', { name: '4 Jul 2019, 18:45' }).first())
+			.toBeInTheDocument();
+		await page.getByRole('button', { name: 'Change date' }).click();
+		await vi.waitFor(() => expect(ondone).toHaveBeenCalled());
+		expect(sent.at(-1)).toEqual({
+			url: '/api/assets/dates',
+			body: { ids: [1, 2], set: '2019-07-04T18:45:00' }
+		});
+	});
+
+	it('a date that cannot be read is said in words, and nothing can be sent', async () => {
+		const sent = stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		await page.getByRole('radio', { name: 'Set exactly' }).click();
+		await page.getByLabelText('Date and time').fill('31/02/2019 25:00');
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+		await expect.element(page.getByRole('table')).not.toBeInTheDocument();
+		await userEvent.tab();
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent("Can't read that as a date. Try 04/07/2019 18:30.");
 		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
 		expect(sent).toEqual([]);
 	});

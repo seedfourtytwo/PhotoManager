@@ -418,7 +418,7 @@ test.describe('photo view', () => {
 		await loupeAction(page, 'Fix date');
 		const dialog = page.getByRole('dialog', { name: 'Fix date' });
 		await dialog.getByLabel('Set exactly').check();
-		await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+		await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 		await dialog.getByRole('button', { name: 'Change date' }).click();
 		await expect(toast(page)).toContainText('Changed the date of 1 photo');
 		await expect(viewer.locator('.readout')).toContainText('2001-02-03 · 04:05');

@@ -130,6 +130,233 @@ export function formatShort(iso: string): string {
 	return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
+/** "04/07/2019 18:30:05", or "04/07/2019" for a day: what a date field shows, never month first. */
+export function formatField(value: string): string {
+	const [day, time] = value.split('T');
+	const [y, m, d] = day.split('-');
+	return `${d}/${m}/${y}${time ? ` ${time}` : ''}`;
+}
+
+/** "25 July 2019": a day in words, where day and month cannot be mixed up. */
+export function formatLongDay(value: string): string {
+	const [y, m, d] = value.slice(0, 10).split('-').map(Number);
+	return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * What a piece of text says: a day (`YYYY-MM-DD`), a time of day (`HH:MM:SS`) or both.
+ * `monthFirst` is true when numbers such as 7/25/2019 could only be read month first.
+ */
+export type DateReading = { date: string | null; time: string | null; monthFirst: boolean };
+
+const lower = (names: string[]) => names.map((name) => name.toLowerCase());
+// Without accents: the text is stripped of them before it is read.
+const MONTH_WORDS = [
+	lower(MONTHS),
+	[
+		'janvier',
+		'fevrier',
+		'mars',
+		'avril',
+		'mai',
+		'juin',
+		'juillet',
+		'aout',
+		'septembre',
+		'octobre',
+		'novembre',
+		'decembre'
+	]
+];
+const WEEKDAY_WORDS = [
+	'monday',
+	'tuesday',
+	'wednesday',
+	'thursday',
+	'friday',
+	'saturday',
+	'sunday',
+	'lundi',
+	'mardi',
+	'mercredi',
+	'jeudi',
+	'vendredi',
+	'samedi',
+	'dimanche'
+];
+// Small words around a date that say nothing: "at 18:30", "le 4 juillet à 18h30", ISO's T.
+const JOINING_WORDS = new Set(['at', 'a', 'le', 'on', 'the', 't']);
+
+// 2019-07-04, 2019/07/04 and the camera's 2019:07:04. Tried first, so those colons are
+// never taken for a time.
+const YEAR_FIRST = /(?<!\d)(\d{4})([-/.:])(\d{1,2})\2(\d{1,2})(?!\d)/;
+// "4 July 2019", "4th of July 2019", "1er août 2019". A year never runs into a time ("18:30").
+const DAY_THEN_NAME =
+	/(?<!\d)(\d{1,2})(?:st|nd|rd|th|er|e)?\.?\s+(?:de\s+|of\s+)?([a-z]{3,9})\.?,?\s+(\d{4}|\d{2})(?![\d:h])/g;
+// "July 4, 2019", "Jul 4th 2019"
+const NAME_THEN_DAY =
+	/(?<![a-z])([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4}|\d{2})(?![\d:h])/g;
+// 04/07/2019, 4.7.2019, 04-07-19
+const NUMBERS = /(?<!\d)(\d{1,2})([/.-])(\d{1,2})\2(\d{4}|\d{2})(?!\d)/;
+// What cameras and phones put in a file name: 20190704_183005, with or without thousandths.
+const STAMP = /(?<!\d)(\d{4})(\d{2})(\d{2})[ _t-]?(\d{2})(\d{2})(\d{2})\d{0,3}(?!\d)/;
+const STAMP_DAY = /(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)/;
+// 18:30, 18:30:05.25, 6:30 pm, 6 pm, with a zone that is dropped: wall-clock as written.
+const CLOCK =
+	/^(\d{1,2})(?::(\d{2})(?::(\d{2})(?:[.,]\d+)?)?)?\s*([ap]m)?\s*(?:z|utc|gmt|[+-]\d{2}(?::?\d{2})?)?$/;
+const FRENCH_CLOCK = /^(\d{1,2})\s?h\s?(\d{2})?$/;
+
+/** The month a word names in English or French, from three letters on; 0 for none or two. */
+function monthOf(word: string): number {
+	const months = new Set(
+		MONTH_WORDS.flatMap((names) =>
+			names.flatMap((name, i) => (name.startsWith(word) ? [i + 1] : []))
+		)
+	);
+	return months.size === 1 ? [...months][0] : 0;
+}
+
+/** A calendar day as `YYYY-MM-DD`, or null when there is no such day (31 February). */
+function dayOf(year: number, month: number, day: number): string | null {
+	const text = `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
+	return isValidLocal(`${text}T00:00:00`) ? text : null;
+}
+
+function timeOf(hour: number, minute: number, second: number): string | null {
+	return hour < 24 && minute < 60 && second < 60
+		? `${pad(hour)}:${pad(minute)}:${pad(second)}`
+		: null;
+}
+
+/** "19" is 2019 and "98" is 1998: two digits up to this year mean this century. */
+function yearOf(digits: string, now: number): number {
+	const year = Number(digits);
+	if (digits.length === 4) return year;
+	return year <= new Date(now).getUTCFullYear() % 100 ? 2000 + year : 1900 + year;
+}
+
+/** A date found in the text: `day` is null when what is written is not a day of the calendar. */
+type FoundDate = { day: string | null; rest: string; monthFirst: boolean };
+
+const without = (text: string, match: RegExpExecArray) =>
+	`${text.slice(0, match.index)} ${text.slice(match.index + match[0].length)}`;
+
+function findNamedDate(text: string, now: number): FoundDate | null {
+	for (const [pattern, dayAt, nameAt] of [
+		[DAY_THEN_NAME, 1, 2],
+		[NAME_THEN_DAY, 2, 1]
+	] as const) {
+		for (const match of text.matchAll(pattern)) {
+			const month = monthOf(match[nameAt]);
+			if (!month) continue;
+			const day = dayOf(yearOf(match[3], now), month, Number(match[dayAt]));
+			return { day, rest: without(text, match), monthFirst: false };
+		}
+	}
+	return null;
+}
+
+function findDate(text: string, now: number): FoundDate | null {
+	const yearFirst = YEAR_FIRST.exec(text);
+	if (yearFirst) {
+		const day = dayOf(Number(yearFirst[1]), Number(yearFirst[3]), Number(yearFirst[4]));
+		return { day, rest: without(text, yearFirst), monthFirst: false };
+	}
+	const named = findNamedDate(text, now);
+	if (named) return named;
+	const numbers = NUMBERS.exec(text);
+	if (!numbers) return null;
+	const [first, second, year] = [Number(numbers[1]), Number(numbers[3]), yearOf(numbers[4], now)];
+	// Day first is the rule; month first only when the numbers allow nothing else.
+	const dayFirst = dayOf(year, second, first);
+	const day = dayFirst ?? dayOf(year, first, second);
+	return { day, rest: without(text, numbers), monthFirst: !dayFirst && day !== null };
+}
+
+function readTime(text: string): string | null {
+	const french = FRENCH_CLOCK.exec(text);
+	if (french) return timeOf(Number(french[1]), Number(french[2] ?? 0), 0);
+	const clock = CLOCK.exec(text);
+	// A number alone ("6") is not a time: it needs minutes, or am / pm.
+	if (!clock || (clock[2] === undefined && !clock[4])) return null;
+	let hour = Number(clock[1]);
+	if (clock[4]) {
+		if (hour < 1 || hour > 12) return null;
+		hour = (hour % 12) + (clock[4] === 'pm' ? 12 : 0);
+	}
+	return timeOf(hour, Number(clock[2] ?? 0), Number(clock[3] ?? 0));
+}
+
+/** The date in a file name such as IMG_20190704_183005.jpg; undefined when there is none. */
+function readStamp(text: string): DateReading | null | undefined {
+	const full = STAMP.exec(text);
+	const stamp = full ?? STAMP_DAY.exec(text);
+	if (!stamp) return undefined;
+	const [y, m, d, h, mi, s] = stamp.slice(1).map(Number);
+	const date = dayOf(y, m, d);
+	const time = full ? timeOf(h, mi, s) : null;
+	return date && (time || !full) ? { date, time, monthFirst: false } : null;
+}
+
+/** Lower case, no accents, single spaces, "p.m." as "pm". */
+function plain(text: string): string {
+	return text
+		.normalize('NFD')
+		.replace(/[̀-ͯ]/g, '')
+		.toLowerCase()
+		.replace(/(?<![a-z])([ap])\.m\b\.?/g, '$1m')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+/** What is left beside a date, without the words and marks that say nothing: a time, or "". */
+function besideDate(text: string): string {
+	const says = (word: string) =>
+		!JOINING_WORDS.has(word) &&
+		!(word.length >= 3 && WEEKDAY_WORDS.some((day) => day.startsWith(word)));
+	return text
+		.replace(/[a-z]+/g, (word) => (says(word) ? word : ' '))
+		.replace(/[,_\s]+/g, ' ')
+		.replace(/^[ .-]+|[ .-]+$/g, '');
+}
+
+/**
+ * Reads text pasted or typed as a date, a time or both: the app's own displays, ISO, camera
+ * and file-name styles, numbers day first, months by name in English and French, am / pm.
+ * Null when it cannot be read or names a day or time that does not exist. It never throws.
+ */
+export function readDateText(text: string, now: number = wallClockNow()): DateReading | null {
+	const written = plain(text);
+	const found = findDate(written, now);
+	if (!found) {
+		const stamp = readStamp(written);
+		if (stamp !== undefined) return stamp;
+		const time = readTime(besideDate(written));
+		return time ? { date: null, time, monthFirst: false } : null;
+	}
+	if (!found.day) return null;
+	const rest = besideDate(found.rest);
+	const time = rest ? readTime(rest) : null;
+	if (rest && !time) return null;
+	return { date: found.day, time, monthFirst: found.monthFirst };
+}
+
+/**
+ * The value a field holds after a reading: a part the text did not give (the day, or the
+ * time) is kept from `current`. A field without a time takes the day only. Null when a part
+ * is still missing.
+ */
+export function mergeReading(
+	reading: DateReading,
+	current: string | null,
+	withTime: boolean
+): string | null {
+	if (!withTime) return reading.date;
+	const date = reading.date ?? current?.slice(0, 10);
+	const time = reading.time ?? current?.slice(11);
+	return date && time ? `${date}T${time}` : null;
+}
+
 export function dateSourceLabel(source: DateSource): string {
 	switch (source) {
 		case 'exif':
