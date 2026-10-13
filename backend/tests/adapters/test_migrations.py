@@ -30,6 +30,8 @@ EXPECTED_TABLES = {
     "face_cluster_pass", "face_cluster_mark",
     # ops
     "backup_target", "backup_run",
+    # send to a device (0028)
+    "handover",
 }  # fmt: skip
 
 
@@ -80,7 +82,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 27
+    assert _latest() == 28
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
