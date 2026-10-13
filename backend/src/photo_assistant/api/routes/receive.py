@@ -20,6 +20,7 @@ from photo_assistant.adapters.zip_stream import zip_stream
 from photo_assistant.api.deps import ServicesDep
 from photo_assistant.api.routes.downloads import attachment
 from photo_assistant.api.routes.handovers import arrived_encrypted
+from photo_assistant.api.send_switch import feature_on
 from photo_assistant.api.services import Services
 from photo_assistant.app.downloads import MEDIA_TYPES, Entry, downloadable
 from photo_assistant.domain.access import User, Viewer
@@ -34,7 +35,9 @@ from photo_assistant.domain.handover import (
     may_travel,
 )
 
-router = APIRouter(prefix="/api/handovers", tags=["send to a device"])
+router = APIRouter(
+    prefix="/api/handovers", tags=["send to a device"], dependencies=[Depends(feature_on)]
+)
 
 _FORMS = ("application/x-www-form-urlencoded", "multipart/form-data")
 

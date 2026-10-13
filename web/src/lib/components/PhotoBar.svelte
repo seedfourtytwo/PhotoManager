@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { AssetDetail, AssetOut } from '$lib/api';
-	import { library, session } from '$lib/app.svelte';
+	import { library, sendToDevice, session } from '$lib/app.svelte';
 	import type { MenuItem } from '$lib/menu';
 	import { readout } from '$lib/readout';
 	import Icon from './Icon.svelte';
@@ -47,7 +47,10 @@
 			? [{ label: 'Private', pressed: asset.private, run: () => ontoggle('private') }]
 			: []),
 		...(canEdit ? [{ label: 'Fix date', run: () => onopen('date') }] : []),
-		...(similarReady && !trash ? [{ label: 'More like this', run: moreLikeThis }] : [])
+		...(similarReady && !trash ? [{ label: 'More like this', run: moreLikeThis }] : []),
+		...(sendToDevice.offered && !trash && detail && !viewOnly
+			? [{ label: 'Send to a device', run: () => sendToDevice.open([asset.id]) }]
+			: [])
 	]);
 
 	onMount(() => {

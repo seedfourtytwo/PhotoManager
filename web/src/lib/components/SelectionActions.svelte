@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { AssetOut, Id } from '$lib/api';
-	import { api, library, notice, session } from '$lib/app.svelte';
+	import { api, library, notice, sendToDevice, session } from '$lib/app.svelte';
 	import { photos } from '$lib/format';
 	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
@@ -136,6 +136,12 @@
 			label: allPrivate ? 'Not private' : 'Make private',
 			run: setPrivate,
 			hidden: !session.canEdit,
+			more: true
+		},
+		{
+			label: 'Send to a device',
+			run: () => sendToDevice.open(ids),
+			hidden: !sendToDevice.offered,
 			more: true
 		},
 		...extra.map((action) => ({ ...action, more: true }))

@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from photo_assistant.api.deps import ServicesDep
+from photo_assistant.api.send_switch import switch
 
 router = APIRouter(prefix="/__test", tags=["test mode"], include_in_schema=False)
 
@@ -29,6 +30,8 @@ def is_loopback(host: str) -> bool:
 
 class ResetIn(BaseModel):
     users: Literal["seed", "none"] = "seed"
+    # "Send to a device" for the test that follows; left out, it is off as the product ships
+    send: bool = False
 
 
 @router.post("/reset", status_code=status.HTTP_204_NO_CONTENT)
@@ -45,4 +48,5 @@ def reset(request: Request, services: ServicesDep, body: ResetIn) -> Response:
     finally:
         if running:
             services.worker.start()
+    switch(request.app, body.send)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

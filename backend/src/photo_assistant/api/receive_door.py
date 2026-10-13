@@ -25,6 +25,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from photo_assistant.api.routes import receive
 from photo_assistant.api.routes.handovers import RECEIVE_PAGE
 from photo_assistant.api.security import RequestLimits
+from photo_assistant.api.send_switch import switch
 from photo_assistant.api.services import Services
 from photo_assistant.api.settings import Settings
 from photo_assistant.domain.errors import DomainError
@@ -75,6 +76,7 @@ def create_door_app(settings: Settings, services: Services, on_error: ErrorHandl
     app = FastAPI(title="Photo Assistant: receive", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
     app.state.services = services
+    switch(app, True)  # the door only exists while the feature is on
     app.add_exception_handler(DomainError, on_error)
     app.include_router(receive.router)
     if settings.web_dir is not None:

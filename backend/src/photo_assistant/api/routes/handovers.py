@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from photo_assistant.api.deps import MemberUser, ServicesDep, require_views
 from photo_assistant.api.routes.testing import is_loopback
 from photo_assistant.api.schemas import Id
+from photo_assistant.api.send_switch import feature_on
 from photo_assistant.api.services import Services
 from photo_assistant.api.settings import Settings
 from photo_assistant.domain.access import Level, User, Viewer
@@ -31,7 +32,9 @@ RECEIVE_PAGE = "/receive.html"
 Via = Literal["here", "home"]
 
 
-router = APIRouter(prefix="/api/handovers", tags=["send to a device"])
+router = APIRouter(
+    prefix="/api/handovers", tags=["send to a device"], dependencies=[Depends(feature_on)]
+)
 
 
 class NoAddressError(InvalidError):

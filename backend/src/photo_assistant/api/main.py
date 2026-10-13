@@ -1,6 +1,6 @@
 """FastAPI app factory. Routes live in api/routes/, one module per area."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -43,6 +43,7 @@ from photo_assistant.api.routes import (
     users,
 )
 from photo_assistant.api.security import CrossSiteGuard, RequestLimits, SessionCookieRenewal
+from photo_assistant.api.send_switch import switch, switched_on
 from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import Settings, get_settings, warn_about_unknown_settings
 from photo_assistant.domain.errors import DomainError, UnavailableError
@@ -58,12 +59,12 @@ class SinglePageApp(StaticFiles):
     """Serve the built web app; unknown paths get index.html so client routing works.
     Files under ``_app/immutable/`` carry a content hash in their name: cached for good."""
 
-    def __init__(self, *, directory: Path, hidden: frozenset[str] = frozenset()) -> None:
+    def __init__(self, *, directory: Path, hidden: Callable[[], frozenset[str]]) -> None:
         super().__init__(directory=directory, html=True)
         self._hidden = hidden  # files of a feature that is switched off: not there
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        if path in self._hidden:
+        if path in self._hidden():
             return PlainTextResponse("Not Found", status_code=404)
         try:
             response = await super().get_response(path, scope)
@@ -79,8 +80,11 @@ class SinglePageApp(StaticFiles):
 def _mount_web(app: FastAPI, settings: Settings) -> None:
     web_dir = settings.web_dir
     if web_dir is not None and (web_dir / "index.html").is_file():
-        off = frozenset() if settings.send_to_device else PAGE_FILES
-        hidden = frozenset(name.lstrip("/") for name in off)
+        receiving = frozenset(name.lstrip("/") for name in PAGE_FILES)
+
+        def hidden() -> frozenset[str]:
+            return frozenset() if switched_on(app) else receiving
+
         app.mount("/", SinglePageApp(directory=web_dir, hidden=hidden), name="web")
 
 
@@ -170,7 +174,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         printing,
     ):
         app.include_router(module.router)
-    if settings.send_to_device:  # off: its addresses do not exist (404 for anyone)
+    # "Send to a device", off unless switched on: its addresses then do not exist. (Test
+    # mode mounts them switched off, so the browser tests can turn the feature on and off.)
+    switch(app, settings.send_to_device)
+    if settings.send_to_device or settings.test_mode:
         app.include_router(handovers.router)
         app.include_router(receive.router)
     if settings.test_mode:

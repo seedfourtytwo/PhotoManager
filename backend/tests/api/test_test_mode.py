@@ -75,3 +75,34 @@ def test_reset_needs_a_known_snapshot_and_a_local_caller(test_app: TestClient) -
     assert test_app.post("/__test/reset", json={"users": "../x"}).status_code == 422
     remote = TestClient(test_app.app, base_url=BASE, client=("10.0.0.5", 5000))
     assert remote.post("/__test/reset", json={"users": "seed"}).status_code == 403
+
+
+def test_reset_switches_send_to_a_device_on_for_one_test_and_off_again(
+    test_app: TestClient,
+) -> None:
+    """The browser tests try the feature on and off against one server. Only this reset can
+    flip it, and the reset only exists in test mode."""
+    test_app.post("/api/setup", json={"username": "c", "display_name": "C", "pin": PIN})
+    _snapshot(test_app, "seed")
+    login = {"username": "c", "pin": PIN}
+
+    def options() -> int:
+        signed_in = TestClient(test_app.app, base_url=BASE, client=LOCAL)
+        assert signed_in.post("/api/auth/login", json=login).status_code == 200
+        return signed_in.get("/api/handovers/options").status_code
+
+    assert options() == 404, "off, as the product ships"
+    assert test_app.post("/api/handovers/look", json={"token": "x"}).status_code == 404
+    assert test_app.post("/__test/reset", json={"users": "seed", "send": True}).status_code == 204
+    assert options() == 200
+    gone = test_app.post("/api/handovers/look", json={"token": "x"})
+    assert gone.status_code == 404 and "does not work any more" in gone.text
+    assert test_app.post("/__test/reset", json={"users": "seed"}).status_code == 204
+    assert options() == 404
+
+
+def test_outside_test_mode_the_switch_is_the_setting_and_nothing_else(tmp_path: Path) -> None:
+    for on in (False, True):
+        app = create_app(make_settings(tmp_path / f"data-{on}", send_to_device=on))
+        assert ("/api/handovers" in app.openapi()["paths"]) is on
+        assert not [route for route in app.routes if "__test" in str(getattr(route, "path", ""))]

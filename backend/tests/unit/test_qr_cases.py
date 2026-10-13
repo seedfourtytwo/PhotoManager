@@ -19,7 +19,7 @@ CASES = json.loads(
 SCALE, QUIET_ZONE = 8, 4  # pixels per square; light squares around the code, as the app draws it
 
 
-def _picture(rows: list[str]) -> np.ndarray:  # type: ignore[type-arg]
+def _picture(rows: list[str]) -> np.ndarray[tuple[int, ...], np.dtype[np.uint8]]:
     dark = np.array([[cell == "1" for cell in row] for row in rows])
     squares = np.pad(np.where(dark, 0, 255).astype(np.uint8), QUIET_ZONE, constant_values=255)
     return np.kron(squares, np.ones((SCALE, SCALE), dtype=np.uint8))

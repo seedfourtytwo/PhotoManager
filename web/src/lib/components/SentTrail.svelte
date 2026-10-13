@@ -8,6 +8,16 @@
 	let sent = $state<Handover[] | null>(null);
 	let busy = $state(false);
 
+	/** "Léa · 3 photos · 8.4 MB · details removed · not encrypted": whose it is only for an admin. */
+	const what = (handover: Handover) =>
+		[
+			session.isAdmin ? handover.sent_by.display_name : null,
+			summary(handover),
+			handover.encrypted ? null : 'not encrypted'
+		]
+			.filter(Boolean)
+			.join(' · ');
+
 	async function load() {
 		try {
 			sent = await api.handovers();
@@ -43,11 +53,7 @@
 	<ul>
 		{#each sent ?? [] as handover (handover.id)}
 			<li>
-				<span>
-					{#if session.isAdmin}{handover.sent_by.display_name} ·
-					{/if}{summary(handover)}{#if !handover.encrypted}
-						· not encrypted{/if}
-				</span>
+				<span>{what(handover)}</span>
 				<span class="quiet small">Sent {formatWhen(handover.created_at)} · {outcome(handover)}</span
 				>
 				{#if handover.state === 'waiting'}

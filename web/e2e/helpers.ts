@@ -20,19 +20,38 @@ export const REAL_BACKEND = !!process.env.E2E_RESET_URL;
 /** Fresh, known state (the mock's seed, or the real backend's seeded snapshot). */
 export async function resetMock(
 	users: 'seed' | 'none' = 'seed',
-	options: { models?: boolean; count?: number; review?: boolean; locked?: string } = {}
+	options: {
+		models?: boolean;
+		count?: number;
+		review?: boolean;
+		locked?: string;
+		/** "Send to a device": `true` switches it on; the rules are a mock-only switch. */
+		send?: boolean | SendRules;
+	} = {}
 ) {
 	test.skip(!RESET_URL, 'needs a reset endpoint (mock API or backend test mode)');
 	test.skip(REAL_BACKEND && !!options.models, 'ML models are a mock-only switch');
 	test.skip(REAL_BACKEND && !!options.review, 'photos held for review are a mock-only switch');
 	test.skip(REAL_BACKEND && !!options.locked, 'an account locked from the start is mock-only');
+	test.skip(
+		REAL_BACKEND && typeof options.send === 'object',
+		'https, link lifetime and the admin switches of "send to a device" are mock-only switches'
+	);
 	const response = await fetch(RESET_URL, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(REAL_BACKEND ? { users } : { users, ...options })
+		body: JSON.stringify(REAL_BACKEND ? { users, send: !!options.send } : { users, ...options })
 	});
 	expect(response.status).toBe(204);
 }
+
+/** How the mock's "send to a device" is set up for a test (mock-api/types.ts). */
+export type SendRules = {
+	https?: boolean;
+	home?: boolean;
+	unencrypted?: boolean;
+	seconds?: number;
+};
 
 export const GUEST = { username: 'guest', name: 'Guest', pin: '3456' };
 export const MEMBER = { username: 'partner', name: 'Partner', pin: '2345' };

@@ -54,9 +54,14 @@ export function handoverRoutes(h: Helpers): Route[] {
 		return me(ctx);
 	}
 
-	/** Where a link may point: the mock's own address counts as the home one. */
+	/**
+	 * Where a link may point: the address of the web app in front of the mock counts as the
+	 * home one. The dev server's proxy puts the mock's own name in Host, so the page's
+	 * address is read from Referer (or Origin) when there is one.
+	 */
 	function addresses(ctx: Ctx): LinkAddress[] {
-		const host = ctx.req.headers.host ?? '127.0.0.1';
+		const page = ctx.req.headers.referer ?? ctx.req.headers.origin;
+		const host = page ? new URL(page).host : (ctx.req.headers.host ?? '127.0.0.1');
 		const found: LinkAddress[] = [];
 		if (rules().https) found.push({ via: 'here', origin: `https://${host}`, encrypted: true });
 		if (rules().home) found.push({ via: 'home', origin: `http://${host}`, encrypted: false });
