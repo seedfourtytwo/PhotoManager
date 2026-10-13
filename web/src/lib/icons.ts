@@ -11,6 +11,7 @@ export const ICONS = {
 		'M8 3.5h10a2.5 2.5 0 0 1 2.5 2.5v10'
 	],
 	download: ['M12 4v11', 'M8 11.5l4 4 4-4', 'M5 20h14'],
+	share: ['M12 15V4', 'M8 8l4-4 4 4', 'M8.5 11H6v9h12v-9h-2.5'],
 	edit: [
 		'M4 7h9',
 		'M17 7h3',
