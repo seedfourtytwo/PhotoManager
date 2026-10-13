@@ -31,6 +31,12 @@ Write lists (`PA_ALLOWED_HOSTS`) comma-separated, without quotes, brackets or sp
 | General | `PA_ARGON2_TIME_COST` | `3` | Work factor of the PIN hash. Tests lower it; never lower it in use. |
 | General | `PA_ARGON2_MEMORY_KIB` | `65536` | Memory used by one PIN hash, in KiB. Tests lower it; never lower it in use. |
 | General | `PA_FACE_CLUSTER_EVERY_HOURS` | `24` | How often faces are regrouped into people. |
+| General | `PA_SEND_TO_DEVICE` | `false` | `true` switches on "Send to a device": a signed-in member can make a one-time link (and QR code) that lets another device download chosen photos without an account (send-to-device.md). |
+| General | `PA_SEND_TO_DEVICE_MINUTES` | `10` | How long such a link works, in minutes (1 to 60). |
+| General | `PA_SEND_TO_DEVICE_UNENCRYPTED` | `true` | `false` forbids links that are not https. `true`: such a link can be made after a warning the sender confirms each time. |
+| General | `PA_SEND_TO_DEVICE_REMOVE_DETAILS` | `true` | What "Remove details before sending" starts as in the dialog: `true` sends copies without location, camera details or original file names. |
+| General | `PA_SEND_TO_DEVICE_ADDRESS` | not set | An address phones on the home Wi-Fi can open, e.g. `http://192.168.1.20:8421`, offered for the link next to the address the sender is using; not set = only the sender's own address. |
+| General | `PA_SEND_TO_DEVICE_LISTEN` | not set | `address:port`, e.g. `0.0.0.0:8421`: a second, plain-http door that serves only the receiving page of "Send to a device", never the library or the sign-in; not set = no such door. |
 | General | `PA_TEST_MODE` | `false` | End-to-end tests only: adds `POST /__test/reset`, which wipes the library. Refused unless host and allowed hosts are loopback. Never set it on a real library. |
 | Uploads, sources, AI | `PA_UPLOAD_MAX_MB` | `200` | Largest single uploaded file, in MB; the upload is cut off as soon as it passes. |
 | Uploads, sources, AI | `PA_UPLOAD_MAX_FILES` | `500` | Most files in one upload request. |

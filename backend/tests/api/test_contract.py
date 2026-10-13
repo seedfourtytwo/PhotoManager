@@ -59,7 +59,8 @@ def test_the_parser_reads_every_style_of_the_contract() -> None:
 def test_every_contract_route_is_served(tmp_path: Path) -> None:
     expected = contract_routes(CONTRACT.read_text(encoding="utf-8"))
     assert len(expected) > 50, "the parser found the tables"
-    app = create_app(make_settings(tmp_path / "data"))
+    # with "send to a device" switched on: its routes are in the contract, and only then mounted
+    app = create_app(make_settings(tmp_path / "data", send_to_device=True))
     served = {
         (method.upper(), normalise(path))
         for path, operations in app.openapi()["paths"].items()

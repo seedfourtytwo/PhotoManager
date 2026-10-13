@@ -10,12 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from starlette.responses import Response
+from starlette.responses import PlainTextResponse, Response
 from starlette.types import Scope
 
 from photo_assistant import __version__
 from photo_assistant.api.deps import path_ids_in_range
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
+from photo_assistant.api.receive_door import PAGE_FILES, ReceiveHeaders, open_door
 from photo_assistant.api.routes import (
     albums,
     assets,
@@ -24,12 +25,14 @@ from photo_assistant.api.routes import (
     downloads,
     edits,
     folders,
+    handovers,
     imports,
     library,
     look,
     ml,
     printing,
     proton,
+    receive,
     remote_sources,
     review,
     sources,
@@ -55,7 +58,13 @@ class SinglePageApp(StaticFiles):
     """Serve the built web app; unknown paths get index.html so client routing works.
     Files under ``_app/immutable/`` carry a content hash in their name: cached for good."""
 
+    def __init__(self, *, directory: Path, hidden: frozenset[str] = frozenset()) -> None:
+        super().__init__(directory=directory, html=True)
+        self._hidden = hidden  # files of a feature that is switched off: not there
+
     async def get_response(self, path: str, scope: Scope) -> Response:
+        if path in self._hidden:
+            return PlainTextResponse("Not Found", status_code=404)
         try:
             response = await super().get_response(path, scope)
         except HTTPException as exc:
@@ -67,9 +76,12 @@ class SinglePageApp(StaticFiles):
         return response
 
 
-def _mount_web(app: FastAPI, web_dir: Path | None) -> None:
+def _mount_web(app: FastAPI, settings: Settings) -> None:
+    web_dir = settings.web_dir
     if web_dir is not None and (web_dir / "index.html").is_file():
-        app.mount("/", SinglePageApp(directory=web_dir, html=True), name="web")
+        off = frozenset() if settings.send_to_device else PAGE_FILES
+        hidden = frozenset(name.lstrip("/") for name in off)
+        app.mount("/", SinglePageApp(directory=web_dir, hidden=hidden), name="web")
 
 
 def _install_services(app: FastAPI, services: Services) -> None:
@@ -116,9 +128,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         services.store.sweep_tmp()  # never from a CLI command: it would cut a running upload
         if settings.worker_enabled:
             services.start_background()
+        door = open_door(settings, services, _domain_error)  # None unless switched on
+        app.state.door = door
         try:
             yield
         finally:
+            if door is not None:
+                door.stop()
             services.close()
             shutdown_logging()
 
@@ -154,12 +170,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         printing,
     ):
         app.include_router(module.router)
+    if settings.send_to_device:  # off: its addresses do not exist (404 for anyone)
+        app.include_router(handovers.router)
+        app.include_router(receive.router)
     if settings.test_mode:
         app.include_router(testing.router)
-    _mount_web(app, settings.web_dir)
+    _mount_web(app, settings)
     app.add_middleware(
         GZipMiddleware, minimum_size=1024, compresslevel=6, exclude_content_types=_NOT_GZIPPED
     )
+    app.add_middleware(ReceiveHeaders)
     app.add_middleware(SessionCookieRenewal)
     app.add_middleware(CrossSiteGuard, allowed_hosts=settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)

@@ -25,6 +25,7 @@ from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.adapters.sqlite_database import Database, open_library_database
+from photo_assistant.adapters.sqlite_handover import SqliteHandovers
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
@@ -39,6 +40,7 @@ from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import RENDER_EDIT_JOB, Editor
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, GroupSimilar
+from photo_assistant.app.handover import HandoverRules, Handovers
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
@@ -78,6 +80,7 @@ class Services:
     printer: AlbumPrinter
     stale_jobs: StaleJobSweep  # queues jobs again whose process died (server only)
     rechecks: ScheduledChecks
+    handovers: Handovers  # "send to a device": one-time links (off unless switched on)
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -142,12 +145,18 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         return outcome
 
     rechecks = ScheduledChecks(repo, clock)
+    handovers = Handovers(
+        SqliteHandovers(db),
+        clock,
+        HandoverRules(settings.send_to_device_minutes, settings.send_to_device_unencrypted),
+    )
 
     def prune_old_records() -> None:
         now = clock.now()
         repo.prune_login_failures(now - LOGIN_FAILURES_KEPT)
         repo.prune_sessions(now - SESSION_IDLE_LIMIT)  # exactly the expired ones
         integrations.ai_log.prune(now - AI_LOG_KEPT)
+        handovers.prune()  # the trail of "send to a device": 90 days
         repo.prune_import_items(IMPORT_RUNS_KEPT_IN_DETAIL)
 
     housekeeping = [
@@ -245,4 +254,5 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         printer,
         stale_jobs,
         rechecks,
+        handovers,
     )

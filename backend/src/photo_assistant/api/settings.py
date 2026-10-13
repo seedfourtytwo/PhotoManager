@@ -17,6 +17,7 @@ from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic.fields import FieldInfo
@@ -30,6 +31,7 @@ from pydantic_settings import (
 
 from photo_assistant.adapters.ollama_ai import OllamaSettings
 from photo_assistant.domain.clustering import ClusterParams
+from photo_assistant.domain.handover import DEFAULT_MINUTES, MAX_MINUTES, MIN_MINUTES
 from photo_assistant.domain.tags import TagParams
 from photo_assistant.ports.sync import SyncOptions
 
@@ -480,6 +482,51 @@ class Settings(BaseSettings):
         default=24.0,
         description="How often faces are regrouped into people.",
     )
+    # Send to a device (spec 2026-10-13): a one-time link to chosen photos, no account needed.
+    send_to_device: bool = Field(
+        default=False,
+        description=(
+            '`true` switches on "Send to a device": a signed-in member can make a one-time '
+            "link (and QR code) that lets another device download chosen photos without an "
+            "account (send-to-device.md)."
+        ),
+    )
+    send_to_device_minutes: int = Field(
+        default=DEFAULT_MINUTES,
+        ge=MIN_MINUTES,
+        le=MAX_MINUTES,
+        description="How long such a link works, in minutes (1 to 60).",
+    )
+    send_to_device_unencrypted: bool = Field(
+        default=True,
+        description=(
+            "`false` forbids links that are not https. `true`: such a link can be made after "
+            "a warning the sender confirms each time."
+        ),
+    )
+    send_to_device_remove_details: bool = Field(
+        default=True,
+        description=(
+            'What "Remove details before sending" starts as in the dialog: `true` sends '
+            "copies without location, camera details or original file names."
+        ),
+    )
+    send_to_device_address: str | None = Field(
+        default=None,
+        description=(
+            "An address phones on the home Wi-Fi can open, e.g. `http://192.168.1.20:8421`, "
+            "offered for the link next to the address the sender is using; not set = only "
+            "the sender's own address."
+        ),
+    )
+    send_to_device_listen: str | None = Field(
+        default=None,
+        description=(
+            "`address:port`, e.g. `0.0.0.0:8421`: a second, plain-http door that serves only "
+            'the receiving page of "Send to a device", never the library or the sign-in; '
+            "not set = no such door."
+        ),
+    )
     # E2E only: adds POST /__test/reset. Refused unless the server stays on this machine.
     test_mode: bool = Field(
         default=False,
@@ -489,6 +536,28 @@ class Settings(BaseSettings):
             "library."
         ),
     )
+
+    @field_validator("send_to_device_address")
+    @classmethod
+    def _an_origin(cls, value: str | None) -> str | None:
+        """``http(s)://host[:port]`` and nothing after it: the link's page and token follow."""
+        if value is None or not value.strip():
+            return None
+        parts = urlsplit(value.strip().rstrip("/"))
+        plain = not (parts.path or parts.query or parts.fragment or parts.username)
+        if parts.scheme not in ("http", "https") or not parts.hostname or not plain:
+            raise ValueError("write it as http://address:port (or https://…), nothing after it")
+        return f"{parts.scheme}://{parts.netloc}"
+
+    @field_validator("send_to_device_listen")
+    @classmethod
+    def _an_address_and_port(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        host, _, port = value.strip().rpartition(":")
+        if not host or not port.isdigit() or int(port) > 65535:  # 0: any free port
+            raise ValueError("write it as address:port, e.g. 0.0.0.0:8421")
+        return f"{host}:{int(port)}"
 
     @field_validator("allowed_hosts", mode="before")
     @classmethod
