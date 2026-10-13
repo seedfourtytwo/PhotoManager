@@ -75,9 +75,12 @@ describe('PortraitDialog', () => {
 		await expect.element(photo(1)).toHaveAttribute('aria-pressed', 'false');
 		await expect.element(photo(3)).toBeInTheDocument();
 		expect(sent[0]).toMatchObject({ method: 'GET', url: '/api/people/7/faces?limit=24' });
-		const img = stage().element().querySelector('img')!;
-		expect(img.getAttribute('src')).toBe('/api/assets/20/preview?edit=none');
-		expect(photo(1).element().querySelector('img')!.getAttribute('src')).toBe(FACES[0].url);
+		// The pictures come a moment after the buttons: wait for them, do not assume them.
+		const src = (within: Element) => within.querySelector('img')?.getAttribute('src');
+		await vi.waitFor(() => {
+			expect(src(stage().element())).toBe('/api/assets/20/preview?edit=none');
+			expect(src(photo(1).element())).toBe(FACES[0].url);
+		});
 	});
 
 	it('saves the photo that was picked and the circle as it was moved and zoomed', async () => {
