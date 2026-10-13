@@ -59,6 +59,13 @@ async function photoLoaded(width = 400, height = 300) {
 	await expect.element(page.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
 }
 
+/** The stage, taking pointer events made here: only a real pointer can be captured. */
+function grabbable() {
+	const el = stage().element() as HTMLElement;
+	el.setPointerCapture = () => {};
+	return el;
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('PortraitDialog', () => {
@@ -111,7 +118,7 @@ describe('PortraitDialog', () => {
 	it('drags the photo under the window with the pointer', async () => {
 		const { sent } = open(lea(face(1)));
 		await photoLoaded();
-		const el = stage().element() as HTMLElement;
+		const el = grabbable();
 		const box = el.getBoundingClientRect();
 		const at = (dx: number, dy: number) => ({
 			pointerId: 1,
@@ -132,6 +139,32 @@ describe('PortraitDialog', () => {
 		expect(body.cx).toBeCloseTo(expected.cx);
 		expect(body.cy).toBeCloseTo(expected.cy);
 		expect(body.size).toBe(0.5);
+	});
+
+	it('zooms in when two fingers move apart, about the point between them', async () => {
+		const { sent } = open(lea(face(1)));
+		await photoLoaded();
+		const el = grabbable();
+		const box = el.getBoundingClientRect();
+		const finger = (pointerId: number, dx: number) => ({
+			pointerId,
+			button: 0,
+			bubbles: true,
+			clientX: box.left + box.width / 2 + dx,
+			clientY: box.top + box.height / 2
+		});
+		el.dispatchEvent(new PointerEvent('pointerdown', finger(1, -20)));
+		el.dispatchEvent(new PointerEvent('pointerdown', finger(2, 20)));
+		el.dispatchEvent(new PointerEvent('pointermove', finger(1, -40)));
+		el.dispatchEvent(new PointerEvent('pointermove', finger(2, 40)));
+		el.dispatchEvent(new PointerEvent('pointerup', finger(1, -40)));
+		el.dispatchEvent(new PointerEvent('pointerup', finger(2, 40)));
+		await page.getByRole('button', { name: 'Save' }).click();
+		await vi.waitFor(() => expect(sent.at(-1)!.method).toBe('PUT'));
+		const body = sent.at(-1)!.body as { cx: number; cy: number; size: number };
+		expect(body.size).toBeCloseTo(0.25);
+		expect(body.cx).toBeCloseTo(0.5);
+		expect(body.cy).toBeCloseTo(0.4);
 	});
 
 	it('zooms with the slider, about the middle', async () => {

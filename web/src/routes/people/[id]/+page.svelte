@@ -9,7 +9,8 @@
 	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import Dialog from '$lib/components/Dialog.svelte';
-	import FaceCrop from '$lib/components/FaceCrop.svelte';
+	import Portrait from '$lib/components/Portrait.svelte';
+	import PortraitDialog from '$lib/components/PortraitDialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
@@ -18,7 +19,7 @@
 	let person = $state<Person | null>(null);
 	let others = $state<Person[]>([]);
 	let error = $state('');
-	let dialog = $state<'rename' | 'merge' | null>(null);
+	let dialog = $state<'rename' | 'merge' | 'portrait' | null>(null);
 	let name = $state('');
 	let merging = $state<number[]>([]);
 	let busy = $state(false);
@@ -121,7 +122,18 @@
 		<p class="quiet">{error}</p>
 	{:else if person}
 		<header>
-			<FaceCrop face={person.cover} size={72} />
+			{#if session.canEdit}
+				<button
+					type="button"
+					class="portrait"
+					aria-label={`Change portrait of ${person.name ?? 'this person'}`}
+					onclick={() => (dialog = 'portrait')}
+				>
+					<Portrait portrait={person.portrait} size={72} />
+				</button>
+			{:else}
+				<Portrait portrait={person.portrait} size={72} />
+			{/if}
 			<div>
 				<h1 class:quiet={!person.name}>{person.name ?? 'Someone'}</h1>
 				<p class="quiet small">
@@ -137,6 +149,7 @@
 								dialog = 'rename';
 							}}>{person.name ? 'Rename' : 'Name'}</button
 						>
+						<button type="button" onclick={() => (dialog = 'portrait')}>Change portrait</button>
 						<button type="button" onclick={openMerge}>Merge with…</button>
 						{#if person.hidden}
 							<button type="button" disabled={busy} onclick={() => setHidden(false)}
@@ -218,7 +231,7 @@
 				<li>
 					<label>
 						<input type="checkbox" value={other.id} bind:group={merging} />
-						<FaceCrop face={other.cover} size={40} />
+						<Portrait portrait={other.portrait} size={40} />
 						<span class:quiet={!other.name}>{other.name ?? 'Someone'}</span>
 						<span class="quiet small">{formatCount(other.asset_count)}</span>
 					</label>
@@ -231,6 +244,15 @@
 			>
 		{/snippet}
 	</Dialog>
+{:else if dialog === 'portrait' && person}
+	<PortraitDialog
+		{person}
+		onclose={() => (dialog = null)}
+		onsaved={(saved) => {
+			person = saved;
+			dialog = null;
+		}}
+	/>
 {/if}
 
 <style>
@@ -249,6 +271,12 @@
 		align-items: center;
 		margin: var(--s-4) 0 var(--s-2);
 	}
+	/* The portrait is its own tool: round, and nothing but the picture. */
+	.portrait {
+		flex: none;
+		padding: 0;
+		border-radius: 50%;
+	}
 	header p {
 		margin: var(--s-1) 0 0;
 	}
@@ -261,6 +289,7 @@
 	}
 	.tools {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0 2px;
 		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
 	}

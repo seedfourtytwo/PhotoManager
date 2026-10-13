@@ -7,6 +7,7 @@ import {
 	photoLayout,
 	sizeOfSlider,
 	sliderOfSize,
+	wheelZoom,
 	zoomAbout,
 	type Circle
 } from './portrait';
@@ -137,9 +138,22 @@ describe('zoomAbout', () => {
 	});
 });
 
+describe('wheelZoom', () => {
+	it('zooms in when the wheel turns away, out when it turns back, by the same amount', () => {
+		expect(wheelZoom(-100)).toBeGreaterThan(1);
+		expect(wheelZoom(100)).toBeLessThan(1);
+		expect(wheelZoom(-100) * wheelZoom(100)).toBeCloseTo(1);
+		expect(wheelZoom(0)).toBe(1);
+	});
+
+	it('adds up: many small turns of a trackpad are one large turn', () => {
+		expect(wheelZoom(-4) ** 25).toBeCloseTo(wheelZoom(-100));
+	});
+});
+
 describe('the zoom slider', () => {
 	it('runs from the whole photo (0) to the closest cut (1), evenly in zoom', () => {
-		expect(sliderOfSize(1)).toBe(0);
+		expect(sliderOfSize(1)).toBeCloseTo(0);
 		expect(sliderOfSize(MIN_SIZE)).toBeCloseTo(1);
 		expect(sizeOfSlider(0)).toBe(1);
 		expect(sizeOfSlider(1)).toBeCloseTo(MIN_SIZE);

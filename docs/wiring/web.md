@@ -121,8 +121,15 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   photos to the oldest (`GET /api/calendar`). It jumps once, where a drag ends.
 - **Grid**: one Tab stop; arrow keys, Home/End move between photos across months.
 - **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename, hide,
-  merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
+  merge, change portrait), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
   faces**, **Settings → Phones and devices**.
+- **Portraits** (`Portrait`, `PortraitDialog`, `lib/portrait.ts`): a person's round picture is
+  an `<img>` of `Person.portrait.url`, which the server cuts; the address changes with the
+  picture, so a saved change shows at once. "Change portrait" (members and admins; the
+  portrait itself is the same button) lists `GET /api/people/<id>/faces`, shows the picked
+  photo without its edits (`/api/assets/<id>/preview?edit=none`) under a round window, and
+  moves and zooms it by drag, pinch, wheel, slider and keys (arrows, + and -). The circle
+  cannot leave the photo. Save is `PUT /api/people/<id>/portrait`, "Use automatic" `DELETE`.
 - **Collections** (`/collections`, `CollectionRows`): each row of the account's look shows what
   is behind it and asks only for that: People `GET /api/people`, Albums `GET /api/albums`,
   Places `GET /api/assets/facets` and then `GET /api/assets?place=<name>&limit=1` for each of

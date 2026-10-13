@@ -13,7 +13,7 @@
 	} from '$lib/collections';
 	import type { CollectionsRow } from '$lib/look';
 	import { collectionRows } from '$lib/nav';
-	import FaceCrop from './FaceCrop.svelte';
+	import Portrait from './Portrait.svelte';
 
 	/** The rows of the account's look, in its order. A row left out is not asked for. */
 	type Props = { rows: readonly CollectionsRow[] };
@@ -80,7 +80,7 @@
 					<div class="rail">
 						{#each people as person (person.id)}
 							<a class="item person" href={`/people/${person.id}`}>
-								<FaceCrop face={person.cover} size={72} />
+								<Portrait portrait={person.portrait} size={72} />
 								<span class="name" class:unnamed={!person.name}>{personName(person)}</span>
 								<span class="data small quiet">{photoCount(person.asset_count)}</span>
 							</a>
