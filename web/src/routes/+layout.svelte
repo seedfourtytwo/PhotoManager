@@ -10,6 +10,7 @@
 	import LookTrial from '$lib/components/LookTrial.svelte';
 	import {
 		backupWatch,
+		forgetOldDensity,
 		isFilterable,
 		isPublicRoute,
 		loadLook,
@@ -31,6 +32,7 @@
 
 	onMount(() => {
 		look.show();
+		forgetOldDensity();
 		if (!bare) void session.load();
 	});
 

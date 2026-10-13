@@ -12,7 +12,7 @@ from dataclasses import replace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from photo_assistant.api.deps import (
     ADMIN_ONLY,
@@ -96,6 +96,7 @@ class PersonOut(BaseModel):
     name: str | None
     face_count: int
     asset_count: int
+    hidden: bool  # left out of GET /people unless asked for
     cover: FaceOut | None  # crop the asset's thumbnail to this box for the People grid
 
     @classmethod
@@ -106,12 +107,22 @@ class PersonOut(BaseModel):
             name=p.name,
             face_count=p.face_count,
             asset_count=p.asset_count,
+            hidden=p.hidden,
             cover=cover,
         )
 
 
 class PersonPatch(BaseModel):
-    name: str | None
+    """Only what is sent changes. ``name: null`` takes the name away."""
+
+    name: str | None = None
+    hidden: bool | None = None
+
+    @model_validator(mode="after")
+    def _something_to_change(self) -> "PersonPatch":
+        if not self.model_fields_set:
+            raise ValueError("nothing to change: send name or hidden")
+        return self
 
 
 class MergeIn(BaseModel):
@@ -159,7 +170,7 @@ def _clip_ready(services: Services) -> bool:
 
 def _person_ids_named(services: Services, name: str, visible: Collection[int]) -> set[int]:
     wanted = name.casefold()
-    people = services.ml.people.list_all(visible)
+    people = services.ml.people.list_all(visible, hidden=None)  # hidden is not forgotten
     return {p.id for p in people if p.name is not None and p.name.casefold() == wanted}
 
 
@@ -266,8 +277,9 @@ def tags(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> TagsOut:
 
 
 @router.get("/people")
-def list_people(services: ServicesDep, viewer: ViewerDep) -> list[PersonOut]:
-    return [PersonOut.of(p) for p in services.ml.people.list_all(viewer)]
+def list_people(services: ServicesDep, viewer: ViewerDep, hidden: bool = False) -> list[PersonOut]:
+    """The people listed in People; ``?hidden=true`` the ones hidden from it instead."""
+    return [PersonOut.of(p) for p in services.ml.people.list_all(viewer, hidden=hidden)]
 
 
 @router.get("/people/{person_id}")
@@ -276,10 +288,15 @@ def get_person(services: ServicesDep, viewer: ViewerDep, person_id: int) -> Pers
 
 
 @router.patch("/people/{person_id}", dependencies=NOT_GUEST)
-def rename_person(
+def change_person(
     services: ServicesDep, viewer: ViewerDep, person_id: int, body: PersonPatch
 ) -> PersonOut:
-    person = services.ml.people.rename(person_id, body.name, viewer)
+    people = services.ml.people
+    person = people.get(person_id, viewer)
+    if "name" in body.model_fields_set:
+        person = people.rename(person_id, body.name, viewer)
+    if body.hidden is not None:
+        person = people.set_hidden(person_id, body.hidden, viewer)
     return PersonOut.of(person)
 
 

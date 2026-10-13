@@ -121,9 +121,9 @@ describe('justify (invariants)', () => {
 
 describe('rowHeightFor', () => {
 	it('follows the design table: ~220 px on laptops, ~110 px on phones', () => {
-		expect(rowHeightFor(1440, 'comfortable')).toBe(220);
-		expect(rowHeightFor(390, 'comfortable')).toBe(110);
-		expect(rowHeightFor(1440, 'compact')).toBeLessThan(220);
+		expect(rowHeightFor(1440, 'medium')).toBe(220);
+		expect(rowHeightFor(390, 'medium')).toBe(110);
+		expect(rowHeightFor(1440, 'small')).toBeLessThan(220);
 		expect(rowHeightFor(1440, 'large')).toBeGreaterThan(220);
 	});
 });

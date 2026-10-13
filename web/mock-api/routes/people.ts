@@ -18,6 +18,7 @@ export function peopleRoutes(h: Helpers): Route[] {
 		return {
 			id,
 			name: person.name,
+			hidden: person.hidden ?? false,
 			face_count: faces.length,
 			asset_count: new Set(faces.map((f) => f.asset_id)).size,
 			cover: faces[0]
@@ -37,8 +38,10 @@ export function peopleRoutes(h: Helpers): Route[] {
 			'GET',
 			/^\/api\/people$/,
 			(ctx) => {
+				const hidden = ctx.url.searchParams.get('hidden') === 'true';
 				const out = [];
 				for (const p of h.state().people) {
+					if ((p.hidden ?? false) !== hidden) continue;
 					try {
 						out.push(personOut(me(ctx), p.id));
 					} catch {
@@ -55,8 +58,11 @@ export function peopleRoutes(h: Helpers): Route[] {
 			(ctx) => {
 				notGuest(ctx);
 				personOut(me(ctx), idParam(ctx));
-				const name = (ctx.body as { name?: string | null } | null)?.name;
-				h.state().people.find((p) => p.id === idParam(ctx))!.name = name?.trim() || null;
+				// Only what is sent changes, as on the server: hiding leaves the name alone.
+				const body = (ctx.body ?? {}) as { name?: string | null; hidden?: boolean };
+				const person = h.state().people.find((p) => p.id === idParam(ctx))!;
+				if ('name' in body) person.name = body.name?.trim() || null;
+				if (typeof body.hidden === 'boolean') person.hidden = body.hidden;
 				return ok(personOut(me(ctx), idParam(ctx)));
 			}
 		],
