@@ -96,6 +96,9 @@ test('every screen', async ({ page }, info) => {
 		await shot(page, '04b-loupe-info', p);
 		await page.getByRole('button', { name: 'Info' }).click();
 	}
+	await page.getByRole('button', { name: 'Zoom' }).click();
+	await shot(page, '04d-loupe-zoom', p);
+	await page.keyboard.press('z');
 	await page.getByRole('button', { name: 'Edit' }).click();
 	await page.getByRole('button', { name: 'Rotate right' }).click();
 	await page.getByRole('button', { name: '4:5', exact: true }).click();
