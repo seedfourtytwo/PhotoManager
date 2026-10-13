@@ -1,8 +1,17 @@
 <script lang="ts">
 	import { isPin, PIN_LENGTH } from '$lib/api';
-	import { api, chooseMode, notice, session, settings, type Density } from '$lib/app.svelte';
+	import {
+		api,
+		chooseMode,
+		notice,
+		sendToDevice,
+		session,
+		settings,
+		type Density
+	} from '$lib/app.svelte';
 	import { look, type Mode } from '$lib/look';
 	import Devices from '$lib/components/Devices.svelte';
+	import SentTrail from '$lib/components/SentTrail.svelte';
 	import { errorMessage } from '$lib/format';
 	import { PIN_FIELD } from '$lib/pin';
 
@@ -114,6 +123,7 @@
 	</section>
 
 	{#if session.canEdit}<Devices />{/if}
+	{#if sendToDevice.offered}<SentTrail />{/if}
 
 	<p class="quiet small version">Library server {version}</p>
 </div>

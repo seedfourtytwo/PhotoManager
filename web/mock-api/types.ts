@@ -117,6 +117,33 @@ export type MockBackup = {
 	runs: (BackupRun & { ends_at: number })[];
 };
 type MockDevice = Device & { user_id: number; token: string };
+/** A one-time link of "send to a device"; times are the mock clock's milliseconds. */
+export type MockHandover = {
+	id: number;
+	token: string;
+	user_id: number;
+	ids: number[];
+	bytes: number;
+	created: number;
+	expires: number;
+	encrypted: boolean;
+	details_removed: boolean;
+	redeemed_at: number | null;
+	redeemed_from: string | null;
+	redeemed_agent: string | null;
+	cancelled: boolean;
+};
+/** How the mock's "send to a device" is set up (the server's PA_SEND_TO_DEVICE settings). */
+export type MockSendRules = {
+	enabled: boolean;
+	/** Pretend the sender's address is an https one. */
+	https: boolean;
+	/** A home address is set (the mock's own). */
+	home: boolean;
+	unencrypted: boolean;
+	/** How long a link lasts. */
+	seconds: number;
+};
 
 export type MockState = {
 	users: MockUser[];
@@ -136,6 +163,8 @@ export type MockState = {
 	faces: MockFace[];
 	backups: MockBackup[];
 	devices: MockDevice[];
+	sendToDevice: MockSendRules;
+	handovers: MockHandover[];
 	remotes: string[];
 	/** rclone sources: source id → remote and path. */
 	remoteSources: Map<number, { remote: string; path: string }>;

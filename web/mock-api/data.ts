@@ -228,6 +228,9 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 			}
 		],
 		devices: [],
+		// off, as the product ships; `/__mock/reset` with `send` switches it on
+		sendToDevice: { enabled: false, https: false, home: true, unencrypted: true, seconds: 600 },
+		handovers: [],
 		remotes: ['gdrive', 'nas'],
 		remoteSources: new Map(),
 		createdFolders: new Set(),

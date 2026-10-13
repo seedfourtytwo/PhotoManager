@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="referrer" content="no-referrer" />
+		<meta name="color-scheme" content="dark light" />
+		<title>Photos for you</title>
+		<link rel="stylesheet" href="/receive.css" />
+	</head>
+	<body>
+		<!--
+			The receiving page of "Send to a device": no account, no app, nothing of the library.
+			The link carries its token after the '#', which a browser never sends to a server;
+			receive.js reads it and sends it in the body of two POSTs (look, then collect on the tap).
+		-->
+		<main>
+			<h1 id="title">Photos for you</h1>
+			<p id="line" role="status">Opening the link…</p>
+			<ul id="facts" hidden></ul>
+			<button id="download" type="button" hidden>Download</button>
+			<p id="after" class="quiet" hidden></p>
+			<noscript><p>This page needs JavaScript to read the link.</p></noscript>
+		</main>
+		<script src="/receive.js"></script>
+	</body>
+</html>

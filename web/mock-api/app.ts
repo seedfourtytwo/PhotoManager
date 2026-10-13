@@ -15,6 +15,7 @@ import { backupRoutes } from './routes/backups.ts';
 import { deviceRoutes } from './routes/devices.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { folderRoutes } from './routes/folders.ts';
+import { handoverRoutes, TOKEN_ROUTES } from './routes/handovers.ts';
 import { importRoutes } from './routes/imports.ts';
 import { lookRoutes } from './routes/look.ts';
 import { peopleRoutes } from './routes/people.ts';
@@ -58,6 +59,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		...backupRoutes(h),
 		...folderRoutes(h),
 		...deviceRoutes(h),
+		...handoverRoutes(h),
 		...remoteSourceRoutes(h),
 		...protonRoutes(h)
 	];
@@ -70,7 +72,13 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		rest[2].held = { reason: 'receipt', like: null };
 	}
 
-	const PUBLIC = new Set(['/api/health', '/api/setup', '/api/auth/accounts', '/api/auth/login']);
+	const PUBLIC = new Set([
+		'/api/health',
+		'/api/setup',
+		'/api/auth/accounts',
+		'/api/auth/login',
+		...TOKEN_ROUTES
+	]);
 
 	async function mockRoute(url: URL, req: IncomingMessage): Promise<Result | null> {
 		if (url.pathname === '/__mock/reset' && req.method === 'POST') {
@@ -81,6 +89,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				review?: boolean;
 				/** A user name to start locked, as after 30 wrong PINs. */
 				locked?: string;
+				/** "Send to a device": `true` switches it on as it is, or on with these rules. */
+				send?: boolean | Partial<MockState['sendToDevice']>;
 			};
 			state = makeState({ users: body.users ?? 'seed', count: body.count ?? initialCount });
 			for (const user of state.users)
@@ -88,6 +98,8 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 					Object.assign(user, { failedPins: LOCK_AFTER_WRONG_PINS, locked: true });
 			state.ml.installed = body.models ?? false;
 			if (body.review) holdSome();
+			if (body.send)
+				Object.assign(state.sendToDevice, { enabled: true }, body.send === true ? {} : body.send);
 			return noContent;
 		}
 		return null;

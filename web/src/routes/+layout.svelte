@@ -8,12 +8,14 @@
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import BackupBanner from '$lib/components/BackupBanner.svelte';
 	import LookTrial from '$lib/components/LookTrial.svelte';
+	import SendToDevice from '$lib/components/SendToDevice.svelte';
 	import {
 		backupWatch,
 		isFilterable,
 		isPublicRoute,
 		loadLook,
 		notice,
+		sendToDevice,
 		session,
 		settings
 	} from '$lib/app.svelte';
@@ -40,6 +42,12 @@
 	const signedInAs = $derived(session.user?.id);
 	$effect(() => {
 		if (signedInAs !== undefined) untrack(() => void loadLook());
+	});
+
+	// "Send to a device" is offered or not per person (and only if the server has it on).
+	$effect(() => {
+		void signedInAs;
+		untrack(() => sendToDevice.belongsTo(session.user));
 	});
 
 	function cameBack() {
@@ -127,6 +135,14 @@
 	<p class="quiet opening">Signing you in…</p>
 {:else}
 	<p class="quiet opening">Opening the library…</p>
+{/if}
+
+{#if sendToDevice.sending && sendToDevice.options}
+	<SendToDevice
+		ids={sendToDevice.sending}
+		options={sendToDevice.options}
+		onclose={() => sendToDevice.close()}
+	/>
 {/if}
 
 <p

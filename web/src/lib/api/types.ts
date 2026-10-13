@@ -461,6 +461,45 @@ export type Device = {
 /** The token is shown once. */
 export type NewDevice = { device: Device; token: string };
 
+// --- send to a device (v1.6): a one-time link to chosen photos ---------------------------------
+
+/** Where a link can point: the address the sender is using, or the home address an admin set. */
+export type LinkAddress = { via: 'here' | 'home'; origin: string; encrypted: boolean };
+export type HandoverOptions = {
+	/** Empty: no other device can open this library at any address it knows. */
+	addresses: LinkAddress[];
+	unencrypted_allowed: boolean;
+	/** What "Remove details before sending" starts as. */
+	remove_details: boolean;
+	minutes: number;
+	max_photos: number;
+	max_bytes: number;
+};
+export type HandoverState = 'waiting' | 'redeemed' | 'expired' | 'cancelled';
+export type Handover = {
+	id: Id;
+	state: HandoverState;
+	count: number;
+	bytes: number;
+	created_at: string;
+	expires_at: string;
+	encrypted: boolean;
+	details_removed: boolean;
+	sent_by: { id: Id; display_name: string };
+	redeemed_at: string | null;
+	redeemed_from: string | null;
+	redeemed_agent: string | null;
+};
+/** The link is shown once. */
+export type NewHandover = Handover & { url: string };
+export type HandoverIn = {
+	ids: Id[];
+	via: LinkAddress['via'];
+	remove_details: boolean;
+	/** The sender read the warning about an unencrypted link and chose to send anyway. */
+	unencrypted_ok?: boolean;
+};
+
 export type RemoteSourceIn = { label: string; remote: string; path: string };
 export type RemoteSource = RemoteSourceIn & { id: Id };
 

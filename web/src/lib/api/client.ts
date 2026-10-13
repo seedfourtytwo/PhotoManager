@@ -35,6 +35,9 @@ import type {
 	DownloadRequest,
 	Face,
 	Facets,
+	Handover,
+	HandoverIn,
+	HandoverOptions,
 	Health,
 	Id,
 	ImportReport,
@@ -52,6 +55,7 @@ import type {
 	MapPoint,
 	MlStatus,
 	NewDevice,
+	NewHandover,
 	NewUser,
 	PinBody,
 	Person,
@@ -410,6 +414,13 @@ export function createApi(options: ApiOptions = {}) {
 		createDevice: (body: { name: string; platform: DevicePlatform }) =>
 			request<NewDevice>('POST', '/api/devices', body),
 		revokeDevice: (id: Id) => request<void>('DELETE', `/api/devices/${id}`),
+
+		// send to a device (v1.6); every route is a 404 while the feature is switched off
+		handoverOptions: () => get<HandoverOptions>('/api/handovers/options'),
+		createHandover: (body: HandoverIn) => request<NewHandover>('POST', '/api/handovers', body),
+		handovers: () => get<Handover[]>('/api/handovers'),
+		handover: (id: Id) => get<Handover>(`/api/handovers/${id}`),
+		cancelHandover: (id: Id) => request<void>('DELETE', `/api/handovers/${id}`),
 
 		// remote (rclone) sources (admin, v1.1)
 		remotes: () => get<{ remotes: string[] }>('/api/remote-sources/remotes'),
