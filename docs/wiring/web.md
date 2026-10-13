@@ -152,6 +152,13 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   and uploads (`library.version`). Facets load only while the filter panel is shown, after the
   first thumbnails; years and sources are counted without their own filter, so other values
   stay listed and a chosen value with no matches can be unticked.
+- **Send to a device** (contract v1.6; off unless the server has it on): `state/send.svelte.ts`
+  asks `GET /api/handovers/options` once per signed-in member (a 404 or 403 means "not
+  offered": no entry anywhere). The entry is under More on the selection pill and in the
+  photo view; both only call `sendToDevice.open(ids)`, and the root layout shows the one
+  `SendToDevice.svelte` dialog (QR code drawn by `lib/qr.ts`, words in `lib/send.ts`).
+  The link's page is `static/receive.html` with `receive.js` and `receive.css`: plain
+  files, nothing of the app, so they also work from the server's second door.
 - **Look**: each account has a look sheet (theme, mode, dials, switches; contract v1.5,
   `docs/adr/0001`). `web/src/lib/look/` holds it and imports nothing from the app: `sheet.ts`
   (the rules, mirrored from `domain/look.py`), `apply.ts` (root attributes and CSS

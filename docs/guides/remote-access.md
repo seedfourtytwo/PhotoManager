@@ -54,6 +54,13 @@ same way by `just run`, the systemd service and Docker.
 Open `https://photos.tail1234.ts.net` on the phone (Tailscale app connected). In Safari:
 Share → Add to Home Screen for the full-screen app.
 
+## Sending photos to a device without an account
+
+"Send to a device" (off by default) hands chosen photos to another device with a one-time
+link and QR code. Over the Tailscale address above it is encrypted and needs nothing more;
+for a phone on the home Wi-Fi without Tailscale see [send-to-device.md](send-to-device.md),
+which also says what such a link does and does not protect against.
+
 ## Checklist
 
 - [ ] `tailscale serve status` shows `https://…ts.net → http://127.0.0.1:8420`

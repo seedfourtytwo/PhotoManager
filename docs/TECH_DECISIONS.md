@@ -191,6 +191,17 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
   env names by one settings source; no `python-dotenv` import of our own (pydantic-settings
   already reads `.env`).
 
+## QR code: our own encoder, no library (decided 2026-10-13)
+
+"Send to a device" shows its link as a QR code. `web/src/lib/qr.ts` draws it: byte mode,
+error-correction level M, versions 1 to 10 (213 bytes; a link is about 90), about 300 lines
+with no dependency. It is pinned square for square to codes from OpenCV's encoder
+(`docs/contracts/qr-cases.json`), and the backend tests read those same codes back with
+OpenCV's decoder, which is already installed for face detection.
+**Rejected:** a QR package from npm: one more dependency in the page that shows a secret
+link, for a format that has not changed since 2006.
+**Revisit if:** links outgrow 213 bytes or a logo in the code is wanted.
+
 ## Tooling
 
 | Concern | Tool |

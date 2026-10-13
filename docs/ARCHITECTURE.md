@@ -53,7 +53,7 @@ faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, f
 `taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
 admin (see Visibility in §7); `0026` keeps what the last global face-clustering pass saw
 (`face_cluster_pass`, `face_cluster_mark`); `0027` gives each account its look
-(`user.look`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+(`user.look`); `0028` the one-time links of "send to a device" (`handover`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -90,6 +90,10 @@ inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0
 device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
        created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
 ai_log(id, capability, model, attempt, ok, duration_ms, error, request_json, response_json)
+handover(id, token_hash UNIQUE sha256, created_by → user ON DELETE CASCADE, created_at,
+         expires_at, asset_ids JSON, byte_size, encrypted, details_removed,
+         max_redemptions, redemptions, redeemed_at, redeemed_from, redeemed_agent,
+         cancelled_at)          -- 0028; its state is worked out, never stored; kept 90 days
 backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, schedule,
               quiet_window, retention_json, enabled, created_at)                     -- 0016
 backup_run(id, target_id → backup_target ON DELETE CASCADE, kind, status, started_at, …)
@@ -402,6 +406,21 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
   of them and revokes the user's device tokens. First-run setup and the last-admin rule are
   atomic (one `BEGIN IMMEDIATE` transaction each).
+- **Send to a device** (off unless `PA_SEND_TO_DEVICE=true`; spec 2026-10-13,
+  `docs/guides/send-to-device.md`) is the one place a device gets photos without a session:
+  `POST /api/handovers/look` and `/collect` take a link's token instead. What stands in
+  for the session: 256 random bits, stored only as SHA-256 and sent only in a request body
+  (the link carries them after `#`, so no log has them); one use, taken in one atomic
+  `UPDATE`; ten minutes; one answer for every token that does not work, and a limit on
+  wrong tries per address and overall (in memory); the photos are checked again through
+  `visibility(viewer)` as the sender at the moment they are collected. Whether a request is
+  https is `request.url.scheme`, which uvicorn sets from `X-Forwarded-Proto` only for the
+  addresses in `PA_TRUSTED_PROXIES`: a link made as https is never honoured over plain
+  http (and is cancelled if tried), an unencrypted one needs the sender's yes each time.
+  Switched off, the routes are not mounted. The optional second listener
+  (`PA_SEND_TO_DEVICE_LISTEN`, `api/receive_door.py`) is a separate small app with only
+  the receiving page and those two routes, so a phone on the home Wi-Fi can collect while
+  the library itself stays on loopback behind Tailscale.
 - Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`
   that turns any of them into its status and `{"detail": sentence}`. Six families carry the
   status: `DomainError` (400), `ForbiddenError` (403), `NotFoundError` (404), `ConflictError`
