@@ -191,5 +191,10 @@
 		.page :global(section > h2) {
 			margin-bottom: var(--s-3);
 		}
+		/* A group's options do not share one line of a phone: a list, a finger-sized row each. */
+		.page :global(section > fieldset > .choice) {
+			display: flex;
+			margin-right: 0;
+		}
 	}
 </style>
