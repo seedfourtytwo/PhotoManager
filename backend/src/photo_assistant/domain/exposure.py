@@ -101,4 +101,7 @@ class Exposure:
 
     @property
     def is_empty(self) -> bool:
-        return self == Exposure()
+        return self == NO_EXPOSURE
+
+
+NO_EXPOSURE = Exposure()

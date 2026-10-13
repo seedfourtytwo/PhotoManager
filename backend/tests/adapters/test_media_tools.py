@@ -8,6 +8,8 @@ import pytest
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader, to_metadata
 from photo_assistant.adapters.vips_renderer import VipsRenderer
+from photo_assistant.domain.exposure import Exposure
+from tests.synthetic import write_photo
 
 pytestmark = pytest.mark.integration
 
@@ -61,6 +63,54 @@ def test_bad_files_get_an_error_not_an_exception(
     assert empty.error is not None
     assert text.error is not None and "not an image" in text.error
     assert emoji.error is None, "unicode file names must work"
+
+
+@needs_exiftool
+def test_reads_aperture_shutter_iso_and_focal_length(
+    reader: ExifToolReader, tmp_path: Path
+) -> None:
+    shot = Exposure(f_number=2.8, exposure_time=1 / 250, iso=400, focal_length=35.0)
+    slow = Exposure(f_number=11.0, exposure_time=2.5, iso=64, focal_length=4.25)
+    first, second = reader.read_many(
+        [
+            write_photo(tmp_path / "shot.jpg", seed=1, exposure=shot),
+            write_photo(tmp_path / "slow.jpg", seed=2, exposure=slow),
+        ]
+    )
+    assert first.exposure == shot
+    assert second.exposure == slow
+
+
+@needs_exiftool
+def test_reads_the_exposure_values_a_photo_has_and_leaves_the_others_empty(
+    reader: ExifToolReader, tmp_path: Path
+) -> None:
+    only_iso = write_photo(tmp_path / "iso.jpg", seed=3, exposure=Exposure(iso=800))
+    (meta,) = reader.read_many([only_iso])
+    assert meta.exposure == Exposure(iso=800)
+
+
+@needs_exiftool
+def test_a_photo_without_exposure_tags_has_an_empty_exposure(
+    reader: ExifToolReader, source_guard: Path
+) -> None:
+    camera, screenshot = reader.read_many(
+        [source_guard / "IMG_1001.JPG", source_guard / "Screenshot from 2026-07-03 15-21-27.png"]
+    )
+    assert camera.exposure.is_empty and screenshot.exposure.is_empty
+
+
+def test_mapping_reads_exposure_through_the_domain_rules() -> None:
+    meta = to_metadata(
+        {
+            "File:MIMEType": "image/jpeg",
+            "EXIF:FNumber": 0,
+            "EXIF:ExposureTime": "1/250",
+            "EXIF:ISO": "100 200",
+            "EXIF:FocalLength": "junk",
+        }
+    )
+    assert meta.exposure == Exposure(exposure_time=0.004, iso=100)
 
 
 def test_mapping_handles_missing_and_junk_values() -> None:

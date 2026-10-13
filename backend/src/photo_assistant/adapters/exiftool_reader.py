@@ -10,6 +10,7 @@ import exiftool  # type: ignore[import-untyped]
 
 from photo_assistant.adapters.tool_runner import ToolTimeoutError, run_tool
 from photo_assistant.domain.capture_time import MetadataDates
+from photo_assistant.domain.exposure import Exposure
 from photo_assistant.domain.model import PhotoMetadata
 
 _TAGS = [
@@ -31,6 +32,10 @@ _TAGS = [
     "File:MIMEType",
     "MakerNotes:ContentIdentifier",
     "QuickTime:ContentIdentifier",
+    "EXIF:FNumber",
+    "EXIF:ExposureTime",
+    "EXIF:ISO",
+    "EXIF:FocalLength",
 ]
 
 
@@ -102,6 +107,12 @@ def to_metadata(record: dict[str, Any]) -> PhotoMetadata:
             _first(record, "MakerNotes:ContentIdentifier", "QuickTime:ContentIdentifier")
         ),
         error=error,
+        exposure=Exposure.from_raw(
+            f_number=record.get("EXIF:FNumber"),
+            exposure_time=record.get("EXIF:ExposureTime"),
+            iso=record.get("EXIF:ISO"),
+            focal_length=record.get("EXIF:FocalLength"),
+        ),
     )
 
 

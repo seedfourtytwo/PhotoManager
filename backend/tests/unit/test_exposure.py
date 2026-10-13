@@ -95,7 +95,14 @@ def test_iso_is_none_for_zero_missing_junk_and_absurd_values(raw: object) -> Non
 
 @pytest.mark.parametrize(
     ("raw", "expected"),
-    [(35.0, 35.0), (35, 35.0), ("35.0 mm", 35.0), ("35mm", 35.0), ("425/100", 4.25), ("4.25", 4.25)],
+    [
+        (35.0, 35.0),
+        (35, 35.0),
+        ("35.0 mm", 35.0),
+        ("35mm", 35.0),
+        ("425/100", 4.25),
+        ("4.25", 4.25),
+    ],
 )
 def test_focal_length_is_millimetres(raw: object, expected: float) -> None:
     assert parse_focal_length(raw) == pytest.approx(expected)
