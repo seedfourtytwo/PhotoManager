@@ -231,6 +231,9 @@ not a token):
 | Selection | click / shift-click / drag-lasso | long-press, then drag or tap |
 | Grid row height | ~220 px | ~110 px, pinch to change |
 
+The row heights are for the look's medium photo size; small is ¾ of it and large 1.4 times.
+Only the look sets it: there is no photo size setting per device.
+
 ## 4. Print design (albums)
 
 - Generous margins, consistent baseline for captions, one serif family per theme.

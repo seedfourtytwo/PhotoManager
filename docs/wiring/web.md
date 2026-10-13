@@ -151,6 +151,8 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   Settings offers the mode (Dark, Light, Like the device), saved on the account.
   The earlier per-browser `pa.theme` key becomes the mode of an account that still has the
   defaults, once; for an account that already has a look it is only removed.
+  The size of the photos in the grids is the look's `thumbSize` and nothing else: the earlier
+  per-browser `pa.density` key (a Settings choice that is gone) is removed when the app loads.
 
 ## Performance (library grid, 10 000-photo mock, phone 390×844, CPU ×4)
 
