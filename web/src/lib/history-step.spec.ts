@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pushState, replaceState } from '$app/navigation';
 import { navigating, page } from '$app/state';
-import { historyStep } from './history-step';
+import { historyStep, stepsGone } from './history-step';
 
 vi.mock('$app/navigation', () => ({ pushState: vi.fn(), replaceState: vi.fn() }));
 vi.mock('$app/state', () => ({
@@ -136,6 +136,20 @@ describe('a history step for a sheet', () => {
 		await settle();
 		first();
 		historyStep(() => {})();
+		await settle();
+		expect(entries).toHaveLength(1);
+	});
+
+	it('a sheet under another one closes after it and takes its own entry out too', async () => {
+		const under = historyStep(() => {});
+		await settle();
+		const over = historyStep(() => {});
+		await settle();
+		expect(entries).toHaveLength(3);
+		over();
+		const gone = stepsGone().then(under);
+		await settle();
+		await gone;
 		await settle();
 		expect(entries).toHaveLength(1);
 	});

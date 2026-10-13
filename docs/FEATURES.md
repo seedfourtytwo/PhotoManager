@@ -107,6 +107,7 @@ copies down.
 
 Edits are stored as a small **recipe** (JSON) per photo, shared by everyone who may edit it (api-v1); the original is never changed.
 Views and downloads render the recipe on the fly (and cache the result). "Revert" deletes the recipe.
+Leaving the editor with changes that are not saved (Back, Escape or Cancel) asks first: Keep editing or Discard changes.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|

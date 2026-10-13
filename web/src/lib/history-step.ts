@@ -42,6 +42,12 @@ let serial = 0;
 let leaving: Promise<void> = Promise.resolve();
 
 /**
+ * Every closed sheet's entry has left the history. A sheet under another one waits for this
+ * before it closes too: its own entry can only be taken out when it is the current one.
+ */
+export const stepsGone = (): Promise<void> => leaving;
+
+/**
  * Adds the step for a sheet that has just opened. `onback` is called when Back left it: the
  * owner then takes the sheet off the page. Returns what the owner calls once the sheet is gone,
  * however it closed.
