@@ -19,10 +19,12 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
-/* The look's text-size dial (lib/look/apply.ts). Sizes and spaces are in rem, so the whole
-   page follows the root; --target stays in pixels. */
+/* The root is the browser's own text size (1rem: 16 px unless the reader chose another) times
+   the look's text-size dial (lib/look/apply.ts). Sizes and spaces are in rem, so the whole
+   page follows it and a token renders at the pixels its name says; --target stays in pixels.
+   The interface text on it is the body's 14. */
 html {
-	font-size: calc(var(--fs-14) * var(--text-scale, 1));
+	font-size: calc(var(--fs-16) * var(--text-scale, 1));
 }
 
 ::selection {

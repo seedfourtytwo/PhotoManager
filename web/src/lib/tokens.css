@@ -55,7 +55,7 @@
 	/* Layout */
 	--gutter: 2px; /* between photos, and beside them on a phone; the look's gap dial moves it */
 	--fine: 2px; /* the finest line and gap: the ruler's needle, an icon and its word */
-	--margin: 16rem; /* right-margin notes and filters on desktop */
+	--margin: 14rem; /* 224: right-margin notes and filters on desktop */
 	--top: 56px; /* the top bar on a laptop; 0 on a phone. Sticky things offset by it. */
 	--dock: 56px; /* the floating dock on a phone */
 	--bar: calc(var(--dock) + var(--s-4)); /* room the dock takes at the bottom of a phone */

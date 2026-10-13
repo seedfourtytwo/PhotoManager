@@ -173,11 +173,11 @@ test('shell: on a tablet or a landscape phone the dock is a pill, not a bar', as
 	const pill = (await nav.getByRole('list').boundingBox())!;
 	const search = (await nav.getByRole('link', { name: 'Search', exact: true }).boundingBox())!;
 	const account = (await nav.getByRole('button', { name: /^Account/ }).boundingBox())!;
-	expect(pill.width).toBeLessThanOrEqual(26 * 14);
+	expect(pill.width).toBeLessThanOrEqual(26 * 16); // 26rem
 	// The three pieces sit together in the middle of the screen.
 	const left = pill.x;
 	const right = account.x + account.width;
-	expect(Math.abs(left - (900 - right))).toBeLessThanOrEqual(2 * 14);
+	expect(Math.abs(left - (900 - right))).toBeLessThanOrEqual(2 * 16);
 	expect(search.x).toBeGreaterThan(pill.x + pill.width);
 	expect(account.x).toBeGreaterThan(search.x);
 });
