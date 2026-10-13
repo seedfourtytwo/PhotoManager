@@ -2,8 +2,9 @@
 	import { untrack } from 'svelte';
 	import type { AssetOut } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
-	import { errorMessage } from '$lib/format';
+	import { errorMessage, photos } from '$lib/format';
 	import {
+		dateProblem,
 		formatShort,
 		isValidLocal,
 		previewDateChange,
@@ -34,7 +35,9 @@
 		const shift = toMinutes({ days: days || 0, hours: hours || 0, minutes: minutes || 0 }, sign);
 		return shift === 0 ? null : { shift_minutes: shift };
 	});
-	const preview = $derived(change ? previewDateChange(items, change) : []);
+	/** Why the server would refuse this change: said here, and nothing is sent. */
+	const problem = $derived(change ? dateProblem(items, change) : null);
+	const preview = $derived(change && !problem ? previewDateChange(items, change) : []);
 	const SHOWN = 5;
 
 	/** Undo: the previous dates, re-set (the server marks them as set by hand). */
@@ -50,7 +53,7 @@
 	}
 
 	async function save() {
-		if (!change) return;
+		if (!change || problem) return;
 		busy = true;
 		error = '';
 		try {
@@ -59,7 +62,7 @@
 			const { updated } = await api.changeDates(
 				'set' in change ? { ids, set: change.set } : { ids, shift_minutes: change.shift_minutes }
 			);
-			notice.show(`Changed the date of ${updated} photo${updated === 1 ? '' : 's'}.`, {
+			notice.show(`Changed the date of ${photos(updated)}.`, {
 				action: { label: 'Undo', run: () => void putBack(undo) }
 			});
 			ondone();
@@ -73,7 +76,7 @@
 
 <Dialog title="Fix date" {onclose}>
 	<p class="quiet">
-		{items.length} photo{items.length === 1 ? '' : 's'}. You can undo the change right after.
+		{photos(items.length)}. You can undo the change right after.
 	</p>
 	<div class="modes" role="radiogroup" aria-label="How to change the date">
 		<label><input type="radio" bind:group={mode} value="shift" /> Shift by</label>
@@ -111,10 +114,10 @@
 		</table>
 		{#if preview.length > SHOWN}<p class="quiet small">and {preview.length - SHOWN} more</p>{/if}
 	{/if}
-	{#if error}<p role="alert">{error}</p>{/if}
+	{#if problem || error}<p class="problem" role="alert">{problem ?? error}</p>{/if}
 
 	{#snippet actions()}
-		<button class="primary" type="button" disabled={!change || busy} onclick={save}>
+		<button class="primary" type="button" disabled={!change || !!problem || busy} onclick={save}>
 			Change date
 		</button>
 	{/snippet}
@@ -162,6 +165,9 @@
 	td {
 		padding: var(--s-1) var(--s-2) var(--s-1) 0;
 		white-space: nowrap;
+	}
+	.problem {
+		margin-top: var(--s-4);
 	}
 	@media (pointer: coarse) {
 		.modes label {

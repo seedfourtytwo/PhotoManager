@@ -1,7 +1,8 @@
 /** Where things are: the places of the app and what sits behind the account button. */
-import type { MenuItem } from './components/Menu.svelte';
+import { photos } from './format';
 import type { IconName } from './icons';
 import type { CollectionsRow } from './look';
+import type { MenuItem } from './menu';
 
 export type Place = {
 	href: string;
@@ -54,12 +55,7 @@ export function accountItems(
 		current: under(path, href)
 	});
 	return [
-		link(
-			'To review',
-			'/review',
-			who.waiting,
-			`${who.waiting} ${who.waiting === 1 ? 'photo' : 'photos'}`
-		),
+		link('To review', '/review', who.waiting, photos(who.waiting)),
 		link('Trash', '/trash'),
 		link('Settings', '/settings'),
 		...(who.isAdmin ? [link('Admin', '/admin')] : []),

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import type { AlbumSummary } from '$lib/api';
+	import { ALBUM_TITLE_MAX, type AlbumSummary } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import { photos } from '$lib/format';
 
 	let albums = $state<AlbumSummary[] | null>(null);
 	let creating = $state(false);
@@ -17,16 +18,17 @@
 			.catch((e: unknown) => notice.error(e));
 	});
 
-	async function create() {
-		if (busy) return;
+	async function create(event: SubmitEvent) {
+		event.preventDefault();
+		if (busy || !title.trim()) return;
 		busy = true;
 		try {
 			const album = await api.createAlbum({
 				title: title.trim(),
 				description: description.trim() || undefined
 			});
-			creating = false;
-			await goto(`/albums/${album.id}`);
+			// In place of the dialog's history step: Back from the album is the list of albums.
+			await goto(`/albums/${album.id}`, { replaceState: true });
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -64,8 +66,7 @@
 					</span>
 					<span class="title">{album.title}</span>
 					<span class="quiet small">
-						{album.count} photo{album.count === 1 ? '' : 's'}{#if album.role !== 'owner'}&nbsp;·
-							shared with you ({album.role}){/if}
+						{photos(album.count)}{#if album.role !== 'owner'}&nbsp;· shared with you ({album.role}){/if}
 					</span>
 				</a>
 			</li>
@@ -75,10 +76,16 @@
 
 {#if creating}
 	<Dialog title="New album" onclose={() => (creating = false)}>
-		<label class="field">Title <input bind:value={title} /></label>
-		<label class="field">Description <input bind:value={description} /></label>
+		<!-- A form, so Enter in a field creates the album. -->
+		<form id="new-album" onsubmit={create}>
+			<label class="field">Title <input bind:value={title} maxlength={ALBUM_TITLE_MAX} /></label>
+			{#if title.length >= ALBUM_TITLE_MAX}
+				<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
+			{/if}
+			<label class="field">Description <input bind:value={description} /></label>
+		</form>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={busy || !title.trim()} onclick={create}
+			<button class="primary" type="submit" form="new-album" disabled={busy || !title.trim()}
 				>Create</button
 			>
 		{/snippet}

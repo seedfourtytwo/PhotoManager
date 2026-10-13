@@ -1,22 +1,29 @@
-/** The loupe: chrome that comes back on touch, real swipes, URL state, rights, guarded actions. */
+/**
+ * The loupe (the photo view): its bar, chrome that comes back on touch, real swipes, URL state,
+ * rights, guarded actions, toasts on top of it, and the view transition from and to the tile.
+ */
+import type { Page } from '@playwright/test';
 import {
 	ADMIN,
 	centre,
+	countSlow,
 	expect,
 	expectAccessible,
 	GUEST,
 	isPhone,
+	loupe,
 	loupeAction,
 	MEMBER,
+	NOTHING_HAPPENS_MS,
 	resetMock,
+	selectionAction,
+	selectTiles,
 	signIn,
 	test,
+	toast,
 	touchSwipe,
 	viewOnlyPhoto
 } from './helpers.ts';
-
-const loupe = (page: import('@playwright/test').Page) =>
-	page.getByRole('dialog', { name: 'Photo viewer' });
 
 test.describe('as admin', () => {
 	test.beforeEach(async ({ page }) => {
@@ -118,7 +125,7 @@ test.describe('as admin', () => {
 		await expect(loupe(page)).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(loupe(page)).toHaveCount(0);
-		await page.waitForTimeout(300);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
 		await expect(page).toHaveURL(/\/$/);
 		await expect(page.locator('.tile').first()).toBeVisible();
 	});
@@ -139,7 +146,7 @@ test.describe('as admin', () => {
 		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
 		await page.touchscreen.tap(at.x, at.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');
-		await page.waitForTimeout(300);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
 		expect(patches).toBe(0);
 		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
 		// Now that it can be seen, it works.
@@ -170,18 +177,13 @@ test.describe('as admin', () => {
 	});
 
 	test('favourite: a double click sends one request and ends favourited', async ({ page }) => {
-		let patches = 0;
-		await page.route(/\/api\/assets\/\d+\/state$/, async (route) => {
-			patches++;
-			await new Promise((r) => setTimeout(r, 300));
-			await route.continue();
-		});
+		const patches = await countSlow(page, /\/api\/assets\/\d+\/state$/);
 		await page.locator('.tile').first().click();
 		const fav = loupe(page).getByRole('button', { name: 'Favourite' });
 		await fav.dblclick();
 		await expect(fav).toHaveAttribute('aria-pressed', 'true');
-		await page.waitForTimeout(500);
-		expect(patches).toBe(1);
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
+		expect(patches.count).toBe(1);
 	});
 
 	test('owner/admin can make a photo private from the loupe', async ({ page }) => {
@@ -258,9 +260,210 @@ test('trash and albums: a linked photo that is not in the list leaves no trace i
 		await page.goto('/albums');
 		await page.goto(`${path}?photo=999999`);
 		await expect(page).toHaveURL(new RegExp(`${path}$`));
-		await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toHaveCount(0);
+		await expect(loupe(page)).toHaveCount(0);
 		// One Back leaves the page: no dead entry was left behind.
 		await page.goBack();
 		await expect(page).toHaveURL(/\/albums$/);
 	}
+});
+
+test.describe('photo view', () => {
+	test.beforeEach(async ({ page }) => {
+		await resetMock();
+		await signIn(page);
+	});
+
+	test('the bar reads the photo’s date, time and file name in the data face', async ({ page }) => {
+		await page.locator('.tile').first().click();
+		const readout = loupe(page).locator('.readout');
+		await expect(readout).toContainText(/\d{4}-\d{2}-\d{2} · \d{2}:\d{2}/);
+		await expect(readout).toContainText(/\d+ × \d+ · \S+\.\w{3,4}$/);
+		await expect(readout).toHaveCSS('font-family', /Martian Mono/);
+	});
+
+	test('the bar holds Favourite, Download, Album, Edit and More; More holds the rest', async ({
+		page
+	}) => {
+		await page.locator('.tile').first().click();
+		const bar = loupe(page).locator('.bar');
+		const actions = bar.locator('.acts > button, .acts > .menu > button');
+		await expect(actions).toHaveText(['Favourite', 'Download', 'Album', 'Edit', 'More']);
+		await expect(actions.locator('svg')).toHaveCount(5);
+		await expect(bar.getByRole('button', { name: 'Fix date' })).toHaveCount(0);
+		await bar.getByRole('button', { name: 'More' }).click();
+		await expect(bar.getByRole('button', { name: 'Private' })).toBeVisible();
+		await expect(bar.getByRole('button', { name: 'Fix date' })).toBeVisible();
+		await expectAccessible(page);
+	});
+
+	test('Album adds the open photo to an album', async ({ page }) => {
+		await page.locator('.tile').first().click();
+		await loupe(page).getByRole('button', { name: 'Album' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add to album' });
+		await expect(dialog.getByText('1 photo', { exact: true })).toBeVisible();
+		await dialog.getByLabel('New album title').fill('From the photo view');
+		await dialog.getByRole('button', { name: 'Add' }).click();
+		await expect(toast(page)).toContainText('Created “From the photo view” with 1 photo');
+		await expect(loupe(page)).toBeVisible();
+		if (!isPhone(page))
+			await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
+	});
+
+	/** The toast is what a finger or a pointer at its middle would hit: in sight, on top, not inert. */
+	const expectOnTop = (page: Page) =>
+		expect
+			.poll(() =>
+				toast(page).evaluate((slip) => {
+					const box = slip.getBoundingClientRect();
+					const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+					return hit !== null && slip.contains(hit);
+				})
+			)
+			.toBe(true);
+
+	test('a toast raised in the photo view shows on top of it, clear of its bar', async ({
+		page
+	}) => {
+		await page.locator('.tile').first().click();
+		await loupe(page).getByRole('button', { name: 'Album' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add to album' });
+		await dialog.getByLabel('New album title').fill('Toasted');
+		await dialog.getByRole('button', { name: 'Add' }).click();
+		await expect(toast(page)).toContainText('Created “Toasted” with 1 photo');
+		await expect(loupe(page)).toBeVisible();
+		await expectOnTop(page);
+		// It is announced: a live region inside the modal viewer, which is the only part of the
+		// page a screen reader is given.
+		expect(await toast(page).evaluate((slip) => slip.closest('dialog')?.ariaLabel)).toBe(
+			'Photo viewer'
+		);
+		const slip = (await toast(page).boundingBox())!;
+		const bar = (await loupe(page).locator('.bar').boundingBox())!;
+		expect(slip.y + slip.height).toBeLessThan(bar.y);
+		// The viewer closes under it: the toast stays for its time.
+		await loupe(page).getByRole('button', { name: 'Close' }).click();
+		await expect(loupe(page)).toHaveCount(0);
+		await expect(toast(page)).toContainText('Created “Toasted”');
+		await expectOnTop(page);
+	});
+
+	test('phone: with the time ruler out, a toast in the photo view is one slip under Close', async ({
+		page
+	}) => {
+		test.skip(
+			!isPhone(page),
+			'the lying ruler, and the toast rule that goes with it, are the phone’s'
+		);
+		await expect(page.locator('.tile').first()).toBeVisible();
+		await page.evaluate(() => window.scrollBy(0, 600));
+		const ruler = page.getByRole('slider', { name: 'Jump to date' });
+		await expect(ruler).toHaveCSS('opacity', '1');
+		await page.locator('.tile').nth(8).click();
+		await expect(loupe(page)).toBeVisible();
+		// The ruler stays on the page under the viewer, so the rule that lifts the toast over it
+		// still matches.
+		await expect(ruler).toHaveAttribute('aria-orientation', 'horizontal');
+		await page.route('**/api/assets/*/state', (route) =>
+			route.fulfill({ status: 500, json: { detail: 'the library is busy, try again' } })
+		);
+		await loupe(page).getByRole('button', { name: 'Favourite' }).click();
+		await expect(toast(page)).toContainText(/the library is busy, try again/i);
+		await expectOnTop(page);
+		const slip = (await toast(page).boundingBox())!;
+		const close = (await loupe(page).getByRole('button', { name: 'Close' }).boundingBox())!;
+		const bar = (await loupe(page).locator('.bar').boundingBox())!;
+		// One line of words on its slip: not stretched from under Close down to the dock.
+		expect(slip.height).toBeLessThan(60);
+		expect(slip.y).toBeGreaterThanOrEqual(close.y + close.height);
+		expect(slip.y).toBeLessThan(close.y + close.height + 24);
+		expect(slip.y + slip.height).toBeLessThan(bar.y);
+		// And nothing asks it to: only being a popover (height: fit-content) kept it one slip
+		// while the rule that clears the ruler still gave it a bottom as well as a top.
+		expect(
+			await toast(page).evaluate((el) => el.computedStyleMap().get('bottom')?.toString())
+		).toBe('auto');
+	});
+
+	test('a toast that is showing when a photo opens moves on top of the photo view', async ({
+		page
+	}) => {
+		await selectTiles(page, [0]);
+		await selectionAction(page, 'Favourite');
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		await page.getByRole('button', { name: 'Clear selection' }).click();
+		await page.locator('.tile').nth(1).click();
+		await expect(loupe(page)).toBeVisible();
+		await expect(toast(page)).toContainText('Marked as favourites.');
+		await expectOnTop(page);
+	});
+
+	test('fixing the date of the open photo keeps the photo view open', async ({ page }) => {
+		await page.locator('.tile').nth(2).click();
+		const viewer = loupe(page);
+		await expect(viewer).toBeVisible();
+		const url = page.url();
+		// The very same viewer afterwards, not one that closed and opened again.
+		await viewer.evaluate((el) => ((el as HTMLElement).dataset.kept = 'yes'));
+		const removed = page.evaluate(
+			() =>
+				new Promise<boolean>((resolve) => {
+					const dialog = document.querySelector('dialog[aria-label="Photo viewer"]')!;
+					new MutationObserver(() => !dialog.isConnected && resolve(true)).observe(document.body, {
+						childList: true,
+						subtree: true
+					});
+					setTimeout(() => resolve(false), 2500);
+				})
+		);
+		await loupeAction(page, 'Fix date');
+		const dialog = page.getByRole('dialog', { name: 'Fix date' });
+		await dialog.getByLabel('Set exactly').check();
+		await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+		await dialog.getByRole('button', { name: 'Change date' }).click();
+		await expect(toast(page)).toContainText('Changed the date of 1 photo');
+		await expect(viewer.locator('.readout')).toContainText('2001-02-03 · 04:05');
+		expect(await removed).toBe(false);
+		await expect(viewer).toHaveAttribute('data-kept', 'yes');
+		expect(page.url()).toBe(url);
+	});
+
+	test('opening and closing run a view transition between the tile and the photo', async ({
+		page
+	}) => {
+		await page.addInitScript(() => {
+			const real = document.startViewTransition.bind(document);
+			const seen = window as unknown as { transitions: number };
+			seen.transitions = 0;
+			document.startViewTransition = (...args: Parameters<typeof real>) => {
+				seen.transitions++;
+				return real(...args);
+			};
+		});
+		await page.goto('/');
+		const transitions = () =>
+			page.evaluate(() => (window as unknown as { transitions: number }).transitions);
+		const tile = page.locator('.tile').first();
+		await tile.click();
+		await expect(loupe(page).locator('.frame')).toHaveCSS('view-transition-name', 'photo');
+		expect(await transitions()).toBe(1);
+		await loupe(page).getByRole('button', { name: 'Close' }).click();
+		await expect(loupe(page)).toHaveCount(0);
+		expect(await transitions()).toBe(2);
+		// The tile only borrows the name for the length of the transition.
+		await expect(tile).not.toHaveAttribute('style', /view-transition-name/);
+		await expect(tile).toBeFocused();
+	});
+
+	test('Escape closes More, not the photo view', async ({ page }) => {
+		test.skip(isPhone(page), 'keyboard');
+		await page.locator('.tile').first().click();
+		const more = loupe(page).getByRole('button', { name: 'More' });
+		await more.click();
+		await expect(more).toHaveAttribute('aria-expanded', 'true');
+		await page.keyboard.press('Escape');
+		await expect(more).toHaveAttribute('aria-expanded', 'false');
+		await expect(loupe(page)).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(loupe(page)).toHaveCount(0);
+	});
 });

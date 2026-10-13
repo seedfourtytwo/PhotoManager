@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '$lib/tokens.css';
 	import { onMount, untrack } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
@@ -17,11 +18,16 @@
 		settings
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
+	import { dropBadPhotoParam } from '$lib/loupe.svelte';
 
 	let { children } = $props();
 
 	const bare = $derived(isPublicRoute(page.url.pathname));
 	const filterable = $derived(isFilterable(page.url.pathname));
+
+	afterNavigate(({ to }) => {
+		if (to) dropBadPhotoParam(to.url);
+	});
 
 	onMount(() => {
 		look.show();
@@ -175,7 +181,7 @@
 		width: auto;
 		height: auto;
 		clip-path: none;
-		z-index: 100;
+		z-index: var(--z-skip);
 		background: var(--raised);
 		padding: var(--s-2) var(--s-3);
 		border-radius: var(--r-1);
@@ -187,7 +193,7 @@
 		inset: auto auto var(--s-5) 50%;
 		transform: translateX(-50%);
 		margin: 0;
-		z-index: 60;
+		z-index: var(--z-toast);
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);
@@ -210,14 +216,16 @@
 	.notice:not(.shown) {
 		display: none;
 	}
-	/* While photos are selected the pill has the bottom centre: the toast sits above it. */
-	:global(body:has([role='toolbar'][aria-label='Selected photos'])) .notice {
-		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
-	}
 	/* In the photo view the bottom belongs to its bar: the toast sits under Close and Info. */
-	:global(dialog[aria-label='Photo viewer']) > .notice {
+	:global(dialog[data-photo-view]) > .notice {
 		top: calc(env(safe-area-inset-top) + var(--s-3) + var(--target) + var(--s-2));
 		bottom: auto;
+	}
+	/* While photos are selected the pill has the bottom centre: the toast sits above it. Not
+	   the toast in the photo view (the pill stays on the page under it): that one has no bottom. */
+	:global(body:has([role='toolbar'][data-selection-pill]))
+		.notice:not(:global([data-photo-view] > *)) {
+		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
 	@media (max-width: 1023px) {
 		.app,
@@ -231,18 +239,11 @@
 		.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
 		}
-		/* The pill and the lying time ruler share the strip above the dock; the toast clears both. */
-		:global(
-				body:has(
-					[role='toolbar'][aria-label='Selected photos'],
-					[role='slider'][aria-orientation='horizontal']
-				)
-			)
-			.notice {
+		/* The pill and the lying time ruler (`data-ruler`, TimeRuler.svelte) share the strip above
+		   the dock; the toast clears both. The ruler too stays on the page under the photo view. */
+		:global(body:has([role='toolbar'][data-selection-pill], [data-ruler='horizontal']))
+			.notice:not(:global([data-photo-view] > *)) {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--pill) + var(--s-3));
-		}
-		:global(dialog[aria-label='Photo viewer']) > .notice {
-			bottom: auto;
 		}
 	}
 </style>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import css from './tokens.css?raw';
+import utilities from './utilities.css?raw';
 import { readBlocks } from './testing/css-blocks';
 
 const blocks = readBlocks(css);
@@ -31,7 +32,7 @@ describe('shape and motion tokens', () => {
 });
 
 describe('glass', () => {
-	const rules = readBlocks(css, true);
+	const rules = readBlocks(utilities, true);
 	const canBlur =
 		'@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))';
 

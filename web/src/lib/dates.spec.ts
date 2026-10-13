@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	dateProblem,
 	dateSourceLabel,
 	formatTaken,
 	isValidLocal,
@@ -89,5 +90,47 @@ describe('undoDateChange (put the previous dates back)', () => {
 			{ ids: [1, 3], set: '2019-07-04T18:30:00' },
 			{ ids: [2], set: '2019-07-04T18:31:00' }
 		]);
+	});
+});
+
+describe('dateProblem (what the server would refuse, said before it is sent)', () => {
+	const items = [makeAsset(1, '2019-07-04T18:30:00'), makeAsset(2, '2019-07-05T09:00:00')];
+	// 9 October 2026, 12:00 on the wall clock
+	const now = Date.UTC(2026, 9, 9, 12, 0, 0);
+
+	it('finds nothing wrong with an ordinary change', () => {
+		expect(dateProblem(items, { shift_minutes: -90 }, now)).toBeNull();
+		expect(dateProblem(items, { set: '2020-02-29T10:00:00' }, now)).toBeNull();
+	});
+
+	it('refuses a date in the future, in the words of the server', () => {
+		const future = "A photo can't be taken in the future: pick a date up to today.";
+		expect(dateProblem(items, { set: '2026-10-11T12:00:01' }, now)).toBe(future);
+		expect(dateProblem(items, { shift_minutes: 8 * 366 * 1440 }, now)).toBe(future);
+	});
+
+	it('allows a day ahead: it may be tomorrow where the photo was taken', () => {
+		expect(dateProblem(items, { set: '2026-10-10T12:00:00' }, now)).toBeNull();
+	});
+
+	it('refuses a date before photography', () => {
+		expect(dateProblem(items, { set: '1825-12-31T23:59:59' }, now)).toBe(
+			'Dates must be after 1826: photography began then.'
+		);
+		expect(dateProblem(items, { set: '1826-01-01T00:00:00' }, now)).toBeNull();
+	});
+
+	it.each([99_999_999 * 1440, -99_999_999 * 1440, Infinity, NaN, 1e300])(
+		'says a shift of %d minutes leaves the calendar instead of throwing',
+		(shift_minutes) => {
+			expect(dateProblem(items, { shift_minutes }, now)).toBe(
+				'That date is out of range: the shift moves a photo out of the calendar.'
+			);
+		}
+	);
+
+	it('checks every photo, not only the first', () => {
+		const spread = [makeAsset(1, '2000-01-01T00:00:00'), makeAsset(2, '2026-10-09T00:00:00')];
+		expect(dateProblem(spread, { shift_minutes: 3 * 1440 }, now)).toMatch(/in the future/);
 	});
 });

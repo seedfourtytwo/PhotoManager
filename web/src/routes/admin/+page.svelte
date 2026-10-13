@@ -2,7 +2,7 @@
 	import { onDestroy, untrack } from 'svelte';
 	import type { BackupTarget, Job, MlStatus, Stats } from '$lib/api';
 	import { api, backupWatch, library, notice, session } from '$lib/app.svelte';
-	import { formatBytes } from '$lib/format';
+	import { formatBytes, photos } from '$lib/format';
 	import { queueText, retryText } from '$lib/jobs';
 	import { Poller } from '$lib/poller';
 	import Backups from '$lib/components/admin/Backups.svelte';
@@ -17,7 +17,6 @@
 	let ml = $state<MlStatus | null>(null);
 	let refresh = $state(0);
 	let analysing = $state(false);
-	const count = new Intl.NumberFormat('en-GB');
 
 	const active = $derived(stats ? stats.jobs.queued + stats.jobs.running : 0);
 	const work = $derived(stats ? queueText(stats.jobs) : '');
@@ -74,7 +73,9 @@
 		analysing = true;
 		try {
 			const { queued, detail } = await api.mlBackfill();
-			notice.show(detail ? `Queued ${queued}. ${detail}` : `Queued ${queued} photos for analysis.`);
+			notice.show(
+				detail ? `Queued ${queued}. ${detail}` : `Queued ${photos(queued)} for analysis.`
+			);
 			await poll();
 		} catch (e) {
 			notice.error(e);
@@ -93,7 +94,7 @@
 	{:else}
 		<p class="quiet status" aria-live="polite">
 			{#if stats}
-				{count.format(stats.assets)} photos · {formatBytes(stats.free_bytes)} free on the library disk
+				{photos(stats.assets)} · {formatBytes(stats.free_bytes)} free on the library disk
 				{#if work}&nbsp;· <span class="working">{work}</span>
 				{/if}
 			{/if}

@@ -11,9 +11,25 @@ import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
-import { notice } from './app.svelte';
+import { api, notice } from './app.svelte';
+import { wentBack } from './history-step';
+import type { TimelineLoader } from './loader.svelte';
 import { refocus } from './modal';
 import { withTransition } from './motion';
+import { tileOf } from './tiles';
+
+/** Said once for a link to a photo that is not there, whatever was wrong with it. */
+const NOT_FOUND = 'That photo was not found.';
+
+/**
+ * A `photo` in the address that cannot be a photo's id (`?photo=abc`) opens nothing: say so
+ * and take it out of the address. Called where the app notices a new address (the layout).
+ */
+export function dropBadPhotoParam(url: URL) {
+	if (!url.searchParams.has('photo') || photoParam(url) !== undefined) return;
+	notice.show(NOT_FOUND);
+	replaceState(withPhoto(url.href, null), { photo: null });
+}
 
 export function photoParam(url: URL): Id | undefined {
 	const value = url.searchParams.get('photo');
@@ -64,28 +80,14 @@ export function openPhotoId(page: { state: App.PageState; url: URL }): Id | unde
 	return photoParam(page.url);
 }
 
-const tileOf = (id: Id) =>
-	typeof document === 'undefined'
-		? null
-		: document.querySelector<HTMLElement>(`.tile[data-id="${id}"]`);
-
 /**
- * The photo's tile takes the view-transition name the open photo has (Loupe.svelte), so the
+ * The photo's tile takes the view-transition name the open photo has (PhotoStage.svelte), so the
  * browser moves one picture between the two places. Returns what takes the name off again.
  */
 function nameTile(id: Id): () => void {
 	const tile = tileOf(id);
 	tile?.style.setProperty('view-transition-name', 'photo');
 	return () => tile?.style.removeProperty('view-transition-name');
-}
-
-/** After `history.back()`: the earlier entry is the current one (or it is taking too long). */
-function wentBack(): Promise<void> {
-	if (typeof window === 'undefined') return Promise.resolve();
-	return new Promise((resolve) => {
-		window.addEventListener('popstate', () => resolve(), { once: true });
-		setTimeout(resolve, 300);
-	});
 }
 
 /** Opens from the photo's tile where the browser can show that. */
@@ -187,13 +189,16 @@ export class LinkedPhoto {
 		fetch: (id: Id) => Promise<AssetOut>;
 		/** Start looking for the photo in the page's own list (load more of it). */
 		find?: (id: Id) => void;
-		/** The photo does not exist or may not be seen: by default the loupe closes. */
+		/** The photo does not exist or may not be seen: by default that is said and the loupe closes. */
 		onmissing?: () => void;
 		/** It could not be fetched for another reason (offline, a server error): by default a toast. */
 		onerror?: (error: unknown) => void;
 	}) {
 		this.#options = {
-			onmissing: closePhoto,
+			onmissing: () => {
+				notice.show(NOT_FOUND);
+				closePhoto();
+			},
 			onerror: (error) => notice.error(error),
 			...options
 		};
@@ -242,5 +247,66 @@ export class LinkedPhoto {
 	/** A change made in the loupe while the photo is shown on its own. */
 	patch(change: Partial<AssetOut>) {
 		if (this.single) this.single = { ...this.single, ...change };
+	}
+}
+
+/** A linked photo is looked for among at most this many photos of a timeline. */
+const DEEP_LINK_LIMIT = 2000;
+
+/**
+ * The open photo of a page whose photos are a timeline that pages in (the library, a person).
+ * A linked photo shows at once on its own; the timeline looks for it meanwhile (so far and no
+ * further) and takes over when it has it. Closed: back to where the photo is in the grid.
+ */
+export class TimelineLoupe {
+	#loader: TimelineLoader;
+	#linked: LinkedPhoto;
+	#tracker: LoupeTracker;
+	/** The photo the address asks for, if any. */
+	readonly id = $derived(openPhotoId(page));
+	// `.by`: the loader and the linked photo are set in the constructor, after these fields.
+	readonly #index = $derived.by(() =>
+		this.id === undefined ? -1 : this.#loader.items.findIndex((a) => a.id === this.id)
+	);
+	/** What the loupe shows: the timeline at the photo, the linked photo on its own, or nothing. */
+	readonly shown = $derived.by(() =>
+		this.#index >= 0
+			? { items: this.#loader.items, index: this.#index }
+			: this.#linked.single && this.#linked.single.id === this.id
+				? { items: [this.#linked.single], index: 0 }
+				: null
+	);
+
+	/** `timeline` gives the page's timeline once it is on the page: it scrolls to a photo. */
+	constructor(loader: TimelineLoader, timeline: () => { reveal: (id: Id) => unknown } | undefined) {
+		this.#loader = loader;
+		this.#linked = new LinkedPhoto({
+			fetch: (id) => api.asset(id),
+			find: (id) =>
+				void loader.until(
+					(items) => items.some((a) => a.id === id) || items.length >= DEEP_LINK_LIMIT
+				)
+		});
+		this.#tracker = new LoupeTracker((id) => void timeline()?.reveal(id));
+	}
+
+	/** Call from an effect: follows the address as a photo opens, changes and closes. */
+	follow() {
+		this.#tracker.seen(this.id);
+		this.#linked.seen(this.id, this.#index >= 0);
+	}
+
+	/** A change made in the loupe: to the photo in the timeline, or to the one shown on its own. */
+	changed(asset: AssetOut) {
+		if (this.#index >= 0) this.#loader.update(asset.id, asset);
+		else this.#linked.patch(asset);
+	}
+
+	/**
+	 * Before a reload that may take the open photo out of the timeline (its date changed): it
+	 * stays open all the same.
+	 */
+	hold() {
+		if (this.shown) this.#linked.hold(this.shown.items[this.shown.index]);
 	}
 }

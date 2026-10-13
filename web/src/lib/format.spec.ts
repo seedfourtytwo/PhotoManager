@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { errorMessage, formatBytes, formatWhen, nextCheckText } from './format';
+import {
+	errorMessage,
+	formatBytes,
+	formatCount,
+	formatWhen,
+	nextCheckText,
+	photos,
+	plural
+} from './format';
 
 describe('formatBytes', () => {
 	it.each([
@@ -55,5 +63,48 @@ describe('errorMessage', () => {
 		expect(errorMessage(new Error(''), 'Could not change the PIN.')).toBe(
 			'Could not change the PIN.'
 		);
+	});
+});
+
+describe('plural', () => {
+	it('counts photos in words', () => {
+		expect(photos(0)).toBe('0 photos');
+		expect(photos(1)).toBe('1 photo');
+		expect(photos(2)).toBe('2 photos');
+		expect(photos(1204)).toBe('1,204 photos');
+	});
+	it('takes any noun, and its own plural where an s is not it', () => {
+		expect(plural(1, 'source')).toBe('1 source');
+		expect(plural(3, 'source')).toBe('3 sources');
+		expect(plural(1, 'library copy', 'library copies')).toBe('1 library copy');
+		expect(plural(2, 'library copy', 'library copies')).toBe('2 library copies');
+	});
+});
+
+describe('counts of photos in the app', () => {
+	const sources = import.meta.glob(['/src/**/*.svelte', '/src/**/*.ts', '!/src/**/*.spec.ts'], {
+		query: '?raw',
+		import: 'default',
+		eager: true
+	}) as Record<string, string>;
+	// A number followed by a written-out "photo(s)", or an s chosen on the spot: both get the
+	// singular or the thousands separator wrong sooner or later. `photos` and `plural` do not.
+	const BY_HAND = [/[})](?:&nbsp;|\s)*photos?\b/, /photo\$?\{[^}]*=== 1/, /'photo'\s*:\s*'photos'/];
+
+	it('no source file builds one by hand', () => {
+		const offenders = Object.entries(sources)
+			.filter(([path, text]) => path !== '/src/lib/format.ts' && BY_HAND.some((p) => p.test(text)))
+			.map(([path]) => path);
+		expect(Object.keys(sources).length).toBeGreaterThan(50);
+		expect(offenders).toEqual([]);
+	});
+});
+
+describe('formatCount', () => {
+	it('groups thousands and leaves small numbers alone', () => {
+		expect(formatCount(0)).toBe('0');
+		expect(formatCount(999)).toBe('999');
+		expect(formatCount(1204)).toBe('1,204');
+		expect(formatCount(1234567)).toBe('1,234,567');
 	});
 });

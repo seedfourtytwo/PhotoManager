@@ -3,25 +3,15 @@
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
-	import { errorMessage } from '$lib/format';
+	import { errorMessage, formatCount, photos, plural } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
-	import {
-		LinkedPhoto,
-		LoupeTracker,
-		closePhoto,
-		openPhoto,
-		openPhotoId,
-		showPhoto
-	} from '$lib/loupe.svelte';
+	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
-
-	/** A linked photo is looked for among at most this many of the person's photos. */
-	const DEEP_LINK_LIMIT = 2000;
 
 	const id = $derived(Number(page.params.id));
 	let person = $state<Person | null>(null);
@@ -34,7 +24,6 @@
 	let selection = $state<Selection>(EMPTY);
 	let timeline: Timeline | undefined = $state();
 	const loader = new TimelineLoader((_filters, cursor) => api.personAssets(id, cursor, 200));
-	const count = new Intl.NumberFormat('en-GB');
 
 	async function load() {
 		try {
@@ -91,30 +80,10 @@
 		}
 	}
 
-	const loupeId = $derived(openPhotoId(page));
-	const loupeIndex = $derived(
-		loupeId === undefined ? -1 : loader.items.findIndex((a) => a.id === loupeId)
-	);
 	// Same as the library: a linked photo shows on its own until the list holds it.
-	const linked = new LinkedPhoto({
-		fetch: (photo) => api.asset(photo),
-		find: (photo) =>
-			void loader.until(
-				(items) => items.some((a) => a.id === photo) || items.length >= DEEP_LINK_LIMIT
-			)
-	});
-	const tracker = new LoupeTracker((photo) => void timeline?.reveal(photo));
-	$effect(() => {
-		tracker.seen(loupeId);
-		linked.seen(loupeId, loupeIndex >= 0);
-	});
-	const shown = $derived(
-		loupeIndex >= 0
-			? { items: loader.items, index: loupeIndex }
-			: linked.single && linked.single.id === loupeId
-				? { items: [linked.single], index: 0 }
-				: null
-	);
+	const loupe = new TimelineLoupe(loader, () => timeline);
+	$effect(() => loupe.follow());
+	const shown = $derived(loupe.shown);
 </script>
 
 <svelte:head><title>{person?.name ?? 'Person'} · Photos</title></svelte:head>
@@ -129,7 +98,7 @@
 			<div>
 				<h1 class:quiet={!person.name}>{person.name ?? 'Someone'}</h1>
 				<p class="quiet small">
-					{count.format(person.asset_count)} photos · {count.format(person.face_count)} faces
+					{photos(person.asset_count)} · {plural(person.face_count, 'face')}
 				</p>
 				{#if session.canEdit}
 					<div class="tools">
@@ -147,20 +116,23 @@
 		</header>
 	{/if}
 
-	<Timeline
-		bind:this={timeline}
-		{loader}
-		{selection}
-		onopen={openPhoto}
-		ontoggle={(assetId, range) =>
-			(selection = applyClick(
-				selection,
-				assetId,
-				loader.items.map((a) => a.id),
-				{ shift: range, toggle: true }
-			))}
-		onselect={(next) => (selection = next)}
-	/>
+	<!-- A person who is not there has no photos to ask for: the one line above says it. -->
+	{#if !error}
+		<Timeline
+			bind:this={timeline}
+			{loader}
+			{selection}
+			onopen={openPhoto}
+			ontoggle={(assetId, range) =>
+				(selection = applyClick(
+					selection,
+					assetId,
+					loader.items.map((a) => a.id),
+					{ shift: range, toggle: true }
+				))}
+			onselect={(next) => (selection = next)}
+		/>
+	{/if}
 
 	<SelectionActions
 		{selected}
@@ -184,7 +156,7 @@
 		onindex={(i) => showPhoto(shown.items[i].id)}
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
-		onchanged={(a) => (loupeIndex >= 0 ? loader.update(a.id, a) : linked.patch(a))}
+		onchanged={(a) => loupe.changed(a)}
 	/>
 {/if}
 
@@ -211,7 +183,7 @@
 						<input type="checkbox" value={other.id} bind:group={merging} />
 						<FaceCrop face={other.cover} size={40} />
 						<span class:quiet={!other.name}>{other.name ?? 'Someone'}</span>
-						<span class="quiet small">{count.format(other.asset_count)}</span>
+						<span class="quiet small">{formatCount(other.asset_count)}</span>
 					</label>
 				</li>
 			{/each}

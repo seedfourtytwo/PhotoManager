@@ -1,7 +1,8 @@
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { makeAsset } from '$lib/testing/fixtures';
+import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 import DownloadDialog from './DownloadDialog.svelte';
 import FixDateDialog from './FixDateDialog.svelte';
 
@@ -41,10 +42,80 @@ describe('FixDateDialog', () => {
 		});
 	});
 
+	it('a shift out of the calendar says so in a sentence, and nothing breaks', async () => {
+		const failures: unknown[] = [];
+		const onerror = (event: ErrorEvent) => failures.push(event.error);
+		window.addEventListener('error', onerror);
+		stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		await page.getByRole('spinbutton', { name: 'days' }).fill('99999999');
+		await expect.element(page.getByRole('alert')).toHaveTextContent(/out of range/);
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+		// Put right, the preview and the button are back.
+		await page.getByRole('spinbutton', { name: 'days' }).fill('1');
+		await expect.element(page.getByRole('cell', { name: '5 Jul 2019, 18:30' })).toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeEnabled();
+		window.removeEventListener('error', onerror);
+		expect(failures).toEqual([]);
+	});
+
+	it('a date in the future is refused in the dialog, before anything is sent', async () => {
+		const sent = stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		await page.getByRole('radio', { name: 'Set exactly' }).click();
+		await page.getByLabelText('Date and time').fill('2999-01-01T12:00');
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent("A photo can't be taken in the future: pick a date up to today.");
+		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+		expect(sent).toEqual([]);
+	});
+
 	it('cannot save a no-op', async () => {
 		stubFetch(() => ({}));
 		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
 		await expect.element(page.getByRole('button', { name: 'Change date' })).toBeDisabled();
+	});
+});
+
+describe('AddToAlbumDialog', () => {
+	const answers = (url: string) =>
+		url === '/api/albums' ? [] : { id: 7, title: 'Summer', count: 2 };
+
+	it('Enter in the title of a new album adds the photos to it', async () => {
+		const sent = stubFetch((url) => (sent.length ? { id: 7, title: 'Summer' } : answers(url)));
+		const ondone = vi.fn();
+		render(AddToAlbumDialog, { ids: [1, 2], onclose: () => {}, ondone });
+		await page.getByRole('textbox', { name: 'New album title' }).fill('Summer');
+		await userEvent.keyboard('{Enter}');
+		await vi.waitFor(() => expect(ondone).toHaveBeenCalledWith(7));
+		expect(sent.at(-1)).toEqual({
+			url: '/api/albums',
+			body: { title: 'Summer', asset_ids: [1, 2] }
+		});
+	});
+
+	it('Enter does nothing while there is no title', async () => {
+		const sent = stubFetch(answers);
+		render(AddToAlbumDialog, { ids: [1], onclose: () => {}, ondone: () => {} });
+		await page.getByRole('textbox', { name: 'New album title' }).click();
+		await userEvent.keyboard('{Enter}');
+		await expect.element(page.getByRole('button', { name: 'Add' })).toBeDisabled();
+		expect(sent.filter((request) => request.body)).toEqual([]);
+	});
+
+	it('a title stops at 200 characters, and a sentence says so', async () => {
+		stubFetch(answers);
+		render(AddToAlbumDialog, { ids: [1], onclose: () => {}, ondone: () => {} });
+		const title = page.getByRole('textbox', { name: 'New album title' });
+		await expect.element(title).toHaveAttribute('maxlength', '200');
+		await title.fill('x'.repeat(199));
+		await expect.element(page.getByText(/200 characters/)).not.toBeInTheDocument();
+		await userEvent.keyboard('yz');
+		await expect.element(title).toHaveValue('x'.repeat(199) + 'y');
+		await expect
+			.element(page.getByText('A title can be up to 200 characters long.'))
+			.toBeInTheDocument();
 	});
 });
 

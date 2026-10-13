@@ -3,6 +3,7 @@ import {
 	expect,
 	expectAccessible,
 	GUEST,
+	loupe,
 	MEMBER,
 	REAL_BACKEND,
 	resetMock,
@@ -35,7 +36,7 @@ test('search without models: word matches, and a calm note that leads an admin t
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await expectAccessible(page);
 	await page.locator('.tile').first().click();
-	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+	await expect(loupe(page)).toBeVisible();
 });
 
 test('without models, a member reads plain words on Search and People: no command, no way in to Admin', async ({

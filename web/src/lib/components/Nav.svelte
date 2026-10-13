@@ -57,7 +57,7 @@
 		grid-column: 1 / -1;
 		position: sticky;
 		top: 0;
-		z-index: 20;
+		z-index: var(--z-bar);
 		height: var(--top);
 		box-sizing: border-box;
 		display: flex;
@@ -69,7 +69,7 @@
 		backdrop-filter: var(--backdrop);
 		border-bottom: 1px solid var(--hairline);
 		/* Frosted glass where the browser can blur and the person has not asked for less;
-		   a solid bar otherwise (the same rule as .glass in tokens.css). */
+		   a solid bar otherwise (the same rule as .glass in utilities.css). */
 		--fill: var(--raised);
 		--backdrop: none;
 	}
@@ -149,7 +149,8 @@
 			height: auto;
 			justify-content: center;
 			gap: var(--s-2);
-			z-index: 28; /* over the selection bar (25) so the open menu is not covered, under the filter sheet (35) */
+			/* over the selection bar so the open menu is not covered, under the filter sheet */
+			z-index: var(--z-dock);
 			padding: 0 calc(var(--s-3) + env(safe-area-inset-right))
 				calc(var(--s-3) + env(safe-area-inset-bottom)) calc(var(--s-3) + env(safe-area-inset-left));
 			background: none;

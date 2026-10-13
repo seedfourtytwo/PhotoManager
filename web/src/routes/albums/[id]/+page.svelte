@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
-	import type { AlbumDetail, AssetOut, Id } from '$lib/api';
-	import { api, notice, settings, viewport } from '$lib/app.svelte';
-	import { errorMessage } from '$lib/format';
-	import { LatestWriter } from '$lib/latest';
-	import { EMPTY, applyClick, type Selection } from '$lib/selection';
+	import { ALBUM_TITLE_MAX, type Id } from '$lib/api';
+	import { AlbumView } from '$lib/album.svelte';
+	import { settings, viewport } from '$lib/app.svelte';
+	import { photos } from '$lib/format';
+	import { EMPTY, applyClick } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
+	import { tileOf } from '$lib/tiles';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
@@ -16,18 +16,13 @@
 	import ShareDialog from '$lib/components/ShareDialog.svelte';
 
 	const id = $derived(Number(page.params.id));
-	// The header fields apart from the photos; both replaced whole, so neither is a deep proxy.
-	let album = $state.raw<Omit<AlbumDetail, 'items'> | null>(null);
-	let items = $state.raw<AssetOut[]>([]);
-	let selection = $state<Selection>(EMPTY);
+	const view = new AlbumView(() => id);
+	const album = $derived(view.album);
+	const items = $derived(view.items);
 	let arrange = $state(false);
-	let dialog = $state<'share' | 'download' | 'rename' | 'delete' | null>(null);
 	let title = $state('');
 	let description = $state('');
 	let width = $state(0);
-	let error = $state('');
-	/** Renaming or deleting: one request at a time, a double click must not send two. */
-	let busy = $state(false);
 
 	const canEdit = $derived(album?.role === 'owner' || album?.role === 'editor');
 	const layout = $derived(
@@ -39,7 +34,7 @@
 		)
 	);
 	const order = $derived(items.map((a) => a.id));
-	const selected = $derived(items.filter((a) => selection.ids.has(a.id)));
+	const selected = $derived(items.filter((a) => view.selection.ids.has(a.id)));
 	const loupeId = $derived(openPhotoId(page));
 	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
 	const tracker = new LoupeTracker();
@@ -49,155 +44,35 @@
 		if (album && loupeId !== undefined && loupeIndex < 0) closePhoto();
 	});
 
-	/** Only the latest load counts: an answer for the album you left must not replace this one. */
-	let loads = 0;
-	async function load() {
-		const run = ++loads;
-		try {
-			const loaded = await api.album(id);
-			if (run !== loads) return;
-			const { items: photos, ...header } = loaded;
-			album = header;
-			items = photos;
-			error = '';
-		} catch (e) {
-			if (run !== loads) return;
-			error = errorMessage(e, 'Could not open the album.');
-		}
-	}
-
 	// Another album: nothing of the previous one stays on screen while this one loads.
 	$effect(() => {
 		void id;
-		album = null;
-		items = [];
-		selection = EMPTY;
 		arrange = false;
-		dialog = null;
-		error = '';
-		void load();
+		view.open();
 	});
 
-	// Each move saves the whole order, so saves go one at a time and only the newest waits.
-	// If one fails, the screen goes back to the order the server has.
-	const savedOrder = new LatestWriter<{ album: Id; ids: Id[] }>(
-		({ album, ids }) => api.reorderAlbum(album, ids),
-		(e) => {
-			notice.error(e);
-			void load();
-		}
-	);
-
 	function move(assetId: Id, to: number) {
-		const next = items.filter((a) => a.id !== assetId);
-		next.splice(
-			to,
-			0,
-			items.find((a) => a.id === assetId)!
-		);
-		items = next;
-		void savedOrder.set({ album: id, ids: next.map((a) => a.id) });
+		view.move(assetId, to);
 		// Keep keyboard focus on the moved photo.
-		queueMicrotask(() =>
-			document.querySelector<HTMLElement>(`.tile[data-id="${assetId}"]`)?.focus()
-		);
-	}
-
-	async function setCover() {
-		const [cover] = selection.ids;
-		try {
-			await api.updateAlbum(id, { cover_asset_id: cover });
-			notice.show('Cover changed.');
-			selection = EMPTY;
-			await load();
-		} catch (e) {
-			notice.error(e);
-		}
-	}
-
-	let removing = false;
-	async function removeSelected() {
-		if (removing) return;
-		removing = true;
-		const ids = [...selection.ids];
-		const before = items.map((a) => a.id);
-		try {
-			await api.removeFromAlbum(id, ids);
-			items = items.filter((a) => !ids.includes(a.id));
-			selection = EMPTY;
-			notice.show(`Removed ${ids.length} from the album. The photos stay in the library.`, {
-				action: { label: 'Undo', run: () => void undoRemove(ids, before) }
-			});
-		} catch (e) {
-			notice.error(e);
-		} finally {
-			removing = false;
-		}
-	}
-
-	/**
-	 * Put removed photos back exactly where they were: each at its old index, smallest first
-	 * (contract v1.2; positions count the photos you see, so this works for editors too).
-	 */
-	async function undoRemove(ids: Id[], before: Id[]) {
-		try {
-			const back = ids
-				.map((photo) => ({ photo, at: before.indexOf(photo) }))
-				.filter((p) => p.at >= 0)
-				.sort((a, b) => a.at - b.at);
-			for (const { photo, at } of back) await api.addToAlbum(id, [photo], at);
-			await load();
-			notice.show('Put back.');
-		} catch (e) {
-			notice.error(e);
-		}
-	}
-
-	async function rename() {
-		if (busy) return;
-		busy = true;
-		try {
-			await api.updateAlbum(id, { title: title.trim(), description: description.trim() });
-			dialog = null;
-			await load();
-		} catch (e) {
-			notice.error(e);
-		} finally {
-			busy = false;
-		}
-	}
-
-	async function remove() {
-		if (busy) return;
-		busy = true;
-		try {
-			await api.deleteAlbum(id);
-			notice.show('Album deleted. Its photos are still in the library.');
-			await goto('/albums');
-		} catch (e) {
-			notice.error(e);
-		} finally {
-			busy = false;
-		}
+		queueMicrotask(() => tileOf(assetId)?.focus());
 	}
 </script>
 
 <svelte:head><title>{album?.title ?? 'Album'} · Photos</title></svelte:head>
 
 <div class="page">
-	{#if error}
-		<p class="quiet">{error} <a href="/albums">All albums</a></p>
+	{#if view.error}
+		<p class="quiet">{view.error} <a href="/albums">All albums</a></p>
 	{:else if album}
 		<header>
 			<p class="small crumb"><a href="/albums">Albums</a></p>
 			<h1>{album.title}</h1>
 			{#if album.description}<p class="quiet desc">{album.description}</p>{/if}
 			<p class="quiet small">
-				{items.length} photo{items.length === 1 ? '' : 's'}{#if album.role !== 'owner'}&nbsp;·
-					shared with you as {album.role}{/if}
+				{photos(items.length)}{#if album.role !== 'owner'}&nbsp;· shared with you as {album.role}{/if}
 			</p>
 			<div class="tools">
-				<button type="button" onclick={() => (dialog = 'download')}>Download</button>
+				<button type="button" onclick={() => (view.dialog = 'download')}>Download</button>
 				{#if items.length}<a class="button" href={`/albums/${album.id}/print`}>Print</a>{/if}
 				{#if canEdit}
 					<button type="button" aria-pressed={arrange} onclick={() => (arrange = !arrange)}>
@@ -208,13 +83,13 @@
 						onclick={() => {
 							title = album?.title ?? '';
 							description = album?.description ?? '';
-							dialog = 'rename';
+							view.dialog = 'rename';
 						}}>Rename</button
 					>
 				{/if}
 				{#if album.role === 'owner'}
-					<button type="button" onclick={() => (dialog = 'share')}>Share</button>
-					<button type="button" onclick={() => (dialog = 'delete')}>Delete album</button>
+					<button type="button" onclick={() => (view.dialog = 'share')}>Share</button>
+					<button type="button" onclick={() => (view.dialog = 'delete')}>Delete album</button>
 				{/if}
 			</div>
 			{#if arrange}
@@ -228,25 +103,36 @@
 			<PhotoGrid
 				{items}
 				{layout}
-				selected={selection.ids}
-				selecting={selection.ids.size > 0}
+				selected={view.selection.ids}
+				selecting={view.selection.ids.size > 0}
 				{arrange}
 				onmove={move}
 				onopen={openPhoto}
-				ontoggle={(assetId, range) =>
-					(selection = applyClick(selection, assetId, order, { shift: range, toggle: true }))}
+				ontoggle={(assetId, range) => {
+					view.selection = applyClick(view.selection, assetId, order, {
+						shift: range,
+						toggle: true
+					});
+				}}
 			/>
 		</div>
 
 		<SelectionActions
 			{selected}
-			onclear={() => (selection = EMPTY)}
-			onpatch={(ids, patch) => (items = items.map((a) => (ids.has(a.id) ? { ...a, ...patch } : a)))}
-			onremove={(ids) => (items = items.filter((a) => !ids.has(a.id)))}
-			onreload={load}
+			onclear={() => {
+				view.selection = EMPTY;
+			}}
+			onpatch={(ids, patch) =>
+				(view.items = items.map((a) => (ids.has(a.id) ? { ...a, ...patch } : a)))}
+			onremove={(ids) => (view.items = items.filter((a) => !ids.has(a.id)))}
+			onreload={view.load}
 			extra={[
-				{ label: 'Set as cover', run: setCover, hidden: !canEdit || selection.ids.size !== 1 },
-				{ label: 'Remove from album', run: removeSelected, hidden: !canEdit }
+				{
+					label: 'Set as cover',
+					run: view.setCover,
+					hidden: !canEdit || view.selection.ids.size !== 1
+				},
+				{ label: 'Remove from album', run: view.removeSelected, hidden: !canEdit }
 			]}
 		/>
 	{:else}
@@ -260,34 +146,51 @@
 		index={loupeIndex}
 		onindex={(i) => showPhoto(items[i].id)}
 		onclose={closePhoto}
-		onchanged={(a) => (items = items.map((x) => (x.id === a.id ? { ...x, ...a } : x)))}
-		ondates={load}
+		onchanged={(a) => (view.items = items.map((x) => (x.id === a.id ? { ...x, ...a } : x)))}
+		ondates={view.load}
 	/>
 {/if}
 
-{#if album && dialog === 'share'}
-	<ShareDialog albumId={album.id} ownerId={album.owner_id} onclose={() => (dialog = null)} />
-{:else if album && dialog === 'download'}
+{#if album && view.dialog === 'share'}
+	<ShareDialog albumId={album.id} ownerId={album.owner_id} onclose={() => (view.dialog = null)} />
+{:else if album && view.dialog === 'download'}
 	<DownloadDialog
 		scope={{ album_id: album.id }}
 		edited={items.some((a) => a.edited)}
-		onclose={() => (dialog = null)}
+		onclose={() => (view.dialog = null)}
 	/>
-{:else if dialog === 'rename'}
-	<Dialog title="Rename album" onclose={() => (dialog = null)}>
-		<label class="field">Title <input bind:value={title} /></label>
-		<label class="field">Description <input bind:value={description} /></label>
+{:else if view.dialog === 'rename'}
+	<Dialog title="Rename album" onclose={() => (view.dialog = null)}>
+		<!-- A form, so Enter in a field saves. -->
+		<form
+			id="rename-album"
+			onsubmit={(event) => {
+				event.preventDefault();
+				void view.rename(title, description);
+			}}
+		>
+			<label class="field">Title <input bind:value={title} maxlength={ALBUM_TITLE_MAX} /></label>
+			{#if title.length >= ALBUM_TITLE_MAX}
+				<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
+			{/if}
+			<label class="field">Description <input bind:value={description} /></label>
+		</form>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={busy || !title.trim()} onclick={rename}
-				>Save</button
+			<button
+				class="primary"
+				type="submit"
+				form="rename-album"
+				disabled={view.busy || !title.trim()}>Save</button
 			>
 		{/snippet}
 	</Dialog>
-{:else if dialog === 'delete'}
-	<Dialog title="Delete album?" onclose={() => (dialog = null)}>
+{:else if view.dialog === 'delete'}
+	<Dialog title="Delete album?" onclose={() => (view.dialog = null)}>
 		<p>The album goes away; its photos stay in the library.</p>
 		{#snippet actions()}
-			<button class="primary" type="button" disabled={busy} onclick={remove}>Delete album</button>
+			<button class="primary" type="button" disabled={view.busy} onclick={view.delete}
+				>Delete album</button
+			>
 		{/snippet}
 	</Dialog>
 {/if}

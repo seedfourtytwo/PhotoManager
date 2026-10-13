@@ -1,7 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import Menu, { type MenuItem } from './Menu.svelte';
+import type { MenuItem } from '$lib/menu';
+import Menu from './Menu.svelte';
 
 const items = (run = () => {}): MenuItem[] => [
 	{ label: 'To review', href: '/review', count: 4, countLabel: '4 photos' },

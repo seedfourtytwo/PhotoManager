@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { AlbumSummary, Id } from '$lib/api';
+	import { ALBUM_TITLE_MAX, type AlbumSummary, type Id } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
+	import { photos } from '$lib/format';
 	import Dialog from './Dialog.svelte';
 
 	type Props = { ids: Id[]; onclose: () => void; ondone: (albumId: Id) => void };
@@ -18,20 +19,22 @@
 			.catch((e: unknown) => notice.error(e));
 	});
 
-	async function save() {
+	const ready = $derived(!busy && (choice !== 'new' || title.trim() !== ''));
+
+	async function save(event: SubmitEvent) {
+		event.preventDefault();
+		if (!ready) return;
 		busy = true;
 		try {
 			let albumId: Id;
 			if (choice === 'new') {
 				const album = await api.createAlbum({ title: title.trim(), asset_ids: ids });
 				albumId = album.id;
-				notice.show(
-					`Created “${album.title}” with ${ids.length} photo${ids.length === 1 ? '' : 's'}.`
-				);
+				notice.show(`Created “${album.title}” with ${photos(ids.length)}.`);
 			} else {
 				albumId = choice;
 				const { count } = await api.addToAlbum(choice, ids);
-				notice.show(`Added ${count} photo${count === 1 ? '' : 's'}.`);
+				notice.show(`Added ${photos(count)}.`);
 			}
 			ondone(albumId);
 		} catch (e) {
@@ -43,15 +46,25 @@
 </script>
 
 <Dialog title="Add to album" {onclose}>
-	<p class="quiet">{ids.length} photo{ids.length === 1 ? '' : 's'}</p>
-	<!-- A group, not a radiogroup: it also holds the title field. The radios share a name. -->
-	<div class="list" role="group" aria-label="Album">
+	<p class="quiet">{photos(ids.length)}</p>
+	<!-- A form, so Enter in the title adds. A group, not a radiogroup: it also holds the title
+	     field. The radios share a name. -->
+	<form id="add-to-album" class="list" role="group" aria-label="Album" onsubmit={save}>
 		<label>
 			<input type="radio" name="album" value="new" bind:group={choice} />
 			New album
 		</label>
 		{#if choice === 'new'}
-			<input class="title" bind:value={title} placeholder="Title" aria-label="New album title" />
+			<input
+				class="title"
+				bind:value={title}
+				maxlength={ALBUM_TITLE_MAX}
+				placeholder="Title"
+				aria-label="New album title"
+			/>
+			{#if title.length >= ALBUM_TITLE_MAX}
+				<p class="quiet small full">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
+			{/if}
 		{/if}
 		{#each albums as album (album.id)}
 			<label>
@@ -59,14 +72,9 @@
 				{album.title} <span class="quiet small">{album.count}</span>
 			</label>
 		{/each}
-	</div>
+	</form>
 	{#snippet actions()}
-		<button
-			class="primary"
-			type="button"
-			disabled={busy || (choice === 'new' && !title.trim())}
-			onclick={save}>Add</button
-		>
+		<button class="primary" type="submit" form="add-to-album" disabled={!ready}>Add</button>
 	{/snippet}
 </Dialog>
 
@@ -91,6 +99,9 @@
 		margin-left: auto;
 	}
 	.title {
+		margin: 0 0 var(--s-2) var(--s-5);
+	}
+	.full {
 		margin: 0 0 var(--s-2) var(--s-5);
 	}
 	@media (pointer: coarse) {

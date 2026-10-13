@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { CalendarDay } from '$lib/api';
 	import { buildHeatmap, ink, monthStarts } from '$lib/calendar';
+	import { formatCount, photos } from '$lib/format';
 	import { formatDay } from '$lib/filters';
 
 	type Props = { days: CalendarDay[]; hrefFor: (day: string) => string };
@@ -14,15 +15,14 @@
 	const TOP = 14;
 	const width = LEFT + 53 * STEP;
 	const height = TOP + 7 * STEP;
-	const count = new Intl.NumberFormat('en-GB');
 </script>
 
 <!-- Small multiples: one identically scaled panel per year; ink = photos that day, zero-based. -->
 <!-- One sideways scroller for all years on narrow screens, so the panels stay aligned. -->
 <div class="years">
 	{#each map.years as y (y.year)}
-		<section aria-label={`${y.year}: ${count.format(y.total)} photos`}>
-			<h2>{y.year} <span class="quiet">{count.format(y.total)}</span></h2>
+		<section aria-label={`${y.year}: ${photos(y.total)}`}>
+			<h2>{y.year} <span class="quiet">{formatCount(y.total)}</span></h2>
 			<svg
 				viewBox={`0 0 ${width} ${height}`}
 				role="group"
@@ -33,10 +33,7 @@
 				{/each}
 				{#each y.cells as c (c.day)}
 					{#if c.count > 0}
-						<a
-							href={hrefFor(c.day)}
-							aria-label={`${formatDay(c.day)}: ${c.count} photo${c.count === 1 ? '' : 's'}`}
-						>
+						<a href={hrefFor(c.day)} aria-label={`${formatDay(c.day)}: ${photos(c.count)}`}>
 							<rect
 								x={LEFT + c.week * STEP}
 								y={TOP + c.weekday * STEP}
@@ -63,7 +60,7 @@
 	{/each}
 	{#if map.years.length}
 		<p class="quiet small legend">
-			Each square is a day, Monday at the top. Stronger ink, more photos; the busiest day has {count.format(
+			Each square is a day, Monday at the top. Stronger ink, more photos; the busiest day has {formatCount(
 				map.max
 			)}.
 		</p>

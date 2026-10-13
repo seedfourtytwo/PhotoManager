@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pull, recognise, type Point } from './gesture';
+import { SLOP, pull, recognise, type Point } from './gesture';
 
 const at = (x: number, y: number, t = 0): Point => ({ x, y, t });
 const down = at(100, 300);
@@ -9,6 +9,12 @@ const swipe = (dx: number, dy: number) => recognise(down, at(100 + dx, 300 + dy,
 describe('recognise', () => {
 	it('a short press that stays put is a tap', () => {
 		expect(recognise(down, at(104, 303, 120), null, true)).toBe('tap');
+	});
+
+	it('a finger that moves exactly the slop has not moved: still a tap; a pixel more is a drag', () => {
+		expect(swipe(SLOP, 0)).toBe('tap');
+		expect(swipe(0, -SLOP)).toBe('tap');
+		expect(swipe(SLOP + 1, 0)).toBeNull();
 	});
 
 	it('a press held longer than half a second is nothing', () => {
@@ -66,5 +72,10 @@ describe('pull', () => {
 		expect(pull(down, at(40, 320))).toEqual({ x: -60, y: 0 });
 		expect(pull(down, at(120, 390))).toEqual({ x: 0, y: 90 });
 		expect(pull(down, at(110, 200))).toEqual({ x: 0, y: 0 });
+	});
+
+	it('starts a pixel past the slop, the same edge as a tap and the grid’s long press', () => {
+		expect(pull(down, at(100 + SLOP, 300))).toEqual({ x: 0, y: 0 });
+		expect(pull(down, at(100 + SLOP + 1, 300))).toEqual({ x: SLOP + 1, y: 0 });
 	});
 });

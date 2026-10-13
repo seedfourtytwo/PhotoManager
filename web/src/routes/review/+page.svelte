@@ -2,7 +2,8 @@
 	import type { AssetOut, Id, ReviewGroup } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
 	import { formatShort } from '$lib/dates';
-	import { photos, reviewTitle } from '$lib/review';
+	import { photos } from '$lib/format';
+	import { reviewTitle } from '$lib/review';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
 
 	let groups = $state.raw<ReviewGroup[] | null>(null);

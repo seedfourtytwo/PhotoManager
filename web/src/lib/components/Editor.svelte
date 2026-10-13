@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { describePhoto } from './PhotoGrid.svelte';
 	import Dialog from './Dialog.svelte';
 	import { IDENTITY_RECIPE, type AssetOut, type CropRect, type Recipe } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
+	import { historyStep } from '$lib/history-step';
 	import { modal } from '$lib/modal';
 	import {
 		MAX_STRAIGHTEN,
@@ -21,6 +22,9 @@
 
 	type Props = { asset: AssetOut; onclose: () => void; onsaved: () => void };
 	let { asset, onclose, onsaved }: Props = $props();
+
+	// Back closes the editor, not the photo under it.
+	onMount(() => historyStep(() => onclose()));
 
 	const FULL: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 	let recipe = $state<Recipe>({ ...IDENTITY_RECIPE });
@@ -271,7 +275,7 @@
 		padding: 0;
 		border: 0;
 		color: var(--ink);
-		z-index: 70;
+		z-index: var(--z-editor);
 		background: var(--bg);
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) auto;
@@ -298,9 +302,9 @@
 	.crop {
 		position: absolute;
 		box-sizing: border-box;
-		border: 1px solid rgb(255 255 255 / 0.9);
+		border: 1px solid var(--on-photo-90);
 		/* Dim what will be cut away. */
-		box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.55);
+		box-shadow: 0 0 0 100vmax var(--photo-shade-55);
 		cursor: move;
 		touch-action: none;
 	}
@@ -319,7 +323,7 @@
 		position: absolute;
 		width: 10px;
 		height: 10px;
-		border: 2px solid #fff;
+		border: 2px solid var(--on-photo);
 	}
 	.nw {
 		left: -4px;

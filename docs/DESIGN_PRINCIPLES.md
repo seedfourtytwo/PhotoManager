@@ -9,7 +9,8 @@ more would hurt understanding.
 1. **Maximise photo ink.** Photos use as much of the screen as possible; no cards, drop shadows,
    rounded frames or gradients around them. Gutters are 2–4 px.
 2. **Never crop without consent.** Grids are *justified* (true aspect ratios). Crops only exist
-   inside album frames, chosen by the user.
+   inside album frames, chosen by the user. A panorama or a tall strip (wider than 4:1,
+   narrower than 0.4:1) gets a tile of that limit and sits whole inside it, never stretched.
 3. **Erase non-data ink.** No borders where whitespace works; one hairline (1 px, low-contrast)
    is the strongest divider on a page. Navigation and action bars use a small drawn icon
    **with** its word; an icon never stands alone where a word fits.
@@ -54,7 +55,9 @@ reworked. The `--ok` / `--fail` colours exist; the System page's status dots are
 yet (issue #10), so the checklist items about them apply once they are.
 
 The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefaces) and
-`tokens.css` (everything else); the tables below mirror them for Safelight.
+`tokens.css` (everything else); the tables below mirror them for Safelight. The rules that use
+the tokens are beside them, one file per subject and all imported by `tokens.css`: `base.css`
+(elements), `buttons.css`, `fields.css`, `utilities.css` (small shared classes, glass, transitions).
 
 ### Colour
 
@@ -72,6 +75,8 @@ The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefac
 | `--glass` | raised at 74 % + blur | same | floating bars over photos |
 | `--ok` / `--fail` | #7BD3A0 / #FF7A6B | #1F7A4A / #B3261E | status dots on the System page only |
 | `--scrim` | near-black 66 % | cool grey 38 % | behind dialogs and sheets |
+| `--on-photo` / `--on-photo-90` | #FFFFFF / white at 90 % | same | marks drawn on a photo: the selection circle, the favourite mark, the crop handles / the crop frame |
+| `--photo-shade-18` / `-20` / `-25` / `-55` | black at 18 · 20 · 25 · 55 % | same | the shade that keeps those marks readable on any photo: inside the empty selection circle · the hairline round it · the hairline inside the selection frame · behind the favourite mark and over what a crop cuts away |
 
 `themes.spec.ts` checks every theme in both modes: text ≥ 7:1, secondary text and status
 colours ≥ 4.5:1, and the accent ≥ 4.5:1 at every hue (its lightness is fixed per mode, only
@@ -94,7 +99,8 @@ Three families, all self-hosted under `web/static/fonts` (SIL OFL; nothing fetch
 |---|---|---|
 | `--fs-12` | 12 px | metadata, counts, group labels, captions under thumbnails |
 | `--fs-14` | 14 px | interface text (the base) |
-| `--fs-16` | 16 px | reading text; every field on a phone (no zoom-on-focus) |
+| `--fs-16` | 16 px | reading text |
+| `--field-phone` | 16 px, in pixels on purpose | every field on a phone (no zoom-on-focus); grows with the look's text dial, never under 16 |
 | `--fs-20` | 20 px | section titles, month and year headings, dialog titles |
 | `--fs-28` | 28 px | page titles (`h1`) |
 | `--fs-40` | 40 px | display: album and person titles, Welcome / sign-in |
@@ -117,9 +123,26 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--top` | 56 px top bar on a laptop; 0 on a phone. Everything sticky offsets by it |
 | `--dock` | 56 px: the floating dock on a phone, and the photo view's action bar |
 | `--bar` | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock |
+| `--pill` | 52 px: the least height of the selection pill; the toast steps over it by this much |
 | `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
 | `--margin` | 224 px (16rem) right margin for notes and filters on a laptop |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
+
+Layers, lowest first (a number of 1 to 5 inside one component orders its own pieces and is
+not a token):
+
+| Token | Value | What |
+|---|---|---|
+| `--z-ruler` | 4 | the time ruler beside the photos |
+| `--z-bar` | 20 | the top bar on a laptop |
+| `--z-selection` | 25 | the selection pill |
+| `--z-dock` | 28 | the dock on a phone (over the pill, so its open menu is not covered) |
+| `--z-menu` / `--z-lasso` | 30 | an open menu / the rectangle drawn while selecting with the mouse |
+| `--z-sheet-backdrop` / `--z-sheet` | 35 / 40 | the filter sheet on a phone and the scrim under it |
+| `--z-loupe` | 50 | the photo view |
+| `--z-toast` | 60 | the toast |
+| `--z-editor` | 70 | the editor, over the photo view it opens from |
+| `--z-skip` | 100 | the skip link, when focused |
 
 ### Component rules
 
@@ -135,7 +158,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - **Sliders**: hairline track, small ink thumb; larger thumb on touch.
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
   right, Cancel left of the primary. On a phone every dialog, the filters and the loupe's info
-  become **bottom sheets** with rounded top corners and safe-area padding.
+  become **bottom sheets**, as wide as the screen, with rounded top corners and safe-area
+  padding. A dialog, the photo editor and the filter sheet each add a history step
+  (`lib/history-step.ts`), so Back closes them; what was chosen in the filter sheet stays.
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
   together. Escape or a press outside closes it. The account button shows the person's initial;
   a count that needs attention sits on it in full ink, never the accent.
@@ -158,7 +183,9 @@ case** — no uppercase tracking. A count beside a title is set in the data face
   the exception: the stylesheet asks `(prefers-reduced-transparency: reduce)` and never its
   negation, because Safari does not know the question and would then show no glass at all.
 - **The look form** (Admin → People → Look): one control per field of the sheet, each with
-  its range or its choices, so nothing can be entered that the server would refuse. "Try on
+  its range or its choices, so nothing can be entered that the server would refuse. The
+  exceptions are `showToday` and `startPage`: they have no control until the Today page
+  exists. "Try on
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
   quiet line at the top of every page says whose look is being tried and offers Stop trying.
 - **Collections rows** show what is behind them, not a sentence about it: people as round
@@ -226,6 +253,6 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 - [ ] Charts: zero-based, directly labelled, no chartjunk?
 - [ ] Works at 375 px wide and at 1440 px wide?
 - [ ] Keyboard reachable, visible focus, AA contrast, reduced motion respected?
-- [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`, `themes.css` and `fonts.css`?
+- [ ] Only tokens: no raw colours, sizes or spacings outside `tokens.css`, `themes.css`, `fonts.css` and the shared rules `tokens.css` imports?
 - [ ] Phone: 44 px targets, nothing wraps to a second toolbar line, safe areas respected?
 - [ ] Checked in both themes, and with the look's dials at their ends (text size 125 %, corners 0 and 22, gap 0 and 8)?

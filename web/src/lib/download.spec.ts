@@ -54,6 +54,11 @@ describe('download model', () => {
 		expect(scopeLabel({ ids: [1, 2] })).toBe('2 selected photos');
 		expect(scopeLabel({ album_id: 1 })).toBe('this album');
 		expect(scopeLabel({ filters: {} }, 40)).toBe('all 40 matching photos');
+		expect(scopeLabel({ filters: {} }, 1)).toBe('all 1 matching photo');
+		expect(scopeLabel({ filters: {} }, 1204)).toBe('all 1,204 matching photos');
+		expect(scopeLabel({ ids: Array.from({ length: 1204 }, (_, i) => i) })).toBe(
+			'1,204 selected photos'
+		);
 	});
 
 	it('names single files by date', () => {

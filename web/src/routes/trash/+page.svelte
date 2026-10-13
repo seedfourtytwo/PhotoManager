@@ -3,6 +3,7 @@
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { api, library, notice, session, settings, viewport } from '$lib/app.svelte';
+	import { photos, plural } from '$lib/format';
 	import { refocus } from '$lib/modal';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import {
@@ -26,6 +27,8 @@
 
 	const list = $derived(items ?? []);
 	const order = $derived(list.map((a) => a.id));
+	/** What "Delete for good" removes: the selected photos, or the whole trash. */
+	const doomed = $derived(selection.ids.size || list.length);
 	const layout = $derived(
 		justify(
 			list.map((a) => aspect(a)),
@@ -69,7 +72,7 @@
 		restoring = true;
 		try {
 			const { restored } = await api.restore(ids);
-			notice.show(`Restored ${restored} photo${restored === 1 ? '' : 's'}.`);
+			notice.show(`Restored ${photos(restored)}.`);
 			selection = EMPTY;
 			library.changed();
 			await load();
@@ -85,7 +88,7 @@
 			// Always the photos on screen (the dialog counted those), never "everything": the
 			// trash may have grown from another device since this page loaded.
 			const { purged } = await api.emptyTrash(selection.ids.size ? [...selection.ids] : order);
-			notice.show(`Deleted ${purged} library cop${purged === 1 ? 'y' : 'ies'} for good.`);
+			notice.show(`Deleted ${plural(purged, 'library copy', 'library copies')} for good.`);
 			confirmEmpty = false;
 			selection = EMPTY;
 			await load();
@@ -168,10 +171,10 @@
 {#if confirmEmpty}
 	<Dialog title="Delete for good?" onclose={() => (confirmEmpty = false)}>
 		<p>
-			{selection.ids.size || list.length} library cop{(selection.ids.size || list.length) === 1
-				? 'y'
-				: 'ies'} and their previews will be removed. Originals in source folders stay where they are,
-			and these photos won't be imported again.
+			{plural(doomed, 'library copy', 'library copies')} and {doomed === 1
+				? 'its preview'
+				: 'their previews'} will be removed. Originals in source folders stay where they are, and
+			{doomed === 1 ? "this photo won't" : "these photos won't"} be imported again.
 		</p>
 		{#snippet actions()}
 			<button class="primary" type="button" onclick={empty}>Delete for good</button>

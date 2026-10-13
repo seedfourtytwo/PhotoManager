@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { makeAsset } from './testing/fixtures';
-import { aspect, groupByMonth, justify, neighbour, rowHeightFor, visibleRange } from './timeline';
+import {
+	aspect,
+	groupByMonth,
+	justify,
+	letterboxed,
+	neighbour,
+	rowHeightFor,
+	visibleRange
+} from './timeline';
 
 describe('groupByMonth', () => {
 	it('groups consecutive photos by local month and keeps order', () => {
@@ -28,6 +36,13 @@ describe('aspect', () => {
 		expect(aspect({ width: null, height: 100 })).toBe(1.5);
 		expect(aspect({ width: 10000, height: 100 })).toBe(4);
 		expect(aspect({ width: 10, height: 1000 })).toBe(0.4);
+	});
+	it('says which photos do not fill a tile of the clamped shape', () => {
+		expect(letterboxed({ width: 6000, height: 400 })).toBe(true);
+		expect(letterboxed({ width: 400, height: 6000 })).toBe(true);
+		expect(letterboxed({ width: 4000, height: 1000 })).toBe(false);
+		expect(letterboxed({ width: 400, height: 1000 })).toBe(false);
+		expect(letterboxed({ width: null, height: 100 })).toBe(false);
 	});
 });
 

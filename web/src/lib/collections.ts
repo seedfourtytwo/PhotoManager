@@ -7,11 +7,8 @@ export const STRIP_LIMIT = 8;
 
 export const personName = (person: Person): string => person.name ?? 'Someone';
 
-const number = new Intl.NumberFormat('en-GB');
-
 /** "1 photo", "12,480 photos". */
-export const photoCount = (count: number): string =>
-	`${number.format(count)} ${count === 1 ? 'photo' : 'photos'}`;
+export { photos as photoCount } from './format';
 
 /** Named people first, then the unnamed, each with the most photos first. */
 export function peopleStrip(people: readonly Person[], limit = STRIP_LIMIT): Person[] {

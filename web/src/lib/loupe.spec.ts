@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
 import { ApiError } from './api';
-import { notice } from './app.svelte';
+import type { AssetDetail, AssetPage } from './api/types';
+import { api, notice } from './app.svelte';
+import { TimelineLoader } from './loader.svelte';
 import {
 	LinkedPhoto,
+	TimelineLoupe,
 	closePhoto,
 	openPhoto,
 	openPhotoId,
@@ -285,5 +288,115 @@ describe('a photo opened by its link', () => {
 		await settled();
 		linked.patch({ favourite: true });
 		expect(linked.single).toMatchObject({ id: 7, favourite: true });
+	});
+});
+
+describe('the loupe of a timeline', () => {
+	const settled = () => new Promise((resolve) => setTimeout(resolve));
+	/** A timeline of `total` photos, ids 1 upwards, that comes ten at a time. */
+	function timelineOf(total: number) {
+		return new TimelineLoader(async (_filters, cursor): Promise<AssetPage> => {
+			const start = cursor ? Number(cursor) : 0;
+			const items = Array.from({ length: Math.min(10, total - start) }, (_, i) =>
+				makeAsset(start + i + 1)
+			);
+			return { items, next_cursor: start + 10 < total ? String(start + 10) : null };
+		});
+	}
+	/** What the server answers for one photo; only what a grid knows of it matters here. */
+	const detail = async (id: number) => makeAsset(id) as AssetDetail;
+	/** The loupe of a page whose address asks for `photo`. */
+	function loupeAt(photo: number | null, loader: TimelineLoader) {
+		page.state = { photo };
+		const reveal = vi.fn();
+		return { loupe: new TimelineLoupe(loader, () => ({ reveal })), reveal };
+	}
+
+	beforeEach(() => vi.restoreAllMocks());
+	afterEach(() => (page.state = {}));
+
+	it('shows nothing while the address asks for no photo', async () => {
+		const loader = timelineOf(5);
+		await loader.reset({});
+		const { loupe } = loupeAt(null, loader);
+		loupe.follow();
+		expect(loupe.id).toBeUndefined();
+		expect(loupe.shown).toBeNull();
+	});
+
+	it('shows a photo the timeline holds among its neighbours, without asking for it', async () => {
+		const asset = vi.spyOn(api, 'asset');
+		const loader = timelineOf(5);
+		await loader.reset({});
+		const { loupe } = loupeAt(3, loader);
+		loupe.follow();
+		expect(loupe.shown).toEqual({ items: loader.items, index: 2 });
+		expect(asset).not.toHaveBeenCalled();
+	});
+
+	it('shows a linked photo on its own until the timeline has loaded as far as it', async () => {
+		vi.spyOn(api, 'asset').mockImplementation(detail);
+		const loader = timelineOf(25);
+		const until = vi.spyOn(loader, 'until').mockResolvedValue();
+		await loader.reset({});
+		const { loupe } = loupeAt(23, loader);
+		loupe.follow();
+		await settled();
+		expect(loupe.shown).toEqual({ items: [makeAsset(23)], index: 0 });
+		// The timeline goes on looking: until it holds the photo, or 2000 photos without it.
+		const ready = until.mock.calls[0][0];
+		expect(ready(loader.items)).toBe(false);
+		expect(ready([makeAsset(23)])).toBe(true);
+		expect(ready(Array.from({ length: 1999 }, (_, i) => makeAsset(100 + i)))).toBe(false);
+		expect(ready(Array.from({ length: 2000 }, (_, i) => makeAsset(100 + i)))).toBe(true);
+
+		await loader.loadMore();
+		await loader.loadMore();
+		expect(loupe.shown).toEqual({ items: loader.items, index: 22 });
+	});
+
+	it('a change made in the loupe lands on the photo it shows', async () => {
+		vi.spyOn(api, 'asset').mockImplementation(detail);
+		const loader = timelineOf(25);
+		vi.spyOn(loader, 'until').mockResolvedValue();
+		await loader.reset({});
+
+		const inList = loupeAt(3, loader).loupe;
+		inList.follow();
+		inList.changed({ ...makeAsset(3), favourite: true });
+		expect(loader.items[2]).toMatchObject({ id: 3, favourite: true });
+
+		const alone = loupeAt(23, loader).loupe;
+		alone.follow();
+		await settled();
+		alone.changed({ ...makeAsset(23), favourite: true });
+		expect(alone.shown?.items).toMatchObject([{ id: 23, favourite: true }]);
+		expect(loader.items.some((a) => a.id === 23)).toBe(false);
+	});
+
+	it('a held photo stays open when a reload takes it out of the timeline', async () => {
+		vi.spyOn(api, 'asset').mockReturnValue(new Promise(() => undefined));
+		const loader = timelineOf(5);
+		vi.spyOn(loader, 'until').mockResolvedValue();
+		await loader.reset({});
+		const { loupe } = loupeAt(3, loader);
+		loupe.follow();
+		const open = loader.items[2];
+		loupe.hold();
+		loader.remove(new Set([3]));
+		loupe.follow();
+		expect(loupe.shown).toEqual({ items: [open], index: 0 });
+	});
+
+	it('closed, the timeline is taken back to where the photo is', async () => {
+		const loader = timelineOf(5);
+		await loader.reset({});
+		const { loupe, reveal } = loupeAt(3, loader);
+		loupe.follow();
+		expect(reveal).not.toHaveBeenCalled();
+		page.state = { photo: null };
+		loupe.follow();
+		expect(loupe.shown).toBeNull();
+		expect(reveal).toHaveBeenCalledExactlyOnceWith(3);
 	});
 });
