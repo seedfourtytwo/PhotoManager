@@ -4,7 +4,6 @@
  */
 import type { Page } from '@playwright/test';
 import {
-	countSlow,
 	expect,
 	expectAccessible,
 	GUEST,
@@ -40,6 +39,17 @@ const shared = (page: Page) =>
 const barActions = (page: Page) =>
 	loupe(page).locator('.bar').locator('.acts > button, .acts > .menu > button');
 const DOWNLOAD = /\/api\/assets\/\d+\/download\?/;
+
+/** Count the fetches of a photo's file and keep each answer back until `release()`. */
+async function holdDownload(page: Page) {
+	const held = { count: 0, release: () => {} };
+	await page.route(DOWNLOAD, async (route) => {
+		held.count++;
+		await new Promise<void>((resolve) => (held.release = resolve));
+		await route.fallback();
+	});
+	return held;
+}
 
 test.beforeEach(async () => {
 	await resetMock();
@@ -123,13 +133,20 @@ test('one share at a time: while the photo is fetched the button is busy, and a 
 }) => {
 	await withShareSheet(page);
 	await signIn(page);
-	const fetches = await countSlow(page, DOWNLOAD);
+	const fetches = await holdDownload(page);
 	await page.locator('.tile').first().click();
 	await loupe(page).getByRole('button', { name: 'Share' }).click();
 	const busy = loupe(page).getByRole('button', { name: 'Wait…' });
 	await expect(busy).toHaveAttribute('aria-busy', 'true');
 	await busy.click();
+	await page.waitForTimeout(NOTHING_HAPPENS_MS);
+	expect(fetches.count).toBe(1);
+	fetches.release();
 	await expect.poll(() => shared(page)).toHaveLength(1);
+	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveAttribute(
+		'aria-busy',
+		'false'
+	);
 	await page.waitForTimeout(NOTHING_HAPPENS_MS);
 	expect(fetches.count).toBe(1);
 	expect(await shared(page)).toHaveLength(1);
@@ -142,11 +159,7 @@ test('at 320 px the bar with Share fits, also with the largest text and while it
 	await withShareSheet(page);
 	await signIn(page);
 	await page.setViewportSize({ width: 320, height: 800 });
-	let release = () => {};
-	await page.route(DOWNLOAD, async (route) => {
-		await new Promise<void>((resolve) => (release = resolve));
-		await route.fallback();
-	});
+	const fetches = await holdDownload(page);
 	await page.locator('.tile').first().click();
 	const fits = async () => {
 		const bar = (await loupe(page).locator('.bar').boundingBox())!;
@@ -165,7 +178,7 @@ test('at 320 px the bar with Share fits, also with the largest text and while it
 	await loupe(page).getByRole('button', { name: 'Share' }).click();
 	await expect(loupe(page).getByRole('button', { name: 'Wait…' })).toBeVisible();
 	await expect(fits).toPass({ timeout: 3000 });
-	release();
+	fetches.release();
 	await expect.poll(() => shared(page)).toHaveLength(1);
 });
 
