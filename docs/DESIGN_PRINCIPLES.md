@@ -161,6 +161,8 @@ not a token):
   become **bottom sheets**, as wide as the screen, with rounded top corners and safe-area
   padding. A dialog, the photo editor and the filter sheet each add a history step
   (`lib/history-step.ts`), so Back closes them; what was chosen in the filter sheet stays.
+  So does the photo's Info sheet on a phone (`lib/info-sheet.svelte.ts`): Back closes the
+  sheet, the next Back the photo; on a laptop Info is a panel beside the photo, with no step.
   The editor with changes that are not saved asks first, whichever way it is left (Back,
   Escape, Cancel): "Keep editing" or "Discard changes". With nothing changed it just closes.
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions

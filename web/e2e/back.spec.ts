@@ -1,7 +1,7 @@
 /**
  * "Opening a sheet or a photo adds a history step, so Back on the phone closes it" (redesign
- * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts; these are the
- * sheets and dialogs.
+ * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts, its Info
+ * sheet's in back-info.spec.ts; these are the sheets and dialogs.
  */
 import {
 	delayRoute,
