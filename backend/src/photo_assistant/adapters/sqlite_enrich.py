@@ -1,9 +1,10 @@
-"""EnrichmentStore on SQLite: places, perceptual hashes, groups."""
+"""EnrichmentStore and ExposureStore on SQLite: places, perceptual hashes, groups, exposure."""
 
 from collections.abc import Sequence
 from datetime import datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
+from photo_assistant.domain.exposure import Exposure
 from photo_assistant.domain.grouping import Shot
 from photo_assistant.domain.places import Place
 
@@ -40,6 +41,24 @@ class EnrichMixin(SqliteBase):
             (after_id, limit),
         )
         return [(int(r["id"]), str(r["thumb_path"])) for r in rows]
+
+    def assets_without_exposure(self, after_id: int, limit: int) -> list[tuple[int, str]]:
+        rows = self._all(
+            """SELECT id, library_path FROM asset
+               WHERE id > ? AND f_number IS NULL AND exposure_time IS NULL AND iso IS NULL
+                 AND focal_length IS NULL
+               ORDER BY id LIMIT ?""",
+            (after_id, limit),
+        )
+        return [(int(r["id"]), str(r["library_path"])) for r in rows]
+
+    def set_exposures(self, exposures: Sequence[tuple[int, Exposure]]) -> None:
+        with self._transaction():
+            self._conn.executemany(
+                """UPDATE asset SET f_number = ?, exposure_time = ?, iso = ?, focal_length = ?
+                   WHERE id = ?""",
+                [(e.f_number, e.exposure_time, e.iso, e.focal_length, i) for i, e in exposures],
+            )
 
     def set_phash(self, asset_id: int, phash: str) -> None:
         self._write("UPDATE asset SET phash = ? WHERE id = ?", (phash, asset_id))
