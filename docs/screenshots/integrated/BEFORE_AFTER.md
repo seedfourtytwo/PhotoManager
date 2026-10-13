@@ -5,6 +5,11 @@ dark, and `light/` holds the key screens in the light theme. They are all synthe
 mock library). The earlier set is in git at `1e3007a` (`git show 1e3007a:docs/screenshots/integrated/<file>`).
 `docs/DESIGN_PRINCIPLES.md` §2 has the resulting tokens and component rules.
 
+The whole set was rendered again when the root text size became the browser's 16 px: until
+then it was 14 px, and type and spacing showed at 14/16 of the sizes in the design tables
+(interface text 12.25 px for 14, a page title 24.5 px for 28). Photos are no smaller for it:
+the laptop's side column is still 224 px.
+
 > **Rows marked † are superseded** by the redesign that followed
 > (`docs/superpowers/specs/2026-10-08-ui-redesign-design.md`); the table is kept as the record
 > of this review. The rail became a top bar on a laptop and a floating dock on a phone, with

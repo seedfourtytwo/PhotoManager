@@ -105,6 +105,12 @@ Three families, all self-hosted under `web/static/fonts` (SIL OFL; nothing fetch
 | `--fs-28` | 28 px | page titles (`h1`) |
 | `--fs-40` | 40 px | display: album and person titles, Welcome / sign-in |
 
+The sizes are in rem and the root is the browser's own text size (16 px unless the reader set
+another) times the look's text dial, so at the dial's 100 % a token renders at the pixels in
+these tables: interface text 14, small text 12, a page title 28, `--s-4` 16
+(`e2e/type.spec.ts` measures them). At 125 % everything in rem is a quarter larger; what is
+promised in pixels (`--target`, `--dock`, `--top`, the corners) stays.
+
 Line heights: `--lh-tight` 1.15 (titles), `--lh-ui` 1.45 (interface), `--lh-text` 1.6 (prose,
 max `--measure` 36 rem). Group labels (`h3`, `legend`) are 12 px / 600 / `--ink-2`, **sentence
 case** — no uppercase tracking. A count beside a title is set in the data face at 12 px.
@@ -125,7 +131,7 @@ case** — no uppercase tracking. A count beside a title is set in the data face
 | `--bar` | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock |
 | `--pill` | 52 px: the least height of the selection pill; the toast steps over it by this much |
 | `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
-| `--margin` | 224 px (16rem) right margin for notes and filters on a laptop |
+| `--margin` | 224 px (14rem) right margin for notes and filters on a laptop |
 | `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
 
 Layers, lowest first (a number of 1 to 5 inside one component orders its own pieces and is
