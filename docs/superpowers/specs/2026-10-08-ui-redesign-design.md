@@ -134,8 +134,11 @@ Download, Fix date, Delete, and More. `Esc` clears.
 - **Share** is not built, in the photo bar or in the pill: nothing here says what sharing one
   photo does, and handing it to the phone's share sheet sends photo data to other apps.
   Download holds its place (Favourite · Download · Album · Edit · More).
-- **Aperture, shutter, ISO and focal length** are not in the API or the database. The
-  readout's second line is camera · pixel size · file name until they are.
+- **Aperture, shutter, ISO and focal length** are stored since migration `0028` and shown
+  (2026-10-13): the readout's second line is aperture · shutter · ISO · focal length · file
+  name, with only the values the photo carries. A photo that carries none (a scan, a
+  screenshot) keeps camera · pixel size · file name. The details list the settings under the
+  camera. Photos imported earlier get theirs from `just exposure-backfill`.
 - The pill says **Move to trash** where this page says Delete: that is what it does, and the
   Trash page keeps "Delete for good" for the other thing.
 - The sideways swipe stays in the gesture recogniser (the photo follows the finger through a

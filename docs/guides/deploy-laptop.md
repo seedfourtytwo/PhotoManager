@@ -114,6 +114,11 @@ systemctl --user restart photo-assistant    # or: just install-service (also reb
 just doctor
 ```
 
+After the update that brings exposure settings into the photo view (aperture, shutter, ISO,
+focal length), run `just exposure-backfill` once: the app then reads them from its own copies
+of the photos you already have, in the background. New imports need nothing. It can be
+stopped and run again without harm.
+
 The database is snapshotted automatically before any schema change
 (`data/db-backups/`), so an update can always be rolled back. The newest 5 of those
 copies are kept; older ones are deleted after an update that worked.
