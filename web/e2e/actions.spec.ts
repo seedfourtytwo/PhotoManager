@@ -99,7 +99,7 @@ test('fix date from the loupe: set an exact date', async ({ page }) => {
 	await loupeAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await dialog.getByLabel('Set exactly').check();
-	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+	await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 	await expect(dialog.getByRole('cell').last()).toHaveText('3 Feb 2001, 04:05');
 	const post = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
 	await dialog.getByRole('button', { name: 'Change date' }).click();
@@ -177,7 +177,7 @@ test('fix date can be undone: the previous dates come back', async ({ page }) =>
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await expect(dialog.getByText(/can be undone/)).toHaveCount(0);
 	await dialog.getByLabel('Set exactly').check();
-	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+	await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 	await dialog.getByRole('button', { name: 'Change date' }).click();
 	await expect(toast(page)).toContainText('Changed the date of 2 photos');
 	const undo = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));

@@ -151,7 +151,9 @@ not a token):
   a dialog or form exists for — is filled with `--ink` (never the accent), 600 weight. Pressed
   toggles (Info, Arrange, crop ratio, Grid/Calendar) are underlined, not filled.
 - **Fields** are a soft box (`--tint` fill, `--r-1`) that takes an accent border on focus.
-  Labels sit above (`.field`), 12 px. Selects keep the native chevron.
+  Labels sit above (`.field`), 12 px. Selects keep the native chevron. A date is typed or
+  pasted into a text field (`DateField`) that shows it day first on the 24-hour clock; the
+  browser's own date control is not used, because it follows the browser's language.
 - **Checkboxes and radios** are drawn (1.5 px `--ink-2` outline, `--check-radius` corners;
   checked = ink fill with a `--bg` check / inner ring), so both themes match. `.choice` lays an
   option out in a row.
