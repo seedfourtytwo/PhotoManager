@@ -355,10 +355,14 @@ export function createApi(options: ApiOptions = {}) {
 		similar: (id: Id, limit = 50) =>
 			get<ScoredAsset[]>(query(`/api/assets/${id}/similar`, { limit })),
 		faces: (id: Id) => get<Face[]>(`/api/assets/${id}/faces`),
-		people: () => get<Person[]>('/api/people'),
+		/** The people listed in People; `hidden` asks for the ones hidden from it instead. */
+		people: (hidden = false) =>
+			get<Person[]>(query('/api/people', { hidden: hidden || undefined })),
 		person: (id: Id) => get<Person>(`/api/people/${id}`),
 		renamePerson: (id: Id, name: string | null) =>
 			request<Person>('PATCH', `/api/people/${id}`, { name }),
+		hidePerson: (id: Id, hidden: boolean) =>
+			request<Person>('PATCH', `/api/people/${id}`, { hidden }),
 		mergePeople: (id: Id, sourceIds: Id[]) =>
 			request<Person>('POST', `/api/people/${id}/merge`, { source_ids: sourceIds }),
 		personAssets: (id: Id, cursor: string | null = null, limit = 200) =>

@@ -383,7 +383,9 @@ class SqliteMlStore:
 
     # --- people ----------------------------------------------------------------------------
 
-    def _persons(self, person_id: int | None, visible: Visible) -> list[PersonSummary]:
+    def _persons(
+        self, visible: Visible, *, person_id: int | None = None, hidden: bool | None = None
+    ) -> list[PersonSummary]:
         """Counted over the faces on photos ``visible`` covers; the cover is the chosen face
         if it is one of them, else the best of them. One pass over those faces."""
         with self._shown(visible) as (shown, bindings):
@@ -391,30 +393,45 @@ class SqliteMlStore:
                 on_shown_photos = f"f.asset_id IN ({shown})"
             else:
                 on_shown_photos = f"pe.id = :person AND EXISTS ({shown} AND a.id = f.asset_id)"
+            asked: dict[str, object] = {} if person_id is None else {"person": person_id}
+            if hidden is not None:
+                on_shown_photos += " AND pe.hidden = :hidden"
+                asked["hidden"] = int(hidden)
             sql = (
-                "SELECT id, name, cover, count(*) AS faces, count(DISTINCT asset_id) AS assets "
-                "FROM (SELECT pe.id AS id, pe.name AS name, f.asset_id AS asset_id, "
+                "SELECT id, name, hidden, cover, count(*) AS faces, "
+                "count(DISTINCT asset_id) AS assets "
+                "FROM (SELECT pe.id AS id, pe.name AS name, pe.hidden AS hidden, "
+                "f.asset_id AS asset_id, "
                 "first_value(f.id) OVER (PARTITION BY pe.id "
                 "ORDER BY f.id = pe.cover_face_id DESC, f.score DESC, f.id) AS cover "
                 f"FROM person pe JOIN face f ON f.person_id = pe.id WHERE {on_shown_photos}"
                 ") GROUP BY id ORDER BY name IS NULL, assets DESC, id"
             )
-            asked = {} if person_id is None else {"person": person_id}
             rows = self._all(sql, bindings | asked)
         return [
-            PersonSummary(r["id"], r["name"], self.get_face(r["cover"]), r["faces"], r["assets"])
+            PersonSummary(
+                r["id"],
+                r["name"],
+                self.get_face(r["cover"]),
+                r["faces"],
+                r["assets"],
+                bool(r["hidden"]),
+            )
             for r in rows
         ]
 
-    def list_persons(self, visible: Visible) -> list[PersonSummary]:
-        return self._persons(None, visible)
+    def list_persons(self, visible: Visible, *, hidden: bool | None = False) -> list[PersonSummary]:
+        return self._persons(visible, hidden=hidden)
 
     def get_person(self, person_id: int, visible: Visible) -> PersonSummary | None:
-        found = self._persons(person_id, visible)
+        found = self._persons(visible, person_id=person_id)
         return found[0] if found else None
 
     def rename_person(self, person_id: int, name: str | None) -> None:
         self._write("UPDATE person SET name = ? WHERE id = ?", (name, person_id))
+
+    def set_person_hidden(self, person_id: int, hidden: bool) -> None:
+        self._write("UPDATE person SET hidden = ? WHERE id = ?", (int(hidden), person_id))
 
     def merge_persons(self, target_id: int, source_ids: Sequence[int]) -> None:
         sources = [s for s in source_ids if s != target_id]

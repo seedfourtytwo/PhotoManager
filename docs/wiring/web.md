@@ -120,7 +120,7 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 - **Time ruler** (`TimeRuler`, `lib/ruler.ts`): linear in time, from the newest month with
   photos to the oldest (`GET /api/calendar`). It jumps once, where a drag ends.
 - **Grid**: one Tab stop; arrow keys, Home/End move between photos across months.
-- **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename,
+- **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename, hide,
   merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
   faces**, **Settings → Phones and devices**.
 - **Collections** (`/collections`, `CollectionRows`): each row of the account's look shows what
@@ -133,6 +133,18 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   bar on a laptop and a floating dock on a phone. The account menu holds To review, Trash,
   Settings, Admin (admins) and Sign out. The selection pill shows Add to album, Download,
   Fix date and Move to trash (the first three on a phone) and puts the rest under “More”.
+- **Date fields** (`DateField`, the reader in `lib/dates.ts`): Fix date's “Set exactly” and
+  the filters' From / To are one text field, never the browser's own date control, so the
+  date is shown day first on the 24-hour clock whatever the browser's language
+  (`04/07/2019 18:30:05`; a filter shows the day only). `readDateText` reads what is pasted or
+  typed: the app's own displays, ISO, camera and file-name styles, numbers day first, month
+  names in English and French, AM/PM. A readable paste replaces the whole field at once;
+  typed text is read at every keystroke (the before → after preview follows) and tidied on
+  Enter or on leaving the field. A day alone keeps the field's time and a time alone its day.
+  Numbers that can only be month first (`7/25/2019`) are converted and a quiet line says so.
+  Text that is not a date, or names a day or time that does not exist, gives no value: a
+  sentence under the field says so, “Change date” stays disabled and the filter is left as
+  it was. The API still gets `YYYY-MM-DDTHH:MM:SS`, and the URL `from` / `to` as `YYYY-MM-DD`.
 - **Downloads**: the dialog pre-flights with the estimate (an expired session goes to sign-in,
   a refusal is a sentence), then posts into a fresh hidden frame; if the frame loads the
   server's JSON error instead of a file, the status line says so.

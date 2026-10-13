@@ -116,6 +116,38 @@ def test_list_and_rename_people(store: SqliteMlStore, family: dict[str, int]) ->
         people.rename(family["lea"], "x" * 101, visible(family))
 
 
+def test_a_hidden_person_is_listed_only_when_asked_for(
+    store: SqliteMlStore, family: dict[str, int]
+) -> None:
+    people = People(store)
+    assert people.set_hidden(family["tom"], True, visible(family)).hidden
+    assert [p.id for p in people.list_all(visible(family))] == [family["lea"]]
+    assert [p.id for p in people.list_all(visible(family), hidden=True)] == [family["tom"]]
+    assert people.get(family["tom"], visible(family)).hidden, "still opens by its link"
+    assert people.assets(family["tom"], visible(family)) == [family["c"]]
+    assert not people.set_hidden(family["tom"], False, visible(family)).hidden
+    assert len(people.list_all(visible(family))) == 2
+    assert people.list_all(visible(family), hidden=True) == []
+
+
+def test_hiding_keeps_the_name_and_a_merge_keeps_the_target_as_it_was(
+    store: SqliteMlStore, family: dict[str, int]
+) -> None:
+    people = People(store)
+    people.rename(family["tom"], "Tom", visible(family))
+    assert people.set_hidden(family["tom"], True, visible(family)).name == "Tom"
+    merged = people.merge(family["lea"], [family["tom"]], visible(family))
+    assert not merged.hidden and merged.face_count == 3
+
+
+def test_a_person_the_viewer_cannot_see_cannot_be_hidden(
+    store: SqliteMlStore, family: dict[str, int]
+) -> None:
+    with pytest.raises(PersonNotFoundError):
+        People(store).set_hidden(family["tom"], True, {family["a"]})
+    assert not People(store).get(family["tom"], visible(family)).hidden
+
+
 def test_people_the_viewer_cannot_see_are_not_found(
     store: SqliteMlStore, family: dict[str, int]
 ) -> None:
