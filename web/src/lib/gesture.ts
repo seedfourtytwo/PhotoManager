@@ -1,6 +1,7 @@
 /**
  * What a touch on the open photo means (spec §4.3, §6): one pure recogniser, so the thresholds
  * are tested without a screen. Every gesture also has a button that does the same thing.
+ * A double tap zooms (lib/zoom.ts, which also has what two fingers do).
  */
 export type Point = { x: number; y: number; t: number };
 export type Gesture = 'tap' | 'double-tap' | 'previous' | 'next' | 'details' | 'close';
