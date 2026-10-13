@@ -219,8 +219,9 @@ As built (step 4, `docs/superpowers/plans/2026-10-08-redesign-4-look-sheet.md`):
 the wrong kind or an unknown choice is rejected like an unknown field; `collectionsRows` may
 not be empty; dials are whole numbers (text scale: two decimals); every role may set its own
 mode; `showToday` and `startPage` are stored but not in the form and without effect until
-the Today page exists; `thumbSize` gives the photo size unless one was chosen on the device
-in Settings; resetting is a `PUT` of `{}`.
+the Today page exists; resetting is a `PUT` of `{}`. `thumbSize` alone gives the photo size:
+the earlier "Photo size in the grid" choice in Settings, kept per browser, hid the look's for
+good and is gone; a browser that still holds it (`pa.density`) drops it when the app loads.
 
 After the QA pass on step 4: a *stored* sheet falls back field by field, not as a whole (one
 field that no longer passes reads as its default, the rest stays); a half rounds up and a

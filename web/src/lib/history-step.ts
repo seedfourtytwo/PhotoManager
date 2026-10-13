@@ -1,6 +1,7 @@
 /**
  * "Opening a sheet or a photo adds a history step, so Back on the phone closes it" (redesign
- * spec §4.2). The photo's step is its address (lib/loupe.svelte.ts); this is the step of
+ * spec §4.2). The photo's step is its address (lib/loupe.svelte.ts), and its Info sheet on a
+ * phone has one that follows the photo (lib/info-sheet.svelte.ts); this is the step of
  * everything else that opens over a page: every dialog, the photo editor, the filter sheet.
  *
  * The step is a shallow history entry at the same address, marked in `page.state.sheet`. Back
@@ -40,6 +41,21 @@ let serial = 0;
  * moment, and a step added meanwhile would be the one it leaves: the next sheet waits.
  */
 let leaving: Promise<void> = Promise.resolve();
+
+/**
+ * Takes the current entry out for a sheet that keeps its own mark (the photo's Info sheet,
+ * lib/info-sheet.svelte.ts). The next step waits for it as for any other.
+ */
+export function stepBack(): Promise<void> {
+	leaving = leave();
+	return leaving;
+}
+
+/**
+ * Every closed sheet's entry has left the history. A sheet under another one waits for this
+ * before it closes too: its own entry can only be taken out when it is the current one.
+ */
+export const stepsGone = (): Promise<void> => leaving;
 
 /**
  * Adds the step for a sheet that has just opened. `onback` is called when Back left it: the

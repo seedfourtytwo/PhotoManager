@@ -105,7 +105,11 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 ## Screens and behaviour added in the M2 fix round
 
 - **Loupe**: `?photo=<id>` in the URL (reload/share reopens it; Back closes it; closing scrolls
-  the grid to that photo and focuses its tile). Chrome fades after 2.5 s and returns on any
+  the grid to that photo and focuses its tile). On a phone the Info sheet is a history entry
+  of its own over the photo's, marked `page.state.info`, and the sheet is open exactly while
+  the current entry has the mark: Back closes it, its own button goes back, and stepping
+  rewrites that entry and adds none. The photo's own entry under it then names an earlier
+  photo; when Back arrives there, the photo on screen is held and written into it. Chrome fades after 2.5 s and returns on any
   touch, key or mouse movement; a tap on the photo toggles it (after 300 ms, in case it is
   the first half of a double tap, which favourites). The photo area has `touch-action: none`,
   so vertical swipes (up = info, down = close) are not taken by the browser; `lib/gesture.ts`
@@ -151,6 +155,8 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   Settings offers the mode (Dark, Light, Like the device), saved on the account.
   The earlier per-browser `pa.theme` key becomes the mode of an account that still has the
   defaults, once; for an account that already has a look it is only removed.
+  The size of the photos in the grids is the look's `thumbSize` and nothing else: the earlier
+  per-browser `pa.density` key (a Settings choice that is gone) is removed when the app loads.
 
 ## Performance (library grid, 10 000-photo mock, phone 390×844, CPU ×4)
 

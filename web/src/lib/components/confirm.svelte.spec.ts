@@ -83,6 +83,70 @@ describe('Editor', () => {
 		expect(deletes()).toEqual([{ method: 'DELETE', url: '/api/assets/7/edit' }]);
 	});
 
+	describe('leaving with changes that are not saved', () => {
+		const discard = () => page.getByRole('dialog', { name: 'Discard your changes?' });
+		async function open() {
+			const calls = stubFetch(() => ({ json: recipe }));
+			const onclose = vi.fn();
+			render(Editor, { asset: edited, onclose, onsaved: () => {} });
+			// the crop box is there once the saved edit is read
+			await expect.element(page.getByRole('group', { name: /Crop area/ })).toBeInTheDocument();
+			return { calls, onclose };
+		}
+
+		it('Cancel closes at once when nothing was changed', async () => {
+			const { onclose } = await open();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			expect(onclose).toHaveBeenCalledOnce();
+			await expect.element(discard()).not.toBeInTheDocument();
+		});
+
+		it('a saved edit that was only opened is not a change', async () => {
+			const { onclose } = await open();
+			await page.getByRole('button', { name: 'Rotate right' }).click();
+			await page.getByRole('button', { name: 'Rotate left' }).click();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			expect(onclose).toHaveBeenCalledOnce();
+		});
+
+		it('Cancel asks first after a change; “Keep editing” keeps the change', async () => {
+			const { onclose } = await open();
+			await page.getByRole('button', { name: 'Rotate right' }).click();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			await expect.element(discard()).toBeInTheDocument();
+			expect(onclose).not.toHaveBeenCalled();
+			await discard().getByRole('button', { name: 'Keep editing' }).click();
+			await expect.element(discard()).not.toBeInTheDocument();
+			expect(onclose).not.toHaveBeenCalled();
+			// still turned: Reset has something to reset
+			await expect.element(page.getByRole('button', { name: 'Reset' })).toBeEnabled();
+		});
+
+		it('“Discard changes” closes the editor and saves nothing', async () => {
+			const { calls, onclose } = await open();
+			await page.getByRole('button', { name: 'Flip horizontal' }).click();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			await discard().getByRole('button', { name: 'Discard changes' }).click();
+			await vi.waitFor(() => expect(onclose).toHaveBeenCalledOnce());
+			expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+		});
+
+		it('Escape asks too, and Escape in the question goes back to editing', async () => {
+			const { onclose } = await open();
+			await page.getByRole('button', { name: 'Rotate right' }).click();
+			const escape = (name: string) =>
+				page
+					.getByRole('dialog', { name })
+					.element()
+					.dispatchEvent(new Event('cancel', { cancelable: true }));
+			escape('Edit photo');
+			await expect.element(discard()).toBeInTheDocument();
+			escape('Discard your changes?');
+			await expect.element(discard()).not.toBeInTheDocument();
+			expect(onclose).not.toHaveBeenCalled();
+		});
+	});
+
 	it('cannot save over an edit it could not load', async () => {
 		const calls = stubFetch(() => ({ status: 503, json: { detail: 'The library is busy.' } }));
 		render(Editor, { asset: edited, onclose: () => {}, onsaved: () => {} });

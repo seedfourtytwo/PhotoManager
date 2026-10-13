@@ -8,6 +8,8 @@ declare global {
 			pushed?: boolean;
 			/** This entry is the history step of an open sheet (lib/history-step.ts): its mark. */
 			sheet?: string;
+			/** This entry is the step of the photo's Info sheet on a phone (lib/info-sheet.svelte.ts). */
+			info?: true;
 		}
 	}
 }
