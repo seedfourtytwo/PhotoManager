@@ -102,7 +102,7 @@ def test_a_chosen_portrait_is_served_and_its_url_changes_with_it(
 
     assert snapshot_tree(originals) == before_files, "originals are never written to"
     derived = services.store.absolute("derived/portrait")
-    assert len(list(derived.rglob("*.webp"))) == 2, "the chosen cut went with the choice"
+    assert len(list(derived.rglob("*.webp"))) == 1, "the chosen cut went with the choice"
 
 
 def test_a_small_face_is_never_blown_up(
@@ -135,7 +135,7 @@ def test_the_faces_to_choose_from_come_best_first_each_with_its_own_picture(
     assert [f["asset_id"] for f in faces] == [lea["tall"], lea["wide"]]
     assert all(f["chosen"] is False for f in faces)
     assert faces[0]["url"].startswith(f"/api/faces/{lea['f_tall']}/portrait?v=")
-    assert faces[0]["size"] == pytest.approx(360 / 900), "a 180 px wide face on the tall photo"
+    assert faces[0]["size"] == pytest.approx(480 / 900), "a 180 x 240 px face, tall photo"
     assert picture(admin, faces[0]["url"], tmp_path).size == (320, 320)
     one = admin.get(f"/api/people/{lea['lea']}/faces", params={"limit": 1}).json()
     assert [f["face_id"] for f in one] == [lea["f_tall"]]

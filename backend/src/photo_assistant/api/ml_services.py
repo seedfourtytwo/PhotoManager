@@ -28,9 +28,10 @@ from photo_assistant.app.ml_jobs import (
     MlJobPlanner,
 )
 from photo_assistant.app.people import People
+from photo_assistant.app.portraits import Portraits
 from photo_assistant.app.search import SemanticSearch, SimilarPhotos
 from photo_assistant.domain.tags import TagScore
-from photo_assistant.ports import Repository
+from photo_assistant.ports import ImageRenderer, Repository
 from photo_assistant.ports.ml import FaceAnalyzer, ModelStatus
 
 Handler = Callable[[dict[str, object]], object]
@@ -46,6 +47,7 @@ class MlServices:
     search: SemanticSearch
     similar: SimilarPhotos
     people: People
+    portraits: Portraits
     handlers: dict[str, Handler] = field(default_factory=dict)
 
     def status(self) -> dict[str, ModelStatus]:
@@ -73,10 +75,12 @@ def build_ml_services(
     repo: Repository,
     library: ImagePaths,
     db: Database,
+    renderer: ImageRenderer,
     on_tags: Callable[[int, Sequence[TagScore]], object] | None = None,
 ) -> MlServices:
     """``repo``/``library``: the app's Repository and LibraryStore; ``db``: the app's one
-    Database, which the ML store shares with every other store."""
+    Database, which the ML store shares with every other store; ``renderer`` cuts people's
+    portraits from the originals."""
     store = SqliteMlStore(db)
     clip = OnnxClip(
         ml.clip_dir(data_root), ml.clip_model, provider=ml.provider, batch_size=ml.clip_batch_size
@@ -94,6 +98,7 @@ def build_ml_services(
     planner = MlJobPlanner(
         repo, tasks if ml.enabled else {}, ready=lambda task: model_of[task].status().ready
     )
+    people = People(store)
     return MlServices(
         settings=ml,
         store=store,
@@ -102,6 +107,7 @@ def build_ml_services(
         planner=planner,
         search=SemanticSearch(clip, store, min_score=ml.search_min_score),
         similar=SimilarPhotos(store, clip.name),
-        people=People(store),
+        people=people,
+        portraits=Portraits(store, people, library, renderer),
         handlers=handlers,
     )

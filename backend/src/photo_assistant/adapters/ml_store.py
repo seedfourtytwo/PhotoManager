@@ -19,7 +19,14 @@ import sqlite_vec  # type: ignore[import-untyped]
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_library import ASSET_FROM, ORDER, filter_sql, visibility
 from photo_assistant.domain.access import Viewer
-from photo_assistant.domain.faces import BoundingBox, Face
+from photo_assistant.domain.faces import (
+    BoundingBox,
+    Circle,
+    Face,
+    automatic_circle,
+    overlap,
+    photo_size,
+)
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
@@ -27,12 +34,23 @@ from photo_assistant.ports.ml import (
     FaceChanges,
     FaceMatches,
     PersonSummary,
+    Portrait,
     ScoredAsset,
     StoredFace,
     Visible,
 )
 
 _FACE_COLUMNS = "f.id, f.asset_id, f.box_x, f.box_y, f.box_w, f.box_h, f.score, f.person_id"
+_FACE_ON_ITS_PHOTO = (
+    f"SELECT {_FACE_COLUMNS}, a.content_hash, a.library_path, a.width, a.height, "
+    "a.thumb_w, a.thumb_h FROM face f JOIN asset a ON a.id = f.asset_id WHERE f.id = ?"
+)
+_COVERS_ON = (
+    f"SELECT pe.id AS person, {_FACE_COLUMNS} FROM person pe "
+    "JOIN face f ON f.id = pe.cover_face_id WHERE f.asset_id = ? AND f.model = ?"
+)
+# A face detected again is the same face if its box shares this much with the old one.
+_SAME_FACE = 0.5
 
 
 def to_blob(vector: Sequence[float]) -> bytes:
@@ -251,8 +269,22 @@ class SqliteMlStore:
 
     def replace_faces(self, asset_id: int, model: str, faces: Sequence[Face]) -> list[int]:
         with self._transaction() as conn:
+            were_covers = conn.execute(_COVERS_ON, (asset_id, model)).fetchall()
             conn.execute("DELETE FROM face WHERE asset_id = ? AND model = ?", (asset_id, model))
-            return [self._insert_face(conn, asset_id, model, face) for face in faces]
+            ids = [self._insert_face(conn, asset_id, model, face) for face in faces]
+            # deleting a cover emptied the person's choice: the face found in its place
+            # takes it over, so a chosen portrait outlives a photo being analysed again
+            for row in were_covers if faces else ():
+                old = _stored_face(row).box
+                shared, face_id = max(
+                    (overlap(old, face.box), face_id)
+                    for face_id, face in zip(ids, faces, strict=True)
+                )
+                if shared >= _SAME_FACE:
+                    conn.execute(
+                        "UPDATE person SET cover_face_id = ? WHERE id = ?", (face_id, row["person"])
+                    )
+            return ids
 
     @staticmethod
     def _insert_face(conn: sqlite3.Connection, asset_id: int, model: str, face: Face) -> int:
@@ -381,13 +413,32 @@ class SqliteMlStore:
         rows = self._all(f"SELECT {_FACE_COLUMNS} FROM face f WHERE f.id = ?", (face_id,))
         return _stored_face(rows[0]) if rows else None
 
+    def face_portrait(self, face_id: int, chosen: Circle | None = None) -> Portrait | None:
+        """``chosen``: the circle someone put on this face's photo, instead of the automatic."""
+        rows = self._all(_FACE_ON_ITS_PHOTO, (face_id,))
+        if not rows:
+            return None
+        (row,) = rows
+        face = _stored_face(row)
+        thumb = (row["thumb_w"], row["thumb_h"]) if row["thumb_w"] else None
+        size = photo_size(row["width"], row["height"], thumb)
+        return Portrait(
+            face,
+            chosen or automatic_circle(face.box, *size),
+            chosen is not None,
+            row["content_hash"],
+            row["library_path"],
+            size,
+        )
+
     # --- people ----------------------------------------------------------------------------
 
     def _persons(
         self, visible: Visible, *, person_id: int | None = None, hidden: bool | None = None
     ) -> list[PersonSummary]:
         """Counted over the faces on photos ``visible`` covers; the cover is the chosen face
-        if it is one of them, else the best of them. One pass over those faces."""
+        if it is one of them, else the best of them. One pass over those faces. A chosen
+        circle belongs to the chosen face: with any other cover the portrait is automatic."""
         with self._shown(visible) as (shown, bindings):
             if person_id is None:
                 on_shown_photos = f"f.asset_id IN ({shown})"
@@ -398,27 +449,34 @@ class SqliteMlStore:
                 on_shown_photos += " AND pe.hidden = :hidden"
                 asked["hidden"] = int(hidden)
             sql = (
-                "SELECT id, name, hidden, cover, count(*) AS faces, "
+                "SELECT id, name, hidden, cover, chosen_face, cx, cy, size, count(*) AS faces, "
                 "count(DISTINCT asset_id) AS assets "
                 "FROM (SELECT pe.id AS id, pe.name AS name, pe.hidden AS hidden, "
-                "f.asset_id AS asset_id, "
+                "pe.cover_face_id AS chosen_face, pe.portrait_cx AS cx, pe.portrait_cy AS cy, "
+                "pe.portrait_size AS size, f.asset_id AS asset_id, "
                 "first_value(f.id) OVER (PARTITION BY pe.id "
                 "ORDER BY f.id = pe.cover_face_id DESC, f.score DESC, f.id) AS cover "
                 f"FROM person pe JOIN face f ON f.person_id = pe.id WHERE {on_shown_photos}"
                 ") GROUP BY id ORDER BY name IS NULL, assets DESC, id"
             )
             rows = self._all(sql, bindings | asked)
-        return [
-            PersonSummary(
-                r["id"],
-                r["name"],
-                self.get_face(r["cover"]),
-                r["faces"],
-                r["assets"],
-                bool(r["hidden"]),
+        found = []
+        for r in rows:
+            its_own = r["cover"] == r["chosen_face"] and r["size"] is not None
+            circle = Circle(r["cx"], r["cy"], r["size"]) if its_own else None
+            portrait = self.face_portrait(r["cover"], circle)
+            found.append(
+                PersonSummary(
+                    r["id"],
+                    r["name"],
+                    portrait.face if portrait else None,
+                    portrait,
+                    r["faces"],
+                    r["assets"],
+                    bool(r["hidden"]),
+                )
             )
-            for r in rows
-        ]
+        return found
 
     def list_persons(self, visible: Visible, *, hidden: bool | None = False) -> list[PersonSummary]:
         return self._persons(visible, hidden=hidden)
@@ -432,6 +490,30 @@ class SqliteMlStore:
 
     def set_person_hidden(self, person_id: int, hidden: bool) -> None:
         self._write("UPDATE person SET hidden = ? WHERE id = ?", (int(hidden), person_id))
+
+    def set_portrait(self, person_id: int, face_id: int, circle: Circle) -> None:
+        self._write(
+            "UPDATE person SET cover_face_id = ?, portrait_cx = ?, portrait_cy = ?, "
+            "portrait_size = ? WHERE id = ?",
+            (face_id, circle.cx, circle.cy, circle.size, person_id),
+        )
+
+    def clear_portrait(self, person_id: int) -> None:
+        self._write(
+            "UPDATE person SET portrait_cx = NULL, portrait_cy = NULL, portrait_size = NULL "
+            "WHERE id = ?",
+            (person_id,),
+        )
+
+    def person_faces(self, person_id: int, visible: Visible, limit: int) -> list[Portrait]:
+        with self._shown(visible) as (shown, bindings):
+            sql = (
+                "SELECT f.id FROM face f WHERE f.person_id = :person "
+                f"AND EXISTS ({shown} AND a.id = f.asset_id) "
+                "ORDER BY f.score DESC, f.id LIMIT :limit"
+            )
+            ids = [r[0] for r in self._all(sql, bindings | {"person": person_id, "limit": limit})]
+        return [portrait for face_id in ids if (portrait := self.face_portrait(face_id))]
 
     def merge_persons(self, target_id: int, source_ids: Sequence[int]) -> None:
         sources = [s for s in source_ids if s != target_id]

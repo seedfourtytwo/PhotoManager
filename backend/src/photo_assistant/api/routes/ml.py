@@ -11,7 +11,8 @@ from collections.abc import Collection
 from dataclasses import replace
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
 from photo_assistant.api.deps import (
@@ -23,12 +24,15 @@ from photo_assistant.api.deps import (
     require_view,
 )
 from photo_assistant.api.filters import FilterDep, checked
+from photo_assistant.api.routes.assets import IMMUTABLE
 from photo_assistant.api.schemas import AssetOut, Id
 from photo_assistant.api.services import Services
+from photo_assistant.app.portraits import portrait_version
 from photo_assistant.app.search import NotIndexedError, SearchUnavailableError, parse_query
 from photo_assistant.domain.access import Viewer
+from photo_assistant.domain.faces import Circle
 from photo_assistant.domain.search_query import ParsedQuery, with_facets
-from photo_assistant.ports.ml import PersonSummary, StoredFace
+from photo_assistant.ports.ml import PersonSummary, Portrait, StoredFace
 
 router = APIRouter(prefix="/api", tags=["ml"], dependencies=LOGGED_IN)
 
@@ -91,17 +95,43 @@ class TagsOut(BaseModel):
     screen_or_document: bool | None
 
 
+class PortraitOut(BaseModel):
+    """A round picture: a circle on photo ``asset_id`` as displayed, without its edits."""
+
+    face_id: int
+    asset_id: int
+    cx: float  # the centre, as fractions of the photo's width and height
+    cy: float
+    size: float  # the square round it, as a fraction of the photo's shorter edge
+    chosen: bool  # by a person; false: the automatic circle round the face
+    url: str  # the picture itself; it changes whenever the picture does
+
+    @classmethod
+    def of(cls, p: Portrait, path: str) -> "PortraitOut":
+        return cls(
+            face_id=p.face.id,
+            asset_id=p.face.asset_id,
+            cx=p.circle.cx,
+            cy=p.circle.cy,
+            size=p.circle.size,
+            chosen=p.chosen,
+            url=f"{path}?v={portrait_version(p)}",
+        )
+
+
 class PersonOut(BaseModel):
     id: int
     name: str | None
     face_count: int
     asset_count: int
     hidden: bool  # left out of GET /people unless asked for
-    cover: FaceOut | None  # crop the asset's thumbnail to this box for the People grid
+    cover: FaceOut | None  # the face the portrait is of
+    portrait: PortraitOut | None  # as this viewer gets it: only from a photo they may see
 
     @classmethod
     def of(cls, p: PersonSummary) -> "PersonOut":
         cover = FaceOut.of(p.cover_face) if p.cover_face else None
+        path = f"/api/people/{p.id}/portrait"
         return cls(
             id=p.id,
             name=p.name,
@@ -109,7 +139,17 @@ class PersonOut(BaseModel):
             asset_count=p.asset_count,
             hidden=p.hidden,
             cover=cover,
+            portrait=PortraitOut.of(p.portrait, path) if p.portrait else None,
         )
+
+
+class PortraitIn(BaseModel):
+    """Numbers outside the photo are brought inside it, not refused."""
+
+    face_id: Id
+    cx: float
+    cy: float
+    size: float
 
 
 class PersonPatch(BaseModel):
@@ -298,6 +338,55 @@ def change_person(
     if body.hidden is not None:
         person = people.set_hidden(person_id, body.hidden, viewer)
     return PersonOut.of(person)
+
+
+def _serve_portrait(services: Services, portrait: Portrait, v: str | None) -> Response:
+    """Kept by the browser for good only at the address of this very picture."""
+    cache = IMMUTABLE if v == portrait_version(portrait) else "no-store"
+    path = services.ml.portraits.image(portrait)
+    return FileResponse(path, media_type="image/webp", headers={"Cache-Control": cache})
+
+
+@router.get("/people/{person_id}/portrait")
+def person_portrait(
+    services: ServicesDep, viewer: ViewerDep, person_id: int, v: str | None = None
+) -> Response:
+    """The person's round picture (WebP, at most 320 px), as this viewer gets it."""
+    return _serve_portrait(services, services.ml.portraits.of_person(person_id, viewer), v)
+
+
+@router.put("/people/{person_id}/portrait", dependencies=NOT_GUEST)
+def choose_portrait(
+    services: ServicesDep, viewer: ViewerDep, person_id: int, body: PortraitIn
+) -> PersonOut:
+    circle = Circle(body.cx, body.cy, body.size)
+    return PersonOut.of(services.ml.portraits.choose(person_id, body.face_id, circle, viewer))
+
+
+@router.delete("/people/{person_id}/portrait", dependencies=NOT_GUEST)
+def use_automatic_portrait(services: ServicesDep, viewer: ViewerDep, person_id: int) -> PersonOut:
+    return PersonOut.of(services.ml.portraits.use_automatic(person_id, viewer))
+
+
+@router.get("/people/{person_id}/faces")
+def person_faces(
+    services: ServicesDep,
+    viewer: ViewerDep,
+    person_id: int,
+    limit: Annotated[int, Query(ge=1, le=100)] = 24,
+) -> list[PortraitOut]:
+    """The faces a portrait can be chosen from, the best first, each as its automatic
+    portrait."""
+    found = services.ml.portraits.candidates(person_id, viewer, limit)
+    return [PortraitOut.of(p, f"/api/faces/{p.face.id}/portrait") for p in found]
+
+
+@router.get("/faces/{face_id}/portrait")
+def face_portrait(
+    services: ServicesDep, viewer: ViewerDep, face_id: int, v: str | None = None
+) -> Response:
+    """The automatic round picture of one face; ``404`` unless you may see its photo."""
+    return _serve_portrait(services, services.ml.portraits.of_face(face_id, viewer), v)
 
 
 @router.post("/people/{person_id}/merge", dependencies=NOT_GUEST)

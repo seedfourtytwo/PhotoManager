@@ -4,12 +4,12 @@ may choose what and renders the round picture once per photo and cut."""
 from pathlib import Path
 
 import pytest
-from photo_assistant.app.portraits import PORTRAIT_EDGE, Portraits, portrait_version
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.people import FaceNotFoundError, People, PersonNotFoundError
+from photo_assistant.app.portraits import PORTRAIT_EDGE, Portraits, portrait_version
 from photo_assistant.domain.faces import (
     BoundingBox,
     Circle,
@@ -257,7 +257,8 @@ def test_what_a_client_sends_is_brought_inside_the_photo(
 ) -> None:
     lea = portraits.choose(family["lea"], family["fb"], Circle(9, -9, 9), visible(family))
     assert lea.portrait is not None
-    assert lea.portrait.circle == Circle(pytest.approx(0.625), 0.5, 1.0)
+    circle = lea.portrait.circle
+    assert (circle.cx, circle.cy, circle.size) == pytest.approx((0.625, 0.5, 1.0))
     with pytest.raises(InvalidPortraitError):
         portraits.choose(family["lea"], family["fb"], Circle(float("nan"), 0, 1), visible(family))
 
@@ -303,7 +304,7 @@ def test_the_picture_is_cut_from_the_original_once_and_kept_under_derived(
     assert source == library.absolute(new_asset(1).library_path)
     assert spec.max_edge == PORTRAIT_EDGE == 320 and spec.format == "webp"
     assert spec.recipe is not None and (crop := spec.recipe.crop) is not None
-    assert (crop.w * 4000, crop.h * 3000) == pytest.approx((800, 800)), "pixel-square"
+    assert (crop.w * 4000, crop.h * 3000) == pytest.approx((1200, 1200)), "pixel-square"
     relative = portrait_relpath(new_asset(1).content_hash, spec.recipe.key)
     assert path == library.absolute(str(relative))
     assert portraits.image(portrait) == path and len(renderer.asked) == 1, "made once"

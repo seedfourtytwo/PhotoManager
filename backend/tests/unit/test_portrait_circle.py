@@ -108,7 +108,7 @@ def test_a_circle_inside_the_photo_is_kept_as_it_is() -> None:
 
 def test_out_of_range_numbers_are_brought_inside_not_refused() -> None:
     fitted = fit_circle(Circle(-5, 7, 3), 4000, 3000)
-    assert fitted == Circle(pytest.approx(0.375), 0.5, 1.0), "the largest circle, at the left"
+    assert (fitted.cx, fitted.cy, fitted.size) == pytest.approx((0.375, 0.5, 1.0)), "at the left"
     small = fit_circle(Circle(0.5, 0.5, -1), 4000, 3000)
     assert 0 < small.size < 0.05, "never nothing"
 
