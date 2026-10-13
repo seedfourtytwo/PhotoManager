@@ -56,12 +56,6 @@ export function scopeLabel(scope: DownloadScope, count?: number): string {
 		: `all ${plural(count, 'matching photo')}`;
 }
 
-/** File name a single download is saved or shared under. */
-export function singleFileName(id: number, taken: string, format: DownloadOptions['format']) {
-	const ext = format === 'original' ? 'jpg' : format === 'jpeg' ? 'jpg' : format;
-	return `${taken.slice(0, 10)}_${id}.${ext}`;
-}
-
 /**
  * A ZIP download runs in a hidden frame. When it works the frame stays empty (the browser
  * saves the file); when the server refuses, the frame shows its answer: this turns that text

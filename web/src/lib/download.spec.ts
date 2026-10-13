@@ -5,8 +5,7 @@ import {
 	buildDownloadRequest,
 	frameError,
 	isUntouched,
-	scopeLabel,
-	singleFileName
+	scopeLabel
 } from './download';
 
 describe('download model', () => {
@@ -56,11 +55,6 @@ describe('download model', () => {
 		expect(scopeLabel({ ids: Array.from({ length: 1204 }, (_, i) => i) })).toBe(
 			'1,204 selected photos'
 		);
-	});
-
-	it('names single files by date', () => {
-		expect(singleFileName(7, '2019-07-04T18:30:00', 'webp')).toBe('2019-07-04_7.webp');
-		expect(singleFileName(7, '2019-07-04T18:30:00', 'original')).toBe('2019-07-04_7.jpg');
 	});
 });
 
