@@ -192,6 +192,7 @@
 		flex: none;
 		display: grid;
 		justify-items: start;
+		align-content: start; /* a one-line name keeps its count right under it */
 		gap: var(--s-1);
 		width: 9rem;
 		scroll-snap-align: start;
@@ -223,9 +224,13 @@
 		max-width: 100%;
 		font-weight: 600;
 		line-height: var(--lh-tight);
+		/* A name too long for its cover takes a second line; only then is it cut, with an ellipsis. */
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.name.unnamed {
 		font-weight: 400;
