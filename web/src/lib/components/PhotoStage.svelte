@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type { AssetOut } from '$lib/api';
 	import { SLOP, pull, recognise, type Gesture, type Point } from '$lib/gesture';
 	import {
@@ -36,7 +37,7 @@
 	// scroll, or two fingers as its own zoom, and cancels them.
 	let press: (Point & { id: number; view: View }) | null = null;
 	/** Fingers on the photo, each where it is now (from the middle of the stage). */
-	const fingers = new Map<number, Spot>();
+	const fingers = new SvelteMap<number, Spot>();
 	/** Two fingers: the view and the places they began with (lib/zoom.ts). */
 	let pinching: { view: View; ids: [number, number]; from: [Spot, Spot] } | null = null;
 	/** A second finger landed: no tap or swipe is read until all are up. */
