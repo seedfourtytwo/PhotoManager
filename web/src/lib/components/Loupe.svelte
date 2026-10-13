@@ -53,6 +53,8 @@
 	let dialog = $state<PhotoDialog | null>(null);
 	let more = $state(false);
 	let root: HTMLDialogElement | undefined = $state();
+	let stage: PhotoStage | undefined = $state();
+	let zoomedIn = $state(false);
 	/** Actions in flight, each for its own photo: a second click while one runs is ignored. */
 	const busy = new SvelteSet<string>();
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
@@ -159,7 +161,8 @@
 			ArrowLeft: () => go(-1),
 			ArrowRight: () => go(1),
 			f: () => void toggleFullscreen(),
-			i: () => setInfo(!info)
+			i: () => setInfo(!info),
+			z: () => stage?.zoom()
 		};
 		const action = keys[event.key.length === 1 ? event.key.toLowerCase() : event.key];
 		if (action && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -180,14 +183,19 @@
 		if (gesture === 'tap') {
 			// It may be the first half of a double tap: the chrome waits to find out.
 			tapTimer = setTimeout(() => (wasIdle ? chrome.wake() : chrome.hide()), DOUBLE_TAP_MS);
-		} else if (gesture === 'double-tap') {
-			chrome.wake();
-			if (!trash) void toggle('favourite');
 		} else if (gesture === 'next') go(1);
 		else if (gesture === 'previous') go(-1);
 		else if (gesture === 'details') setInfo(true);
 		else if (gesture === 'close' && info) setInfo(false);
 		else if (gesture === 'close') onclose();
+	}
+
+	/** Zoomed in, the photo has the screen to itself; back at its fit the chrome returns. */
+	function onzoom(zoomed: boolean) {
+		if (zoomed === zoomedIn) return;
+		zoomedIn = zoomed;
+		if (zoomed) chrome.hide();
+		else chrome.wake();
 	}
 
 	onMount(() => {
@@ -226,10 +234,12 @@
 >
 	{#if asset}
 		<PhotoStage
+			bind:this={stage}
 			{asset}
 			src={previewOf(asset)}
 			onpress={() => (pressedIdle = chrome.idle)}
 			{ongesture}
+			{onzoom}
 		/>
 
 		<PhotoEdges {index} count={items.length} faded={chrome.idle} inset={info} onstep={go} />
@@ -250,8 +260,14 @@
 				<button type="button" class="pill glass" aria-pressed={info} onclick={() => setInfo(!info)}
 					><Icon name="info" />Info</button
 				>
+				<button
+					type="button"
+					class="pill glass wordy"
+					aria-pressed={zoomedIn}
+					onclick={() => stage?.zoom()}>Zoom</button
+				>
 				{#if canFullscreen}
-					<button type="button" class="pill glass fullscreen" onclick={toggleFullscreen}
+					<button type="button" class="pill glass wordy fullscreen" onclick={toggleFullscreen}
 						>Full screen</button
 					>
 				{/if}
@@ -338,7 +354,8 @@
 	.right .pill {
 		position: static;
 	}
-	.pill.fullscreen {
+	/* A pill of a word alone, with no icon before it. */
+	.pill.wordy {
 		padding-left: var(--s-3);
 	}
 	.pill[aria-pressed='true'] {
