@@ -84,21 +84,27 @@ for (const { width, scale } of SIZES) {
 	});
 }
 
-test('320 px at the largest text: sheets and their controls stay on the screen', async ({
+const CONTROLS = 'button, input, select, textarea, label';
+
+test('320 px at the largest text: a form’s sheet and its controls stay on the screen', async ({
+	page
+}) => {
+	test.skip(!isPhone(page), 'a dialog is a bottom sheet on a phone');
+	await signIn(page, '/albums');
+	await resize(page, 320, 1.25);
+	await page.getByRole('button', { name: 'New album' }).click();
+	const sheet = page.getByRole('dialog', { name: 'New album' });
+	await expect(sheet).toBeVisible();
+	await onScreen(sheet, 320);
+	await onScreen(sheet.locator(CONTROLS), 320);
+});
+
+test('320 px at the largest text: the photo’s sheets and their controls stay on the screen', async ({
 	page
 }) => {
 	test.skip(!isPhone(page), 'a dialog is a bottom sheet on a phone');
 	const width = 320;
-	await signIn(page, '/albums');
-	await resize(page, width, 1.25);
-	await page.getByRole('button', { name: 'New album' }).click();
-	const controls = 'button, input, select, textarea, label';
-	const fresh = page.getByRole('dialog', { name: 'New album' });
-	await expect(fresh).toBeVisible();
-	await onScreen(fresh.locator(controls), width);
-	await fresh.getByRole('button', { name: 'Cancel' }).click();
-
-	await page.goto('/');
+	await signIn(page);
 	await page.locator('.tile').first().click();
 	await expect(loupe(page)).toBeVisible();
 	await resize(page, width, 1.25);
@@ -111,7 +117,7 @@ test('320 px at the largest text: sheets and their controls stay on the screen',
 		const sheet = page.getByRole('dialog', { name });
 		await expect(sheet).toBeVisible();
 		await onScreen(sheet, width);
-		await onScreen(sheet.locator(controls), width);
+		await onScreen(sheet.locator(CONTROLS), width);
 		await sheet.getByRole('button', { name: 'Cancel' }).click();
 		await expect(sheet).toBeHidden();
 	}
