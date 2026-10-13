@@ -1,6 +1,8 @@
 /**
  * The open photo lives in the URL (`?photo=<id>`), so a reload or a shared link reopens it.
  * Opening pushes a shallow history entry (Back closes the loupe); stepping replaces it.
+ * On a phone the Info sheet has an entry of its own over that one (lib/info-sheet.svelte.ts):
+ * a step then rewrites the sheet's entry, and the photo's is put right when it is reached.
  * SvelteKit keeps `page.url` at the last real navigation during shallow routing, so the id is
  * read from `page.state.photo` first (null = closed here) and from the URL after a reload.
  * `page.state.pushed` says this history entry was made by `openPhoto`, so Back closes the
@@ -8,11 +10,12 @@
  */
 import { tick, untrack } from 'svelte';
 import { pushState, replaceState } from '$app/navigation';
-import { page } from '$app/state';
+import { navigating, page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetOut, Id } from './api/types';
 import { api, notice } from './app.svelte';
 import { wentBack } from './history-step';
+import { infoSheet } from './info-sheet.svelte';
 import type { TimelineLoader } from './loader.svelte';
 import { refocus } from './modal';
 import { withTransition } from './motion';
@@ -61,15 +64,55 @@ const pathname = () => new URL(location.href).pathname;
 function writeStep() {
 	clearTimeout(stepTimer);
 	stepTimer = undefined;
+	// A navigation is on its way: the history is SvelteKit's until it is over.
+	if (stepped && navigating.to) {
+		stepTimer = setTimeout(writeStep, STEP_MS);
+		return;
+	}
 	const step = stepped;
 	stepped = null;
 	// Left by a link meanwhile: that page's URL is not this one's to write.
 	if (!step || step.path !== pathname()) return;
 	lastStep = Date.now();
-	const state: App.PageState = page.state.pushed
-		? { photo: step.id, pushed: true }
-		: { photo: step.id };
-	replaceState(withPhoto(location.href, step.id), state);
+	// What the entry is stays: the one `openPhoto` made, and the Info sheet's over it.
+	const { pushed, info } = page.state;
+	replaceState(withPhoto(location.href, step.id), {
+		photo: step.id,
+		...(pushed && { pushed }),
+		...(info && { info })
+	});
+}
+
+/**
+ * The photo the open photo view shows, and its page. Kept by hand (the view says so when it
+ * opens, `showPhoto` at every step) and not read from the page: after Back the page is
+ * already the new entry's, and redrawn, by the time `arrived` hears of it.
+ */
+let onScreen: { id: Id; path: string } | null = null;
+
+/**
+ * Back or Forward with the photo view open. An entry of this page that names another photo
+ * than the one on screen is the photo's own entry under a sheet (or, with Forward, the
+ * sheet's): the photos were stepped while the sheet was open, which rewrote the sheet's entry
+ * only. It takes the photo on screen, so leaving a sheet never changes the photo. The photo
+ * is held at once, like any step; its address is written a moment later, when SvelteKit is
+ * done with the history (the first Back after a reload is a navigation of its own).
+ * Any other entry closes the photo view, and a step still to be written goes with it.
+ */
+function arrived() {
+	clearTimeout(stepTimer);
+	stepTimer = undefined;
+	const named = photoParam(new URL(location.href));
+	const stale = named !== undefined && named !== onScreen?.id && onScreen?.path === pathname();
+	stepped = stale ? onScreen : null;
+	if (stale) stepTimer = setTimeout(writeStep, STEP_MS);
+}
+
+/** The photo view says which photo it opens with, and (`undefined`) that it has closed. */
+export function photoOnScreen(id: Id | undefined) {
+	removeEventListener('popstate', arrived);
+	onScreen = id === undefined ? null : { id, path: pathname() };
+	if (onScreen) addEventListener('popstate', arrived);
 }
 
 /** Which photo the loupe shows on this page, if any. */
@@ -102,6 +145,7 @@ export function openPhoto(id: Id) {
 
 export function showPhoto(id: Id) {
 	stepped = { id, path: pathname() };
+	if (onScreen) onScreen = stepped;
 	const wait = lastStep + STEP_MS - Date.now();
 	if (wait <= 0) writeStep();
 	else stepTimer ??= setTimeout(writeStep, wait);
@@ -121,6 +165,8 @@ export function closePhoto() {
 	closing = true;
 	let release = () => {};
 	void withTransition(async () => {
+		// The Info sheet's entry first: the photo's own is under it.
+		if (page.state.info) await infoSheet.show(false);
 		if (page.state.pushed) {
 			history.back();
 			await wentBack();

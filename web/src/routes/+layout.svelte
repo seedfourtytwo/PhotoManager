@@ -11,6 +11,7 @@
 	import SendToDevice from '$lib/components/SendToDevice.svelte';
 	import {
 		backupWatch,
+		forgetOldDensity,
 		isFilterable,
 		isPublicRoute,
 		loadLook,
@@ -33,6 +34,7 @@
 
 	onMount(() => {
 		look.show();
+		forgetOldDensity();
 		if (!bare) void session.load();
 	});
 

@@ -5,6 +5,8 @@
 	import { api, notice, viewport } from '$lib/app.svelte';
 	import { DOUBLE_TAP_MS, type Gesture } from '$lib/gesture';
 	import { Idle } from '$lib/idle.svelte';
+	import { infoSheet } from '$lib/info-sheet.svelte';
+	import { photoOnScreen } from '$lib/loupe.svelte';
 	import { modal } from '$lib/modal';
 	import Icon from './Icon.svelte';
 	import PhotoBar from './PhotoBar.svelte';
@@ -38,7 +40,14 @@
 	const trash = $derived(onrestore !== undefined);
 	const asset = $derived(items[index]);
 	let detail = $state<AssetDetail | null>(null);
-	let info = $state(viewport.desktop);
+	// The details: a panel beside the photo on a laptop, open from the start; a sheet on a
+	// phone, which has a history step of its own, so Back closes it and not the photo.
+	let panel = $state(viewport.desktop);
+	const info = $derived(infoSheet.open || (viewport.desktop && panel));
+	function setInfo(open: boolean) {
+		if (viewport.desktop && !infoSheet.open) panel = open;
+		else void infoSheet.show(open);
+	}
 	/** The press that brings hidden chrome back must not also press what it uncovers. */
 	let waking = false;
 	let dialog = $state<PhotoDialog | null>(null);
@@ -150,7 +159,7 @@
 			ArrowLeft: () => go(-1),
 			ArrowRight: () => go(1),
 			f: () => void toggleFullscreen(),
-			i: () => (info = !info)
+			i: () => setInfo(!info)
 		};
 		const action = keys[event.key.length === 1 ? event.key.toLowerCase() : event.key];
 		if (action && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -176,8 +185,8 @@
 			if (!trash) void toggle('favourite');
 		} else if (gesture === 'next') go(1);
 		else if (gesture === 'previous') go(-1);
-		else if (gesture === 'details') info = true;
-		else if (gesture === 'close' && info) info = false;
+		else if (gesture === 'details') setInfo(true);
+		else if (gesture === 'close' && info) setInfo(false);
 		else if (gesture === 'close') onclose();
 	}
 
@@ -185,8 +194,10 @@
 		// `use:modal` has opened it by now: the viewer itself takes the focus, not its first button.
 		root?.focus();
 		chrome.wake();
+		photoOnScreen(asset?.id);
 	});
 	onDestroy(() => {
+		photoOnScreen(undefined);
 		chrome.stop();
 		clearTimeout(tapTimer);
 		if (document.fullscreenElement) void document.exitFullscreen();
@@ -236,7 +247,7 @@
 				onrestore={() => onrestore?.(asset)}
 			/>
 			<div class="right">
-				<button type="button" class="pill glass" aria-pressed={info} onclick={() => (info = !info)}
+				<button type="button" class="pill glass" aria-pressed={info} onclick={() => setInfo(!info)}
 					><Icon name="info" />Info</button
 				>
 				{#if canFullscreen}

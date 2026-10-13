@@ -298,6 +298,40 @@ test('the old per-browser setting does not overwrite a mode chosen on another de
 	expect((await (await page.request.get('/api/me/look')).json()).mode).toBe('system');
 });
 
+test('a photo size once chosen on this device is gone: the look gives the size again', async ({
+	page,
+	context
+}) => {
+	await resetMock();
+	// As left by the app before this change; set once, so its removal can be seen.
+	await context.addInitScript(() => {
+		if (sessionStorage.getItem('seeded')) return;
+		sessionStorage.setItem('seeded', '1');
+		localStorage.setItem('pa.density', 'large');
+	});
+	await signIn(page, '/settings');
+	await expect(page.getByRole('group', { name: 'Mode' })).toBeVisible();
+	await expect(page.getByRole('group', { name: /Photo size/ })).toHaveCount(0);
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('pa.density'))).toBeNull();
+
+	// Rows are justified, so one tile's height says little: the middle one of the first twenty.
+	const tiles = page.locator('.tile');
+	const height = () =>
+		tiles.evaluateAll((all) => {
+			const heights = all.slice(0, 20).map((tile) => tile.getBoundingClientRect().height);
+			return heights.sort((a, b) => a - b)[Math.floor(heights.length / 2)] ?? 0;
+		});
+	await page.goto('/');
+	await expect(tiles.nth(19)).toBeVisible();
+	const medium = await height();
+	await setMyLook(page, { thumbSize: 'large' });
+	await page.reload();
+	await expect.poll(height).toBeGreaterThan(medium * 1.2);
+	await setMyLook(page, { thumbSize: 'small' });
+	await page.reload();
+	await expect.poll(height).toBeLessThan(medium * 0.9);
+});
+
 test('on a shared device the next person does not get the last one’s look', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/settings');

@@ -10,5 +10,5 @@ export { chooseMode, loadLook } from './state/look-loading';
 export { notice, type NoticeAction } from './state/notice.svelte';
 export { sendToDevice } from './state/send.svelte';
 export { isPublicRoute, session } from './state/session.svelte';
-export { settings, type Density } from './state/settings.svelte';
+export { forgetOldDensity, settings } from './state/settings.svelte';
 export { isFilterable, ui, viewport } from './state/ui.svelte';
