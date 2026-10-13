@@ -161,4 +161,14 @@
 			bottom: calc(env(safe-area-inset-bottom) + var(--s-3));
 		}
 	}
+	/* A phone: five words share the bar down to 320 px and at the largest text. The room goes
+	   between them, not into a hover wash no finger sees; each stays a whole target. */
+	@media (max-width: 639px) {
+		.bar {
+			padding-inline: var(--s-2);
+		}
+		.acts :global(.action) {
+			padding-inline: 0;
+		}
+	}
 </style>
