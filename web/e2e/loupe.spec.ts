@@ -269,6 +269,9 @@ test('trash and albums: a linked photo that is not in the list leaves no trace i
 });
 
 test.describe('photo view', () => {
+	// The first test answers a request itself; see exposure.spec.ts for why that needs this.
+	test.use({ serviceWorkers: 'block' });
+
 	test.beforeEach(async ({ page }) => {
 		await resetMock();
 		await signIn(page);
