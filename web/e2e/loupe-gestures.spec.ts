@@ -21,25 +21,62 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe('photo view', () => {
-	test('phone: a double tap on the photo favourites it, like the Favourite button', async ({
+	test('phone: a double tap zooms in on the photo and the next one zooms back out; neither favourites it', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'touch only');
+		let patches = 0;
+		await page.route(/\/api\/assets\/\d+\/state$/, async (route) => {
+			patches++;
+			await route.continue();
+		});
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const frame = viewer.locator('.frame');
+		const fit = (await frame.boundingBox())!.width;
+		const photo = await centre(viewer.locator('img.photo'));
+		await takesInput(page);
+		await page.touchscreen.tap(photo.x, photo.y);
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect.poll(async () => (await frame.boundingBox())!.width).toBeCloseTo(fit * 2.5, 0);
+		// Zoomed in, the photo has the screen to itself.
+		await expect(viewer.getByRole('toolbar', { name: 'Photo actions' })).toHaveCSS('opacity', '0');
+		await page.touchscreen.tap(photo.x, photo.y);
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect.poll(async () => (await frame.boundingBox())!.width).toBeCloseTo(fit, 0);
+		await expect(viewer.getByRole('toolbar', { name: 'Photo actions' })).toHaveCSS('opacity', '1');
+		await expect(viewer.getByRole('button', { name: 'Favourite' })).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
+		expect(patches).toBe(0);
+	});
+
+	test('phone: a zoomed photo moves under one finger, stops at its edge, and does not step', async ({
 		page
 	}) => {
 		test.skip(!isPhone(page), 'touch only');
 		await page.locator('.tile').first().click();
-		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
-		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
-		const photo = await centre(loupe(page).locator('img.photo'));
-		await takesInput(page);
-		await page.touchscreen.tap(photo.x, photo.y);
-		await page.touchscreen.tap(photo.x, photo.y);
-		await expect(favourite).toHaveAttribute('aria-pressed', 'true');
-		// The double tap leaves the bar in sight, and its button takes the favourite back.
-		await expect(loupe(page).getByRole('toolbar', { name: 'Photo actions' })).toHaveCSS(
-			'opacity',
-			'1'
+		const viewer = loupe(page);
+		const frame = viewer.locator('.frame');
+		const was = await alt(viewer);
+		const mid = await centre(viewer.locator('.stage'));
+		await viewer.getByRole('button', { name: 'Zoom' }).click();
+		await expect(viewer.getByRole('button', { name: 'Zoom' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
 		);
-		await favourite.tap();
-		await expect(favourite).toHaveAttribute('aria-pressed', 'false');
+		const screen = page.viewportSize()!.width;
+		const box = async () => (await frame.boundingBox())!;
+		await expect.poll(async () => (await box()).width).toBeGreaterThan(screen * 2);
+		const rest = (await box()).x;
+		await touchSwipe(page, mid, { x: mid.x - 120, y: mid.y });
+		await expect.poll(async () => Math.round((await box()).x)).toBe(Math.round(rest - 120));
+		// A long way further: the photo's right edge stops at the screen's.
+		for (let i = 0; i < 4; i++) await touchSwipe(page, mid, { x: mid.x - 300, y: mid.y });
+		await expect.poll(async () => Math.round((await box()).x + (await box()).width)).toBe(screen);
+		expect(await alt(viewer)).toBe(was);
+		await expect(viewer).toBeVisible();
 	});
 
 	test('phone: the photo follows the finger and springs back from a short drag', async ({
@@ -136,11 +173,14 @@ test.describe('photo view', () => {
 		await expect(viewer).toHaveCount(0);
 	});
 
-	test('phone: a pinch neither steps to another photo nor closes the view', async ({ page }) => {
+	test('phone: a pinch zooms the photo; it neither steps to another photo nor closes the view', async ({
+		page
+	}) => {
 		test.skip(!isPhone(page), 'touch only');
 		await page.locator('.tile').first().click();
 		const viewer = loupe(page);
 		const was = await alt(viewer);
+		const fit = (await viewer.locator('.frame').boundingBox())!.width;
 		const mid = await centre(viewer.locator('.stage'));
 		await takesInput(page);
 		const cdp = await page.context().newCDPSession(page);
@@ -171,7 +211,16 @@ test.describe('photo view', () => {
 		await cdp.detach();
 		await expect(viewer).toBeVisible();
 		expect(await alt(viewer)).toBe(was);
-		// One finger swipes again afterwards.
+		// Fingers that ended five times as far apart: as large as a photo goes, four times.
+		await expect
+			.poll(async () => (await viewer.locator('.frame').boundingBox())!.width)
+			.toBeCloseTo(fit * 4, 0);
+		// Back at its fit, one finger swipes again.
+		await page.touchscreen.tap(mid.x, mid.y);
+		await page.touchscreen.tap(mid.x, mid.y);
+		await expect
+			.poll(async () => (await viewer.locator('.frame').boundingBox())!.width)
+			.toBeCloseTo(fit, 0);
 		await touchSwipe(page, mid, { x: mid.x - 200, y: mid.y });
 		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', was!);
 	});
