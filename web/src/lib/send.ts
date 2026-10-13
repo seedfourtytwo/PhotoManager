@@ -4,8 +4,8 @@ import { formatBytes, formatWhen, photos } from './format';
 
 /** The warning a sender reads before every link that is not https. */
 export const UNENCRYPTED_WARNING =
-	'This link is not encrypted. Anyone on the same network could see these photos while they ' +
-	'travel. Fine for something unimportant, not for anything private.';
+	'Anyone on the same network could see these photos while they travel. Fine for something ' +
+	'unimportant, not for anything private.';
 
 const hostOf = (origin: string) => origin.replace(/^https?:\/\//, '');
 

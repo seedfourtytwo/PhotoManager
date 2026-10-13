@@ -31,10 +31,22 @@ async function sendSelected(page: Page, tiles: number[]): Promise<string> {
 	await selectTiles(page, tiles);
 	await selectionAction(page, 'Send to a device');
 	const dialog = sendDialog(page);
-	await expect(dialog.getByText(/not encrypted\. Anyone on the same network/)).toBeVisible();
+	await expect(
+		dialog.getByText(/Not encrypted\. Anyone on the same network could see these photos/)
+	).toBeVisible();
 	await dialog.getByRole('button', { name: 'Send anyway' }).click();
 	await expect(dialog.getByRole('img', { name: 'QR code of the link' })).toBeVisible();
 	return dialog.getByRole('textbox', { name: 'Link' }).inputValue();
+}
+
+/**
+ * The dialog is gone and the step back it took in the history is over: closing a dialog goes
+ * back one entry, and a `goto` started before that has landed is aborted by it.
+ */
+async function leaveDialog(page: Page) {
+	await expect(sendDialog(page)).toBeHidden();
+	// SvelteKit keeps `page.state` (where the step is marked, history-step.ts) in the entry
+	await page.waitForFunction(() => !history.state?.['sveltekit:states']?.sheet);
 }
 
 /** Another device: a fresh browser with no session, the same size as this one. */
@@ -107,6 +119,7 @@ test('photos are sent with a code, collected once without an account, and the se
 	expect(again.status()).toBe(404);
 
 	await dialog.getByRole('button', { name: 'Done' }).click();
+	await leaveDialog(page);
 	await page.goto('/settings');
 	const trail = page.getByRole('region', { name: 'Sent to a device' });
 	await expect(trail.getByText(/2 photos · .* · details removed · not encrypted/)).toBeVisible();
@@ -150,6 +163,7 @@ test('Cancel stops a waiting link, in the dialog and from Settings', async ({ pa
 	const first = await sendSelected(page, [0]);
 	await sendDialog(page).getByRole('button', { name: 'Cancel' }).click();
 	await expect(toast(page)).toHaveText('The link was cancelled.');
+	await leaveDialog(page);
 	const phone = await otherDevice(browser, page);
 	await phone.goto(first);
 	await expect(phone.getByRole('heading', { name: 'This link does not work' })).toBeVisible();
@@ -194,6 +208,7 @@ test('a member sees only their own links, an admin everyone’s', async ({ page 
 	await signIn(page, '/', MEMBER);
 	await sendSelected(page, [0]);
 	await sendDialog(page).getByRole('button', { name: 'Cancel' }).click();
+	await leaveDialog(page);
 	await page.goto('/settings');
 	const trail = page.getByRole('region', { name: 'Sent to a device' });
 	await expect(trail.getByRole('listitem')).toHaveCount(1);

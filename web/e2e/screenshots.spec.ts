@@ -43,7 +43,10 @@ const LIGHT = new Set([
 	'16-settings',
 	'19-people',
 	'20-print',
-	'22-look-form'
+	'22-look-form',
+	'24-send',
+	'24b-send-code',
+	'25-receive'
 ]);
 
 test.beforeEach(async ({ page }) => {
@@ -225,4 +228,36 @@ test('every screen', async ({ page }, info) => {
 	await signIn(page, '/search?q=beach%20at%20sunset');
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await shot(page, '18b-search-meaning', p);
+});
+
+test('send to a device', async ({ page, browser }, info) => {
+	const p = info.project.name;
+	await resetMock('seed', { send: true });
+	await signIn(page);
+	await selectTiles(page, [0, 1, 2]);
+	await selectionAction(page, 'Send to a device');
+	const dialog = page.getByRole('dialog', { name: 'Send to a device' });
+	await expect(dialog.getByRole('button', { name: 'Send anyway' })).toBeVisible();
+	await shot(page, '24-send', p);
+	await dialog.getByRole('button', { name: 'Send anyway' }).click();
+	await expect(dialog.getByRole('img', { name: 'QR code of the link' })).toBeVisible();
+	const link = await dialog.getByRole('textbox', { name: 'Link' }).inputValue();
+	await shot(page, '24b-send-code', p);
+
+	// the other device: no session, the same size and theme
+	const context = await browser.newContext({
+		viewport: page.viewportSize() ?? undefined,
+		colorScheme: THEME
+	});
+	const phone = await context.newPage();
+	await phone.goto(link);
+	await expect(phone.getByRole('button', { name: 'Download' })).toBeVisible();
+	await shot(phone, '25-receive', p);
+	const download = phone.waitForEvent('download');
+	await phone.getByRole('button', { name: 'Download' }).click();
+	await download;
+	await shot(phone, '25b-receive-done', p);
+	await expect(dialog.getByText('Downloaded on another device.')).toBeVisible();
+	await shot(page, '24c-send-done', p);
+	await context.close();
 });

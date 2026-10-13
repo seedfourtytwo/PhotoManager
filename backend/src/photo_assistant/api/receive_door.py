@@ -58,7 +58,11 @@ class ReceiveHeaders:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 headers["Cache-Control"] = "no-store"
-                headers["Referrer-Policy"] = "no-referrer"
+                # The page's files say "same-origin": nothing goes to another site, and its
+                # own form post still names its origin (with "no-referrer" a browser sends
+                # "Origin: null", which the cross-site guard rightly refuses).
+                own_file = path in PAGE_FILES
+                headers["Referrer-Policy"] = "same-origin" if own_file else "no-referrer"
                 if path == RECEIVE_PAGE:
                     headers["Content-Security-Policy"] = PAGE_POLICY
                     headers["X-Frame-Options"] = "DENY"

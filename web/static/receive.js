@@ -136,8 +136,7 @@
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ token }),
-				cache: 'no-store',
-				referrerPolicy: 'no-referrer'
+				cache: 'no-store'
 			});
 		} catch {
 			finish('This link could not be opened', unreachable);

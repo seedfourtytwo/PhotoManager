@@ -44,12 +44,22 @@ def test_the_receiving_page_is_never_cached_framed_or_named_to_other_sites(
     page = app.get("/receive.html")
     assert page.status_code == 200 and "receive" in page.text
     assert page.headers["cache-control"] == "no-store"
-    assert page.headers["referrer-policy"] == "no-referrer"
+    assert page.headers["referrer-policy"] == "same-origin", "nothing to other sites"
     assert page.headers["content-security-policy"] == PAGE_POLICY
     assert page.headers["x-frame-options"] == "DENY"
     assert page.headers["x-content-type-options"] == "nosniff"
     for name in ("/receive.js", "/receive.css"):
         assert app.get(name).headers["cache-control"] == "no-store"
+    refused = app.post("/api/handovers/look", json={"token": "nope"})
+    assert refused.headers["referrer-policy"] == "no-referrer"
+
+
+def test_the_pages_own_form_post_must_name_its_origin(app: TestClient) -> None:
+    """Why the page is "same-origin" and not "no-referrer": under "no-referrer" a browser
+    posts a form with ``Origin: null``, and the cross-site guard refuses that, as it should."""
+    for origin, status in (("null", 403), (BASE, 404)):
+        answer = app.post("/api/handovers/collect", data={"token": "x"}, headers={"Origin": origin})
+        assert answer.status_code == status, origin
     assert "content-security-policy" not in app.get("/").headers, "only that page"
 
 

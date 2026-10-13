@@ -13,7 +13,8 @@ Conventions
   does so every 15 days of use, together with its marker cookie `pa_session_fresh`), so a
   session that is used does not end; clients have nothing to do.
   Every `/api/*` route needs a session **except** `/api/health`, `/api/setup` (GET/POST),
-  `/api/auth/accounts`, `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
+  `/api/auth/accounts`, `/api/auth/login`, and (v1.6, only while that feature is switched on)
+  `POST /api/handovers/look` and `POST /api/handovers/collect`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
 - Roles: `admin` (everything, manages users/sources/access), `member`, `guest`
   (view + download only; never edits).
 - Access levels on a source: `view` < `download` < `edit`. Admins have `edit` everywhere.
@@ -123,6 +124,50 @@ mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases
 - `PUT /api/me/look` changes the mode of the sheet as it is stored at that moment, in one
   step: an admin's save at the same time is never half undone.
 - `showToday` and `startPage` are stored and answered but have no effect until the Today page exists.
+
+## Send to a device (v1.6)
+
+Off unless the server runs with `PA_SEND_TO_DEVICE=true`: until then **every route below
+answers `404`** like an unknown address, for anyone. A signed-in member or admin (never a
+guest: `403`) makes a one-time link to chosen photos; a device with no session collects them
+once, within minutes. Rules and reasons: `docs/superpowers/specs/2026-10-13-send-to-device-design.md`.
+
+| GET | `/api/handovers/options` | – | `HandoverOptions` |
+|---|---|---|---|
+| POST | `/api/handovers` | `{ids, via: "here"\|"home", remove_details: bool, unencrypted_ok?: bool}` | `201 Handover + {url}`. `url` is `<origin>/receive.html#<token>`: the only time the token is given; only its SHA-256 is stored. Every photo must be visible to you (`404`) at `download` (`403`); at most 100 photos and about 1 GB (`422`). `via` picks the address (below); one the server does not offer is `422`. A link that is not https needs `unencrypted_ok: true` each time (`409` with the warning sentence without it), and is `403` when the admin switched unencrypted sending off |
+| GET | `/api/handovers` | – | `Handover[]`, newest first, the last 90 days: your own; an admin gets everyone's |
+| GET | `/api/handovers/{id}` | – | `Handover`; `404` if it is not yours (admins: anyone's) |
+| DELETE | `/api/handovers/{id}` | – | `204`, cancels a waiting one; `409` with the reason if it was collected, ran out or was cancelled already |
+| POST | `/api/handovers/look` | `{token}` | **no session.** `{count, sent_by, expires_at, encrypted, details_removed}`; uses nothing up |
+| POST | `/api/handovers/collect` | `{token}` as JSON, or a form field `token` | **no session.** One photo as `image/jpeg`, several as a streamed `application/zip` (`photos-<n>.zip`), `Content-Disposition: attachment`; uses the link up. `X-Skipped`: photos the sender may no longer send |
+
+```
+HandoverOptions = {addresses: [{via: "here"|"home", origin, encrypted}],   // [] = no address another device can open
+                   unencrypted_allowed, remove_details,                      // remove_details: what the dialog starts on
+                   minutes, max_photos, max_bytes}
+Handover = {id, state: "waiting"|"redeemed"|"expired"|"cancelled", count, bytes,
+            created_at, expires_at,                                          // UTC instants, with offset
+            encrypted, details_removed, sent_by: {id, display_name},
+            redeemed_at|null, redeemed_from|null, redeemed_agent|null}       // when, from which address, which browser
+```
+
+- **Addresses.** `here` is the address of the request itself (scheme as the server knows it:
+  `https` only when its trusted proxy says so), offered unless it is this machine's own
+  (`localhost`, `127.0.0.1`). `home` is `PA_SEND_TO_DEVICE_ADDRESS`, if set and different.
+  `encrypted` is whether that address is https.
+- **What is sent.** Full-size JPEGs with the edits. With `remove_details` the copies carry no
+  metadata (location, camera, dates, XMP/IPTC, embedded thumbnail; upright, colour profile
+  kept) and are named `photo.jpg`, `photo_2.jpg`…; without it they keep both. The library
+  file is never changed.
+- **The two routes without a session** take the token in the body only, never in the address.
+  A wrong, used, expired or cancelled token, a missing one, and a sender who was disabled or
+  may no longer send any of the photos all get the same `404 {"detail": "this link does not
+  work any more: it was used, ran out or was cancelled; ask for a new one"}`. Ten such answers
+  to one address in 15 minutes (100 overall) and further tries get `429`. A link made as an
+  https one that arrives over plain http is refused (`403`) and cancelled. Both routes and the
+  receiving page answer `Cache-Control: no-store`; the routes `Referrer-Policy: no-referrer`.
+- Collecting is atomic: of two requests at the same moment, one gets the photos, the other `404`.
+- Access is checked twice: when the link is made, and again as the sender when it is collected.
 
 ## Sources (existing, plus access)
 
@@ -462,3 +507,16 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Look | New: `GET/PUT /api/me/look` and `GET/PUT /api/admin/accounts/{id}/look` (see "Look" above). | The mode switch in Settings saves on the account (`api.setMyMode`); Admin → People has a "Look" form per account (`api.accountLook`, `api.setAccountLook`). The browser's old `pa.theme` setting is removed after the first `GET /api/me/look` that answers; it is sent as the mode first only when that answer is still the defaults (the API does not say whether a look was ever stored, so a sheet equal to the defaults counts as none). |
+
+---
+
+# v1.6 changes (send to a device)
+
+Additions only, and none of them exists until `PA_SEND_TO_DEVICE=true`.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Send to a device | New: `GET /api/handovers/options`, `GET/POST /api/handovers`, `GET/DELETE /api/handovers/{id}`, and without a session `POST /api/handovers/look` and `POST /api/handovers/collect` (see "Send to a device" above). The static page `/receive.html` (with `/receive.js`, `/receive.css`) is the link's target; it is a `404` while the feature is off. | "Send to a device" under More on the selection pill and in the photo view (`SendToDevice.svelte`, drawn QR code from `lib/qr.ts`); "Sent to a device" in Settings (`SentTrail.svelte`). Nothing shows while `GET /api/handovers/options` is `404` or `403`. |
+| Downloads | A converted download with `strip_all_metadata` now keeps its colour profile (it lost it; an untouched original stripped of its metadata always kept it). | none |
+| Test mode | `POST /__test/reset` takes `send: bool` (default `false`): the feature for the tests that follow. | `resetMock(…, {send: true})` |
+
