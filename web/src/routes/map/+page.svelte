@@ -136,7 +136,7 @@
 		justify(
 			chosenItems.map((a) => aspect(a)),
 			gridWidth,
-			rowHeightFor(viewport.width, settings.density),
+			rowHeightFor(viewport.width, settings.thumbSize),
 			settings.gap
 		)
 	);

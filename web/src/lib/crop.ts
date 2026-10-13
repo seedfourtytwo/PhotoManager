@@ -129,14 +129,36 @@ export function outputAspect(recipe: Recipe, imageAspect: number): number {
 	return recipe.crop ? (recipe.crop.w * frame) / recipe.crop.h : frame;
 }
 
+/** No crop, or one that keeps the whole photo: saving stores neither. */
+function isWhole(crop: CropRect | null): boolean {
+	return !crop || (crop.x <= 0 && crop.y <= 0 && crop.w >= 1 && crop.h >= 1);
+}
+
 export function isIdentity(recipe: Recipe): boolean {
-	const c = recipe.crop;
-	const fullCrop = !c || (c.x <= 0 && c.y <= 0 && c.w >= 1 && c.h >= 1);
 	return (
 		recipe.rotate === 0 &&
 		!recipe.flip_horizontal &&
 		!recipe.flip_vertical &&
 		recipe.straighten === 0 &&
-		fullCrop
+		isWhole(recipe.crop)
+	);
+}
+
+/** Turning a crop there and back leaves a rounding error; less than this is no change. */
+const SAME = 1e-9;
+
+function sameCrop(a: CropRect | null, b: CropRect | null): boolean {
+	if (!a || !b || isWhole(a) || isWhole(b)) return isWhole(a) && isWhole(b);
+	return (['x', 'y', 'w', 'h'] as const).every((side) => Math.abs(a[side] - b[side]) < SAME);
+}
+
+/** Saving `b` over `a` would change nothing: the editor has nothing unsaved. */
+export function sameRecipe(a: Recipe, b: Recipe): boolean {
+	return (
+		a.rotate === b.rotate &&
+		a.flip_horizontal === b.flip_horizontal &&
+		a.flip_vertical === b.flip_vertical &&
+		a.straighten === b.straighten &&
+		sameCrop(a.crop, b.crop)
 	);
 }

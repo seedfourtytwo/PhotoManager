@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { isPin, PIN_LENGTH } from '$lib/api';
-	import { api, chooseMode, notice, session, settings, type Density } from '$lib/app.svelte';
+	import { api, chooseMode, notice, session } from '$lib/app.svelte';
 	import { look, type Mode } from '$lib/look';
 	import Devices from '$lib/components/Devices.svelte';
 	import { errorMessage } from '$lib/format';
@@ -45,11 +45,6 @@
 		['light', 'Light'],
 		['system', 'Like the device']
 	];
-	const densities: [Density, string][] = [
-		['compact', 'Small'],
-		['comfortable', 'Medium'],
-		['large', 'Large']
-	];
 </script>
 
 <svelte:head><title>Settings · Photos</title></svelte:head>
@@ -69,21 +64,6 @@
 						{value}
 						checked={look.saved.mode === value}
 						onchange={() => chooseMode(value)}
-					/>
-					{label}
-				</label>
-			{/each}
-		</fieldset>
-		<fieldset>
-			<legend>Photo size in the grid</legend>
-			{#each densities as [value, label] (value)}
-				<label class="choice">
-					<input
-						type="radio"
-						name="density"
-						{value}
-						checked={settings.density === value}
-						onchange={() => settings.setDensity(value)}
 					/>
 					{label}
 				</label>

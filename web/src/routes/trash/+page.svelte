@@ -33,7 +33,7 @@
 		justify(
 			list.map((a) => aspect(a)),
 			width,
-			rowHeightFor(viewport.width, settings.density),
+			rowHeightFor(viewport.width, settings.thumbSize),
 			settings.gap
 		)
 	);

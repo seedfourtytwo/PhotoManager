@@ -107,6 +107,7 @@ copies down.
 
 Edits are stored as a small **recipe** (JSON) per photo, shared by everyone who may edit it (api-v1); the original is never changed.
 Views and downloads render the recipe on the fly (and cache the result). "Revert" deletes the recipe.
+Leaving the editor with changes that are not saved (Back, Escape or Cancel) asks first: Keep editing or Discard changes.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
@@ -170,7 +171,7 @@ folder can be shared with everyone, with a few people, or kept to one person.
 | 8.6 | Each account's phone inbox is its own source, private to that account by default | Should | M4 |
 | 8.7 | Remote access via Tailscale (no public exposure) | Should | M6 |
 | 8.8 | Account groups (e.g. "family", "friends") to grant access in one go | Could | M4 |
-| 8.9 | **Per-account look**: each account has a look (theme, dark/light/device mode, accent hue, corners, photo gap, text size, photo size, which Collections rows in which order, dock labels) stored as a validated sheet of values, never CSS. The account chooses its mode in Settings; an admin sets the rest in Admin → People → Look, with "Try on my screen" before "Save for …". The two Today switches are stored but wait for the Today page | Should | ✅ |
+| 8.9 | **Per-account look**: each account has a look (theme, dark/light/device mode, accent hue, corners, photo gap, text size, photo size, which Collections rows in which order, dock labels) stored as a validated sheet of values, never CSS. The account chooses its mode in Settings; an admin sets the rest (the photo size too: there is no per-device setting for it) in Admin → People → Look, with "Try on my screen" before "Save for …". The two Today switches are stored but wait for the Today page | Should | ✅ |
 
 ## 9. Operate
 
