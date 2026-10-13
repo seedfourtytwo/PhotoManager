@@ -1,9 +1,11 @@
 <script lang="ts">
 	import type { AssetDetail, AssetOut } from '$lib/api';
+	import { session } from '$lib/app.svelte';
 	import { dateSourceLabel, formatTaken } from '$lib/dates';
 	import { exposureParts, exposureSpoken } from '$lib/exposure';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
+	import { cameFrom } from '$lib/readout';
 
 	type Props = {
 		asset: AssetOut;
@@ -63,10 +65,10 @@
 				detail.byte_size
 			)}{#if asset.edited}&nbsp;· edited{/if}
 		</p>
-		<h3>Sources</h3>
+		<h3>Came from</h3>
 		<ul>
-			{#each detail.origins as origin (`${origin.source_id}:${origin.relative_path}`)}
-				<li>{origin.source_label} <span class="quiet small">{origin.relative_path}</span></li>
+			{#each cameFrom(detail, session.isAdmin) as origin (origin.key)}
+				<li>{origin.label} <span class="quiet small">{origin.file}</span></li>
 			{/each}
 		</ul>
 		{#if detail.albums.length}

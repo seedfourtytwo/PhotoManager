@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AssetDetail } from './api/types';
-import { readout, readoutSpoken } from './readout';
+import { cameFrom, readout, readoutSpoken } from './readout';
 import { makeAsset } from './testing/fixtures';
 
 const asset = makeAsset(1, '2019-08-14T18:42:07', 4032, 3024, {
@@ -118,5 +118,44 @@ describe('readoutSpoken (line two for a screen reader)', () => {
 	it('is null when there is nothing to reword: no settings, or no details yet', () => {
 		expect(readoutSpoken(detail())).toBeNull();
 		expect(readoutSpoken(null)).toBeNull();
+	});
+});
+
+describe('cameFrom (where a photo came from, in the details)', () => {
+	const two = detail({
+		origins: [
+			{ source_id: 1, source_label: 'Phone', relative_path: '2019/08/IMG_4471.HEIC' },
+			{ source_id: 2, source_label: 'Old hard disk', relative_path: 'IMG_4471.HEIC' }
+		]
+	});
+
+	it('a member reads the folder it came from and the file name, never the path', () => {
+		expect(cameFrom(two, false).map((o) => [o.label, o.file])).toEqual([
+			['Phone', 'IMG_4471.HEIC'],
+			['Old hard disk', 'IMG_4471.HEIC']
+		]);
+	});
+
+	it('an admin reads the whole path, to find the file', () => {
+		expect(cameFrom(two, true).map((o) => o.file)).toEqual([
+			'2019/08/IMG_4471.HEIC',
+			'IMG_4471.HEIC'
+		]);
+	});
+
+	it('two origins never share a key, even when id and path run together', () => {
+		const close = detail({
+			origins: [
+				{ source_id: 1, source_label: 'A', relative_path: '23.jpg' },
+				{ source_id: 12, source_label: 'A', relative_path: '3.jpg' }
+			]
+		});
+		const keys = cameFrom(close, false).map((o) => o.key);
+		expect(new Set(keys).size).toBe(2);
+	});
+
+	it('is empty before the details arrive, and for a photo with no origin', () => {
+		expect(cameFrom(null, false)).toEqual([]);
+		expect(cameFrom(detail({ origins: [] }), true)).toEqual([]);
 	});
 });

@@ -4,6 +4,7 @@
  */
 import type { Page } from '@playwright/test';
 import {
+	ADMIN,
 	centre,
 	countSlow,
 	expect,
@@ -12,6 +13,7 @@ import {
 	isPhone,
 	loupe,
 	loupeAction,
+	MEMBER,
 	NOTHING_HAPPENS_MS,
 	resetMock,
 	selectionAction,
@@ -212,6 +214,30 @@ test('guest: view-only photos say why they cannot be downloaded; no edit or priv
 	await expect(dialog.getByRole('button', { name: 'Fix date' })).toHaveCount(0);
 	await expect(dialog.getByRole('button', { name: 'Private' })).toHaveCount(0);
 });
+
+for (const who of [MEMBER, ADMIN]) {
+	const admin = who === ADMIN;
+	test(`where a photo came from: ${admin ? 'an admin reads the path' : 'a member reads the folder name and the file, not the path'}`, async ({
+		page
+	}) => {
+		await resetMock();
+		await page.route(/\/api\/assets\/\d+$/, async (route) => {
+			const response = await route.fetch();
+			const detail = await response.json();
+			detail.origins = [{ ...detail.origins[0], relative_path: 'trips/2019/IMG_0001.JPG' }];
+			await route.fulfill({ response, json: detail });
+		});
+		await signIn(page, '/', who);
+		await page.locator('.tile').first().click();
+		if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Info' }).click();
+		const about = loupe(page).getByRole('complementary', { name: 'About this photo' });
+		await expect(about.getByText('Came from')).toBeVisible();
+		await expect(
+			about.getByText(admin ? 'trips/2019/IMG_0001.JPG' : 'IMG_0001.JPG', { exact: true })
+		).toBeVisible();
+		if (!admin) await expect(about).not.toContainText('trips/2019');
+	});
+}
 
 test('more like this, when the models are installed', async ({ page }) => {
 	await resetMock('seed', { models: true });

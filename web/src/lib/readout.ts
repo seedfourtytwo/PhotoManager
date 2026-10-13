@@ -7,11 +7,17 @@ import type { AssetDetail, AssetOut } from './api/types';
 import { exposureParts, exposureSpoken } from './exposure';
 
 const join = (parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' · ');
+const fileName = (path: string) => path.split('/').at(-1) ?? path;
+/** What the file is called where the photo was first found. */
+const firstFile = (detail: AssetDetail | null) => {
+	const first = detail?.origins[0];
+	return first && fileName(first.relative_path);
+};
 
 export function readout(asset: AssetOut, detail: AssetDetail | null): [string, string] {
 	const place = asset.place?.city ?? asset.place?.region ?? asset.place?.country;
 	const size = asset.width && asset.height ? `${asset.width} × ${asset.height}` : null;
-	const file = detail?.origins[0]?.relative_path.split('/').at(-1);
+	const file = firstFile(detail);
 	const exposure = exposureParts(detail);
 	return [
 		join([asset.taken_at.slice(0, 10), asset.taken_at.slice(11, 16), place]),
@@ -26,6 +32,20 @@ export function readout(asset: AssetOut, detail: AssetDetail | null): [string, s
 export function readoutSpoken(detail: AssetDetail | null): string | null {
 	const exposure = exposureSpoken(detail);
 	if (!exposure.length) return null;
-	const file = detail?.origins[0]?.relative_path.split('/').at(-1);
-	return [...exposure, file].filter(Boolean).join(', ');
+	return [...exposure, firstFile(detail)].filter(Boolean).join(', ');
+}
+
+export type Origin = { key: string; label: string; file: string };
+
+/**
+ * Where a photo came from, for the details: the name of each folder it was found in and what
+ * the file is called there. The path inside the folder is for an admin, who may need to find
+ * the file; anyone else reads the name alone.
+ */
+export function cameFrom(detail: AssetDetail | null, isAdmin: boolean): Origin[] {
+	return (detail?.origins ?? []).map((origin) => ({
+		key: `${origin.source_id}:${origin.relative_path}`,
+		label: origin.source_label,
+		file: isAdmin ? origin.relative_path : fileName(origin.relative_path)
+	}));
 }

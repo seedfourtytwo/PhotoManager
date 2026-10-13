@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MlStatus, Person } from '$lib/api';
-	import { api, library, notice } from '$lib/app.svelte';
+	import { api, library, notice, session } from '$lib/app.svelte';
 	import { photos } from '$lib/format';
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 
@@ -28,8 +28,8 @@
 	<h1>People</h1>
 	{#if status && !status.faces.ready}
 		<p class="quiet small note" role="note">
-			Finding faces needs models — run <code>just models</code> on the server, then
-			<code>just ml-backfill</code>. People found so far stay listed.
+			New faces are not being found yet. People found so far stay listed.
+			{#if session.isAdmin}Set it up in <a href="/admin">Admin</a>, under Search and faces.{/if}
 		</p>
 	{/if}
 
@@ -66,10 +66,6 @@
 		max-width: var(--measure);
 		margin: var(--s-2) 0 0;
 	}
-	code {
-		font-size: var(--fs-12);
-		color: var(--ink);
-	}
 	h2 {
 		margin: var(--s-6) 0 var(--s-3);
 	}
@@ -82,12 +78,12 @@
 		grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
 		gap: var(--s-5) var(--s-3);
 	}
-	a {
+	.people a {
 		display: grid;
 		gap: var(--s-1);
 		text-decoration: none;
 	}
-	a :global(:first-child) {
+	.people a :global(:first-child) {
 		margin-bottom: var(--s-1);
 	}
 	.name {
@@ -104,7 +100,7 @@
 		font-style: var(--voice-style);
 	}
 	@media (hover: hover) {
-		a:hover .name {
+		.people a:hover .name {
 			text-decoration: underline;
 			text-decoration-thickness: 1px;
 			text-underline-offset: 0.2em;
