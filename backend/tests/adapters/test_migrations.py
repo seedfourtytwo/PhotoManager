@@ -80,7 +80,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 27
+    assert _latest() == 28
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -462,4 +462,26 @@ def test_accounts_from_before_0027_come_through_with_no_look(tmp_path: Path) -> 
     assert (repo.stored_look(1), repo.stored_look(2)) == (None, '{"mode": "light"}')
     assert repo.stored_look(99) is None, "no such account: nothing stored"
     assert [u.username for u in repo.list_users()] == ["c", "lea"], "accounts are untouched"
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
+
+
+def test_people_from_before_0028_come_through_listed(tmp_path: Path) -> None:
+    """0028: a person can be hidden from People; everyone found before it stays listed."""
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 28)
+    for number, sql in _migrations():
+        if number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript("INSERT INTO person (id, name) VALUES (1, 'Lea'), (2, NULL);")
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    rows = upgraded.execute("SELECT id, name, hidden FROM person ORDER BY id")
+    assert [tuple(r) for r in rows] == [(1, "Lea", 0), (2, None, 0)]
+    with pytest.raises(sqlite3.IntegrityError):
+        upgraded.execute("UPDATE person SET hidden = 2 WHERE id = 1")
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
