@@ -294,14 +294,6 @@
 		grid-template-columns: 4.25rem 1fr;
 		align-items: baseline;
 	}
-	/* A date needs the room for all of dd/mm/yyyy and its calendar in the laptop's column:
-	   its two short labels give it theirs. */
-	.row:has(input[type='date']) {
-		grid-template-columns: 2.75rem 1fr;
-	}
-	.row input[type='date'] {
-		padding-inline: var(--s-2);
-	}
 	.check {
 		display: flex;
 		align-items: center;

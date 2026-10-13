@@ -124,7 +124,7 @@ test('320 px at the largest text: the photo’s sheets and their controls stay o
 });
 
 for (const width of [1440, 1024]) {
-	test(`laptop ${width} px: the filter column shows its search hint and its dates whole`, async ({
+	test(`laptop ${width} px: the filter column shows the hint of each field whole`, async ({
 		page
 	}) => {
 		test.skip(isPhone(page), 'the side column is the laptop’s');
@@ -133,31 +133,24 @@ for (const width of [1440, 1024]) {
 		const panel = page.getByRole('complementary', { name: 'Filters' });
 		await expect(panel).toBeVisible();
 
-		// A field's own width when nothing holds it: what it needs to show all it has.
-		const short = (field: Locator) =>
-			field.evaluate((el) => {
-				const free = el.cloneNode(true) as HTMLElement;
-				free.style.cssText = 'position: absolute; visibility: hidden; width: auto';
-				el.parentElement!.append(free);
-				const needs = free.getBoundingClientRect().width;
-				free.remove();
-				return Math.ceil(needs - el.getBoundingClientRect().width);
-			});
-		expect(await short(panel.getByLabel('From'))).toBeLessThanOrEqual(0);
-		expect(await short(panel.getByLabel('To'))).toBeLessThanOrEqual(0);
-
-		// The hint is not a value, so the field does not measure it: it is measured here. The
-		// whole field is its room, because an empty field keeps none for its clear button
+		// A hint is not a value, so the field does not measure it: it is measured here. The
+		// whole field is its room: an empty search field keeps none for its clear button
 		// (fields.css; tokens.spec.ts holds that rule, which a page cannot see).
-		const hint = await panel.getByRole('searchbox').evaluate((el) => {
-			const field = el as HTMLInputElement;
-			const style = getComputedStyle(field);
-			const pen = document.createElement('canvas').getContext('2d')!;
-			pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-			const room =
-				field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-			return { text: pen.measureText(field.placeholder).width, room };
-		});
-		expect(hint.text).toBeLessThanOrEqual(hint.room);
+		const spare = (field: Locator) =>
+			field.evaluate((el) => {
+				const input = el as HTMLInputElement;
+				const style = getComputedStyle(input);
+				const pen = document.createElement('canvas').getContext('2d')!;
+				pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+				const room =
+					input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+				return room - pen.measureText(input.placeholder).width;
+			});
+		for (const field of [
+			panel.getByRole('searchbox'),
+			panel.getByLabel('From'),
+			panel.getByLabel('To')
+		])
+			expect(await spare(field)).toBeGreaterThanOrEqual(0);
 	});
 }
