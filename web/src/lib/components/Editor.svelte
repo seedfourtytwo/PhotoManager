@@ -4,7 +4,7 @@
 	import Dialog from './Dialog.svelte';
 	import { IDENTITY_RECIPE, type AssetOut, type CropRect, type Recipe } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
-	import { historyStep } from '$lib/history-step';
+	import { EditorExit } from '$lib/editor-exit.svelte';
 	import { modal } from '$lib/modal';
 	import {
 		MAX_STRAIGHTEN,
@@ -17,17 +17,23 @@
 		resizeCrop,
 		rotateRecipe,
 		rotatedAspect,
+		sameRecipe,
 		type Handle
 	} from '$lib/crop';
 
 	type Props = { asset: AssetOut; onclose: () => void; onsaved: () => void };
 	let { asset, onclose, onsaved }: Props = $props();
 
-	// Back closes the editor, not the photo under it.
-	onMount(() => historyStep(() => onclose()));
-
 	const FULL: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 	let recipe = $state<Recipe>({ ...IDENTITY_RECIPE });
+	/** The edit as it is saved: what leaving without saving goes back to. */
+	let saved: Recipe = { ...IDENTITY_RECIPE };
+	// Back closes the editor, not the photo under it; with unsaved changes every way out asks.
+	const exit = new EditorExit(
+		() => !sameRecipe(saved, recipe),
+		() => onclose()
+	);
+	onMount(exit.mount);
 	let loaded = $state(false);
 	/** The saved edit could not be read: saving now would overwrite it with a blank one. */
 	let failed = $state(false);
@@ -54,7 +60,7 @@
 		api
 			.recipe(asset.id)
 			.then((r) => {
-				recipe = r;
+				recipe = saved = r;
 				loaded = true;
 			})
 			.catch((e: unknown) => {
@@ -123,7 +129,7 @@
 			const full = crop.x <= 0 && crop.y <= 0 && crop.w >= 1 && crop.h >= 1;
 			await api.saveRecipe(asset.id, { ...recipe, crop: full ? null : crop });
 			notice.show('Saved. The original file is unchanged.');
-			onsaved();
+			await exit.leave(onsaved);
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -137,7 +143,7 @@
 		try {
 			await api.revertRecipe(asset.id);
 			notice.show('Back to the original.');
-			onsaved();
+			await exit.leave(onsaved);
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -149,7 +155,7 @@
 <dialog
 	class="editor"
 	aria-label="Edit photo"
-	use:modal={onclose}
+	use:modal={exit.request}
 	onkeydown={(e) => e.stopPropagation()}
 >
 	<div class="area" bind:clientWidth={areaW} bind:clientHeight={areaH}>
@@ -246,7 +252,7 @@
 					>Revert to original</button
 				>
 			{/if}
-			<button type="button" onclick={onclose}>Cancel</button>
+			<button type="button" onclick={exit.request}>Cancel</button>
 			<button type="button" class="primary" disabled={busy || !loaded || failed} onclick={save}
 				>Save</button
 			>
@@ -259,6 +265,14 @@
 		<p>The saved crop and rotation are removed. The original file was never changed.</p>
 		{#snippet actions()}
 			<button class="primary" type="button" onclick={revert}>Revert</button>
+		{/snippet}
+	</Dialog>
+{/if}
+{#if exit.asking}
+	<Dialog title="Discard your changes?" cancelLabel="Keep editing" onclose={exit.keep}>
+		<p>What you changed here is not saved yet. The photo stays as it was.</p>
+		{#snippet actions()}
+			<button class="primary" type="button" onclick={() => exit.leave()}>Discard changes</button>
 		{/snippet}
 	</Dialog>
 {/if}

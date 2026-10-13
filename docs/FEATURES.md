@@ -52,18 +52,18 @@ separate, explicit "purge from library copy" that never touches the source.
 | 2.5b | **To review** (issue 8): a newly imported photo that looks like one already in the library, or that the auto-tagger sees as a screenshot, document, receipt or meme, is copied in but held out of the library. A grouped review screen offers Keep (joins the library, never held again) or Discard (30-day trash). Applies to every source | Should | M2 ✅ |
 | 2.6 | Quality signals: blur, exposure, eyes-closed (from face landmarks) → used for "best of" picks | Could | M3 |
 | 2.7 | Semantic embeddings (CLIP-family) for every photo | Must | M3 |
-| 2.8 | Face detection + clustering into people; user names clusters; merge/split | Should | M3 |
+| 2.8 | Face detection + clustering into people; user names clusters; merge/split; **hide** a person you do not want listed (a stranger in the background): they leave People, their faces stay grouped so they do not come back as a new "Someone", and a "Hidden" list brings them back (issue 53) | Should | M3 |
 | 2.9 | Auto-tags from embeddings against a fixed vocabulary (beach, snow, food, document, screenshot…) | Should | M3 ✅ (API) |
 | 2.10 | Screenshot / document / meme detection → filtered out of "memories" by default | Should | M3 |
 | 2.11 | Captions from local vision LLM (via AI socket) | Could | M5 |
-| 2.12 | **Fix dates**: set or shift the date of one or many photos (e.g. Facebook downloads whose only date is the download day); the photo shows "date guessed from file" until fixed; corrections are kept in the library and exported with XMP (11.2) | Should | M2 ✅ (API) |
+| 2.12 | **Fix dates**: set or shift the date of one or many photos (e.g. Facebook downloads whose only date is the download day); the photo shows "date guessed from file" until fixed; corrections are kept in the library and exported with XMP (11.2). The exact date is a text field that takes a date or time pasted in any common format (the app's own, ISO, camera, file name, English or French month names, month-first, AM/PM) and always shows it day first on the 24-hour clock | Should | M2 ✅ (API) |
 
 ## 3. Find (organise, filter, search)
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
 | 3.1 | Timeline (newest first), grouped by day/month/year, fast scroll with the time ruler | Must | M2 |
-| 3.2 | Facet filters: date range, place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, source, guessed date, location; people/tags in M3* | Must | M2 |
+| 3.2 | Facet filters: date range (From / To take a pasted date like Fix date and show it day first), place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, source, guessed date, location; people/tags in M3* | Must | M2 |
 | 3.3 | Favourites (per user) and hide (per user) | Must | M2 ✅ (API) |
 | 3.4 | Keyword search over places, tags, names, captions — *API: file names, places, camera, album titles; tags/names/captions in M3* | Must | M2 |
 | 3.5 | Natural-language search ("kids in the snow at grandma's") via embeddings | Should | M3 ✅ (API) |
@@ -107,6 +107,7 @@ copies down.
 
 Edits are stored as a small **recipe** (JSON) per photo, shared by everyone who may edit it (api-v1); the original is never changed.
 Views and downloads render the recipe on the fly (and cache the result). "Revert" deletes the recipe.
+Leaving the editor with changes that are not saved (Back, Escape or Cancel) asks first: Keep editing or Discard changes.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
@@ -170,7 +171,7 @@ folder can be shared with everyone, with a few people, or kept to one person.
 | 8.6 | Each account's phone inbox is its own source, private to that account by default | Should | M4 |
 | 8.7 | Remote access via Tailscale (no public exposure) | Should | M6 |
 | 8.8 | Account groups (e.g. "family", "friends") to grant access in one go | Could | M4 |
-| 8.9 | **Per-account look**: each account has a look (theme, dark/light/device mode, accent hue, corners, photo gap, text size, photo size, which Collections rows in which order, dock labels) stored as a validated sheet of values, never CSS. The account chooses its mode in Settings; an admin sets the rest in Admin → People → Look, with "Try on my screen" before "Save for …". The two Today switches are stored but wait for the Today page | Should | ✅ |
+| 8.9 | **Per-account look**: each account has a look (theme, dark/light/device mode, accent hue, corners, photo gap, text size, photo size, which Collections rows in which order, dock labels) stored as a validated sheet of values, never CSS. The account chooses its mode in Settings; an admin sets the rest (the photo size too: there is no per-device setting for it) in Admin → People → Look, with "Try on my screen" before "Save for …". The two Today switches are stored but wait for the Today page | Should | ✅ |
 
 ## 9. Operate
 

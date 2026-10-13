@@ -134,7 +134,7 @@ Download, Fix date, Delete, and More. `Esc` clears.
 - **Share** is not built, in the photo bar or in the pill: nothing here says what sharing one
   photo does, and handing it to the phone's share sheet sends photo data to other apps.
   Download holds its place (Favourite · Download · Album · Edit · More).
-- **Aperture, shutter, ISO and focal length** are stored since migration `0028` and shown
+- **Aperture, shutter, ISO and focal length** are stored since migration `0029` and shown
   (2026-10-13): the readout's second line is aperture · shutter · ISO · focal length · file
   name, with only the values the photo carries. A photo that carries none (a scan, a
   screenshot) keeps camera · pixel size · file name. The details list the settings under the
@@ -213,8 +213,9 @@ As built (step 4, `docs/superpowers/plans/2026-10-08-redesign-4-look-sheet.md`):
 the wrong kind or an unknown choice is rejected like an unknown field; `collectionsRows` may
 not be empty; dials are whole numbers (text scale: two decimals); every role may set its own
 mode; `showToday` and `startPage` are stored but not in the form and without effect until
-the Today page exists; `thumbSize` gives the photo size unless one was chosen on the device
-in Settings; resetting is a `PUT` of `{}`.
+the Today page exists; resetting is a `PUT` of `{}`. `thumbSize` alone gives the photo size:
+the earlier "Photo size in the grid" choice in Settings, kept per browser, hid the look's for
+good and is gone; a browser that still holds it (`pa.density`) drops it when the app loads.
 
 After the QA pass on step 4: a *stored* sheet falls back field by field, not as a whole (one
 field that no longer passes reads as its default, the rest stays); a half rounds up and a

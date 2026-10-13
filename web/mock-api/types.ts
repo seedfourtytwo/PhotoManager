@@ -102,7 +102,7 @@ export type MockFace = {
 	score: number;
 	person_id: number | null;
 };
-export type MockPerson = { id: number; name: string | null };
+export type MockPerson = { id: number; name: string | null; hidden?: boolean };
 export type MockBackup = {
 	id: number;
 	label: string;

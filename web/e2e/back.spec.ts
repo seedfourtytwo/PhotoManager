@@ -1,9 +1,10 @@
 /**
  * "Opening a sheet or a photo adds a history step, so Back on the phone closes it" (redesign
- * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts; these are the
- * sheets and dialogs.
+ * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts, its Info
+ * sheet's in back-info.spec.ts; these are the sheets and dialogs.
  */
 import {
+	delayRoute,
 	expect,
 	isPhone,
 	loupe,
@@ -121,6 +122,103 @@ test('Back closes the editor, not the photo under it', async ({ page }) => {
 	await page.goBack();
 	await expect(editor).toBeHidden();
 	await expect(viewer).toBeVisible();
+});
+
+test('the editor asks before unsaved changes go: Back, Escape and Cancel alike', async ({
+	page
+}) => {
+	await page.locator('.tile').first().click();
+	const viewer = loupe(page);
+	await loupeAction(page, 'Edit');
+	const editor = page.getByRole('dialog', { name: 'Edit photo' });
+	const ask = page.getByRole('dialog', { name: 'Discard your changes?' });
+	const turned = editor.getByRole('button', { name: 'Reset' });
+	await expect(editor.getByRole('group', { name: /Crop area/ })).toBeVisible();
+	await editor.getByRole('button', { name: 'Rotate right' }).click();
+
+	await page.goBack();
+	await expect(ask).toBeVisible();
+	await expect(editor).toBeVisible();
+	await ask.getByRole('button', { name: 'Keep editing' }).click();
+	await expect(ask).toBeHidden();
+	await expect(turned, 'the change is still there').toBeEnabled();
+
+	// A second Back asks again: the editor has its step back.
+	await page.goBack();
+	await expect(ask).toBeVisible();
+	await page.goBack(); // Back in the question is "Keep editing"
+	await expect(ask).toBeHidden();
+	await expect(editor).toBeVisible();
+
+	await page.keyboard.press('Escape');
+	await expect(ask).toBeVisible();
+	await page.keyboard.press('Escape'); // and so is Escape
+	await expect(ask).toBeHidden();
+	await expect(editor).toBeVisible();
+	await expect(turned).toBeEnabled();
+
+	await editor.getByRole('button', { name: 'Cancel' }).click();
+	await ask.getByRole('button', { name: 'Discard changes' }).click();
+	await expect(editor).toBeHidden();
+	await expect(viewer).toBeVisible();
+	await expect(page).toHaveURL(/photo=\d+/);
+
+	// No step is left behind: one Back for the photo, one for the page.
+	await page.goBack();
+	await expect(viewer).toBeHidden();
+	await expect(page).toHaveURL(/\/$/);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/collections$/);
+});
+
+test('Back with unsaved changes, then “Discard changes”: the photo is one Back from the library', async ({
+	page
+}) => {
+	await page.locator('.tile').first().click();
+	const viewer = loupe(page);
+	await loupeAction(page, 'Edit');
+	const editor = page.getByRole('dialog', { name: 'Edit photo' });
+	const ask = page.getByRole('dialog', { name: 'Discard your changes?' });
+	await expect(editor.getByRole('group', { name: /Crop area/ })).toBeVisible();
+	await editor.getByRole('button', { name: 'Flip horizontal' }).click();
+	const saved = { count: 0 };
+	page.on('request', (r) => {
+		if (r.method() === 'PUT' && r.url().endsWith('/edit')) saved.count++;
+	});
+	await page.goBack();
+	await ask.getByRole('button', { name: 'Discard changes' }).click();
+	await expect(editor).toBeHidden();
+	await expect(viewer).toBeVisible();
+	await page.goBack();
+	await expect(viewer).toBeHidden();
+	await expect(page).toHaveURL(/\/$/);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/collections$/);
+	expect(saved.count).toBe(0);
+});
+
+test('a save that lands while the editor is asking closes both and leaves no step behind', async ({
+	page
+}) => {
+	await page.locator('.tile').first().click();
+	const viewer = loupe(page);
+	await loupeAction(page, 'Edit');
+	const editor = page.getByRole('dialog', { name: 'Edit photo' });
+	const ask = page.getByRole('dialog', { name: 'Discard your changes?' });
+	await expect(editor.getByRole('group', { name: /Crop area/ })).toBeVisible();
+	await editor.getByRole('button', { name: 'Rotate right' }).click();
+	await delayRoute(page, /\/api\/assets\/\d+\/edit$/, 600);
+	await editor.getByRole('button', { name: 'Save' }).click();
+	await page.goBack();
+	await expect(ask).toBeVisible();
+	await expect(editor).toBeHidden();
+	await expect(ask).toBeHidden();
+	await expect(viewer).toBeVisible();
+	await page.goBack();
+	await expect(viewer).toBeHidden();
+	await expect(page).toHaveURL(/\/$/);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/collections$/);
 });
 
 test('a new album: Back from it is the list of albums, not the dialog', async ({ page }) => {

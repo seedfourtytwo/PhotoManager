@@ -125,6 +125,21 @@ describe('search and people', () => {
 		const guest = await h.signedIn('guest', '3456');
 		await expect(guest.renamePerson(a.id, 'x')).rejects.toMatchObject({ status: 403 });
 	});
+
+	it('hides a person from the list, keeps the name, and shows them again', async () => {
+		const api = await h.signedIn();
+		const [a] = await api.people();
+		await api.renamePerson(a.id, 'Léa');
+		const hidden = await api.hidePerson(a.id, true);
+		expect([hidden.hidden, hidden.name]).toEqual([true, 'Léa']);
+		expect((await api.people()).some((p) => p.id === a.id)).toBe(false);
+		expect((await api.people(true)).map((p) => p.id)).toEqual([a.id]);
+		expect((await api.person(a.id)).hidden).toBe(true);
+		expect((await api.hidePerson(a.id, false)).hidden).toBe(false);
+		expect(await api.people(true)).toEqual([]);
+		const guest = await h.signedIn('guest', '3456');
+		await expect(guest.hidePerson(a.id, true)).rejects.toMatchObject({ status: 403 });
+	});
 });
 
 describe('print', () => {

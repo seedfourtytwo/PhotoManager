@@ -1,4 +1,4 @@
-"""People (FEATURES 2.8, 4.6): list, rename, merge, split, a person's photos.
+"""People (FEATURES 2.8, 4.6): list, rename, hide, merge, split, a person's photos.
 
 Every call takes ``visible``: the viewer, or the asset ids they may see. A person exists for them
 only through faces on visible photos; anything else is "not found". People are shared by the
@@ -36,8 +36,9 @@ class People:
     def __init__(self, store: MlStore) -> None:
         self._store = store
 
-    def list_all(self, visible: Visible) -> list[PersonSummary]:
-        return self._store.list_persons(visible)
+    def list_all(self, visible: Visible, *, hidden: bool | None = False) -> list[PersonSummary]:
+        """The listed people; ``hidden=True`` the hidden ones instead, ``None`` both."""
+        return self._store.list_persons(visible, hidden=hidden)
 
     def get(self, person_id: int, visible: Visible) -> PersonSummary:
         person = self._store.get_person(person_id, visible)
@@ -48,6 +49,13 @@ class People:
     def rename(self, person_id: int, name: str | None, visible: Visible) -> PersonSummary:
         self.get(person_id, visible)
         self._store.rename_person(person_id, _clean_name(name))
+        return self.get(person_id, visible)
+
+    def set_hidden(self, person_id: int, hidden: bool, visible: Visible) -> PersonSummary:
+        """Leave a person out of People, or list them again. Their faces stay theirs, so
+        later photos of them join the same person, hidden or not."""
+        self.get(person_id, visible)
+        self._store.set_person_hidden(person_id, hidden)
         return self.get(person_id, visible)
 
     def merge(self, target_id: int, source_ids: Sequence[int], visible: Visible) -> PersonSummary:

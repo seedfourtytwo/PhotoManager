@@ -6,32 +6,33 @@
 	import {
 		dateProblem,
 		formatShort,
-		isValidLocal,
 		previewDateChange,
+		shiftLocal,
 		toMinutes,
 		undoDateChange,
 		type DateChangeSpec
 	} from '$lib/dates';
+	import DateField from './DateField.svelte';
 	import Dialog from './Dialog.svelte';
 
 	type Props = { items: AssetOut[]; onclose: () => void; ondone: () => void };
 	let { items, onclose, ondone }: Props = $props();
+	const uid = $props.id();
 
 	let mode = $state<'shift' | 'set'>('shift');
 	let sign = $state<1 | -1>(1);
 	let days = $state(0);
 	let hours = $state(0);
 	let minutes = $state(0);
-	// Start from the first photo's own time; datetime-local wants seconds for step=1.
-	let exact = $state(untrack(() => items[0]?.taken_at ?? '2000-01-01T12:00:00'));
+	// Start from the first photo's own time, to the second. Null while the text is not a date.
+	let exact = $state<string | null>(
+		untrack(() => (items[0] ? shiftLocal(items[0].taken_at, 0) : '2000-01-01T12:00:00'))
+	);
 	let busy = $state(false);
 	let error = $state('');
 
 	const change = $derived.by((): DateChangeSpec | null => {
-		if (mode === 'set') {
-			const value = exact.length === 16 ? `${exact}:00` : exact;
-			return isValidLocal(value) ? { set: value } : null;
-		}
+		if (mode === 'set') return exact ? { set: exact } : null;
 		const shift = toMinutes({ days: days || 0, hours: hours || 0, minutes: minutes || 0 }, sign);
 		return shift === 0 ? null : { shift_minutes: shift };
 	});
@@ -94,10 +95,10 @@
 			<label><input type="number" min="0" max="59" bind:value={minutes} /> minutes</label>
 		</div>
 	{:else}
-		<label class="exact">
-			Date and time
-			<input type="datetime-local" step="1" bind:value={exact} />
-		</label>
+		<div class="exact">
+			<label for="{uid}-exact">Date and time</label>
+			<DateField id="{uid}-exact" time value={exact} oninput={(value) => (exact = value)} />
+		</div>
 	{/if}
 
 	{#if preview.length}

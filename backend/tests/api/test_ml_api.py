@@ -176,6 +176,33 @@ def test_people_rename_merge_split_and_their_photos(
     assert faces_of_snow[0]["person_id"] == split.json()["id"]
 
 
+def test_a_person_is_hidden_from_people_and_shown_again(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    store = services_of(admin).ml.store
+    face = Face(BoundingBox(0.1, 0.1, 0.2, 0.2), 0.9, ((0.5, 0.5),) * 5, (1.0, 0.0, 0.0))
+    lea = store.create_person(store.replace_faces(library["beach"], "f", [face])[0])
+    tom = store.create_person(store.replace_faces(library["snow"], "f", [face])[0])
+    admin.patch(f"/api/people/{tom}", json={"name": "Tom"})
+
+    hidden = admin.patch(f"/api/people/{tom}", json={"hidden": True})
+    assert hidden.status_code == 200
+    assert (hidden.json()["hidden"], hidden.json()["name"]) == (True, "Tom"), "the name stays"
+    assert [(p["id"], p["hidden"]) for p in admin.get("/api/people").json()] == [(lea, False)]
+    listed = admin.get("/api/people", params={"hidden": "true"}).json()
+    assert [(p["id"], p["hidden"]) for p in listed] == [(tom, True)]
+    assert admin.get(f"/api/people/{tom}").json()["hidden"] is True
+    by_name = admin.get("/api/search", params={"q": "person:Tom"}).json()
+    assert _ids(by_name) == [library["snow"]], "a hidden person is still found by name"
+
+    renamed = admin.patch(f"/api/people/{tom}", json={"name": None}).json()
+    assert (renamed["name"], renamed["hidden"]) == (None, True), "a rename leaves it hidden"
+    shown = admin.patch(f"/api/people/{tom}", json={"hidden": False}).json()
+    assert shown["hidden"] is False
+    assert {p["id"] for p in admin.get("/api/people").json()} == {lea, tom}
+    assert admin.patch(f"/api/people/{tom}", json={}).status_code == 422, "nothing to change"
+
+
 def test_people_and_face_ids_beyond_sqlite_integers_are_unprocessable(
     admin: TestClient, library: dict[str, int]
 ) -> None:
@@ -195,6 +222,7 @@ def test_people_and_face_ids_beyond_sqlite_integers_are_unprocessable(
 def test_guests_cannot_change_people(admin: TestClient, library: dict[str, int]) -> None:
     gus = add_user(admin, "gus", "guest")
     assert gus.patch("/api/people/1", json={"name": "x"}).status_code == 403
+    assert gus.patch("/api/people/1", json={"hidden": True}).status_code == 403
     assert gus.post("/api/people/split", json={"face_ids": [1]}).status_code == 403
 
 

@@ -5,13 +5,24 @@
 	import FaceCrop from '$lib/components/FaceCrop.svelte';
 
 	let people = $state<Person[] | null>(null);
+	let hidden = $state<Person[]>([]);
 	let status = $state<MlStatus | null>(null);
 
 	$effect(() => {
+		void library.version; // hiding, and its Undo, change who is listed
 		api
 			.people()
 			.then((p) => (people = p))
 			.catch((e: unknown) => notice.error(e));
+		// Only those who may bring someone back are shown who was left out.
+		if (session.canEdit)
+			api
+				.people(true)
+				.then((p) => (hidden = p))
+				.catch((e: unknown) => notice.error(e));
+	});
+
+	$effect(() => {
 		library
 			.ml()
 			.then((s) => (status = s))
@@ -20,6 +31,15 @@
 
 	const named = $derived((people ?? []).filter((p) => p.name));
 	const unnamed = $derived((people ?? []).filter((p) => !p.name));
+
+	async function showAgain(person: Person) {
+		try {
+			await api.hidePerson(person.id, false);
+			library.changed();
+		} catch (e) {
+			notice.error(e);
+		}
+	}
 </script>
 
 <svelte:head><title>People · Photos</title></svelte:head>
@@ -35,8 +55,12 @@
 
 	{#if people && people.length === 0}
 		<div class="empty-state">
-			<p>No people yet.</p>
-			<p>Faces are grouped here once photos have been analysed; then you can name them.</p>
+			{#if hidden.length}
+				<p>Everyone found so far is hidden.</p>
+			{:else}
+				<p>No people yet.</p>
+				<p>Faces are grouped here once photos have been analysed; then you can name them.</p>
+			{/if}
 		</div>
 	{/if}
 
@@ -56,6 +80,24 @@
 			</ul>
 		{/if}
 	{/each}
+
+	{#if hidden.length}
+		<details class="hidden">
+			<summary class="quiet">Hidden · {hidden.length}</summary>
+			<ul>
+				{#each hidden as person (person.id)}
+					<li>
+						<a href={`/people/${person.id}`}>
+							<FaceCrop face={person.cover} size={40} />
+							<span class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
+						</a>
+						<span class="quiet small">{photos(person.asset_count)}</span>
+						<button type="button" onclick={() => showAgain(person)}>Show again</button>
+					</li>
+				{/each}
+			</ul>
+		</details>
+	{/if}
 </div>
 
 <style>
@@ -98,6 +140,39 @@
 	.name.quiet {
 		font-weight: 400;
 		font-style: var(--voice-style);
+	}
+	/* Left out on purpose: one quiet line, opened only by who goes looking. */
+	.hidden {
+		margin-top: var(--s-7);
+		max-width: var(--measure);
+	}
+	.hidden summary {
+		cursor: pointer;
+		min-height: var(--target);
+		align-content: center;
+	}
+	.hidden ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.hidden li {
+		display: flex;
+		align-items: center;
+		gap: var(--s-3);
+		padding: var(--s-1) 0;
+	}
+	.hidden a {
+		display: flex;
+		align-items: center;
+		gap: var(--s-3);
+		min-width: 0;
+		margin-right: auto;
+		color: var(--ink);
+		text-decoration: none;
+	}
+	.hidden button {
+		color: var(--ink-2);
 	}
 	@media (hover: hover) {
 		.people a:hover .name {

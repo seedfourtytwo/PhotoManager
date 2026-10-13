@@ -39,7 +39,7 @@
 	 */
 	const LABEL = 48;
 	let width = $state(0);
-	const rowHeight = $derived(rowHeightFor(viewport.width, settings.density));
+	const rowHeight = $derived(rowHeightFor(viewport.width, settings.thumbSize));
 	const groups = $derived(groupByMonth(loader.items));
 	// Earlier months keep their layout when a page arrives (lib/month-layouts.ts).
 	const layoutsFor = monthLayouts();

@@ -202,6 +202,26 @@ def test_per_asset_clustering_defers_then_the_global_pass_resolves(
     assert store.get_face(lonely).person_id == person  # type: ignore[union-attr]
 
 
+def test_a_new_face_of_a_hidden_person_joins_them_instead_of_coming_back_as_someone(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    def put(asset: int, degrees: list[float]) -> list[int]:
+        faces = [Face(BoundingBox(0, 0, 1, 1), 0.9, (), angle(d)) for d in degrees]
+        return store.replace_faces(asset, "m", faces)
+
+    job = ClusterFaces(store, "m", ClusterParams(0.5, 3))
+    put(add(repo, 1), [0, 10, 20])
+    job({})
+    (stranger,) = store.list_persons({1})
+    store.set_person_hidden(stranger.id, True)
+    later = add(repo, 2)
+    (again,) = put(later, [5])
+    job({"asset_id": later})
+    assert store.get_face(again).person_id == stranger.id  # type: ignore[union-attr]
+    assert store.list_persons({1, later}) == []
+    assert [p.face_count for p in store.list_persons({1, later}, hidden=True)] == [4]
+
+
 def test_user_placed_faces_are_never_reclustered(
     repo: SqliteRepository, store: SqliteMlStore
 ) -> None:

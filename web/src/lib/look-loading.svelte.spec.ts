@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type User } from '$lib/api';
 import { DEFAULT_LOOK, look, parseLook, type Look } from '$lib/look';
-import { api, chooseMode, loadLook, notice, session, settings } from './app.svelte';
+import {
+	api,
+	chooseMode,
+	forgetOldDensity,
+	loadLook,
+	notice,
+	session,
+	settings
+} from './app.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => undefined) }));
 
@@ -246,15 +254,27 @@ describe('leaving (a shared device)', () => {
 });
 
 describe('the look’s dials that the grid reads', () => {
-	it('the look’s thumb size is the grid size until one is chosen on this device', () => {
-		expect(settings.density).toBe('comfortable');
+	it('the look’s thumb size is the grid size, and so is that of a look being tried', () => {
+		expect(settings.thumbSize).toBe('medium');
 		look.receive(parseLook({ thumbSize: 'large' }));
-		expect(settings.density).toBe('large');
-		look.receive(parseLook({ thumbSize: 'small' }));
-		expect(settings.density).toBe('compact');
-		settings.setDensity('comfortable');
-		expect(settings.density).toBe('comfortable');
-		expect(localStorage.getItem('pa.density')).toBe('comfortable');
+		expect(settings.thumbSize).toBe('large');
+		look.try(parseLook({ thumbSize: 'small' }), { id: 2, name: 'Donna' });
+		expect(settings.thumbSize).toBe('small');
+	});
+
+	it('a photo size once chosen on this device is forgotten, so the look decides again', () => {
+		localStorage.setItem('pa.density', 'compact');
+		look.receive(parseLook({ thumbSize: 'large' }));
+		forgetOldDensity();
+		expect(localStorage.getItem('pa.density')).toBeNull();
+		expect(settings.thumbSize).toBe('large');
+	});
+
+	it('forgetting it does not throw where storage is blocked', () => {
+		vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+			throw new DOMException('blocked', 'SecurityError');
+		});
+		expect(forgetOldDensity).not.toThrow();
 	});
 
 	it('the look’s photo gap is the grid gap; left to the theme it is 3', () => {

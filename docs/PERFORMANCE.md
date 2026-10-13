@@ -216,7 +216,7 @@ where both are rendered anyway: thumbnail repairs and edited renders (`render_ed
 when a recipe is saved). The 4-core figure is a projection from the measured per-lane costs;
 re-measure on the laptop with `scripts/perf/import_e2e.py`.
 
-## Exposure settings (migration 0028)
+## Exposure settings (migration 0029)
 
 2,144 synthetic photos (`make_mock_library.py --count 2000 --size 800`, 1,995 of them with
 exposure tags), development machine (16 cores, other work running), median of 9 runs,

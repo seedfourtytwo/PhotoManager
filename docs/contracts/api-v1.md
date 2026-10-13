@@ -344,9 +344,9 @@ Without model files every route still answers; nothing fails because a model is 
 | GET | `/api/assets/{id}/similar` | `limit` ≤ 200 | `(AssetOut + {score})[]`; `503` models not installed; `409` not analysed yet |
 | GET | `/api/assets/{id}/faces` | – | `[{id, asset_id, box: {x, y, w, h}, score, person_id}]` (box in fractions of the displayed photo) |
 | GET | `/api/assets/{id}/tags` | – | `{tags: [{name, score}], screen_or_document: bool\|null}` |
-| GET | `/api/people` | – | `[{id, name, face_count, asset_count, cover: Face\|null}]` (counts over what you may see) |
+| GET | `/api/people` | `hidden` (default `false`) | `[{id, name, face_count, asset_count, hidden, cover: Face\|null}]` (counts over what you may see). The people listed; `hidden=true` answers the ones hidden from the list instead |
 | GET | `/api/people/{id}` | – | `Person`; `404` |
-| PATCH | `/api/people/{id}` | `{name}` | `Person` (members/admins; guests `403`) |
+| PATCH | `/api/people/{id}` | `{name?, hidden?}` | `Person` (members/admins; guests `403`). Only what is sent changes; `name: null` takes the name away; an empty body is `422`. A hidden person keeps their faces, so later photos of them join the same person; they still open by id and are still found by `person:Name` |
 | POST | `/api/people/{id}/merge` | `{source_ids}` | `Person` (guests `403`) |
 | POST | `/api/people/split` | `{face_ids, person_id?, name?}` | `Person` (no `person_id` → a new person; guests `403`) |
 | GET | `/api/people/{id}/assets` | `limit`, `cursor` | `{items: AssetOut[], next_cursor}` newest first |

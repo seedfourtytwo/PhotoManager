@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
@@ -59,6 +60,32 @@
 		}
 	}
 
+	/** Out of People, or back in. Hiding leaves the page: there is nothing more to do here. */
+	async function setHidden(hidden: boolean) {
+		if (busy || !person) return;
+		busy = true;
+		try {
+			person = await api.hidePerson(id, hidden);
+			if (!hidden) return notice.show(`${person.name ?? 'This person'} is listed in People again.`);
+			const hiddenId = id;
+			await goto('/people');
+			notice.show(`${person.name ?? 'Someone'} is hidden from People.`, {
+				action: {
+					label: 'Undo',
+					run: () =>
+						void api
+							.hidePerson(hiddenId, false)
+							.then(() => library.changed())
+							.catch((e: unknown) => notice.error(e))
+				}
+			});
+		} catch (e) {
+			notice.error(e);
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function openMerge() {
 		merging = [];
 		dialog = 'merge';
@@ -99,6 +126,7 @@
 				<h1 class:quiet={!person.name}>{person.name ?? 'Someone'}</h1>
 				<p class="quiet small">
 					{photos(person.asset_count)} · {plural(person.face_count, 'face')}
+					{#if person.hidden}· Hidden from People{/if}
 				</p>
 				{#if session.canEdit}
 					<div class="tools">
@@ -110,6 +138,15 @@
 							}}>{person.name ? 'Rename' : 'Name'}</button
 						>
 						<button type="button" onclick={openMerge}>Merge with…</button>
+						{#if person.hidden}
+							<button type="button" disabled={busy} onclick={() => setHidden(false)}
+								>Show again</button
+							>
+						{:else}
+							<button type="button" disabled={busy} onclick={() => setHidden(true)}
+								>Hide person</button
+							>
+						{/if}
 					</div>
 				{/if}
 			</div>

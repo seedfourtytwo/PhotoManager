@@ -316,6 +316,8 @@ export type Person = {
 	id: Id;
 	name: string | null;
 	face_count: number;
+	/** Left out of People: a stranger someone chose not to list. */
+	hidden: boolean;
 	asset_count: number;
 	/** Crop the asset's thumbnail to this box for the People grid. */
 	cover: Face | null;
