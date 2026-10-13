@@ -105,7 +105,11 @@ Mock-only routes live under `/__mock/` and are never called by the app.
 ## Screens and behaviour added in the M2 fix round
 
 - **Loupe**: `?photo=<id>` in the URL (reload/share reopens it; Back closes it; closing scrolls
-  the grid to that photo and focuses its tile). Chrome fades after 2.5 s and returns on any
+  the grid to that photo and focuses its tile). On a phone the Info sheet is a history entry
+  of its own over the photo's, marked `page.state.info`, and the sheet is open exactly while
+  the current entry has the mark: Back closes it, its own button goes back, and stepping
+  rewrites that entry and adds none. The photo's own entry under it then names an earlier
+  photo; when Back arrives there, the photo on screen is held and written into it. Chrome fades after 2.5 s and returns on any
   touch, key or mouse movement; a tap on the photo toggles it (after 300 ms, in case it is
   the first half of a double tap, which favourites). The photo area has `touch-action: none`,
   so vertical swipes (up = info, down = close) are not taken by the browser; `lib/gesture.ts`
@@ -129,6 +133,18 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   bar on a laptop and a floating dock on a phone. The account menu holds To review, Trash,
   Settings, Admin (admins) and Sign out. The selection pill shows Add to album, Download,
   Fix date and Move to trash (the first three on a phone) and puts the rest under “More”.
+- **Date fields** (`DateField`, the reader in `lib/dates.ts`): Fix date's “Set exactly” and
+  the filters' From / To are one text field, never the browser's own date control, so the
+  date is shown day first on the 24-hour clock whatever the browser's language
+  (`04/07/2019 18:30:05`; a filter shows the day only). `readDateText` reads what is pasted or
+  typed: the app's own displays, ISO, camera and file-name styles, numbers day first, month
+  names in English and French, AM/PM. A readable paste replaces the whole field at once;
+  typed text is read at every keystroke (the before → after preview follows) and tidied on
+  Enter or on leaving the field. A day alone keeps the field's time and a time alone its day.
+  Numbers that can only be month first (`7/25/2019`) are converted and a quiet line says so.
+  Text that is not a date, or names a day or time that does not exist, gives no value: a
+  sentence under the field says so, “Change date” stays disabled and the filter is left as
+  it was. The API still gets `YYYY-MM-DDTHH:MM:SS`, and the URL `from` / `to` as `YYYY-MM-DD`.
 - **Downloads**: the dialog pre-flights with the estimate (an expired session goes to sign-in,
   a refusal is a sentence), then posts into a fresh hidden frame; if the frame loads the
   server's JSON error instead of a file, the status line says so.
@@ -151,6 +167,8 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   Settings offers the mode (Dark, Light, Like the device), saved on the account.
   The earlier per-browser `pa.theme` key becomes the mode of an account that still has the
   defaults, once; for an account that already has a look it is only removed.
+  The size of the photos in the grids is the look's `thumbSize` and nothing else: the earlier
+  per-browser `pa.density` key (a Settings choice that is gone) is removed when the app loads.
 
 ## Performance (library grid, 10 000-photo mock, phone 390×844, CPU ×4)
 

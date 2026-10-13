@@ -36,6 +36,7 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 	await expect(dialog.getByText(/2 selected photos\s+· about [\d.]+ [KMG]B/)).toBeVisible();
 	await expectAccessible(page);
 
+	await dialog.getByRole('button', { name: 'More options' }).click();
 	await dialog.getByLabel('JPEG').check();
 	await dialog.getByLabel('2048').check();
 	await dialog.getByLabel('Remove location').check();
@@ -67,6 +68,7 @@ test('download everything matching a filter', async ({ page }) => {
 	await page.getByRole('button', { name: 'Download all' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/all \d+ matching photos/)).toBeVisible();
+	await dialog.getByRole('button', { name: 'More options' }).click();
 	const estimate = page.waitForRequest((r) => r.url().endsWith('/api/downloads/estimate'));
 	await dialog.getByLabel('Email · 1280').check();
 	expect((await estimate).postDataJSON()).toMatchObject({
@@ -97,7 +99,7 @@ test('fix date from the loupe: set an exact date', async ({ page }) => {
 	await loupeAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await dialog.getByLabel('Set exactly').check();
-	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+	await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 	await expect(dialog.getByRole('cell').last()).toHaveText('3 Feb 2001, 04:05');
 	const post = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
 	await dialog.getByRole('button', { name: 'Change date' }).click();
@@ -175,7 +177,7 @@ test('fix date can be undone: the previous dates come back', async ({ page }) =>
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await expect(dialog.getByText(/can be undone/)).toHaveCount(0);
 	await dialog.getByLabel('Set exactly').check();
-	await dialog.getByLabel('Date and time').fill('2001-02-03T04:05:06');
+	await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 	await dialog.getByRole('button', { name: 'Change date' }).click();
 	await expect(toast(page)).toContainText('Changed the date of 2 photos');
 	const undo = page.waitForRequest((r) => r.url().endsWith('/api/assets/dates'));
@@ -223,10 +225,42 @@ test('download: original files are labelled as without edits, with a hint for ed
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('button', { name: 'Download' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Download photo' });
+	await expect(dialog.getByLabel('Full size', { exact: true })).toBeChecked();
+	await expect(dialog.getByText(/as it was taken, without the edits/)).toBeVisible();
+	await expect(dialog.getByLabel('With edits', { exact: true })).toBeVisible();
+	await dialog.getByRole('button', { name: 'More options' }).click();
 	await expect(dialog.getByLabel('Original file (without edits)')).toBeChecked();
 	await expect(dialog.getByText(/Choose JPEG to include the edits/)).toBeVisible();
 	await dialog.getByLabel('JPEG').check();
 	await expect(dialog.getByText(/Choose JPEG/)).toHaveCount(0);
+	await expect(dialog.getByLabel('With edits', { exact: true })).toBeChecked();
+});
+
+test('download: two plain choices, and Smaller sends a 2048 JPEG without opening More options', async ({
+	page
+}) => {
+	await selectTiles(page, [0, 1]);
+	await selectionAction(page, 'Download');
+	const dialog = page.getByRole('dialog', { name: 'Download' });
+	await expect(dialog.getByRole('radio')).toHaveCount(2);
+	await expect(dialog.getByLabel('Full size', { exact: true })).toBeChecked();
+	await expect(dialog.getByLabel('Folders')).toHaveCount(0);
+	await dialog.getByLabel('Smaller', { exact: true }).check();
+	await expectAccessible(page);
+
+	const post = page.waitForRequest(
+		(r) => r.method() === 'POST' && r.url().endsWith('/api/downloads')
+	);
+	await dialog.getByRole('button', { name: 'Download', exact: true }).click();
+	const form = new URLSearchParams((await post).postData() ?? '');
+	expect(JSON.parse(form.get('request')!)).toMatchObject({
+		format: 'jpeg',
+		quality: 90,
+		max_edge: 2048,
+		strip_location: false,
+		naming: 'original',
+		folders: 'flat'
+	});
 });
 
 test('download: a guest with view-only photos is told why nothing can be downloaded', async ({

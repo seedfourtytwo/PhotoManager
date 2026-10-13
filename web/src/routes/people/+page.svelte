@@ -48,8 +48,8 @@
 	<h1>People</h1>
 	{#if status && !status.faces.ready}
 		<p class="quiet small note" role="note">
-			Finding faces needs models — run <code>just models</code> on the server, then
-			<code>just ml-backfill</code>. People found so far stay listed.
+			New faces are not being found yet. People found so far stay listed.
+			{#if session.isAdmin}Set it up in <a href="/admin">Admin</a>, under Search and faces.{/if}
 		</p>
 	{/if}
 
@@ -107,10 +107,6 @@
 	.note {
 		max-width: var(--measure);
 		margin: var(--s-2) 0 0;
-	}
-	code {
-		font-size: var(--fs-12);
-		color: var(--ink);
 	}
 	h2 {
 		margin: var(--s-6) 0 var(--s-3);

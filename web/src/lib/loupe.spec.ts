@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pushState, replaceState } from '$app/navigation';
-import { page } from '$app/state';
+import { navigating, page } from '$app/state';
 import { ApiError } from './api';
 import type { AssetDetail, AssetPage } from './api/types';
 import { api, notice } from './app.svelte';
+import { infoSheet } from './info-sheet.svelte';
 import { TimelineLoader } from './loader.svelte';
 import {
 	LinkedPhoto,
@@ -11,6 +12,7 @@ import {
 	closePhoto,
 	openPhoto,
 	openPhotoId,
+	photoOnScreen,
 	photoParam,
 	showPhoto,
 	withPhoto
@@ -18,7 +20,10 @@ import {
 import { makeAsset } from './testing/fixtures';
 
 vi.mock('$app/navigation', () => ({ pushState: vi.fn(), replaceState: vi.fn() }));
-vi.mock('$app/state', () => ({ page: { state: {}, url: new URL('http://x/') } }));
+vi.mock('$app/state', () => ({
+	page: { state: {}, url: new URL('http://x/') },
+	navigating: { to: null }
+}));
 
 describe('loupe URL state', () => {
 	it('reads ?photo=<id> and ignores anything else', () => {
@@ -157,6 +162,179 @@ describe('closing the loupe', () => {
 		closePhoto();
 		expect(back).not.toHaveBeenCalled();
 		expect(replaceState).toHaveBeenCalledWith('/', { photo: null });
+	});
+});
+
+describe('the photo under a sheet (the Info sheet on a phone has a history step of its own)', () => {
+	const back = vi.fn();
+	let clock = Date.now() + 3_600_000;
+	/** The history as far as these tests need it: entries of [href, state], the last one current. */
+	let entries: [string, App.PageState][] = [];
+	let onpopstate: (() => void) | undefined;
+	const arrive = () => {
+		const [href, state] = entries.at(-1)!;
+		page.state = state;
+		vi.stubGlobal('location', { href });
+	};
+	/** Back, as the browser and SvelteKit do it: the entry before is the current one, then the listeners. */
+	const goBack = () => {
+		entries.pop();
+		arrive();
+		onpopstate?.();
+	};
+	/** The Info sheet opens: an entry like the current one, with its mark. */
+	const openInfo = () => pushState('', { ...page.state, info: true });
+	const address = () => location.href.replace('http://x', '');
+
+	beforeEach(() => {
+		vi.useFakeTimers({ now: (clock += 120_000) });
+		vi.clearAllMocks();
+		navigating.to = null;
+		entries = [['http://x/', {}]];
+		arrive();
+		onpopstate = undefined;
+		vi.stubGlobal('history', { back });
+		vi.stubGlobal('addEventListener', (_: string, fn: () => void) => (onpopstate = fn));
+		vi.stubGlobal('removeEventListener', () => (onpopstate = undefined));
+		vi.mocked(pushState).mockImplementation((url, state) => {
+			entries.push([new URL(url || location.href, location.href).href, state]);
+			arrive();
+		});
+		vi.mocked(replaceState).mockImplementation((url, state) => {
+			entries[entries.length - 1] = [new URL(url || location.href, location.href).href, state];
+			arrive();
+		});
+		openPhoto(5);
+		photoOnScreen(5);
+	});
+	afterEach(() => {
+		photoOnScreen(undefined);
+		vi.advanceTimersByTime(1000);
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+	});
+
+	it('a step with the sheet open rewrites the sheet’s entry, keeps its mark and adds none', () => {
+		openInfo();
+		showPhoto(6);
+		vi.advanceTimersByTime(400);
+		showPhoto(7);
+		vi.advanceTimersByTime(400);
+		expect(entries).toEqual([
+			['http://x/', {}],
+			['http://x/?photo=5', { photo: 5, pushed: true }],
+			['http://x/?photo=7', { photo: 7, pushed: true, info: true }]
+		]);
+	});
+
+	it('Back from the sheet stays on the photo on screen, and the photo’s own entry then names it', () => {
+		openInfo();
+		showPhoto(6);
+		vi.advanceTimersByTime(400);
+		goBack();
+		expect(openPhotoId(page), 'held at once').toBe(6);
+		expect(address(), 'written a moment later').toBe('/?photo=5');
+		vi.advanceTimersByTime(400);
+		expect(entries).toEqual([
+			['http://x/', {}],
+			['http://x/?photo=6', { photo: 6, pushed: true }]
+		]);
+		expect(openPhotoId(page)).toBe(6);
+		closePhoto();
+		expect(back).toHaveBeenCalledOnce();
+	});
+
+	it('also when Back comes before the last step was written', () => {
+		openInfo();
+		showPhoto(6);
+		showPhoto(7);
+		goBack();
+		expect(openPhotoId(page)).toBe(7);
+		vi.advanceTimersByTime(400);
+		expect(entries.at(-1)).toEqual(['http://x/?photo=7', { photo: 7, pushed: true }]);
+	});
+
+	it('Back from a sheet under which nothing was stepped writes nothing', () => {
+		openInfo();
+		goBack();
+		vi.advanceTimersByTime(400);
+		expect(replaceState).not.toHaveBeenCalled();
+		expect(openPhotoId(page)).toBe(5);
+	});
+
+	it('a photo that came with its link (no state of its own) takes the photo on screen too', () => {
+		entries = [['http://x/?photo=5', {}]];
+		arrive();
+		page.url = new URL('http://x/?photo=5') as typeof page.url;
+		openInfo();
+		showPhoto(6);
+		vi.advanceTimersByTime(400);
+		goBack();
+		vi.advanceTimersByTime(400);
+		expect(entries).toEqual([['http://x/?photo=6', { photo: 6 }]]);
+		page.url = new URL('http://x/') as typeof page.url;
+	});
+
+	it('Back that closes the photo drops a step that was still to be written', () => {
+		showPhoto(6);
+		showPhoto(7);
+		goBack();
+		expect(openPhotoId(page)).toBeUndefined();
+		vi.advanceTimersByTime(400);
+		expect(entries).toEqual([['http://x/', {}]]);
+	});
+
+	it('while a navigation is on its way nothing is written; the photo is held and written after it', () => {
+		openInfo();
+		showPhoto(6);
+		vi.advanceTimersByTime(400);
+		// The first Back after a reload: SvelteKit navigates, and the page's state follows later.
+		navigating.to = { url: new URL('http://x/?photo=5') } as typeof navigating.to;
+		const was = page.state;
+		entries.pop();
+		vi.stubGlobal('location', { href: entries.at(-1)![0] });
+		onpopstate?.();
+		vi.advanceTimersByTime(1000);
+		expect(replaceState).toHaveBeenCalledTimes(1); // the step, before Back
+		expect(page.state).toBe(was);
+		expect(openPhotoId(page)).toBe(6);
+		navigating.to = null;
+		arrive();
+		vi.advanceTimersByTime(400);
+		expect(entries.at(-1)).toEqual(['http://x/?photo=6', { photo: 6, pushed: true }]);
+	});
+
+	it('Back to another page leaves that page’s address alone', () => {
+		entries = [
+			['http://x/albums/3', {}],
+			['http://x/?photo=5', {}]
+		];
+		arrive();
+		showPhoto(6);
+		showPhoto(7);
+		goBack();
+		vi.advanceTimersByTime(400);
+		expect(entries).toEqual([['http://x/albums/3', {}]]);
+	});
+
+	it('the photo view closed: Back is not listened to any more', () => {
+		photoOnScreen(undefined);
+		expect(onpopstate).toBeUndefined();
+	});
+
+	it('closing the photo with the Info sheet open takes the sheet’s entry out first, then the photo’s', async () => {
+		openInfo();
+		showPhoto(6);
+		vi.advanceTimersByTime(400);
+		const hide = vi.spyOn(infoSheet, 'show').mockImplementation(async () => goBack());
+		back.mockImplementation(() => setTimeout(goBack));
+		closePhoto();
+		await vi.advanceTimersByTimeAsync(400);
+		expect(hide).toHaveBeenCalledExactlyOnceWith(false);
+		expect(back).toHaveBeenCalledOnce();
+		expect(entries).toEqual([['http://x/', {}]]);
+		hide.mockRestore();
+		back.mockReset();
 	});
 });
 

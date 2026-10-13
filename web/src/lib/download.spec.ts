@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
 	DEFAULT_OPTIONS,
 	EDGE_PRESETS,
+	applySimple,
 	buildDownloadRequest,
 	frameError,
 	isUntouched,
 	scopeLabel,
+	simpleChoices,
+	simpleOf,
 	singleFileName
 } from './download';
 
@@ -61,6 +64,54 @@ describe('download model', () => {
 	it('names single files by date', () => {
 		expect(singleFileName(7, '2019-07-04T18:30:00', 'webp')).toBe('2019-07-04_7.webp');
 		expect(singleFileName(7, '2019-07-04T18:30:00', 'original')).toBe('2019-07-04_7.jpg');
+	});
+});
+
+describe('the plain choices the dialog opens on', () => {
+	it('are full size or smaller; a with-edits choice comes only when there are edits', () => {
+		expect(simpleChoices(false).map((c) => c.value)).toEqual(['full', 'small']);
+		expect(simpleChoices(true).map((c) => c.value)).toEqual(['full', 'edited', 'small']);
+	});
+
+	it('say in words whether the edits come along', () => {
+		const about = (edited: boolean) =>
+			Object.fromEntries(simpleChoices(edited).map((c) => [c.value, c.about]));
+		expect(about(false).full).not.toMatch(/edit/);
+		expect(about(false).small).not.toMatch(/edit/);
+		expect(about(true).full).toMatch(/without the edits/);
+		expect(about(true).small).toMatch(/Edits included/);
+	});
+
+	it('the default is full size: the file as it was taken', () => {
+		expect(simpleOf(DEFAULT_OPTIONS)).toBe('full');
+		expect(isUntouched(applySimple({ ...DEFAULT_OPTIONS, max_edge: 1080 }, 'full'))).toBe(true);
+	});
+
+	it('smaller is a 2048 JPEG, with edits a full-size one', () => {
+		expect(applySimple(DEFAULT_OPTIONS, 'small')).toMatchObject({ format: 'jpeg', max_edge: 2048 });
+		expect(applySimple(DEFAULT_OPTIONS, 'edited')).toMatchObject({
+			format: 'jpeg',
+			max_edge: null
+		});
+		expect(simpleOf(applySimple(DEFAULT_OPTIONS, 'small'))).toBe('small');
+		expect(simpleOf(applySimple(DEFAULT_OPTIONS, 'edited'))).toBe('edited');
+	});
+
+	it('a choice changes format and size only', () => {
+		const mine = {
+			...DEFAULT_OPTIONS,
+			strip_location: true,
+			naming: 'date',
+			folders: 'year'
+		} as const;
+		expect(applySimple(mine, 'small')).toEqual({ ...mine, format: 'jpeg', max_edge: 2048 });
+		expect(simpleOf({ ...mine, quality: 40 })).toBe('full');
+	});
+
+	it('anything set by hand that is none of them is no plain choice', () => {
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'png' })).toBeNull();
+		expect(simpleOf({ ...DEFAULT_OPTIONS, max_edge: 2048 })).toBeNull();
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'jpeg', max_edge: 1280 })).toBeNull();
 	});
 });
 

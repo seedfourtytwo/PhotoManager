@@ -151,7 +151,9 @@ not a token):
   a dialog or form exists for — is filled with `--ink` (never the accent), 600 weight. Pressed
   toggles (Info, Arrange, crop ratio, Grid/Calendar) are underlined, not filled.
 - **Fields** are a soft box (`--tint` fill, `--r-1`) that takes an accent border on focus.
-  Labels sit above (`.field`), 12 px. Selects keep the native chevron.
+  Labels sit above (`.field`), 12 px. Selects keep the native chevron. A date is typed or
+  pasted into a text field (`DateField`) that shows it day first on the 24-hour clock; the
+  browser's own date control is not used, because it follows the browser's language.
 - **Checkboxes and radios** are drawn (1.5 px `--ink-2` outline, `--check-radius` corners;
   checked = ink fill with a `--bg` check / inner ring), so both themes match. `.choice` lays an
   option out in a row.
@@ -161,6 +163,10 @@ not a token):
   become **bottom sheets**, as wide as the screen, with rounded top corners and safe-area
   padding. A dialog, the photo editor and the filter sheet each add a history step
   (`lib/history-step.ts`), so Back closes them; what was chosen in the filter sheet stays.
+  So does the photo's Info sheet on a phone (`lib/info-sheet.svelte.ts`): Back closes the
+  sheet, the next Back the photo; on a laptop Info is a panel beside the photo, with no step.
+  The editor with changes that are not saved asks first, whichever way it is left (Back,
+  Escape, Cancel): "Keep editing" or "Discard changes". With nothing changed it just closes.
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
   together. Escape or a press outside closes it. The account button shows the person's initial;
   a count that needs attention sits on it in full ink, never the accent.
@@ -200,6 +206,13 @@ not a token):
   of round keys (1 to 9, then 0 with the word Delete to its right), set in the middle of the
   screen where the thumb is, and no system keyboard; a laptop has no pad and types. The
   fourth digit signs in; a wrong PIN empties the dots, which shake once, and says why.
+- **Words for whoever is reading**: a terminal command and a folder path are for an admin, on
+  the Admin page. Anyone else reads what it means for them ("New faces are not being found
+  yet"); an admin reading the same note is also told where to set it up. A photo's details
+  say which folder it came from and what the file is called; only an admin reads the path.
+- **A dialog opens on the few choices most people want**, each with one quiet line saying what
+  you get (Download: Full size, Smaller, and With edits when there are edits). Formats,
+  pixel sizes and file naming wait under "More options"; picking a plain choice again wins.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
@@ -230,6 +243,9 @@ not a token):
 | Time ruler | upright at the right edge | lying above the dock, fading when idle |
 | Selection | click / shift-click / drag-lasso | long-press, then drag or tap |
 | Grid row height | ~220 px | ~110 px, pinch to change |
+
+The row heights are for the look's medium photo size; small is ¾ of it and large 1.4 times.
+Only the look sets it: there is no photo size setting per device.
 
 ## 4. Print design (albums)
 

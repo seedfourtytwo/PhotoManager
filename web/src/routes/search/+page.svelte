@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AssetOut, MlStatus, SearchResult } from '$lib/api';
-	import { api, library } from '$lib/app.svelte';
+	import { api, library, session } from '$lib/app.svelte';
 	import { errorMessage, photos } from '$lib/format';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
@@ -110,8 +110,9 @@
 
 	{#if status && !semantic}
 		<p class="quiet small hint" role="note">
-			AI search needs models — run <code>just models</code> on the server. Until then, words are matched
-			in file names, places, cameras and album titles.
+			Search by what is in a photo is not set up yet. For now, words match file names, places,
+			cameras and album titles.
+			{#if session.isAdmin}Set it up in <a href="/admin">Admin</a>, under Search and faces.{/if}
 		</p>
 	{/if}
 
@@ -191,10 +192,6 @@
 	.source {
 		max-width: 40rem;
 		margin: var(--s-2) 0;
-	}
-	code {
-		font-size: var(--fs-12);
-		color: var(--ink);
 	}
 	.meta {
 		margin: var(--s-4) 0 var(--s-2);
