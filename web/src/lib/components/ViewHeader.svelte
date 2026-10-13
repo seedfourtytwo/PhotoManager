@@ -86,8 +86,12 @@
 			padding: var(--s-4) var(--s-2) var(--s-1);
 			gap: 0 var(--s-2);
 		}
+		/* Beside the title while it fits there whole; else on a line of its own, never squeezed
+		   to a word's width (which pushed the page sideways at large text). */
 		.meta {
+			flex: 1 0 auto;
 			min-width: 0;
+			max-width: 100%;
 		}
 		.tools {
 			flex-basis: 100%;
