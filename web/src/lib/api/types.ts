@@ -243,6 +243,11 @@ export type DownloadOptions = {
 export type DownloadScope = { ids: Id[] } | { album_id: Id } | { filters: AssetFilters };
 export type DownloadRequest = DownloadScope & DownloadOptions;
 export type DownloadEstimate = { count: number; bytes: number };
+/** What GET /api/assets/{id}/download takes: one photo, so nothing about names or folders. */
+export type SingleDownloadOptions = Pick<DownloadOptions, 'format' | 'quality' | 'max_edge'> &
+	Partial<Pick<DownloadOptions, 'strip_location'>>;
+/** One photo's file in memory, under the name the server gives its download. */
+export type PhotoFile = { blob: Blob; filename: string };
 
 // --- albums --------------------------------------------------------------------------------
 

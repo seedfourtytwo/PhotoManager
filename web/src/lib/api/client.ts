@@ -31,7 +31,7 @@ import type {
 	DevicePlatform,
 	DirectoryEntry,
 	DownloadEstimate,
-	DownloadOptions,
+	PhotoFile,
 	DownloadRequest,
 	Face,
 	Facets,
@@ -56,6 +56,7 @@ import type {
 	PinBody,
 	Person,
 	PrintedPdf,
+	SingleDownloadOptions,
 	PrintOptions,
 	PrintPlan,
 	PrintRequest,
@@ -198,6 +199,15 @@ export function createApi(options: ApiOptions = {}) {
 	}
 
 	const get = <T>(path: string) => request<T>('GET', path);
+	function singlePath(id: Id, options: SingleDownloadOptions): string {
+		const params = new URLSearchParams({
+			format: options.format,
+			quality: String(options.quality)
+		});
+		if (options.max_edge) params.set('max_edge', String(options.max_edge));
+		if (options.strip_location) params.set('strip_location', 'true');
+		return `/api/assets/${id}/download?${params}`;
+	}
 	const query = (path: string, values: Record<string, string | number | boolean | undefined>) =>
 		withQuery(
 			path,
@@ -294,18 +304,12 @@ export function createApi(options: ApiOptions = {}) {
 		estimateDownload: (body: DownloadRequest) =>
 			request<DownloadEstimate>('POST', '/api/downloads/estimate', body),
 		downloadAction: `${base}/api/downloads`,
-		singleDownloadUrl: (
-			id: Id,
-			options: Pick<DownloadOptions, 'format' | 'quality' | 'max_edge'> &
-				Partial<Pick<DownloadOptions, 'strip_location'>>
-		) => {
-			const params = new URLSearchParams({
-				format: options.format,
-				quality: String(options.quality)
-			});
-			if (options.max_edge) params.set('max_edge', String(options.max_edge));
-			if (options.strip_location) params.set('strip_location', 'true');
-			return `${base}/api/assets/${id}/download?${params}`;
+		singleDownloadUrl: (id: Id, options: SingleDownloadOptions) =>
+			`${base}${singlePath(id, options)}`,
+		/** The same file as `singleDownloadUrl`, held in memory: for the device's share sheet. */
+		singleDownload: async (id: Id, options: SingleDownloadOptions): Promise<PhotoFile> => {
+			const { blob, headers } = await binary('GET', singlePath(id, options));
+			return { blob, filename: fileNameFrom(headers.get('content-disposition'), `photo-${id}`) };
 		},
 
 		// albums
