@@ -56,7 +56,15 @@
 <script lang="ts">
 	import type { AssetOut, DownloadEstimate, DownloadOptions, DownloadScope } from '$lib/api';
 	import { api, notice, photoShare, SHARE_AGAIN, viewport } from '$lib/app.svelte';
-	import { DEFAULT_OPTIONS, EDGE_PRESETS, buildDownloadRequest, scopeLabel } from '$lib/download';
+	import {
+		DEFAULT_OPTIONS,
+		EDGE_PRESETS,
+		applySimple,
+		buildDownloadRequest,
+		scopeLabel,
+		simpleChoices,
+		simpleOf
+	} from '$lib/download';
 	import { errorMessage, formatBytes } from '$lib/format';
 	import { canShare } from '$lib/share';
 	import Dialog from './Dialog.svelte';
@@ -72,6 +80,7 @@
 
 	let options = $state<DownloadOptions>({ ...DEFAULT_OPTIONS });
 	let custom = $state(false);
+	let more = $state(false);
 	let estimate = $state<DownloadEstimate | null>(null);
 	let estimateError = $state('');
 	let error = $state('');
@@ -80,6 +89,7 @@
 	const request = $derived(buildDownloadRequest(scope, options));
 	const hasEdits = $derived(single ? single.edited : edited);
 	const nothing = $derived(estimate?.count === 0);
+	const simple = $derived(custom ? null : simpleOf(options));
 
 	$effect(() => {
 		const body = request;
@@ -177,100 +187,132 @@
 		{/if}
 	</p>
 
-	<fieldset>
-		<legend>Format</legend>
-		{#each [['original', 'Original file (without edits)'], ['jpeg', 'JPEG'], ['png', 'PNG'], ['webp', 'WebP']] as [value, label] (value)}
-			<label class="choice">
-				<input type="radio" name="format" {value} bind:group={options.format} />
-				{label}
-			</label>
-		{/each}
-		{#if hasEdits && options.format === 'original'}
-			<p class="quiet small note">
-				{single ? 'This photo has' : 'Some of these photos have'} edits; an original file comes as it
-				was taken. Choose JPEG to include the edits.
-			</p>
-		{/if}
-	</fieldset>
-
-	{#if lossy}
-		<label class="row">
-			Quality <span class="value">{options.quality}</span>
-			<input type="range" min="1" max="100" bind:value={options.quality} />
-		</label>
-	{/if}
-
-	<fieldset>
-		<legend>Size (long edge)</legend>
-		{#each EDGE_PRESETS as preset (preset.label)}
-			<label class="choice">
+	<fieldset class="plain">
+		<legend class="visually-hidden">What to download</legend>
+		{#each simpleChoices(hasEdits) as pick (pick.value)}
+			<label class="pick">
 				<input
 					type="radio"
-					name="edge"
-					checked={!custom && options.max_edge === preset.value}
+					name="simple"
+					aria-labelledby={`dl-${pick.value}`}
+					aria-describedby={`dl-${pick.value}-about`}
+					checked={simple === pick.value}
 					onchange={() => {
 						custom = false;
-						options.max_edge = preset.value;
+						options = applySimple(options, pick.value);
 					}}
 				/>
-				{preset.label}
+				<span id={`dl-${pick.value}`}>{pick.label}</span>
+				<span id={`dl-${pick.value}-about`} class="quiet small about">{pick.about}</span>
 			</label>
 		{/each}
-		<label class="choice">
-			<input type="radio" name="edge" checked={custom} onchange={() => (custom = true)} />
-			Custom
-		</label>
-		{#if custom}
-			<label class="row">
-				Pixels
-				<input
-					type="number"
-					min="100"
-					max="20000"
-					step="1"
-					value={options.max_edge ?? 1600}
-					oninput={(e) => (options.max_edge = Number(e.currentTarget.value) || null)}
-				/>
-			</label>
-		{/if}
-		<p class="quiet small">Never enlarged beyond the original.</p>
 	</fieldset>
+	<label class="choice">
+		<input
+			type="checkbox"
+			bind:checked={options.strip_location}
+			disabled={options.strip_all_metadata}
+		/>
+		Remove location
+	</label>
 
-	<fieldset>
-		<legend>Metadata</legend>
-		<label class="choice">
-			<input
-				type="checkbox"
-				bind:checked={options.strip_location}
-				disabled={options.strip_all_metadata}
-			/>
-			Remove location
-		</label>
-		<label class="choice">
-			<input type="checkbox" bind:checked={options.strip_all_metadata} />
-			Remove all metadata
-		</label>
-	</fieldset>
+	<button
+		type="button"
+		class="more"
+		aria-expanded={more}
+		aria-controls="dl-more"
+		onclick={() => (more = !more)}>More options</button
+	>
+	{#if more}
+		<div id="dl-more">
+			<fieldset>
+				<legend>Format</legend>
+				{#each [['original', 'Original file (without edits)'], ['jpeg', 'JPEG'], ['png', 'PNG'], ['webp', 'WebP']] as [value, label] (value)}
+					<label class="choice">
+						<input type="radio" name="format" {value} bind:group={options.format} />
+						{label}
+					</label>
+				{/each}
+				{#if hasEdits && options.format === 'original'}
+					<p class="quiet small note">
+						{single ? 'This photo has' : 'Some of these photos have'} edits; an original file comes as
+						it was taken. Choose JPEG to include the edits.
+					</p>
+				{/if}
+			</fieldset>
 
-	{#if !single}
-		<fieldset>
-			<legend>In the ZIP</legend>
-			<label class="row">
-				Names
-				<select bind:value={options.naming}>
-					<option value="original">Original file names</option>
-					<option value="date">Date and place</option>
-				</select>
-			</label>
-			<label class="row">
-				Folders
-				<select bind:value={options.folders}>
-					<option value="flat">None</option>
-					<option value="year">By year</option>
-					<option value="month">By month</option>
-				</select>
-			</label>
-		</fieldset>
+			{#if lossy}
+				<label class="row">
+					Quality <span class="value">{options.quality}</span>
+					<input type="range" min="1" max="100" bind:value={options.quality} />
+				</label>
+			{/if}
+
+			<fieldset>
+				<legend>Size (long edge)</legend>
+				{#each EDGE_PRESETS as preset (preset.label)}
+					<label class="choice">
+						<input
+							type="radio"
+							name="edge"
+							checked={!custom && options.max_edge === preset.value}
+							onchange={() => {
+								custom = false;
+								options.max_edge = preset.value;
+							}}
+						/>
+						{preset.label}
+					</label>
+				{/each}
+				<label class="choice">
+					<input type="radio" name="edge" checked={custom} onchange={() => (custom = true)} />
+					Custom
+				</label>
+				{#if custom}
+					<label class="row">
+						Pixels
+						<input
+							type="number"
+							min="100"
+							max="20000"
+							step="1"
+							value={options.max_edge ?? 1600}
+							oninput={(e) => (options.max_edge = Number(e.currentTarget.value) || null)}
+						/>
+					</label>
+				{/if}
+				<p class="quiet small">Never enlarged beyond the original.</p>
+			</fieldset>
+
+			<fieldset>
+				<legend>Metadata</legend>
+				<label class="choice">
+					<input type="checkbox" bind:checked={options.strip_all_metadata} />
+					Remove all metadata
+				</label>
+			</fieldset>
+
+			{#if !single}
+				<fieldset>
+					<legend>In the ZIP</legend>
+					<label class="row">
+						Names
+						<select bind:value={options.naming}>
+							<option value="original">Original file names</option>
+							<option value="date">Date and place</option>
+						</select>
+					</label>
+					<label class="row">
+						Folders
+						<select bind:value={options.folders}>
+							<option value="flat">None</option>
+							<option value="year">By year</option>
+							<option value="month">By month</option>
+						</select>
+					</label>
+				</fieldset>
+			{/if}
+		</div>
 	{/if}
 	{#if error}<p role="alert">{error}</p>{/if}
 
@@ -296,6 +338,38 @@
 	}
 	.note {
 		margin: var(--s-1) 0 0;
+	}
+	.plain {
+		margin-top: var(--s-2);
+	}
+	/* A plain choice: the option, and under it what you get. The whole block is the target. */
+	.pick {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		column-gap: var(--s-2);
+		align-items: center;
+		padding: var(--s-2) 0;
+	}
+	.about {
+		grid-column: 2;
+	}
+	.more {
+		display: block;
+		margin: var(--s-3) 0 0;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--ink-2);
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.more[aria-expanded='true'] {
+		color: var(--ink);
+	}
+	@media (pointer: coarse) {
+		.more {
+			min-height: var(--target);
+		}
 	}
 	.row {
 		display: grid;

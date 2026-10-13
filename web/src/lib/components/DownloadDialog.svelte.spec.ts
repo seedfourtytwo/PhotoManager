@@ -35,6 +35,7 @@ describe('DownloadDialog on a phone with a share sheet', () => {
 		});
 		const onclose = vi.fn();
 		render(DownloadDialog, { scope: { ids: [7] }, single: asset, onclose });
+		await page.getByRole('button', { name: 'More options' }).click();
 		await page.getByRole('radio', { name: 'WebP' }).click();
 		await page.getByRole('button', { name: 'Save to Photos' }).click();
 		await vi.waitFor(() => expect(onclose).toHaveBeenCalledTimes(1));
