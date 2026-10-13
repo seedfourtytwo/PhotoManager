@@ -170,6 +170,13 @@ export type AssetDetail = AssetOut & {
 	camera_model: string | null;
 	latitude: number | null;
 	longitude: number | null;
+	/** Aperture as its f-number: 2.8 for f/2.8. */
+	f_number: number | null;
+	/** Shutter time in seconds: 0.004 for 1/250. */
+	exposure_time: number | null;
+	iso: number | null;
+	/** Millimetres, the lens's own (not the 35 mm equivalent). */
+	focal_length: number | null;
 	imported_at: string;
 	origins: { source_id: Id; source_label: string; relative_path: string }[];
 	albums: { id: Id; title: string }[];

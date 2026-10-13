@@ -20,7 +20,8 @@ import {
 	test,
 	toast,
 	touchSwipe,
-	viewOnlyPhoto
+	viewOnlyPhoto,
+	withDetail
 } from './helpers.ts';
 
 test.describe('as admin', () => {
@@ -248,6 +249,13 @@ test.describe('photo view', () => {
 	});
 
 	test('the bar reads the photo’s date, time and file name in the data face', async ({ page }) => {
+		// A photo that carries no exposure settings; one that does is in exposure.spec.ts.
+		await withDetail(page, () => ({
+			f_number: null,
+			exposure_time: null,
+			iso: null,
+			focal_length: null
+		}));
 		await page.locator('.tile').first().click();
 		const readout = loupe(page).locator('.readout');
 		await expect(readout).toContainText(/\d{4}-\d{2}-\d{2} · \d{2}:\d{2}/);

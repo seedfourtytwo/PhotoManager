@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { AssetDetail, AssetOut } from '$lib/api';
 	import { dateSourceLabel, formatTaken } from '$lib/dates';
+	import { exposureParts, exposureSpoken } from '$lib/exposure';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
 
@@ -16,6 +17,7 @@
 	/** Decimal places of a coordinate as written: about ten metres. */
 	const COORD_PLACES = 4;
 	const viewOnly = $derived(detail?.level === 'view');
+	const exposure = $derived(exposureParts(detail));
 </script>
 
 <aside class="sidenote" aria-label="About this photo">
@@ -46,6 +48,12 @@
 		{#if detail.camera_model}
 			<p class="camera">
 				{detail.camera_make ? `${detail.camera_make} · ` : ''}{detail.camera_model}
+			</p>
+		{/if}
+		{#if exposure.length}
+			<p class="exposure data">
+				<span aria-hidden="true">{exposure.join(' · ')}</span>
+				<span class="visually-hidden">{exposureSpoken(detail).join(', ')}</span>
 			</p>
 		{/if}
 		<!-- Not for the formatter to wrap: a line break inside "· edited" ends up in the text. -->

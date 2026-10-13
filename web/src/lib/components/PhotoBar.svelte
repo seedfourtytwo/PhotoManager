@@ -4,7 +4,7 @@
 	import type { AssetDetail, AssetOut } from '$lib/api';
 	import { library, session } from '$lib/app.svelte';
 	import type { MenuItem } from '$lib/menu';
-	import { readout } from '$lib/readout';
+	import { readout, readoutSpoken } from '$lib/readout';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 	import type { PhotoDialog } from './PhotoDialogs.svelte';
@@ -41,6 +41,8 @@
 	// v1.2: marking a photo private needs edit on it (from a source, or as an admin).
 	const canPrivate = $derived(!trash && canEdit);
 	const lines = $derived(readout(asset, detail));
+	/** Line two in words, when it holds exposure settings ("f/2.8" is said "f 2.8"). */
+	const spoken = $derived(readoutSpoken(detail));
 	/** What does not fit among the bar's five actions. */
 	const moreItems = $derived<MenuItem[]>([
 		...(canPrivate
@@ -65,7 +67,8 @@
 <div class="bar glass">
 	<p class="readout data">
 		<b>{lines[0]}</b>
-		{#if lines[1]}<span>{lines[1]}</span>{/if}
+		{#if lines[1]}<span aria-hidden={spoken ? true : undefined}>{lines[1]}</span
+			>{/if}{#if spoken}<span class="visually-hidden">{spoken}</span>{/if}
 	</p>
 	<div class="acts">
 		{#if trash}

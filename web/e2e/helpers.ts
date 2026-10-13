@@ -2,6 +2,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test as base, type Locator, type Page } from '@playwright/test';
 import { MOCK_URL } from '../playwright.config.ts';
+import type { AssetDetail } from '../src/lib/api/types.ts';
 
 export const ADMIN = {
 	username: process.env.E2E_USER ?? 'admin',
@@ -85,6 +86,22 @@ export async function delayRoute(page: Page, url: string | RegExp, ms: number) {
 	await page.route(url, async (route) => {
 		await new Promise((r) => setTimeout(r, ms));
 		await route.continue().catch(() => undefined);
+	});
+}
+
+/**
+ * Answer a photo's details with some values replaced: the server's own answer (mock or real
+ * backend) with what `change` returns laid over it.
+ */
+export async function withDetail(
+	page: Page,
+	change: (detail: AssetDetail) => Partial<AssetDetail>
+) {
+	await page.route(/\/api\/assets\/\d+$/, async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		const response = await route.fetch();
+		const detail = (await response.json()) as AssetDetail;
+		await route.fulfill({ response, json: { ...detail, ...change(detail) } });
 	});
 }
 
