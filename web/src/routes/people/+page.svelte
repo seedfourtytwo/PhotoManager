@@ -2,7 +2,7 @@
 	import type { MlStatus, Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { photos } from '$lib/format';
-	import FaceCrop from '$lib/components/FaceCrop.svelte';
+	import Portrait from '$lib/components/Portrait.svelte';
 
 	let people = $state<Person[] | null>(null);
 	let hidden = $state<Person[]>([]);
@@ -71,7 +71,7 @@
 				{#each group.list as person (person.id)}
 					<li>
 						<a href={`/people/${person.id}`}>
-							<FaceCrop face={person.cover} />
+							<Portrait portrait={person.portrait} />
 							<span class="name" class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
 							<span class="quiet small">{photos(person.asset_count)}</span>
 						</a>
@@ -88,7 +88,7 @@
 				{#each hidden as person (person.id)}
 					<li>
 						<a href={`/people/${person.id}`}>
-							<FaceCrop face={person.cover} size={40} />
+							<Portrait portrait={person.portrait} size={40} />
 							<span class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
 						</a>
 						<span class="quiet small">{photos(person.asset_count)}</span>

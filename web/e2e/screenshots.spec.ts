@@ -104,6 +104,7 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: '4:5', exact: true }).click();
 	await shot(page, '13-editor', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'Discard changes' }).click();
 	await page.getByRole('button', { name: 'More' }).click();
 	await shot(page, '04c-loupe-more', p);
 	await page.keyboard.press('Escape');
@@ -180,6 +181,9 @@ test('every screen', async ({ page }, info) => {
 		.click();
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await shot(page, '19b-person', p);
+	await page.getByRole('button', { name: 'Change portrait', exact: true }).click();
+	await expect(page.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
+	await shot(page, '19c-person-portrait', p);
 
 	await page.goto('/');
 	await selectTiles(page, [0]);

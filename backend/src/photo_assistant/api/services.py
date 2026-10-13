@@ -132,7 +132,9 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         clock=clock,
         min_free_bytes=min_free_bytes,
     )
-    ml = build_ml_services(root, settings.ml, repo, store, db, on_tags=review.hold_clutter)
+    ml = build_ml_services(
+        root, settings.ml, repo, store, db, renderer, on_tags=review.hold_clutter
+    )
 
     def scan(payload: dict[str, object]) -> object:
         # rclone sources are pulled into staging/ first; every kind is then imported

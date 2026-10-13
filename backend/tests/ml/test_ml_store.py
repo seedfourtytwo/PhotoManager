@@ -637,7 +637,10 @@ def test_one_persons_page_for_a_viewer_reads_that_persons_faces_not_the_library(
     for sql in one_person:
         plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + sql))
         by_person = "USING INDEX face_by_person (person_id=?)" in plan
-        assert by_person or plan == "SEARCH f USING INTEGER PRIMARY KEY (rowid=?)", plan
+        cover = "SEARCH f USING INTEGER PRIMARY KEY (rowid=?)"
+        # the cover face, with (issue 53) the photo it is on: both read by their id
+        with_its_photo = f"{cover} | SEARCH a USING INTEGER PRIMARY KEY (rowid=?)"
+        assert by_person or plan in (cover, with_its_photo), plan
         # no walk over a whole table, nor over every photo that is not in the trash
         assert not re.search(r"SCAN (?!\(subquery)", plan) and "(trashed_at=?)" not in plan, plan
 
