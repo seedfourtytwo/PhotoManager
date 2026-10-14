@@ -15,6 +15,7 @@ from photo_assistant.api.filters import checked
 from photo_assistant.api.schemas import DownloadRequest, Estimate
 from photo_assistant.api.services import Services
 from photo_assistant.app.downloads import MEDIA_TYPES, Entry, downloadable
+from photo_assistant.app.photo_names import photo_names
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.archive_name import (
     album_zip_name,
@@ -95,9 +96,7 @@ def _entries(
 ) -> list[Entry]:
     """The photos of the scope you may download, each under its file name in the ZIP."""
     allowed = downloadable(scope.views)
-    original = services.repo.first_origin_names(viewer, [v.id for v in allowed])
-    names = [original.get(v.id, "photo") for v in allowed]
-    return services.downloads.plan(allowed, names, options)
+    return services.downloads.plan(allowed, photo_names(services.repo, viewer, allowed), options)
 
 
 @router.post("/downloads/estimate")
@@ -135,8 +134,8 @@ def download_one(
     options = ExportOptions(  # OptionsError: 422
         format=fmt, quality=quality, max_edge=max_edge, strip_location=strip_location
     )
-    name = services.repo.first_origin_name(viewer, asset_id) or "photo"
-    entry = services.downloads.plan([view], [name], options)[0]
+    names = photo_names(services.repo, viewer, [view])
+    entry = services.downloads.plan([view], names, options)[0]
     out_format = services.downloads.output_format(view, options)
     media = MEDIA_TYPES.get(out_format, view.asset.mime_type or "application/octet-stream")
     content: Iterator[bytes] = services.downloads.content(view, options)

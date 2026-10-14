@@ -92,6 +92,8 @@ test('Share hands the sheet one file: the photo’s download, under its name', a
 	const header = response.headers()['content-disposition'];
 	const starred = /filename\*=UTF-8''([^;]+)/.exec(header)?.[1];
 	const name = starred ? decodeURIComponent(starred) : /filename="([^"]+)"/.exec(header)![1];
+	const detail = await (await page.request.get(`/api/assets/${id}`)).json();
+	expect(name.startsWith(`${detail.name}.`), `${name} is named after the photo`).toBe(true);
 	expect(files).toEqual([
 		{ name, type: response.headers()['content-type'].split(';')[0], size: expect.any(Number) }
 	]);

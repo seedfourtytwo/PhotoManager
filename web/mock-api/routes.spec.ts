@@ -58,6 +58,28 @@ describe('integration rules', () => {
 		expect(run.message).toMatch(/folder not found/);
 	});
 
+	it('names a photo after its minute (numbered within it) or its tidied file, downloads too', async () => {
+		const api = await h.signedIn();
+		const [a, b, c] = h.mock.state.assets.filter((x) => x.trashed_at === null && !x.held);
+		Object.assign(a, { taken_at: '2015-06-12T14:32:40', date_source: 'exif' });
+		Object.assign(b, { taken_at: '2015-06-12T14:32:05', date_source: 'exif' });
+		c.date_source = 'file_mtime';
+		c.sources[0].relative_path = '2015/Beach day (Copy).jpg';
+		expect((await api.asset(b.id)).name).toBe('2015-06-12 14.32');
+		expect((await api.asset(a.id)).name).toBe('2015-06-12 14.32 · 2');
+		expect((await api.asset(c.id)).name).toBe('Beach day');
+		const single = await api.raw(`/api/assets/${a.id}/download?format=original`);
+		expect(single.headers.get('content-disposition')).toContain(
+			`filename*=UTF-8''${encodeURIComponent('2015-06-12 14.32 · 2.svg')}`
+		);
+		const zip = await api.raw('/api/downloads', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ ...zipRequest({ ids: [c.id] }), naming: 'name' })
+		});
+		expect(Buffer.from(await zip.arrayBuffer()).includes('Beach day.svg')).toBe(true);
+	});
+
 	it('names the ZIP after the album or the scope', async () => {
 		const api = await h.signedIn();
 		const form = (request: DownloadRequest) =>
