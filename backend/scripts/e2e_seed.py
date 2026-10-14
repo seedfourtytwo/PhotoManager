@@ -5,7 +5,8 @@
 
 Imports the three mock source folders, then writes two snapshots the test-mode server resets
 to (``POST /__test/reset``): ``none`` (photos, no accounts: the first-run screen) and ``seed``
-(the same people, access, albums and failed job as the web mock in ``web/mock-api/data.ts``).
+(the same people, access, albums and failed job as the web mock in ``web/mock-api/data.ts``),
+plus a copy of the library files, so a reset also undoes a test that emptied the trash.
 ``--scans`` writes a folder for the "admin adds a folder" journey: six new photos, a duplicate,
 a broken JPEG and a video.
 
@@ -22,6 +23,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from photo_assistant.adapters.library_snapshot import save_library_files
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
 from photo_assistant.api.services import Services, build_services
 from photo_assistant.api.settings import Settings
@@ -128,6 +130,7 @@ def main() -> int:
         SqliteSnapshotter(args.data / "library.db").snapshot(snapshots / "none.db")
         seed_people(services, sources, args.data / "library.db")
         SqliteSnapshotter(args.data / "library.db").snapshot(snapshots / "seed.db")
+        save_library_files(args.data, snapshots / "files")  # seeding people adds no files
     finally:
         services.close()
     if args.scans:

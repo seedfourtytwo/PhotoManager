@@ -132,6 +132,7 @@ def download_one(
     strip_location: bool = False,
 ) -> StreamingResponse:
     view = require_view(services, viewer, asset_id, Level.DOWNLOAD)
+    services.downloads.original(view)  # OriginalMissingError: 503, before the stream starts
     options = ExportOptions(  # OptionsError: 422
         format=fmt, quality=quality, max_edge=max_edge, strip_location=strip_location
     )

@@ -184,9 +184,7 @@ def preview(
 
 @router.get("/{asset_id}/original")
 def original(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
-    a = require_view(services, viewer, asset_id, Level.DOWNLOAD).asset
-    path = services.store.absolute(a.library_path)
-    if not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "original missing from the library")
+    view = require_view(services, viewer, asset_id, Level.DOWNLOAD)
+    path, a = services.downloads.original(view), view.asset
     name = services.repo.first_origin_name(viewer, asset_id) or path.name
     return FileResponse(path, media_type=a.mime_type or "application/octet-stream", filename=name)
