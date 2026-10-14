@@ -5,12 +5,14 @@ start unless the server only listens on and answers to loopback names, and only 
 requests coming from this machine.
 """
 
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from photo_assistant.adapters.library_snapshot import save_library_files
 from photo_assistant.adapters.sqlite_snapshot import SqliteSnapshotter
 from photo_assistant.api.main import create_app
 from tests.api.conftest import BASE, PIN, add_user, make_settings, services_of
@@ -51,6 +53,7 @@ def _snapshot(client: TestClient, name: str) -> None:
     folder = root / "test-snapshots"
     folder.mkdir(exist_ok=True)
     SqliteSnapshotter(root / "library.db").snapshot(folder / f"{name}.db")
+    save_library_files(root, folder / "files")
 
 
 def test_reset_restores_a_snapshot_of_the_library(test_app: TestClient) -> None:
@@ -75,3 +78,37 @@ def test_reset_needs_a_known_snapshot_and_a_local_caller(test_app: TestClient) -
     assert test_app.post("/__test/reset", json={"users": "../x"}).status_code == 422
     remote = TestClient(test_app.app, base_url=BASE, client=("10.0.0.5", 5000))
     assert remote.post("/__test/reset", json={"users": "seed"}).status_code == 403
+
+
+def test_reset_puts_back_the_library_files_of_the_snapshot(test_app: TestClient) -> None:
+    """Emptying the trash deletes originals and derivatives; the next test must find them
+    again, and must not find what an earlier test added. Other files are not the library's."""
+    root = services_of(test_app).settings.data_root
+    kept, thumb = root / "originals/2019/07/a.jpg", root / "derived/thumb/ab/a.webp"
+    for path, content in ((kept, b"original"), (thumb, b"thumb")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    kept.chmod(0o444)
+    _snapshot(test_app, "seed")
+    kept.unlink()  # a purge
+    thumb.write_bytes(b"re-rendered")
+    added = [root / "originals/2026/09/new.jpg", root / "derived/edited/cd/new.webp"]
+    for path in added:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"from a later test")
+    log = root / "logs/server.log"
+    log.parent.mkdir(exist_ok=True)
+    log.write_text("not a library file")
+
+    assert test_app.post("/__test/reset", json={"users": "seed"}).status_code == 204
+
+    assert kept.read_bytes() == b"original" and thumb.read_bytes() == b"thumb"
+    assert not any(path.exists() for path in added)
+    assert log.read_text() == "not a library file"
+    assert test_app.post("/__test/reset", json={"users": "seed"}).status_code == 204, "twice"
+
+
+def test_reset_refuses_a_snapshot_without_its_library_files(test_app: TestClient) -> None:
+    _snapshot(test_app, "seed")
+    shutil.rmtree(services_of(test_app).settings.data_root / "test-snapshots" / "files")
+    assert test_app.post("/__test/reset", json={"users": "seed"}).status_code == 404

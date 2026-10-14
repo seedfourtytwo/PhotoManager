@@ -15,6 +15,7 @@ from pathlib import Path
 
 from photo_assistant.app.photo_names import PhotoName
 from photo_assistant.domain.access import Level
+from photo_assistant.domain.errors import UnavailableError
 from photo_assistant.domain.export_naming import (
     ExportOptions,
     estimate_bytes,
@@ -29,6 +30,14 @@ from photo_assistant.ports.library import AssetView
 CHUNK = 1024 * 1024
 _KEEPS_FORMAT = {"image/jpeg": "jpeg", "image/png": "png", "image/webp": "webp"}
 MEDIA_TYPES = {"jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
+
+class OriginalMissingError(UnavailableError):
+    def __init__(self) -> None:
+        super().__init__(
+            "This photo's original file is missing from the library. Run verify-library to "
+            "find what is missing, then put it back from a backup."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,9 +103,18 @@ class Downloads:
             return options.format
         return _KEEPS_FORMAT.get(view.asset.mime_type or "", "jpeg")
 
-    def content(self, view: AssetView, options: ExportOptions) -> Iterator[bytes]:
-        """The bytes of one download, produced lazily (nothing happens until iterated)."""
+    def original(self, view: AssetView) -> Path:
+        """The photo's library file; OriginalMissingError when it is not on the disk."""
         library_file = self._store.absolute(view.asset.library_path)
+        if not library_file.is_file():
+            raise OriginalMissingError
+        return library_file
+
+    def content(self, view: AssetView, options: ExportOptions) -> Iterator[bytes]:
+        """The bytes of one download, produced lazily (nothing happens until iterated, so a
+        ZIP lists a failing photo in its manifest; a single download checks ``original``
+        first, while it can still answer an error)."""
+        library_file = self.original(view)
         fmt = self.output_format(view, options)
         if fmt == "original" and not (options.strip_location or options.strip_all_metadata):
             yield from _read(library_file)

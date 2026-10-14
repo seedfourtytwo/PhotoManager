@@ -157,7 +157,7 @@ def test_asset_detail_images_and_original_download(client: TestClient, source_gu
     library_file.chmod(0o644)
     library_file.unlink()
     missing = client.get(f"/api/assets/{asset['id']}/original")
-    assert missing.status_code == 404 and "missing" in missing.json()["detail"]
+    assert missing.status_code == 503 and "missing from the library" in missing.json()["detail"]
     assert client.get("/api/assets/999/thumb").status_code == 404
 
 

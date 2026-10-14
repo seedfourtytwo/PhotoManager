@@ -212,6 +212,20 @@ def test_single_download(admin: TestClient, ids: list[int]) -> None:
         assert im.size == (400, 300), "original means untouched"
 
 
+@pytest.mark.parametrize("params", [{}, {"format": "webp"}])
+def test_a_download_whose_original_is_missing_says_so(
+    admin: TestClient, ids: list[int], params: dict[str, str]
+) -> None:
+    """A library original gone from the disk (deleted by hand, a bad disk) answers a named
+    503 the user can act on, not a 500 from deep inside the stream."""
+    services = services_of(admin)
+    path = services.store.absolute(services.repo.get_asset(ids[0]).library_path)  # type: ignore[union-attr]
+    path.unlink()
+    response = admin.get(f"/api/assets/{ids[0]}/download", params=params)
+    assert response.status_code == 503
+    assert "missing from the library" in response.json()["detail"]
+
+
 def test_an_absurd_max_edge_is_refused(admin: TestClient, ids: list[int]) -> None:
     """QA A6: max_edge=10**9 overflowed libvips."""
     body = {"ids": ids, "format": "jpeg", "max_edge": 10**9}

@@ -202,9 +202,7 @@ def preview(
 @router.get("/{asset_id}/original")
 def original(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
     view = require_view(services, viewer, asset_id, Level.DOWNLOAD)
-    path = services.store.absolute(view.asset.library_path)
-    if not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "original missing from the library")
+    path = services.downloads.original(view)  # OriginalMissingError: 503
     names = photo_names(services.repo, viewer, [view])
     (entry,) = services.downloads.plan([view], names, ExportOptions())  # untouched, as named
     media_type = view.asset.mime_type or "application/octet-stream"

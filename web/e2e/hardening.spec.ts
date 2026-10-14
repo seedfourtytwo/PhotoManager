@@ -180,8 +180,6 @@ test('search: “like this photo” never names the previous photo as its source
 test('trash: “Empty trash” deletes what the page showed, not what arrived since', async ({
 	page
 }) => {
-	// Purging deletes the files for good, and the real backend's reset restores rows, not files.
-	test.skip(REAL_BACKEND, 'would delete photos the later tests need');
 	await signIn(page);
 	const [first, later] = await page
 		.locator('.tile')
