@@ -188,18 +188,22 @@ test('a locked account is told how it gets unlocked; the right PIN works once an
 	await signIn(page, '/', GUEST);
 });
 
-/** Admin → People: only the guest is marked Locked and has Unlock; using it clears both. */
+/** Admin → People: only the guest's tile says Locked; its sheet has Unlock, which clears it. */
 async function unlockFromPeople(page: Page) {
-	const rowOf = (username: string) =>
-		page.getByRole('row').filter({ has: page.getByRole('cell', { name: username, exact: true }) });
-	const row = rowOf(GUEST.username);
-	await expect(row.getByText('Locked', { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Unlock' })).toHaveCount(1);
-	await expect(rowOf(ADMIN.username).getByText('Locked', { exact: true })).toHaveCount(0);
-	await row.getByRole('button', { name: 'Unlock' }).click();
+	const tileOf = (name: string) =>
+		page
+			.getByRole('region', { name: 'People' })
+			.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+	const tile = tileOf(GUEST.name);
+	await expect(tile).toContainText('Locked');
+	await expect(tileOf(ADMIN.name)).not.toContainText('Locked');
+	await tile.click();
+	const sheet = page.getByRole('dialog', { name: GUEST.name });
+	await sheet.getByRole('button', { name: 'Unlock' }).click();
 	await expect(
 		page.getByRole('status').filter({ hasText: `${GUEST.username} can try their PIN again.` })
 	).toBeVisible();
-	await expect(row.getByText('Locked', { exact: true })).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Unlock' })).toHaveCount(0);
+	await expect(sheet.getByRole('button', { name: 'Unlock' })).toHaveCount(0);
+	await sheet.getByRole('button', { name: 'Close' }).click();
+	await expect(tile).not.toContainText('Locked');
 }
