@@ -5,11 +5,13 @@ import {
 	countSlow,
 	delayRoute,
 	expect,
+	follow,
 	isPhone,
 	loupe,
 	NOTHING_HAPPENS_MS,
 	REAL_BACKEND,
 	resetMock,
+	selectEverything,
 	selectTiles,
 	signIn,
 	test
@@ -140,16 +142,6 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	expect(asked.length).toBe(settled);
 });
 
-/** Follow a link the way a click in the app does (no reload). */
-async function follow(page: Page, href: string) {
-	await page.evaluate((to) => {
-		const link = Object.assign(document.createElement('a'), { href: to });
-		document.body.append(link);
-		link.click();
-		link.remove();
-	}, href);
-}
-
 test('search: clearing the search while one is running does not leave “Searching…”', async ({
 	page
 }) => {
@@ -162,10 +154,12 @@ test('search: clearing the search while one is running does not leave “Searchi
 	await box.fill('');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search$/);
-	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	// nothing typed: the suggestions are back
+	const places = page.getByRole('region', { name: 'Places' });
+	await expect(places).toBeVisible();
 	await page.waitForTimeout(1000); // the abandoned search answers; nothing may change
 	await expect(page.getByText('Searching…')).toHaveCount(0);
-	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	await expect(places).toBeVisible();
 });
 
 test('search: “like this photo” never names the previous photo as its source', async ({ page }) => {
@@ -195,6 +189,7 @@ test('trash: “Empty trash” deletes what the page showed, not what arrived si
 	await expect(page.locator('.tile')).toHaveCount(1);
 	// Meanwhile another device moves a photo to the trash.
 	await page.request.delete('/api/assets', { data: { ids: [later] } });
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Empty trash' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Delete for good?' });
 	await expect(dialog).toContainText('1 library copy');
@@ -303,6 +298,7 @@ test('album: two quick moves reach the server in order, the last one last', asyn
 	const ids = async () =>
 		tiles.evaluateAll((all) => all.map((t) => Number(t.getAttribute('data-id'))));
 	const before = await ids();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Arrange' }).click();
 	await tiles.first().focus();
 	await page.keyboard.press('Alt+ArrowRight');
@@ -333,6 +329,7 @@ test.describe('a double click sends one request', () => {
 	test('Rename album saves once', async ({ page }) => {
 		const patches = await countSlow(page, '**/api/albums/1', 'PATCH');
 		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Rename' }).click();
 		const dialog = page.getByRole('dialog', { name: 'Rename album' });
 		await dialog.getByLabel('Title').fill('Renamed once');
@@ -344,6 +341,7 @@ test.describe('a double click sends one request', () => {
 	test('Delete album deletes once, without a “not found” afterwards', async ({ page }) => {
 		const deletes = await countSlow(page, '**/api/albums/1', 'DELETE');
 		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Delete album' }).click();
 		await page
 			.getByRole('dialog', { name: 'Delete album?' })
@@ -357,18 +355,20 @@ test.describe('a double click sends one request', () => {
 	test('Change PIN changes it once, without “the current PIN is wrong”', async ({ page }) => {
 		const posts = await countSlow(page, '**/api/auth/pin', 'POST');
 		await signIn(page, '/settings');
-		await page.getByLabel('Current PIN').fill(ADMIN.pin);
-		await page.getByLabel('New PIN').fill('8642');
-		await page.getByRole('button', { name: 'Change PIN' }).dblclick();
+		await page.getByRole('button', { name: 'Change PIN' }).click();
+		const sheet = page.getByRole('dialog', { name: 'Change PIN' });
+		await sheet.getByLabel('Current PIN').fill(ADMIN.pin);
+		await sheet.getByLabel('New PIN').fill('8642');
+		await sheet.getByRole('button', { name: 'Change PIN' }).dblclick();
 		await expect(page.getByRole('status').filter({ hasText: 'PIN changed' })).toBeVisible();
 		expect(posts.count).toBe(1);
-		// the backup warning is an alert on every page: look for one about the PIN
 		await expect(page.getByRole('alert').filter({ hasText: /PIN/ })).toHaveCount(0);
 	});
 
 	test('Analyse photos queues once', async ({ page }) => {
 		const posts = await countSlow(page, '**/api/ml/backfill', 'POST');
 		await signIn(page, '/admin');
+		await page.getByRole('region', { name: 'Search and faces' }).getByRole('button').click();
 		await page.getByRole('button', { name: 'Analyse photos not done yet' }).dblclick();
 		await expect(page.getByRole('status').filter({ hasText: /Queued/ })).toBeVisible();
 		expect(posts.count).toBe(1);
@@ -381,17 +381,21 @@ test('library: “select” says how many it takes while more photos are still t
 	test.skip(REAL_BACKEND, 'needs a library larger than one page');
 	await resetMock('seed', { count: 450 });
 	await signIn(page);
-	const loaded = await page.getByRole('button', { name: /^Select loaded \(\d+\)$/ }).textContent();
+	// Under the pill's More, which Select brings before a photo is chosen.
+	await page.getByRole('button', { name: 'Select', exact: true }).click();
+	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
+	await bar.getByRole('button', { name: 'More' }).click();
+	const loaded = await bar.getByRole('button', { name: /^Select loaded \(\d+\)$/ }).textContent();
 	const n = Number(loaded!.match(/\d+/)![0]);
 	expect(n).toBeLessThan(450);
-	await page.getByRole('button', { name: /^Select loaded/ }).click();
+	await expect(bar.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
+	await bar.getByRole('button', { name: /^Select loaded/ }).click();
 	await expect(page.getByText(`${n} selected`)).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
 });
 
 test('selecting a few photos says nothing about the 10,000 limit', async ({ page }) => {
 	await signIn(page);
-	await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+	await selectEverything(page);
 	await expect(page.getByText(/\d+ selected/)).toBeVisible();
 	await expect(page.getByText(/the most one action can change/)).toHaveCount(0);
 });

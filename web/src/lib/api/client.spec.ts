@@ -37,6 +37,7 @@ const asset = (id: number): AssetOut => ({
 	thumb: null,
 	preview_ready: false,
 	favourite: false,
+	pinned: false,
 	hidden: false,
 	private: false,
 	place: null,
@@ -176,6 +177,39 @@ describe('createApi', () => {
 		]);
 	});
 
+	it('narrows by people and pinned photos, repeating person_id', async () => {
+		const { calls, fetcher } = fakeServer([json({ items: [], next_cursor: null }), json({})]);
+		const api = createApi({ fetch: fetcher });
+		await api.assets({ person_id: [3, 4], pinned: true });
+		await api.facets({ person_id: [3] });
+		expect(calls.map((c) => c.url)).toEqual([
+			'/api/assets?person_id=3&person_id=4&pinned=true&limit=200',
+			'/api/assets/facets?person_id=3'
+		]);
+	});
+
+	it('pins through the state routes', async () => {
+		const { calls, fetcher } = fakeServer([json(asset(9)), json({ updated: 2 })]);
+		const api = createApi({ fetch: fetcher });
+		await api.setState(9, { pinned: true });
+		await api.setStates({ ids: [9, 10], pinned: false });
+		expect(calls).toMatchObject([
+			{ url: '/api/assets/9/state', method: 'PATCH', body: { pinned: true } },
+			{ url: '/api/assets/state', method: 'POST', body: { ids: [9, 10], pinned: false } }
+		]);
+	});
+
+	it('reads Home', async () => {
+		const home = {
+			on_this_day: null,
+			memories: [],
+			new: { count: 0, days: 7, sources: [], items: [] }
+		};
+		const { calls, fetcher } = fakeServer([json(home)]);
+		expect(await createApi({ fetch: fetcher }).home()).toEqual(home);
+		expect(calls[0]).toMatchObject({ url: '/api/home', method: 'GET' });
+	});
+
 	it('sends bodies on DELETE (trash, album items)', async () => {
 		const { calls, fetcher } = fakeServer([json({ trashed: 2 }), json({ count: 1 })]);
 		const api = createApi({ fetch: fetcher });
@@ -275,6 +309,8 @@ describe('createApi', () => {
 			api.addSource({ label: 'L', path: '/p' }),
 			api.updateSource(1, { enabled: false }),
 			api.scanSource(1),
+			api.sourceRemoval(1),
+			api.removeSource(1, 'trash'),
 			api.scanAll(),
 			api.sourceAccess(1),
 			api.setSourceAccess(1, { everyone: 'view', users: [] }),
@@ -313,6 +349,8 @@ describe('createApi', () => {
 			['POST', '/api/sources'],
 			['PATCH', '/api/sources/1'],
 			['POST', '/api/sources/1/scan'],
+			['GET', '/api/sources/1/removal'],
+			['DELETE', '/api/sources/1?photos=trash'],
 			['POST', '/api/sources/scan-all'],
 			['GET', '/api/sources/1/access'],
 			['PUT', '/api/sources/1/access'],

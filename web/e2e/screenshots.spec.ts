@@ -7,11 +7,12 @@ import type { Page } from '@playwright/test';
 import {
 	expect,
 	isPhone,
+	loupe,
 	loupeAction,
-	openAccountMenu,
 	resetMock,
 	selectionAction,
 	selectTiles,
+	sheetStepGone,
 	signIn,
 	test
 } from './helpers.ts';
@@ -25,6 +26,7 @@ const DIR =
 	(THEME === 'light' ? '../docs/screenshots/integrated/light' : '../docs/screenshots/integrated');
 /** The light set: the screens where the theme matters most. */
 const LIGHT = new Set([
+	'00-home',
 	'02-login',
 	'02b-login-pin',
 	'03-library',
@@ -77,7 +79,23 @@ test('every screen', async ({ page }, info) => {
 		for (const digit of '12') await page.getByRole('button', { name: digit }).tap();
 	else await page.getByLabel('PIN').fill('12');
 	await shot(page, '02b-login-pin', p);
-	await signIn(page);
+	await signIn(page, '/home');
+	const memory = page
+		.getByRole('main')
+		.getByRole('button', { name: /^Play: / })
+		.first();
+	await expect(memory.locator('img')).toBeVisible();
+	await shot(page, '00-home', p, true);
+	const title = (await memory.locator('.title').textContent())!;
+	await memory.click();
+	const story = page.getByRole('dialog', { name: title });
+	await expect(story.locator('.segment').first()).toBeVisible();
+	await shot(page, '00b-story', p);
+	await page.keyboard.press('Escape');
+	await expect(story).toBeHidden();
+	await sheetStepGone(page);
+
+	await page.goto('/');
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '03-library', p);
 	if (isPhone(page)) {
@@ -92,9 +110,9 @@ test('every screen', async ({ page }, info) => {
 	await page.locator('.tile').nth(3).click();
 	await shot(page, '04-loupe', p);
 	if (isPhone(page)) {
-		await page.getByRole('button', { name: 'Info' }).click();
+		await page.getByRole('button', { name: 'Details' }).click();
 		await shot(page, '04b-loupe-info', p);
-		await page.getByRole('button', { name: 'Info' }).click();
+		await page.getByRole('button', { name: 'Details' }).click();
 	}
 	await page.getByRole('button', { name: 'Zoom' }).click();
 	await shot(page, '04d-loupe-zoom', p);
@@ -105,7 +123,7 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '13-editor', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Discard changes' }).click();
-	await page.getByRole('button', { name: 'More' }).click();
+	await loupe(page).getByRole('button', { name: 'More' }).click();
 	await shot(page, '04c-loupe-more', p);
 	await page.keyboard.press('Escape');
 	await loupeAction(page, 'Fix date');
@@ -120,13 +138,14 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Close' }).click();
 
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
 	await page
-		.getByRole('complementary', { name: 'Filters' })
-		.getByRole('button', { name: /^2019/ })
+		.getByRole('group', { name: 'Filters' })
+		.getByRole('button', { name: 'When', exact: true })
 		.click();
+	const when = page.getByRole('dialog', { name: 'When' });
+	await when.getByRole('button', { name: /^2019/ }).click();
 	await shot(page, '05-filters', p);
-	if (isPhone(page)) await page.getByRole('button', { name: 'Done' }).click();
+	await when.getByRole('button', { name: 'Done' }).click();
 
 	await page.goto('/');
 	await selectTiles(page, [1, 2, 4]);
@@ -166,6 +185,7 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: 'Share' }).click();
 	await shot(page, '12-share', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('link', { name: 'Print' }).click();
 	await expect(page.getByRole('list', { name: 'Pages' }).getByRole('img').first()).toBeVisible();
 	await shot(page, '20-print', p);
@@ -181,7 +201,7 @@ test('every screen', async ({ page }, info) => {
 		.click();
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await shot(page, '19b-person', p);
-	await page.getByRole('button', { name: 'Change portrait', exact: true }).click();
+	await page.getByRole('button', { name: /^Change portrait of/ }).click();
 	await expect(page.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
 	await shot(page, '19c-person-portrait', p);
 
@@ -193,15 +213,33 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '15-trash', p);
 
 	await page.goto('/admin');
-	await expect(page.getByRole('region', { name: 'Backups' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Folders' })).toBeVisible();
 	await shot(page, '14-admin', p, true);
-	await page.getByRole('region', { name: 'Backups' }).scrollIntoViewIfNeeded();
+	await page.getByRole('button', { name: /^Backups/ }).click();
+	const backups = page.getByRole('dialog', { name: 'Backups' });
+	await expect(backups).toHaveCSS('opacity', '1');
 	await shot(page, '14b-backups', p);
+	await backups.getByRole('button', { name: 'Close' }).click();
+	await page
+		.getByRole('region', { name: 'Folders' })
+		.getByRole('button', { name: /^Old hard disk/ })
+		.click();
+	await page
+		.getByRole('dialog', { name: 'Old hard disk' })
+		.getByRole('button', { name: 'Stop watching' })
+		.click();
+	const stop = page.getByRole('dialog', { name: 'Stop watching “Old hard disk”?' });
+	await expect(stop.getByRole('radio', { name: 'Keep them in the library' })).toBeVisible();
+	await shot(page, '14c-stop-watching', p);
+	await stop.getByRole('button', { name: 'Cancel' }).click();
 
 	// The look of one account: the form, then that look tried on the admin's own screen.
 	await page
-		.getByRole('row')
-		.filter({ has: page.getByRole('cell', { name: 'partner', exact: true }) })
+		.getByRole('region', { name: 'People' })
+		.getByRole('button', { name: /^Partner/ })
+		.click();
+	await page
+		.getByRole('dialog', { name: 'Partner' })
 		.getByRole('button', { name: 'Look', exact: true })
 		.click();
 	const look = page.getByRole('dialog', { name: 'Look for Partner' });
@@ -222,16 +260,18 @@ test('every screen', async ({ page }, info) => {
 
 	await page.goto('/settings');
 	await shot(page, '16-settings', p);
-	await page.getByRole('button', { name: 'Add a device' }).click();
+	await page.getByRole('button', { name: 'Add a phone' }).click();
 	await page.getByLabel('Name').fill('Léa’s iPhone');
 	await page.getByRole('button', { name: 'Create' }).click();
 	await expect(page.getByLabel('Device token')).toHaveValue(/^pa_dev_/);
 	await shot(page, '16b-device-token', p);
 
 	await page.getByRole('button', { name: 'Done' }).click();
-	await openAccountMenu(page);
-	await shot(page, '21-account-menu', p);
+	await page.getByRole('button', { name: /^Léa’s iPhone/ }).click();
+	await expect(page.getByRole('dialog', { name: 'Léa’s iPhone' })).toBeVisible();
+	await shot(page, '21-phone-sheet', p);
 	await page.keyboard.press('Escape');
+	await sheetStepGone(page);
 
 	await resetMock('seed', { models: true });
 	await signIn(page, '/search?q=beach%20at%20sunset');

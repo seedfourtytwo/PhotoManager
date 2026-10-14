@@ -55,9 +55,7 @@ test.describe('as admin', () => {
 		await page.locator('.tile').first().click();
 		const photo = await centre(loupe(page).locator('.stage'));
 		await touchSwipe(page, photo, { x: photo.x, y: photo.y - 200 });
-		await expect(
-			loupe(page).getByRole('complementary', { name: 'About this photo' })
-		).toBeVisible();
+		await expect(loupe(page).getByRole('complementary', { name: 'Details' })).toBeVisible();
 		await touchSwipe(page, { x: photo.x, y: 150 }, { x: photo.x, y: 400 });
 		await expect(loupe(page).getByRole('complementary')).toHaveCount(0);
 		const alt = await loupe(page).locator('img.photo').getAttribute('alt');
@@ -142,7 +140,7 @@ test.describe('as admin', () => {
 			name: 'Photo actions',
 			includeHidden: true
 		});
-		const favourite = loupe(page).locator('.top button', { hasText: 'Favourite' });
+		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
 		const at = await centre(favourite);
 		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
 		await page.touchscreen.tap(at.x, at.y);
@@ -171,7 +169,7 @@ test.describe('as admin', () => {
 			await route.fulfill({ response, json: detail });
 		});
 		await page.locator('.tile').first().click();
-		const sources = loupe(page).getByRole('complementary', { name: 'About this photo' });
+		const sources = loupe(page).getByRole('complementary', { name: 'Details' });
 		await expect(sources.getByText('23.jpg', { exact: true })).toBeVisible();
 		await expect(sources.getByText('3.jpg', { exact: true })).toBeVisible();
 		expect(errors).toEqual([]);
@@ -217,25 +215,29 @@ test('guest: view-only photos say why they cannot be downloaded; no edit or priv
 
 for (const who of [MEMBER, ADMIN]) {
 	const admin = who === ADMIN;
-	test(`where a photo came from: ${admin ? 'an admin reads the path' : 'a member reads the folder name and the file, not the path'}`, async ({
+	test(`where a photo came from: ${admin ? 'an admin reads the original file and its path' : 'a member reads the folder name and the photo name, not the file'}`, async ({
 		page
 	}) => {
 		await resetMock();
+		let named = '';
 		await page.route(/\/api\/assets\/\d+$/, async (route) => {
 			const response = await route.fetch();
 			const detail = await response.json();
 			detail.origins = [{ ...detail.origins[0], relative_path: 'trips/2019/IMG_0001.JPG' }];
+			named = detail.name;
 			await route.fulfill({ response, json: detail });
 		});
 		await signIn(page, '/', who);
 		await page.locator('.tile').first().click();
-		if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Info' }).click();
-		const about = loupe(page).getByRole('complementary', { name: 'About this photo' });
-		await expect(about.getByText('Came from')).toBeVisible();
-		await expect(
-			about.getByText(admin ? 'trips/2019/IMG_0001.JPG' : 'IMG_0001.JPG', { exact: true })
-		).toBeVisible();
-		if (!admin) await expect(about).not.toContainText('trips/2019');
+		if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Details' }).click();
+		const about = loupe(page).getByRole('complementary', { name: 'Details' });
+		await expect(about.getByText('From', { exact: true })).toBeVisible();
+		await expect(about.getByText(named, { exact: true })).toBeVisible();
+		if (admin) {
+			await expect(about.getByText('trips/2019/IMG_0001.JPG', { exact: true })).toBeVisible();
+		} else {
+			await expect(about).not.toContainText('IMG_0001');
+		}
 	});
 }
 
@@ -274,29 +276,42 @@ test.describe('photo view', () => {
 		await signIn(page);
 	});
 
-	test('the bar reads the photo’s date, time and file name in the data face', async ({ page }) => {
+	test('the bar reads the day in words, the time and the camera, apart by space; the name is in the details', async ({
+		page
+	}) => {
 		// A photo that carries no exposure settings; one that does is in exposure.spec.ts.
 		await withDetail(page, () => ({
 			f_number: null,
 			exposure_time: null,
 			iso: null,
-			focal_length: null
+			focal_length: null,
+			camera_model: 'Test Camera',
+			name: 'Beach day'
 		}));
 		await page.locator('.tile').first().click();
 		const readout = loupe(page).locator('.readout');
-		await expect(readout).toContainText(/\d{4}-\d{2}-\d{2} · \d{2}:\d{2}/);
-		await expect(readout).toContainText(/\d+ × \d+ · \S+\.\w{3,4}$/);
-		await expect(readout).toHaveCSS('font-family', /Martian Mono/);
+		const [when, how] = [0, 1].map((n) => readout.locator('.line').nth(n).locator('.item'));
+		await expect(when.first()).toHaveText(/^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+		await expect(when.nth(1)).toHaveText(/^\d{2}:\d{2}$/);
+		await expect(how).toHaveText(['Test Camera']);
+		await expect(readout).not.toContainText('·');
+		await expect(readout).not.toContainText('Beach day');
+		await expect(readout).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
 	});
 
-	test('the bar holds Favourite, Download, Album, Edit and More; More holds the rest', async ({
+	test('the bar holds Favourite, Download, Add to album, Edit and More; More holds the rest', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
 		const bar = loupe(page).locator('.bar');
 		const actions = bar.locator('.acts > button, .acts > .menu > button');
-		await expect(actions).toHaveText(['Favourite', 'Download', 'Album', 'Edit', 'More']);
+		await expect(actions).toHaveText(['Favourite', 'Download', 'Add to album', 'Edit', 'More']);
 		await expect(actions.locator('svg')).toHaveCount(5);
+		// Icons alone: each word is its name and its tooltip, shown only when the look asks.
+		for (const action of await actions.all()) {
+			await expect(action.locator('.word')).toBeHidden();
+			await expect(action).toHaveAttribute('title', (await action.getAttribute('aria-label'))!);
+		}
 		await expect(bar.getByRole('button', { name: 'Fix date' })).toHaveCount(0);
 		await bar.getByRole('button', { name: 'More' }).click();
 		await expect(bar.getByRole('button', { name: 'Private' })).toBeVisible();
@@ -304,9 +319,9 @@ test.describe('photo view', () => {
 		await expectAccessible(page);
 	});
 
-	test('Album adds the open photo to an album', async ({ page }) => {
+	test('Add to album adds the open photo to an album', async ({ page }) => {
 		await page.locator('.tile').first().click();
-		await loupe(page).getByRole('button', { name: 'Album' }).click();
+		await loupe(page).getByRole('button', { name: 'Add to album' }).click();
 		const dialog = page.getByRole('dialog', { name: 'Add to album' });
 		await expect(dialog.getByText('1 photo', { exact: true })).toBeVisible();
 		await dialog.getByLabel('New album title').fill('From the photo view');
@@ -333,7 +348,7 @@ test.describe('photo view', () => {
 		page
 	}) => {
 		await page.locator('.tile').first().click();
-		await loupe(page).getByRole('button', { name: 'Album' }).click();
+		await loupe(page).getByRole('button', { name: 'Add to album' }).click();
 		const dialog = page.getByRole('dialog', { name: 'Add to album' });
 		await dialog.getByLabel('New album title').fill('Toasted');
 		await dialog.getByRole('button', { name: 'Add' }).click();
@@ -409,6 +424,7 @@ test.describe('photo view', () => {
 		await page.locator('.tile').nth(2).click();
 		const viewer = loupe(page);
 		await expect(viewer).toBeVisible();
+		await expect(page).toHaveURL(/photo=\d+/);
 		const url = page.url();
 		// The very same viewer afterwards, not one that closed and opened again.
 		await viewer.evaluate((el) => ((el as HTMLElement).dataset.kept = 'yes'));
@@ -429,7 +445,9 @@ test.describe('photo view', () => {
 		await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 		await dialog.getByRole('button', { name: 'Change date' }).click();
 		await expect(toast(page)).toContainText('Changed the date of 1 photo');
-		await expect(viewer.locator('.readout')).toContainText('2001-02-03 · 04:05');
+		const when = viewer.locator('.readout .line').first().locator('.item');
+		await expect(when.first()).toHaveText('3 February 2001');
+		await expect(when.nth(1)).toHaveText('04:05');
 		expect(await removed).toBe(false);
 		await expect(viewer).toHaveAttribute('data-kept', 'yes');
 		expect(page.url()).toBe(url);

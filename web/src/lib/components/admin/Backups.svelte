@@ -4,6 +4,9 @@
 	import { copyPlaceState, placeState, protonCopyState } from '$lib/backups';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
+	import Icon from '../Icon.svelte';
+	import ActionCard from './ActionCard.svelte';
+	import ActionCards from './ActionCards.svelte';
 	import BackupSetup from './BackupSetup.svelte';
 	import ProtonCopy from './ProtonCopy.svelte';
 	import RecoveryKey from './RecoveryKey.svelte';
@@ -32,9 +35,9 @@
 		if (run.status === 'skipped')
 			return `not connected since ${formatWhen(t.skipped_since ?? run.started_at)}`;
 		const when = formatWhen(run.finished_at ?? run.started_at);
-		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when} · failed: ${run.error ?? 'no reason given'}`;
-		const added = run.bytes_added !== null ? ` · ${formatBytes(run.bytes_added)} added` : '';
-		return `last ${KIND[run.kind]} ${when} · succeeded${added}`;
+		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when}, failed: ${run.error ?? 'no reason given'}`;
+		const added = run.bytes_added !== null ? `, ${formatBytes(run.bytes_added)} added` : '';
+		return `last ${KIND[run.kind]} ${when}, succeeded${added}`;
 	} // prettier-ignore
 
 	function protonLine(t: BackupTarget): string {
@@ -98,11 +101,8 @@
 	}
 </script>
 
-<section aria-labelledby="a-backups">
-	<header>
-		<h2 id="a-backups">Backups</h2>
-		<button type="button" onclick={() => (adding = true)}>Add backup</button>
-	</header>
+<!-- Inside the Backups sheet of the Admin page: each place, what it says, what can be done. -->
+<div class="backups">
 	{#if health && health.places_total > 0}
 		<p class="quiet small health">
 			{#if health.protected}Protected in {health.places_ok} places{:else}Only {health.places_ok} of {health.places_total}
@@ -117,57 +117,70 @@
 	<ul>
 		{#each targets as t (t.id)}
 			<li class:off={!t.enabled}>
-				<div class="name">
-					<span class="dot {placeState(t).replace(' ', '-')}" role="img" aria-label={placeState(t)}
-					></span>
-					<span>{t.label}</span>
-					<span class="quiet small">{t.repository}</span>
-				</div>
-				<p class="quiet small">
-					{t.schedule}{#if t.quiet_window}&nbsp;· only {t.quiet_window}{/if}{#if !t.enabled}&nbsp;·
-						disabled{:else if t.next_run_at}&nbsp;· next {formatWhen(
-							t.next_run_at
-						)}{/if}{#if t.repo_bytes}&nbsp;·
-						{formatBytes(t.repo_bytes)} stored{/if}
-				</p>
-				<p class="small status" class:attention={t.needs_attention}>
-					{t.overdue ? 'overdue · ' : ''}{lastLine(t)}{#if proofLine(t)}&nbsp;· {proofLine(t)}{/if}
-				</p>
-				{#if t.mirror_path}
-					<p class="small status copy" class:attention={!!t.mirror_error && t.enabled}>
+				<div class="place">
+					<div class="name">
 						<span
-							class="dot {copyPlaceState(t).replace(' ', '-')}"
+							class="dot {placeState(t).replace(' ', '-')}"
 							role="img"
-							aria-label={copyPlaceState(t)}
+							aria-label={placeState(t)}
 						></span>
-						Copy on Proton Drive · {protonPlaceName(t.mirror_path)} · {protonLine(t)}
+						<span>{t.label}</span>
+					</div>
+					<p class="small status" class:attention={t.needs_attention}>
+						{t.overdue ? 'overdue, ' : ''}{lastLine(t)}{#if proofLine(t)}, {proofLine(t)}{/if}
 					</p>
-				{/if}
-				{#if !t.key_saved}
-					<p class="small status" class:attention={t.enabled}>
-						The recovery key is not saved yet: without it this backup cannot be read.
+					<p class="quiet small">
+						{t.schedule}{#if t.quiet_window}, only {t.quiet_window}{/if}{#if !t.enabled}, disabled{:else if t.next_run_at},
+							next {formatWhen(t.next_run_at)}{/if}{#if t.repo_bytes},
+							{formatBytes(t.repo_bytes)} stored{/if}
 					</p>
-				{/if}
-				<div class="actions">
-					<button type="button" disabled={busy !== null || !t.enabled} onclick={() => act(t, 'run')}
-						>Back up now</button
-					>
-					<button
-						type="button"
-						disabled={busy !== null || !t.enabled}
-						onclick={() => act(t, 'restore')}>Test a restore</button
-					>
-					<button type="button" aria-expanded={open === t.id} onclick={() => showRuns(t)}
-						>Recent runs</button
-					>
-					<button type="button" onclick={() => showKey(t)}>Recovery key</button>
-					{#if t.kind === 'local'}
-						<button type="button" onclick={() => (copying = t)}>Copy to Proton</button>
+					{#if t.mirror_path}
+						<p class="small status copy" class:attention={!!t.mirror_error && t.enabled}>
+							<span
+								class="dot {copyPlaceState(t).replace(' ', '-')}"
+								role="img"
+								aria-label={copyPlaceState(t)}
+							></span>
+							Copy on Proton Drive, {protonPlaceName(t.mirror_path)}, {protonLine(t)}
+						</p>
 					{/if}
-					<button type="button" disabled={busy !== null} onclick={() => act(t, 'toggle')}
-						>{t.enabled ? 'Disable' : 'Enable'}</button
-					>
+					{#if !t.key_saved}
+						<p class="small status" class:attention={t.enabled}>
+							The recovery key is not saved yet: without it this backup cannot be read.
+						</p>
+					{/if}
+					<p class="small repository"><code>{t.repository}</code></p>
 				</div>
+				<ActionCards>
+					<ActionCard
+						icon="refresh"
+						label="Back up now"
+						disabled={busy !== null || !t.enabled}
+						onclick={() => act(t, 'run')}
+					/>
+					<ActionCard
+						icon="restore"
+						label="Test a restore"
+						disabled={busy !== null || !t.enabled}
+						onclick={() => act(t, 'restore')}
+					/>
+					<ActionCard
+						icon="report"
+						label="Recent runs"
+						aria-expanded={open === t.id}
+						onclick={() => showRuns(t)}
+					/>
+					<ActionCard icon="lock" label="Recovery key" onclick={() => showKey(t)} />
+					{#if t.kind === 'local'}
+						<ActionCard icon="cloud" label="Copy to Proton" onclick={() => (copying = t)} />
+					{/if}
+					<ActionCard
+						icon="power"
+						label={t.enabled ? 'Disable' : 'Enable'}
+						disabled={busy !== null}
+						onclick={() => act(t, 'toggle')}
+					/>
+				</ActionCards>
 				{#if open === t.id}
 					<table>
 						<thead><tr><th>Started</th><th>What</th><th>Result</th></tr></thead>
@@ -190,7 +203,10 @@
 			</li>
 		{/each}
 	</ul>
-</section>
+	<button type="button" class="add" onclick={() => (adding = true)}
+		><Icon name="plus" />Add backup</button
+	>
+</div>
 
 {#if adding}
 	<BackupSetup onclose={() => (adding = false)} {onchange} />
@@ -207,23 +223,20 @@
 {/if}
 
 <style>
-	header button,
-	.actions button {
-		color: var(--ink-2);
-	}
 	ul {
 		list-style: none;
 		margin: 0;
 		padding: 0;
+		display: grid;
+		gap: var(--s-6);
 	}
-	li {
-		padding: var(--s-3) 0;
-		border-bottom: 1px solid var(--hairline);
+	/* A place is a tile on the sheet's fill; its actions are the cards under it. */
+	.place {
+		padding: var(--s-3) var(--s-4);
+		border-radius: var(--r-2);
+		background: var(--fill);
 	}
-	li:last-child {
-		border-bottom: 0;
-	}
-	li p {
+	.place p {
 		margin: var(--s-1) 0 0;
 	}
 	li.off .name span:nth-child(2) {
@@ -231,84 +244,81 @@
 	}
 	.name {
 		display: flex;
-		gap: var(--s-1) var(--s-3);
-		align-items: baseline;
-		flex-wrap: wrap;
+		gap: var(--s-2);
+		align-items: center;
 		overflow-wrap: anywhere;
 	}
 	.name span:nth-child(2) {
 		font-weight: 600;
 	}
 	.health {
-		margin: 0 0 var(--s-2);
+		margin: 0 0 var(--s-3);
 	}
-	/* The place's state as a shape, so it reads without colour: filled, ring, or square. */
+	/* The place's state as a shape and a colour, so it reads either way: a filled dot (ok), a
+	   ring (not connected), a square (needs attention). The admin page is where status dots
+	   live. */
 	.dot {
 		display: inline-block;
 		flex: none;
-		align-self: center;
 		box-sizing: border-box;
 		width: 0.625rem;
 		height: 0.625rem;
 		border-radius: 50%;
-		background: var(--ink);
+		background: var(--ok);
 	}
 	.dot.not-connected {
 		background: transparent;
-		border: 2px solid var(--ink);
+		border: var(--fine) solid var(--ink-2);
 	}
 	.dot.needs-attention {
 		border-radius: 0;
 		transform: rotate(45deg);
-	}
-	.copy {
-		margin-left: var(--s-5);
+		background: var(--fail);
 	}
 	.copy .dot {
 		margin-right: var(--s-2);
 		vertical-align: middle;
 	}
-	.name .small {
-		font-family: var(--font-data);
-		font-stretch: 80%;
+	.repository code {
+		color: var(--ink-2);
+		overflow-wrap: anywhere;
 	}
 	.status {
 		color: var(--ink-2);
 	}
-	/* Needs attention: full ink and an ink rule beside it — value, not a warning colour. */
+	/* Needs attention: full ink and weight, never a warning colour on words. */
 	.status.attention {
 		color: var(--ink);
-		border-left: 2px solid var(--ink);
-		padding-left: var(--s-2);
-	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0 2px;
-		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
+		font-weight: 600;
 	}
 	table {
 		border-collapse: collapse;
 		font-size: var(--fs-12);
-		margin-top: var(--s-2);
 	}
 	th {
 		text-align: left;
 		font-weight: 600;
 		color: var(--ink-2);
 		padding: 0 var(--s-4) var(--s-1) 0;
-		border-bottom: 1px solid var(--hairline);
 	}
 	tr.attention td {
 		color: var(--ink);
-	}
-	tr.attention td:first-child {
-		border-left: 2px solid var(--ink);
-		padding-left: var(--s-2);
+		font-weight: 600;
 	}
 	td {
 		padding: var(--s-1) var(--s-4) var(--s-1) 0;
 		vertical-align: top;
+	}
+	.add {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s-2);
+		margin-top: var(--s-5);
+		min-height: var(--target);
+		padding: 0 var(--s-4);
+		border-radius: var(--r-pill);
+		background: var(--fill);
+		font-weight: 600;
 	}
 	p {
 		margin: 0 0 var(--s-3);

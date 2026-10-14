@@ -15,12 +15,15 @@ const sources = import.meta.glob(['/src/**/*.svelte', '/src/**/*.css'], {
 }) as Record<string, string>;
 
 describe('style guard', () => {
-	it.each(['--font-text', 'Instrument Sans'])('no source file mentions %s', (name) => {
-		const offenders = Object.entries(sources)
-			.filter(([, text]) => text.includes(name))
-			.map(([path]) => path);
-		expect(offenders).toEqual([]);
-	});
+	it.each(['--font-text', 'Instrument Sans', 'Hanken Grotesk', 'Martian Mono'])(
+		'no source file mentions %s',
+		(name) => {
+			const offenders = Object.entries(sources)
+				.filter(([, text]) => text.includes(name))
+				.map(([path]) => path);
+			expect(offenders).toEqual([]);
+		}
+	);
 
 	// The look's "gap between photos" dial moves --gutter from 0 to 8 px: a needle or a gap
 	// inside a control that borrowed it would vanish or swell with it. Those use --fine.
@@ -50,11 +53,7 @@ describe('style guard', () => {
 
 	it('every font family ships its licence', () => {
 		const licences = readdirSync('static/fonts').filter((name) => name.endsWith('-OFL.txt'));
-		expect(licences.sort()).toEqual([
-			'HankenGrotesk-OFL.txt',
-			'MartianMono-OFL.txt',
-			'Newsreader-OFL.txt'
-		]);
+		expect(licences.sort()).toEqual(['AtkinsonHyperlegibleNext-OFL.txt', 'Newsreader-OFL.txt']);
 	});
 
 	it('every source file is non-empty (a blanked stylesheet would pass the other guards)', () => {
@@ -65,16 +64,30 @@ describe('style guard', () => {
 		expect(empty).toEqual([]);
 	});
 
-	it('mono text is always set at 80 % width', () => {
+	// C, 2026-10-14: no tracked text and no capitals; weight and size make the hierarchy.
+	it('no text is letter-spaced or set in capitals', () => {
 		const offenders = Object.entries(sources).flatMap(([path, text]) =>
-			[...text.matchAll(/\{([^{}]*)\}/g)]
-				.filter(
-					([, body]) =>
-						/font-family:\s*var\(--font-(mono|data)\)/.test(body) && !/font-stretch:/.test(body)
+			[
+				...text.matchAll(
+					/letter-spacing:\s*([^;}]+)|text-transform:\s*uppercase|font-variant(-caps)?:[^;}]*(small|all)-caps/g
 				)
-				.map(() => path)
+			]
+				.filter((m) => !m[1] || !/^(0|normal)\s*$/.test(m[1].trim()))
+				.map((m) => `${path}: ${m[0]}`)
 		);
 		expect(offenders).toEqual([]);
+	});
+
+	// Groups separate by space or by a seam of --fine (DESIGN_PRINCIPLES §2): no hairlines.
+	it('no stylesheet draws a 1 px line', () => {
+		const lines = Object.entries(sources).flatMap(([path, text]) =>
+			[
+				...text.matchAll(
+					/(border(-(top|bottom|left|right|block|inline)(-(start|end))?)?|outline|box-shadow):[^;}]*\b1px\b[^;}]*/g
+				)
+			].map((m) => `${path}: ${m[0]}`)
+		);
+		expect(lines).toEqual([]);
 	});
 
 	it('the browser chrome colours equal the Safelight dark page colour', () => {

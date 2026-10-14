@@ -1,5 +1,5 @@
 /**
- * The per-account look (spec 2026-10-08 §5): an account chooses its mode in Settings; an
+ * The per-account look (spec 2026-10-08 §5): an account chooses its mode on You; an
  * admin sets any account's look in Admin → People, trying it on their own screen first.
  */
 import type { Browser, Page } from '@playwright/test';
@@ -9,7 +9,7 @@ import {
 	expect,
 	expectAccessible,
 	isPhone,
-	openAccountMenu,
+	follow,
 	resetMock,
 	signIn,
 	test,
@@ -17,14 +17,22 @@ import {
 } from './helpers.ts';
 
 const root = (page: Page) => page.locator('html');
+/** One of the three modes on You (a segmented control: pressed is chosen). */
+const mode = (page: Page, label: string) =>
+	page.getByRole('group', { name: 'Mode' }).getByRole('button', { name: label, exact: true });
 const variable = (page: Page, name: string) =>
 	page.evaluate((n) => document.documentElement.style.getPropertyValue(n), name);
 
-const userRow = (page: Page, username: string) =>
-	page.getByRole('row').filter({ has: page.getByRole('cell', { name: username, exact: true }) });
-
-async function openLookOf(page: Page, username: string, name: string) {
-	await userRow(page, username).getByRole('button', { name: 'Look', exact: true }).click();
+/** Admin → People: the person's tile opens their sheet, whose Look card opens the form. */
+async function openLookOf(page: Page, name: string) {
+	await page
+		.getByRole('region', { name: 'People' })
+		.getByRole('button', { name: new RegExp(`^${name}\\b`) })
+		.click();
+	await page
+		.getByRole('dialog', { name })
+		.getByRole('button', { name: 'Look', exact: true })
+		.click();
 	const form = page.getByRole('dialog', { name: `Look for ${name}` });
 	await expect(form.getByRole('combobox', { name: 'Theme', exact: true })).toBeVisible();
 	return form;
@@ -52,7 +60,7 @@ async function setMyLook(page: Page, sheet: Record<string, unknown>) {
 	expect(status).toBe(200);
 }
 
-test('a member chooses light in Settings; it is on their account and painted before the app loads', async ({
+test('a member chooses light on You; it is on their account and painted before the app loads', async ({
 	page,
 	browser,
 	baseURL
@@ -60,9 +68,9 @@ test('a member chooses light in Settings; it is on their account and painted bef
 	await resetMock();
 	await signIn(page, '/settings', MEMBER);
 	await expect(root(page)).toHaveAttribute('data-theme', 'dark');
-	await expect(page.getByRole('radio', { name: 'Dark (best for photos)' })).toBeChecked();
+	await expect(mode(page, 'Dark')).toHaveAttribute('aria-pressed', 'true');
 
-	await page.getByRole('radio', { name: 'Light', exact: true }).check();
+	await mode(page, 'Light').click();
 	await expect(root(page)).toHaveAttribute('data-theme', 'light');
 	await expect
 		.poll(async () => (await (await page.request.get('/api/me/look')).json()).mode)
@@ -90,7 +98,7 @@ test('following the device: light on a light device, dark on a dark one', async 
 	await resetMock();
 	await page.emulateMedia({ colorScheme: 'light' });
 	await signIn(page, '/settings', MEMBER);
-	await page.getByRole('radio', { name: 'Like the device' }).check();
+	await mode(page, 'Like the device').click();
 	await expect(root(page)).not.toHaveAttribute('data-theme');
 	const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 	await expect.poll(background).toBe('rgb(242, 243, 245)'); // --bg, light (themes.css)
@@ -105,7 +113,7 @@ test('an admin tries a look for Partner on their own screen, stops, then saves i
 }) => {
 	await resetMock();
 	await signIn(page, '/admin');
-	let form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	let form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('checkbox', { name: 'Accent colour: the theme’s own' }).uncheck();
 	await form.getByRole('slider', { name: 'Accent hue' }).fill('200');
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
@@ -138,7 +146,7 @@ test('an admin tries a look for Partner on their own screen, stops, then saves i
 	expect(await variable(page, '--acc-h')).toBe('');
 
 	await page.goto('/admin');
-	form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('checkbox', { name: 'Accent colour: the theme’s own' }).uncheck();
 	await form.getByRole('slider', { name: 'Accent hue' }).fill('200');
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
@@ -159,7 +167,7 @@ test('an admin tries a look for Partner on their own screen, stops, then saves i
 test('a trial ends when the page is reloaded', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/admin');
-	const form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	const form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
 	await form.getByRole('button', { name: 'Try on my screen' }).click();
 	await expect(root(page)).toHaveAttribute('data-look', 'album');
@@ -172,13 +180,13 @@ test('a trial ends when the page is reloaded', async ({ page }) => {
 test('a trial ends when the admin signs out: the next person does not get it', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/admin');
-	const form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	const form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
 	await form.getByRole('button', { name: 'Try on my screen' }).click();
 	await form.getByRole('button', { name: 'Cancel' }).click();
 	await expect(root(page)).toHaveAttribute('data-look', 'album');
-	const nav = await openAccountMenu(page);
-	await nav.getByRole('button', { name: 'Sign out' }).click();
+	await follow(page, '/settings'); // to You, without a reload (a reload ends a trial too)
+	await page.getByRole('button', { name: 'Sign out' }).click();
 	await expect(page).toHaveURL(/\/login$/); // the app went there itself: no reload
 	await expect(root(page)).not.toHaveAttribute('data-look');
 });
@@ -186,7 +194,7 @@ test('a trial ends when the admin signs out: the next person does not get it', a
 test('a member has no way to anyone’s look but their mode', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/settings', MEMBER);
-	await expect(page.getByRole('group', { name: 'Mode' }).getByRole('radio')).toHaveCount(3);
+	await expect(page.getByRole('group', { name: 'Mode' }).getByRole('button')).toHaveCount(3);
 	await expect(page.getByRole('button', { name: 'Look', exact: true })).toHaveCount(0);
 	const answers = await page.evaluate(async () => {
 		const put = (url: string, body: unknown) =>
@@ -265,7 +273,7 @@ test('the old per-browser theme setting moves to the account once, then is gone'
 	await page.goto('/login');
 	await expect(root(page)).toHaveAttribute('data-theme', 'light'); // honoured before sign-in
 	await signIn(page, '/settings', MEMBER);
-	await expect(page.getByRole('radio', { name: 'Light', exact: true })).toBeChecked();
+	await expect(mode(page, 'Light')).toHaveAttribute('aria-pressed', 'true');
 	await expect
 		.poll(async () => (await (await page.request.get('/api/me/look')).json()).mode)
 		.toBe('light');
@@ -281,7 +289,7 @@ test('the old per-browser setting does not overwrite a mode chosen on another de
 	await resetMock();
 	const phone = await elsewhere(browser, baseURL, MEMBER);
 	await phone.page.goto('/settings');
-	await phone.page.getByRole('radio', { name: 'Like the device' }).check();
+	await mode(phone.page, 'Like the device').click();
 	await expect
 		.poll(async () => (await (await phone.page.request.get('/api/me/look')).json()).mode)
 		.toBe('system');
@@ -293,7 +301,7 @@ test('the old per-browser setting does not overwrite a mode chosen on another de
 		localStorage.setItem('pa.theme', 'light');
 	});
 	await signIn(page, '/settings', MEMBER);
-	await expect(page.getByRole('radio', { name: 'Like the device' })).toBeChecked();
+	await expect(mode(page, 'Like the device')).toHaveAttribute('aria-pressed', 'true');
 	await expect.poll(() => page.evaluate(() => localStorage.getItem('pa.theme'))).toBeNull();
 	expect((await (await page.request.get('/api/me/look')).json()).mode).toBe('system');
 });
@@ -351,7 +359,7 @@ test('on a shared device the next person does not get the last one’s look', as
 	// Partner signs in while the server cannot say what their look is: the defaults, not the admin's.
 	await page.route('**/api/me/look', (route) => route.abort());
 	await signIn(page, '/settings', MEMBER);
-	await expect(page.getByRole('radio', { name: 'Dark (best for photos)' })).toBeChecked();
+	await expect(mode(page, 'Dark')).toHaveAttribute('aria-pressed', 'true');
 	await expect(root(page)).not.toHaveAttribute('data-look');
 	expect(await variable(page, '--acc-h')).toBe('');
 });

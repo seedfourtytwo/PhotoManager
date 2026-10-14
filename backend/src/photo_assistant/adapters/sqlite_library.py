@@ -11,6 +11,7 @@ import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta
 
+from photo_assistant.adapters.sqlite_accounts import utc_text
 from photo_assistant.adapters.sqlite_base import (
     SqliteBase,
     asset_from_row,
@@ -19,6 +20,8 @@ from photo_assistant.adapters.sqlite_base import (
     source_from_row,
 )
 from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.capture_time import DateSource
+from photo_assistant.domain.display_name import Dated
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.library_filter import AssetFilter, like_pattern, search_terms
 from photo_assistant.domain.model import Source
@@ -111,8 +114,8 @@ ASSET_FROM = f"FROM asset a {ASSET_JOINS}"
 def asset_columns(level: str) -> str:
     """Everything ``view_from_row`` reads, with ``level`` from ``visibility``."""
     return f"""a.*, {level} AS vis_level, COALESCE(ua.favourite, 0) AS vis_favourite,
-    COALESCE(ua.hidden, 0) AS vis_hidden, p.country, p.region, p.city,
-    er.recipe_json AS vis_recipe"""
+    ua.pinned_at IS NOT NULL AS vis_pinned, COALESCE(ua.hidden, 0) AS vis_hidden,
+    p.country, p.region, p.city, er.recipe_json AS vis_recipe"""
 
 
 # Albums and sources you can see (used for search, facets, origins and album lists).
@@ -132,6 +135,7 @@ def view_from_row(row: sqlite3.Row) -> AssetView:
         asset=asset_from_row(row),
         level=Level(row["vis_level"]),
         favourite=bool(row["vis_favourite"]),
+        pinned=bool(row["vis_pinned"]),
         hidden=bool(row["vis_hidden"]),
         private=bool(row["private"]),
         place=place,
@@ -186,6 +190,19 @@ def _sources(f: AssetFilter, where: Clauses, params: Bindings) -> None:
     )
 
 
+def _people(f: AssetFilter, where: Clauses, params: Bindings) -> None:
+    """Photos with ANY of the people on them. A person is no secret of a folder: who is on a
+    photo is only ever told about photos the viewer may see (the visibility rule)."""
+    if not f.person_ids:
+        return
+    names = [f":f_person{i}" for i in range(len(f.person_ids))]
+    params.update({n[1:]: pid for n, pid in zip(names, f.person_ids, strict=True)})
+    where.append(
+        "EXISTS (SELECT 1 FROM face fp WHERE fp.asset_id = a.id "
+        f"AND fp.person_id IN ({', '.join(names)}))"
+    )
+
+
 def _camera_place(f: AssetFilter, where: Clauses, params: Bindings) -> None:
     if f.camera is not None:
         where.append("a.camera_model = :f_camera")
@@ -221,6 +238,7 @@ def _flag(column: str, value: bool | None, where: Clauses, default_off: bool = F
 
 def _flags(f: AssetFilter, where: Clauses, params: Bindings) -> None:
     _flag("COALESCE(ua.favourite, 0)", f.favourite, where)
+    _flag("(ua.pinned_at IS NOT NULL)", f.pinned, where)
     _flag("COALESCE(ua.hidden, 0)", f.hidden, where, default_off=True)  # hidden: out unless asked
     _flag("(a.date_source = 'file_mtime')", f.guessed_date, where)
     _flag("(a.latitude IS NOT NULL)", f.has_location, where)
@@ -230,6 +248,7 @@ _FILTERS: list[Callable[[AssetFilter, Clauses, Bindings], None]] = [
     _days,
     _year_month,
     _sources,
+    _people,
     _camera_place,
     _text,
     _flags,
@@ -237,10 +256,12 @@ _FILTERS: list[Callable[[AssetFilter, Clauses, Bindings], None]] = [
 
 
 def from_sql(f: AssetFilter) -> str:
-    """``FROM asset a`` with the per-photo joins. "Only my favourites" and "only my hidden
-    photos" start from my own marks (C25): a handful of rows instead of a walk over the whole
-    timeline."""
+    """``FROM asset a`` with the per-photo joins. "Only my favourites", "only my pinned" and
+    "only my hidden photos" start from my own marks (C25): a handful of rows instead of a walk
+    over the whole timeline."""
     mine = [f"fav.{flag} = 1" for flag in ("favourite", "hidden") if getattr(f, flag)]
+    if f.pinned:
+        mine.append("fav.pinned_at IS NOT NULL")
     if mine:
         return f"""FROM user_asset fav JOIN asset a ON a.id = fav.asset_id
             AND fav.user_id = :vis_uid AND {" AND ".join(mine)} {ASSET_JOINS}"""
@@ -463,6 +484,25 @@ class LibraryMixin(SqliteBase):
     def first_origin_name(self, viewer: Viewer, asset_id: int) -> str | None:
         return self.first_origin_names(viewer, [asset_id]).get(asset_id)
 
+    def minute_mates(self, viewer: Viewer, asset_ids: Sequence[int]) -> list[Dated]:
+        """The photos in the library this viewer sees, taken in the same wall-clock minute as
+        any of these (these included when they are among them). One query for any number."""
+        visible, _, params = visibility(viewer)
+        # a minute as a taken_at range ("…T14:32" up to "…T14:32;"), so the timeline index serves it
+        rows = self._all(
+            f"""WITH minute AS (
+                    SELECT DISTINCT substr(t.taken_at, 1, 16) AS m FROM asset t
+                     WHERE t.id IN (SELECT value FROM json_each(:assets)))
+                SELECT DISTINCT a.id, a.taken_at, a.date_source FROM minute
+                  JOIN asset a ON a.taken_at >= minute.m AND a.taken_at < minute.m || ';'
+                 WHERE {visible}""",
+            params | {"assets": json.dumps(list(asset_ids))},
+        )
+        return [
+            Dated(int(r["id"]), datetime.fromisoformat(r["taken_at"]), DateSource(r["date_source"]))
+            for r in rows
+        ]
+
     # --- per-user state --------------------------------------------------------------------
 
     def set_user_state(
@@ -481,6 +521,25 @@ class LibraryMixin(SqliteBase):
                        ON CONFLICT (user_id, asset_id) DO UPDATE SET
                            favourite = COALESCE(?, favourite), hidden = COALESCE(?, hidden)""",
                     (user_id, asset_id, favourite, hidden, favourite, hidden),
+                )
+        return len(asset_ids)
+
+    def set_pinned(
+        self, user_id: int, asset_ids: Sequence[int], pinned: bool, now: datetime
+    ) -> int:
+        """Pin (stamped ``now``; a photo pinned before keeps its first time) or unpin."""
+        with self._transaction():
+            if pinned:
+                self._conn.executemany(
+                    """INSERT INTO user_asset (user_id, asset_id, pinned_at) VALUES (?, ?, ?)
+                       ON CONFLICT (user_id, asset_id) DO UPDATE SET
+                           pinned_at = COALESCE(pinned_at, excluded.pinned_at)""",
+                    [(user_id, asset_id, utc_text(now)) for asset_id in asset_ids],
+                )
+            else:
+                self._conn.executemany(
+                    "UPDATE user_asset SET pinned_at = NULL WHERE user_id = ? AND asset_id = ?",
+                    [(user_id, asset_id) for asset_id in asset_ids],
                 )
         return len(asset_ids)
 

@@ -9,6 +9,7 @@ import PhotoBar from './PhotoBar.svelte';
 const asset = makeAsset(7, '2019-07-01T10:00:00', 400, 300);
 const detailOf = (level: Level = 'edit', extra: Partial<AssetDetail> = {}): AssetDetail => ({
 	...asset,
+	name: '2019-07-01 10.00',
 	byte_size: 1000,
 	mime_type: 'image/jpeg',
 	camera_make: null,
@@ -63,24 +64,26 @@ const jpegFile = () =>
 		}
 	});
 
-function open(detail: AssetDetail | null = detailOf(), trash = false) {
+function open(detail: AssetDetail | null = detailOf(), trash = false, shown = asset) {
 	const onopen = vi.fn();
+	const ontoggle = vi.fn();
 	render(PhotoBar, {
-		asset,
+		asset: shown,
 		detail,
 		trash,
 		busy: false,
 		more: false,
-		ontoggle: vi.fn(),
+		ontoggle,
 		onopen,
 		onrestore: vi.fn()
 	});
-	return { onopen };
+	return { onopen, ontoggle };
 }
 
+/** The bar's actions by name: each is its icon alone, named for a screen reader. */
 const actions = () =>
 	[...document.querySelectorAll('.acts > button, .acts > .menu > button')].map((b) =>
-		b.textContent.trim()
+		b.getAttribute('aria-label')
 	);
 const button = (name: string) => page.getByRole('button', { name, exact: true });
 
@@ -95,11 +98,11 @@ afterEach(() => {
 });
 
 describe('PhotoBar on a device with a share sheet', () => {
-	it('holds Favourite, Share, Album, Edit and More; Download is under More', async () => {
+	it('holds Favourite, Share, Add to album, Edit and More; Download is under More', async () => {
 		shareSheet();
 		server();
 		const { onopen } = open();
-		expect(actions()).toEqual(['Favourite', 'Share', 'Album', 'Edit', 'More']);
+		expect(actions()).toEqual(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
 		await button('More').click();
 		await button('Download').click();
 		expect(onopen).toHaveBeenCalledWith('download');
@@ -184,7 +187,7 @@ describe('PhotoBar on a device with a share sheet', () => {
 		server();
 		open(null);
 		await expect.element(button('Share')).toBeDisabled();
-		expect(actions()).toEqual(['Favourite', 'Share', 'Album']);
+		expect(actions()).toEqual(['Favourite', 'Share', 'Add to album']);
 	});
 
 	it('a guest who may download: Favourite, Share, and Download under More', async () => {
@@ -202,7 +205,8 @@ describe('PhotoBar on a device with a share sheet', () => {
 		server();
 		session.user = user('guest');
 		open(detailOf('view'));
-		expect(actions()).toEqual(['Favourite', 'Download']);
+		// More holds Pin to Home: a mark of one's own, like Favourite (issue 54)
+		expect(actions()).toEqual(['Favourite', 'Download', 'More']);
 		await expect.element(button('Download')).toBeDisabled();
 		await expect.element(page.getByText('view only')).toBeInTheDocument();
 	});
@@ -215,11 +219,81 @@ describe('PhotoBar on a device with a share sheet', () => {
 	});
 });
 
+describe('PhotoBar: the readout', () => {
+	const SHOT = { f_number: 2.8, exposure_time: 0.004, iso: 400, focal_length: 35 };
+	const items = (line: number) =>
+		[...document.querySelectorAll(`.readout .line:nth-child(${line}) .item`)].map(
+			(item) => item.textContent
+		);
+
+	it('line one: the day in words, the time and the place, each its own piece and no dots', async () => {
+		server();
+		render(PhotoBar, {
+			asset: { ...asset, place: { country: 'France', region: null, city: 'Nice' } },
+			detail: detailOf('edit', { camera_model: 'iPhone 11', ...SHOT }),
+			trash: false,
+			busy: false,
+			more: false,
+			ontoggle: vi.fn(),
+			onopen: vi.fn(),
+			onrestore: vi.fn()
+		});
+		expect(items(1)).toEqual(['1 July 2019', '10:00', 'Nice']);
+		expect(items(2)).toEqual(['iPhone 11', 'f/2.8', '1/250 s', 'ISO 400', '35 mm']);
+		expect(document.querySelector('.readout')!.textContent).not.toContain('·');
+	});
+
+	it('each line is said in words, with a pause between pieces; the photo’s name is not on the bar', async () => {
+		server();
+		open(detailOf('edit', { camera_model: 'iPhone 11', name: 'Beach day', ...SHOT }));
+		const heard = [...document.querySelectorAll('.readout .line .visually-hidden')].map(
+			(words) => words.textContent
+		);
+		expect(heard).toEqual([
+			'1 July 2019, 10:00',
+			'iPhone 11, f 2.8, 1/250 second, ISO 400, 35 millimetres'
+		]);
+		expect(document.querySelector('.readout')!.textContent).not.toContain('Beach day');
+	});
+
+	it('line two keeps its place while the details are on their way', async () => {
+		server();
+		open(null);
+		await vi.waitFor(() => expect(items(1)).toEqual(['1 July 2019', '10:00']));
+		expect(document.querySelectorAll('.readout .line')).toHaveLength(2);
+		expect(items(2)).toEqual([]);
+	});
+});
+
+describe('PhotoBar: Favourite', () => {
+	it('gives a short pop when it is pressed, not when another photo opens already a favourite', async () => {
+		server();
+		const ontoggle = vi.fn();
+		const view = render(PhotoBar, {
+			asset,
+			detail: detailOf(),
+			trash: false,
+			busy: false,
+			more: false,
+			ontoggle,
+			onopen: vi.fn(),
+			onrestore: vi.fn()
+		});
+		const heart = () => button('Favourite');
+		await heart().click();
+		expect(ontoggle).toHaveBeenCalledWith('favourite');
+		await expect.element(heart()).toHaveClass(/pop/);
+		await view.rerender({ asset: { ...asset, id: 8, favourite: true } });
+		await expect.element(heart()).toHaveAttribute('aria-pressed', 'true');
+		await expect.element(heart()).not.toHaveClass(/pop/);
+	});
+});
+
 describe('PhotoBar on a device without a share sheet', () => {
-	it('is as it was: Favourite, Download, Album, Edit, More, and no Share anywhere', async () => {
+	it('is as it was: Favourite, Download, Add to album, Edit, More, and no Share anywhere', async () => {
 		server();
 		const { onopen } = open();
-		expect(actions()).toEqual(['Favourite', 'Download', 'Album', 'Edit', 'More']);
+		expect(actions()).toEqual(['Favourite', 'Download', 'Add to album', 'Edit', 'More']);
 		await button('More').click();
 		await expect.element(button('Fix date')).toBeInTheDocument();
 		expect(document.body.textContent).not.toContain('Share');
@@ -227,5 +301,31 @@ describe('PhotoBar on a device without a share sheet', () => {
 		await button('More').click();
 		await button('Download').click();
 		expect(onopen).toHaveBeenCalledWith('download');
+	});
+});
+
+describe('Pin to Home (issue 54)', () => {
+	it('is under More once the details are in, for anyone who sees the photo', async () => {
+		server();
+		session.user = user('guest');
+		const { ontoggle } = open(detailOf('view'));
+		await button('More').click();
+		await button('Pin to Home').click();
+		expect(ontoggle).toHaveBeenCalledWith('pinned');
+	});
+
+	it('a pinned photo offers Unpin from Home instead', async () => {
+		server();
+		const { ontoggle } = open(detailOf(), false, { ...asset, pinned: true });
+		await button('More').click();
+		await expect.element(button('Pin to Home')).not.toBeInTheDocument();
+		await button('Unpin from Home').click();
+		expect(ontoggle).toHaveBeenCalledWith('pinned');
+	});
+
+	it('is not offered in the trash', async () => {
+		server();
+		open(detailOf(), true);
+		expect(document.body.textContent).not.toContain('Pin to Home');
 	});
 });

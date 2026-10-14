@@ -56,7 +56,9 @@ admin (see Visibility in §7); `0026` keeps what the last global face-clustering
 (`user.look`); `0029` lets a person's portrait be a chosen circle on one of their photos
 (`person.portrait_cx/cy/size`, empty = automatic; the round picture is cut from the original
 on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`); `0030` keeps how a
-photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`); `0031` keeps what
+each device keeps on it (`sync_rule`) and what the phone said it saved (`sync_sent`), for "Keep on my
+phone"; `0032` lets an account pin photos to its Home (`user_asset.pinned_at`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -80,7 +82,8 @@ asset(id, content_hash UNIQUE, kind, mime_type, byte_size, width, height,
                            -- solely through the marker's own sources or albums
       place_id, phash, group_id, edit_version, trashed_at, trashed_by)
 asset_source(asset_id, source_id, relative_path, seen_at, byte_size, mtime_ns, ctime_ns)
-user_asset(user_id, asset_id, favourite, hidden)                      -- per-user state
+user_asset(user_id, asset_id, favourite, hidden,                      -- per-user state
+           pinned_at)       -- 0032: NULL = not pinned; else when (UTC), kept on a re-pin
 place(id, country, region, city)                                      -- offline geocoding
 album(id, owner_id, title, description, cover_asset_id, created_at, updated_at)
 album_member(album_id, user_id, role[viewer|editor])                  -- owner is album.owner_id
@@ -94,6 +97,11 @@ import_run(...), import_item(...), job(id, kind, payload_json, status, attempts,
 inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0014, FK 0017
 device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
        created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
+                                       -- sync_cursor is unused (see "Keep on my phone")
+sync_rule(id, device_id → device CASCADE, kind[album|person|filter], album_id → album CASCADE,
+          person_id → person CASCADE, filter_json, mode[include|exclude], created_at)  -- 0031
+          -- one rule per (device, thing): UNIQUE (device_id, kind, COALESCE(album, person, filter))
+sync_sent(device_id → device CASCADE, asset_id → asset CASCADE, sent_at)        -- 0031
 ai_log(id, capability, model, attempt, ok, duration_ms, error, request_json, response_json)
 backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, schedule,
               quiet_window, retention_json, enabled, created_at)                     -- 0016
@@ -115,8 +123,8 @@ theme(id, name, tokens_json);  layout(id, name, slots_json)     -- data, not cod
 ```
 
 The SQLite adapter is one `SqliteRepository` composed of per-area mixins
-(`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_albums`, `sqlite_edits`,
-`sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
+(`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_home`, `sqlite_albums`,
+`sqlite_edits`, `sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
 on the process's ONE `Database` (`adapters/sqlite_database.py`, B16/B26): a single writer
 connection behind a single lock for every write and transaction (transactions nest by joining
 the outer one), and a read-only WAL connection per thread for reads, so reads never wait for a
@@ -177,6 +185,27 @@ Each `source` row is scanned independently (local path, or an rclone remote pull
 into `staging/<source_id>/`). Because assets are keyed by content hash, the same photo found in
 three sources is one asset with three `asset_source` rows — aggregation is a consequence of the
 data model, not extra logic. "Rescan all" enqueues one scan job per enabled source.
+A disabled source ("Pause checking") is only left out of scans and re-checks; it still grants
+access, so its photos stay visible.
+
+### Stop watching a source
+`StopWatching` (app/stop_watching.py) needs no migration. On disk it only deletes a cloud
+source's own `staging/<id>` copy. It holds the library's import lock, so no import can link a
+photo elsewhere meanwhile. Under that lock it asks, for each live photo of the source, which
+sources hold it; the photos held only there are picked out by `only_from` (in app/). Then one
+transaction refuses if a check of that source is running (409) and drops its checks that
+have not started. The rest depends on the choice:
+- **Keep** *detaches* the source (`SqliteRepository.detach_source`): kind `kept`, root
+  `kept:<id>` (frees the folder; `root` is UNIQUE), disabled, re-check off, no remote config.
+  Its `source_access` and `asset_source` rows stay, so visibility and levels are exactly as
+  before. Scans and re-checks only take enabled sources; the routes refuse to scan or
+  re-enable it, `SyncSource` refuses a queued check of it, and the backup overlap check leaves
+  its root out (`watched_roots`).
+- **Trash, or removing a detached source** (`SqliteRepository.remove_source`): the photos
+  found only there are trashed (`trashed_by` is the admin) or left with no source. Then
+  `asset.first_source_id` is nulled and its `asset_source`, `source_access`, `import_run` /
+  `import_item` rows and the `source` row go. The foreign keys have no cascade. `inbox` rows
+  are never reached, because an inbox source is refused with 422.
 
 ### Download / convert
 `Downloads` (app/downloads.py) takes the scope (ids, album or filter) resolved through the
@@ -188,7 +217,7 @@ so a 2 GB year export needs no archive on disk. Skipped photos are counted in `X
 photo that fails while the ZIP streams is left out and listed in a final `manifest.txt`.
 Size estimates start from each photo's real bytes (calibrated factors, PERFORMANCE.md).
 Every download is streamed in the request; a background `export_job` with progress for very
-large exports is not built (it is in the planned tables of §3). Naming and folder layout are
+large exports is not built (it is in the planned tables of §3). Naming (the photo's display name, `domain/display_name.py`, from `app/photo_names.py`: two queries for any number of photos) and folder layout are
 pure domain functions (unit-tested).
 
 ### Edit recipe
@@ -208,7 +237,7 @@ backend reaches SMB/SFTP/cloud targets. There is no scheduler library: the perio
 `backup_due` job every `PA_BACKUP_POLL_SECONDS` (60 s); that job, on the worker's long lane,
 runs every target whose schedule says it is due and that is outside its quiet window, then
 `restic forget --prune` with the target's retention policy. Results go to a `backup_run` table
-that feeds the status page and the overdue banner.
+that feeds the status page and the admin's avatar dot.
 
 Guided setup (issue 3): `BackupPlaces` (mounted disks, rclone remotes, facts about one place)
 feeds the pure rule `plan_backup` (fits? writable? same disk? another backup there?); `KeyVault`
@@ -235,8 +264,9 @@ with the disk connected and check it succeeded.
 
 `protection()` (pure) turns the target statuses into `places_ok / places_total` plus problems; a
 place is an enabled target or its Proton copy, "protected" is two or more ok. `GET
-/api/backups/health` serves it to admins and the root layout shows `BackupBanner` from it on
-every page. `backup run-due` exits 1 when a run failed or a skipped place is overdue, not for a
+/api/backups/health` serves it to admins; the root layout asks again on each page change, and
+the first problem becomes the red dot on the admin's avatar and its sentence under "Needs you" on
+You (`attentionOf` in `web/src/lib/nav.ts`). Members never see it. `backup run-due` exits 1 when a run failed or a skipped place is overdue, not for a
 fresh skip.
 
 ### Phone inbox
@@ -255,15 +285,58 @@ with `POST /api/upload` as ordinary multipart. The body is parsed as it streams
 off at `PA_UPLOAD_MAX_MB`, then moved into the inbox, and one import is queued. An upload is
 not resumable (no tus): a broken request is sent again, and files that already arrived are
 kept. The caller is a browser session or a per-device token (`/api/devices`), which is what
-Apple Shortcuts uses. Not built: the server → phone change cursor (the `device.sync_cursor`
-column exists, no route uses it). If a phone app is ever built (parked), it is the web UI in
+Apple Shortcuts uses. If a phone app is ever built (parked), it is the web UI in
 a Capacitor shell; only `DeviceBridge` (photo library, background upload, save to Photos)
 would have a native implementation.
+
+### Keep on my phone (server → phone)
+One way: the server says what a device should hold, the device fetches it; nothing comes
+back, so a photo deleted on the phone stays in the library. Rules are **per device** (a
+person's phone and tablet keep different things; revoking a device ends its list with its
+token). Each rule names an album, a person or a filter (the `/api/assets` query as canonical
+JSON; search facets in `q`) and keeps it (include) or leaves it off (exclude).
+`app/device_sync.DeviceSync` computes the list on every request, never stores it: each
+rule's photos come from `api/library_scopes.LibraryScopes` (the album, person and search code
+the screens use, all under the visibility rule), `domain/device_sync.kept_ids` takes the union
+of the includes minus the excludes, and `views_by_ids` keeps only photos the owner may
+**download** and has not hidden (live ones only: trash and held photos are out). A device
+fetches originals only from its own list. Fetching marks nothing: after saving, the phone
+posts the ids it saved (`POST /api/sync/sent`, ids on its list only), kept in `sync_sent`, so
+`?new=true` offers the rest and a run killed between fetching and saving offers those photos
+again (the manifest's `hash` lets a phone skip a repeat). Each include rule also counts its
+photos the owner may only view (`view_only`, typically album-only photos), so the app can say
+why they stay off the phone; paging is by asset id (`after`), so a photo joining or leaving the
+list moves nothing else. A cursor (`device.sync_cursor`) was not used: it cannot tell that an
+old photo joined a kept album. Cost: the list is recomputed for each manifest page and each
+original; fine for a family library, the first place to cache if it ever is not.
+The device routes take only a device token (`deps.device_only`); the rules are edited only
+from a signed-in browser. The free iPhone client is an Apple Shortcut
+(`docs/guides/keep-on-my-phone.md`).
 
 ### Search
 Query → parser splits facets (`date:2023`, `person:Lea`, `place:France`) from free text →
 SQL filters narrow candidates → free text is embedded by the CLIP text encoder → sqlite-vec
 KNN within candidates → results ranked, paginated with a cursor.
+
+### Home (issue 54)
+`GET /api/home` (`app/home.py`) reads the visible library once: `moments` (in
+`adapters/sqlite_home.py`) answers every photo the viewer sees on the timeline with a real
+date (no `file_mtime` guesses: a copied folder would make a "trip" of its copy day) as
+(id, taken_at, place name, favourite), in time order. Pure rules turn that into the blocks:
+`domain/on_this_day.py` (today's date in the earlier year with the most photos, else three
+days either side) and `domain/memories.py` (home is the city with the most photos; trips
+away from it split on a gap of more than two days or a change of city, 21 days at most, ten
+photos at least; a calendar month with twenty photos at home is a memory too, so a family
+that takes photos every day does not get one endless trip; the two newest, then a page of
+the others that turns each day). `arrivals` gives the photos imported in the last
+seven days. One `views_by_ids` fetches the covers and newest arrivals as `AssetOut`, and
+the people on "on this day" come from `People.list_all` over its photos. "Today" is the
+server's local date of the clock passed in, so tests fix it. Each block carries the
+`/api/assets` filters (`from`, `to`, `guessed_date=false`) that list exactly its photos.
+The person filter (`person_id`) is one more condition of the shared filter SQL: an
+`EXISTS` over `face` (index `face_by_person`) after the visibility rule, so it never
+widens what a viewer sees; `pinned` starts from the viewer's own `user_asset` rows like
+favourites. Timings: `PERFORMANCE.md`.
 
 ### Album → print
 `Album` (pages → slots → assets + crops) + `Theme` + `Layout`s → `PrintRenderer`
@@ -417,7 +490,8 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   request without it is the sign that half the time is over. Every `/api` route except health, setup and login
   needs a session; source, scan, import, job, access-list and user routes are admin-only.
   Upload routes take the session **or** a device token through one fail-closed dependency
-  (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
+  (`api/deps.py`); the two "Keep on my phone" device routes (`/api/sync/…`) take the device
+  token only, read-only, and serve only photos on that device's list. Changing a PIN ends the user's other sessions; an admin reset ends all
   of them and revokes the user's device tokens. First-run setup and the last-admin rule are
   atomic (one `BEGIN IMMEDIATE` transaction each).
 - Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`

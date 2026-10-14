@@ -89,3 +89,123 @@ button.primary:disabled {
 		min-height: var(--target);
 	}
 }
+
+/* A control gives a little under the finger (transform only: the compositor draws it). */
+.icon-button,
+.chip,
+.segmented button,
+button.primary,
+.button.primary,
+.action {
+	transition:
+		background-color var(--motion) var(--ease),
+		color var(--motion) var(--ease),
+		transform var(--press) var(--ease);
+}
+.icon-button:active,
+.chip:active,
+.segmented button:active,
+button.primary:active,
+.button.primary:active,
+.action:active {
+	transform: scale(0.95);
+}
+
+/* An action everyone knows, drawn as its icon alone: round, 44 px, its name for screen
+   readers and as a tooltip. Its word shows when the look asks for words under icons. */
+.icon-button {
+	display: inline-grid;
+	justify-items: center;
+	align-content: center;
+	gap: var(--fine);
+	min-width: var(--target);
+	min-height: var(--target);
+	padding: 0;
+	border-radius: var(--r-pill);
+	color: var(--ink);
+	flex: none;
+}
+.icon-button.filled {
+	background: var(--fill);
+}
+.icon-button[aria-pressed='true'] {
+	color: var(--accent);
+}
+.icon-button[aria-pressed='true'] svg {
+	fill: currentColor;
+}
+.icon-button .word {
+	display: none;
+	font-size: var(--fs-12);
+	font-weight: 600;
+	white-space: nowrap;
+}
+:root[data-words='all'] .icon-button .word,
+.icon-button.worded .word {
+	display: block;
+}
+:root[data-words='all'] .icon-button,
+.icon-button.worded {
+	padding: var(--s-1) var(--s-2);
+	border-radius: var(--r-1);
+}
+
+/* A chip: a question you can ask of the photos (a filter), or a suggestion. Set = ink. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	flex: none;
+	min-height: 2.5rem;
+	padding: 0 var(--s-4) 0 var(--s-3);
+	border-radius: var(--r-pill);
+	background: var(--fill);
+	color: var(--ink);
+	font-size: var(--fs-16);
+	font-weight: 600;
+	white-space: nowrap;
+}
+.chip svg {
+	width: var(--s-5);
+	height: var(--s-5);
+}
+.chip[aria-pressed='true'],
+.chip.set {
+	background: var(--ink);
+	color: var(--bg);
+}
+@media (hover: hover) {
+	.chip:not(:disabled):hover {
+		background: color-mix(in oklab, var(--fill), var(--ink) 8%);
+	}
+	.chip[aria-pressed='true']:hover,
+	.chip.set:hover {
+		background: var(--ink-2);
+	}
+}
+
+/* A few choices side by side; the chosen one sits under the lens. */
+.segmented {
+	display: inline-flex;
+	gap: var(--fine);
+	padding: var(--fine);
+	border-radius: var(--r-pill);
+	background: var(--fill);
+	flex: none;
+}
+.segmented button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-2);
+	min-width: 2.5rem;
+	min-height: 2.125rem;
+	padding: 0 var(--s-3);
+	border-radius: var(--r-pill);
+	color: var(--ink-2);
+	font-weight: 600;
+}
+.segmented button[aria-pressed='true'] {
+	background: var(--lens);
+	color: var(--ink);
+}

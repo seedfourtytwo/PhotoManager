@@ -29,6 +29,7 @@ import type {
 	DateChange,
 	Device,
 	DevicePlatform,
+	DeviceSync,
 	DirectoryEntry,
 	DownloadEstimate,
 	PhotoFile,
@@ -36,6 +37,7 @@ import type {
 	Face,
 	Facets,
 	Health,
+	HomeData,
 	Id,
 	ImportReport,
 	ImportReportPage,
@@ -52,6 +54,8 @@ import type {
 	MapPoint,
 	MlStatus,
 	NewDevice,
+	SyncRule,
+	SyncRuleIn,
 	NewUser,
 	PinBody,
 	Person,
@@ -75,9 +79,12 @@ import type {
 	SearchResult,
 	SetupBody,
 	SetupState,
+	PhotosOnlyHere,
 	Source,
 	SourceIn,
 	SourcePatch,
+	SourceRemoval,
+	SourceRemoved,
 	StatePatch,
 	Stats,
 	TrashItem,
@@ -265,6 +272,11 @@ export function createApi(options: ApiOptions = {}) {
 		updateSource: (id: Id, body: SourcePatch) =>
 			request<Source>('PATCH', `/api/sources/${id}`, body),
 		scanSource: (id: Id) => request<Queued>('POST', `/api/sources/${id}/scan`),
+		/** Admin: what stopping watching this folder would do (nothing changes yet). */
+		sourceRemoval: (id: Id) => get<SourceRemoval>(`/api/sources/${id}/removal`),
+		/** Admin: stop watching a folder; the folder itself is never touched. */
+		removeSource: (id: Id, photos: PhotosOnlyHere) =>
+			request<SourceRemoved>('DELETE', query(`/api/sources/${id}`, { photos })),
 		scanAll: () => request<Queued[]>('POST', '/api/sources/scan-all'),
 		sourceAccess: (id: Id) => get<Access>(`/api/sources/${id}/access`),
 		setSourceAccess: (id: Id, body: Access) =>
@@ -276,6 +288,9 @@ export function createApi(options: ApiOptions = {}) {
 		jobs: (status?: JobStatus | 'waiting') => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),
+
+		// Home (issue 54): on this day, memories, what is new
+		home: () => get<HomeData>('/api/home'),
 
 		// assets
 		assets: (filters: AssetFilters, cursor: string | null = null, limit = 200) => {
@@ -426,6 +441,14 @@ export function createApi(options: ApiOptions = {}) {
 		createDevice: (body: { name: string; platform: DevicePlatform }) =>
 			request<NewDevice>('POST', '/api/devices', body),
 		revokeDevice: (id: Id) => request<void>('DELETE', `/api/devices/${id}`),
+		// keep on my phone (v1.7)
+		deviceSync: (id: Id) => get<DeviceSync>(`/api/devices/${id}/sync`),
+		keepOnDevice: (id: Id, rule: SyncRuleIn) =>
+			request<SyncRule>('POST', `/api/devices/${id}/sync/rules`, rule),
+		dropFromDevice: (id: Id, ruleId: Id) =>
+			request<void>('DELETE', `/api/devices/${id}/sync/rules/${ruleId}`),
+		resendToDevice: (id: Id) =>
+			request<{ forgotten: number }>('POST', `/api/devices/${id}/sync/resend`),
 
 		// remote (rclone) sources (admin, v1.1)
 		remotes: () => get<{ remotes: string[] }>('/api/remote-sources/remotes'),

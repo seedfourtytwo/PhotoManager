@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AlbumSummary, Person } from './api/types';
+import { filtersFromParams } from './filters';
 import {
+	UTILITIES,
 	albumStrip,
 	peopleStrip,
 	personName,
@@ -160,5 +162,23 @@ describe('places that say the same thing twice', () => {
 	it('keeps a place whose photo could not be looked up', () => {
 		const places = [seen('Portugal', 73, null), seen('Lisbon', 73, null)];
 		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['Portugal', 'Lisbon']);
+	});
+});
+
+describe('utilities', () => {
+	it('are To review, Hidden and Trash, in that order', () => {
+		expect(UTILITIES.map((u) => u.title)).toEqual(['To review', 'Hidden', 'Trash']);
+	});
+	it('Hidden opens the library showing only the hidden photos', () => {
+		const hidden = UTILITIES.find((u) => u.key === 'hidden')!;
+		const [path, query] = hidden.href.split('?');
+		expect(path).toBe('/');
+		expect(filtersFromParams(new URLSearchParams(query))).toEqual({ hidden: true });
+	});
+	it('To review and Trash open their own pages', () => {
+		expect(UTILITIES.filter((u) => u.key !== 'hidden').map((u) => u.href)).toEqual([
+			'/review',
+			'/trash'
+		]);
 	});
 });

@@ -109,12 +109,13 @@ it('closes when keyboard focus leaves the menu', async () => {
 	outside.remove();
 });
 
-it('shows an icon over its word when given one', async () => {
+it('given an icon it is an icon button: the icon, its name as a tooltip, its word for the look', async () => {
 	render(Menu, { label: 'More', text: 'More', icon: 'more', items: items() });
 	const button = page.getByRole('button', { name: 'More' });
-	await expect.element(button).toHaveTextContent('More');
+	await expect.element(button).toHaveAttribute('title', 'More');
 	expect(button.element().querySelector('svg')).not.toBeNull();
-	expect(button.element().classList.contains('action')).toBe(true);
+	expect(button.element().classList.contains('icon-button')).toBe(true);
+	expect(button.element().querySelector('.word')?.textContent).toBe('More');
 });
 
 it('a pressed row says so', async () => {
@@ -133,4 +134,29 @@ it('a pressed row says so', async () => {
 	await expect
 		.element(page.getByRole('button', { name: 'Fix date' }))
 		.not.toHaveAttribute('aria-pressed');
+});
+
+it('a round menu is an icon button named by its label', async () => {
+	render(Menu, { label: 'More for Sam', text: 'More', icon: 'more', round: true, items: items() });
+	const button = page.getByRole('button', { name: 'More for Sam' });
+	expect(button.element().classList.contains('icon-button')).toBe(true);
+	expect(button.element().classList.contains('action')).toBe(false);
+	await expect.element(button).toHaveAttribute('title', 'More for Sam');
+	expect(button.element().querySelector('svg')).not.toBeNull();
+});
+
+it('a destructive row is marked as one', async () => {
+	render(Menu, {
+		label: 'More',
+		text: 'More',
+		items: [
+			{ label: 'Restore all', run: () => {} },
+			{ label: 'Empty trash', run: () => {}, danger: true }
+		]
+	});
+	await page.getByRole('button', { name: 'More' }).click();
+	const empty = page.getByRole('button', { name: 'Empty trash' }).element();
+	const restore = page.getByRole('button', { name: 'Restore all' }).element();
+	expect(empty.classList.contains('danger')).toBe(true);
+	expect(restore.classList.contains('danger')).toBe(false);
 });

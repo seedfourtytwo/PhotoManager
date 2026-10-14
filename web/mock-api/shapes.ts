@@ -2,6 +2,7 @@
 import type { AlbumSummary, AssetDetail, AssetOut } from '../src/lib/api/types.ts';
 import { live, setFor, type AccessHelpers } from './access.ts';
 import { editedSize } from './images.ts';
+import { displayName } from './names.ts';
 import type { MockAlbum, MockAsset, MockUser, World } from './types.ts';
 
 export function shapeHelpers(h: World & AccessHelpers) {
@@ -18,6 +19,7 @@ export function shapeHelpers(h: World & AccessHelpers) {
 			thumb: { url: `/api/assets/${a.id}/thumb?v=${a.edit_version}` },
 			preview_ready: true,
 			favourite: setFor(h.state().favourites, user.id).has(a.id),
+			pinned: setFor(h.state().pinned, user.id).has(a.id),
 			hidden: setFor(h.state().hidden, user.id).has(a.id),
 			private: a.private_owner !== null,
 			place: a.place ? { ...a.place.place } : null,
@@ -30,6 +32,7 @@ export function shapeHelpers(h: World & AccessHelpers) {
 	function toDetail(user: MockUser, a: MockAsset): AssetDetail {
 		return {
 			...toOut(user, a),
+			name: displayName(a, h.visible(user)),
 			byte_size: a.byte_size,
 			mime_type: a.mime_type,
 			camera_make: a.camera_make,

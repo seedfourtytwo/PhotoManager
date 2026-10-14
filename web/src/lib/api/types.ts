@@ -70,6 +70,12 @@ export type Source = {
 export type Recheck = 'off' | 'hourly' | 'daily' | 'weekly';
 export type SourceIn = { label: string; path: string };
 export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Recheck }>;
+/** What "Stop watching" would do: the folder's photos, and those no other folder holds. */
+export type SourceRemoval = { photos: number; only_here: number };
+/** v1.8: keep the photos found only in that folder (a watched folder is detached; one no longer watched is removed) or trash them. */
+export type PhotosOnlyHere = 'keep' | 'trash';
+/** `detached`: kept as a folder no longer watched (kind "kept"), its photos seen as before. */
+export type SourceRemoved = { only_here: number; trashed: number; detached: boolean };
 
 export type Access = { everyone: Level | null; users: { user_id: Id; level: Level }[] };
 
@@ -153,6 +159,8 @@ export type AssetOut = {
 	thumb: { url: string } | null;
 	preview_ready: boolean;
 	favourite: boolean;
+	/** On the account's Home (issue 54); like a favourite, the account's own. */
+	pinned: boolean;
 	hidden: boolean;
 	private: boolean;
 	place: Place | null;
@@ -164,6 +172,8 @@ export type AssetOut = {
 export type AssetPage = { items: AssetOut[]; next_cursor: string | null };
 
 export type AssetDetail = AssetOut & {
+	/** What people call the photo, and what a download of it is named (without extension). */
+	name: string;
 	byte_size: number;
 	mime_type: string | null;
 	camera_make: string | null;
@@ -190,10 +200,13 @@ export type AssetFilters = {
 	year?: number;
 	month?: number;
 	source_id?: Id[];
+	/** Photos with ANY of these people on them. */
+	person_id?: Id[];
 	camera?: string;
 	place?: string;
 	q?: string;
 	favourite?: boolean;
+	pinned?: boolean;
 	hidden?: boolean;
 	guessed_date?: boolean;
 	has_location?: boolean;
@@ -211,8 +224,17 @@ export type Facets = {
 export type CalendarDay = { day: string; count: number };
 export type MapPoint = { id: Id; lat: number; lon: number };
 
-export type StatePatch = Partial<{ favourite: boolean; hidden: boolean; private: boolean }>;
-export type BulkState = { ids: Id[] } & Partial<{ favourite: boolean; hidden: boolean }>;
+export type StatePatch = Partial<{
+	favourite: boolean;
+	pinned: boolean;
+	hidden: boolean;
+	private: boolean;
+}>;
+export type BulkState = { ids: Id[] } & Partial<{
+	favourite: boolean;
+	pinned: boolean;
+	hidden: boolean;
+}>;
 export type DateChange = { ids: Id[] } & (
 	{ set: string; shift_minutes?: never } | { shift_minutes: number; set?: never }
 );
@@ -235,6 +257,54 @@ export const IDENTITY_RECIPE: Recipe = {
 	straighten: 0
 };
 
+// --- Home (issue 54) --------------------------------------------------------------------------
+
+/**
+ * The /api/assets filters that list exactly the photos a Home block counts. Dates guessed from
+ * a file's mtime are left out of Home, hence `guessed_date: false`.
+ */
+export type HomeFilter = { from: string; to: string; guessed_date: false };
+/** Today's date in an earlier year: the year with the most photos on it. */
+export type OnThisDay = {
+	/** Today's date in that year (YYYY-MM-DD). */
+	day: string;
+	years_ago: number;
+	/** False: nothing was taken on the day itself, so three days either side count. */
+	exact: boolean;
+	count: number;
+	/** A favourite of yours if there is one, else the first photo. */
+	cover: AssetOut;
+	/** The place most of them were taken at (a city, else a region or country). */
+	place: string | null;
+	/** The named people on them, most photos first (hidden people left out). */
+	people: { id: Id; name: string }[];
+	filter: HomeFilter;
+};
+/**
+ * A trip away from home ("Lisbon, July and August 2024") or a month at home ("October 2024":
+ * `count` is every photo of that month, what `filter` lists).
+ */
+export type Memory = {
+	/** Its first and last day: the same while the trip stays the same. */
+	key: string;
+	title: string;
+	from: string;
+	to: string;
+	count: number;
+	cover: AssetOut;
+	filter: HomeFilter;
+};
+/** Photos imported in the last `days` days; `sources`: the folders they came from. */
+export type NewArrivals = {
+	count: number;
+	days: number;
+	sources: { id: Id; label: string; count: number }[];
+	/** The newest arrivals (at most 12), newest first. */
+	items: AssetOut[];
+};
+/** GET /api/home: the two newest memories come first, the others change every day. */
+export type HomeData = { on_this_day: OnThisDay | null; memories: Memory[]; new: NewArrivals };
+
 // --- downloads -----------------------------------------------------------------------------
 
 export type DownloadFormat = 'original' | 'jpeg' | 'png' | 'webp';
@@ -244,7 +314,7 @@ export type DownloadOptions = {
 	max_edge: number | null;
 	strip_location: boolean;
 	strip_all_metadata: boolean;
-	naming: 'original' | 'date';
+	naming: 'name' | 'original' | 'date';
 	folders: 'flat' | 'year' | 'month';
 };
 export type DownloadScope = { ids: Id[] } | { album_id: Id } | { filters: AssetFilters };
@@ -479,10 +549,46 @@ export type Device = {
 	platform: DevicePlatform;
 	created_at: string;
 	last_used_at: string | null;
+	/** When it last asked for its "Keep on my phone" list (v1.7). */
+	last_sync_at: string | null;
 	revoked: boolean;
 };
 /** The token is shown once. */
 export type NewDevice = { device: Device; token: string };
+
+// --- keep on my phone (v1.7) ----------------------------------------------------------------
+
+export type SyncMode = 'include' | 'exclude';
+/** What a device keeps on it or leaves off: an album, a person, or filters (search facets in `q`). */
+export type SyncTarget =
+	| { kind: 'album'; album_id: Id }
+	| { kind: 'person'; person_id: Id }
+	| { kind: 'filter'; filters: AssetFilters };
+export type SyncRuleIn = SyncTarget & { mode: SyncMode };
+export type SyncRule = {
+	id: Id;
+	kind: SyncTarget['kind'];
+	mode: SyncMode;
+	album_id: Id | null;
+	person_id: Id | null;
+	filters: AssetFilters | null;
+	/** The album's title or the person's name; null for filters (described by the app). */
+	label: string | null;
+	/** Photos it names that you can see. */
+	count: number;
+	/** It names nothing you can see any more (an album unshared or deleted, a person merged). */
+	gone: boolean;
+	/** Of an include's photos, those you may only view: they can't go to the phone. */
+	view_only: number;
+};
+/** One device's list: what it keeps and leaves off, its size, and how much it has fetched. */
+export type DeviceSync = {
+	device: Device;
+	rules: SyncRule[];
+	count: number;
+	bytes: number;
+	sent: number;
+};
 
 export type RemoteSourceIn = { label: string; remote: string; path: string };
 export type RemoteSource = RemoteSourceIn & { id: Id };

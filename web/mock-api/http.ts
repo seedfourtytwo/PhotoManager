@@ -27,8 +27,20 @@ export type Route = [string, RegExp, Handler];
 export const ok = (json: unknown, status = 200): Result => ({ status, json });
 export const noContent: Result = { status: 204 };
 export const nowIso = () => new Date().toISOString().slice(0, 19);
+/** A mock clock reading (ms) as the API writes a time. */
+export const isoAt = (ms: number) => new Date(ms).toISOString().slice(0, 19);
 export const me = (ctx: Ctx) => ctx.user!;
 export const idParam = (ctx: Ctx, i = 0) => Number(ctx.params[i]);
+
+/** RFC 6266: the UTF-8 name, plus an ASCII stand-in (accents dropped, the rest `_`). */
+export function attachment(name: string): string {
+	const ascii = [...name.normalize('NFC')]
+		.map((c) => c.normalize('NFKD').replace(/\p{M}/gu, ''))
+		.map((c) => (c && /^[\x20-\x7e]+$/.test(c) ? c : '_'))
+		.join('')
+		.replace(/["\\]/g, '_');
+	return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
 
 export function requireFields<T extends object>(body: unknown, fields: (keyof T)[]): T {
 	if (!body || typeof body !== 'object') throw new HttpError(422, 'Expected a JSON body.');

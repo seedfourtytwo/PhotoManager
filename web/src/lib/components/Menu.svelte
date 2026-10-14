@@ -9,8 +9,11 @@
 	type Props = {
 		label: string;
 		text: string;
-		/** In an action bar: the button is this icon over its word, not a round button. */
+		/** In an action bar: the button is this icon alone (an icon button), its word for the look. */
 		icon?: IconName;
+		/** With `icon`: a round icon button standing on the page (⋯), on a fill unless `filled` is false. */
+		round?: boolean;
+		filled?: boolean;
 		badge?: number;
 		badgeLabel?: string;
 		items: MenuItem[];
@@ -20,6 +23,8 @@
 		label,
 		text,
 		icon,
+		round = false,
+		filled = true,
 		badge = 0,
 		badgeLabel,
 		items,
@@ -59,15 +64,16 @@
 	<button
 		bind:this={button}
 		type="button"
-		class={icon ? 'action' : 'trigger'}
+		class={icon ? `icon-button${round && filled ? ' filled' : ''}` : 'trigger'}
 		aria-label={label}
+		title={icon ? label : undefined}
 		aria-expanded={open}
 		aria-controls={open ? id : undefined}
 		aria-describedby={badge > 0 && badgeLabel ? `${id}-badge` : undefined}
 		onclick={() => (open = !open)}
 	>
 		{#if icon}<Icon name={icon} />{/if}
-		<span aria-hidden="true">{text}</span>
+		<span class:word={!!icon} aria-hidden="true">{text}</span>
 		{#if badge > 0}<span class="badge data" aria-hidden="true"
 				>{badge > BADGE_MAX ? `${BADGE_MAX}+` : badge}</span
 			>{/if}
@@ -94,6 +100,7 @@
 					{:else}
 						<button
 							type="button"
+							class:danger={item.danger}
 							aria-pressed={item.pressed}
 							onclick={() => {
 								close(true);
@@ -148,8 +155,8 @@
 		padding: var(--s-1);
 		list-style: none;
 		background: var(--raised);
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-2);
+		box-shadow: var(--lift);
 	}
 	.panel a,
 	.panel button {
@@ -165,6 +172,9 @@
 		color: var(--ink);
 		text-align: left;
 		text-decoration: none;
+	}
+	.panel button.danger {
+		color: var(--fail);
 	}
 	.panel a[aria-current='page'] {
 		font-weight: 600;

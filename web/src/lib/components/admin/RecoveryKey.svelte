@@ -98,7 +98,6 @@
 	.key {
 		display: block;
 		font-family: var(--font-data);
-		font-stretch: 80%;
 		overflow-wrap: anywhere;
 		user-select: all;
 		border-left: 2px solid var(--ink);

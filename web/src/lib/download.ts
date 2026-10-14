@@ -4,10 +4,10 @@ import { plural } from './format';
 
 export const EDGE_PRESETS: { label: string; value: number | null }[] = [
 	{ label: 'Original', value: null },
-	{ label: '4K · 3840', value: 3840 },
+	{ label: '4K, 3840 px', value: 3840 },
 	{ label: '2048', value: 2048 },
 	{ label: '1080', value: 1080 },
-	{ label: 'Email · 1280', value: 1280 }
+	{ label: 'Email, 1280 px', value: 1280 }
 ];
 
 export const DEFAULT_OPTIONS: DownloadOptions = {
@@ -16,7 +16,7 @@ export const DEFAULT_OPTIONS: DownloadOptions = {
 	max_edge: null,
 	strip_location: false,
 	strip_all_metadata: false,
-	naming: 'original',
+	naming: 'name',
 	folders: 'flat'
 };
 

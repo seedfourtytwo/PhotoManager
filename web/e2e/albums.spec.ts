@@ -31,7 +31,8 @@ test('select → add to a new album → reorder → set cover', async ({ page })
 	await expect(page.locator('.tile')).toHaveCount(3);
 	await expectAccessible(page);
 
-	// Keyboard reorder works on both devices: Arrange, focus a photo, Alt+→.
+	// Keyboard reorder works on both devices: Arrange (behind ⋯), focus a photo, Alt+→.
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Arrange' }).click();
 	const order = page.waitForRequest(
 		(r) => r.method() === 'PUT' && /\/api\/albums\/\d+\/order$/.test(r.url())
@@ -156,6 +157,7 @@ test('Rename album: Enter saves; the title field stops at 200 characters', async
 	await create.getByLabel('Title').fill('Before');
 	await create.getByRole('button', { name: 'Create' }).click();
 	await expect(page.getByRole('heading', { name: 'Before' })).toBeVisible();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Rename' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Rename album' });
 	await expect(dialog.getByLabel('Title')).toHaveAttribute('maxlength', '200');
@@ -163,4 +165,33 @@ test('Rename album: Enter saves; the title field stops at 200 characters', async
 	await dialog.getByLabel('Title').press('Enter');
 	await expect(page.getByRole('heading', { name: 'After' })).toBeVisible();
 	await expect(dialog).toBeHidden();
+});
+
+test('Add photos: pick from the library in a sheet; what the album holds is not offered', async ({
+	page
+}) => {
+	await page.goto('/albums/1');
+	const tiles = page
+		.getByRole('main')
+		.getByRole('group', { name: 'Photos', exact: true })
+		.locator('.tile');
+	await expect(tiles.first()).toBeVisible();
+	const before = await tiles.count();
+	await expect(page.getByRole('main')).toContainText(`${before} photos, `);
+	await page.getByRole('button', { name: 'Add photos' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Add photos' });
+	const offered = sheet.locator('.tile');
+	await expect(offered.first()).toBeVisible();
+	const inAlbum = await tiles.evaluateAll((all) => all.map((t) => t.getAttribute('data-id')));
+	const shown = await offered.evaluateAll((all) => all.map((t) => t.getAttribute('data-id')));
+	expect(shown.filter((id) => inAlbum.includes(id))).toEqual([]);
+	await expect(sheet.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
+	await offered.nth(0).click();
+	await offered.nth(1).click();
+	await expect(offered.nth(0)).toHaveAttribute('aria-pressed', 'true');
+	await expectAccessible(page);
+	await sheet.getByRole('button', { name: 'Add 2 photos' }).click();
+	await expect(toast(page)).toContainText('Added 2 photos');
+	await expect(sheet).toBeHidden();
+	await expect(tiles).toHaveCount(before + 2);
 });

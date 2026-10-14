@@ -2,7 +2,9 @@
 import type { Recipe } from '../../src/lib/api/types.ts';
 import { setFor } from '../access.ts';
 import { countBy } from '../filters.ts';
+import { displayName } from '../names.ts';
 import {
+	attachment,
 	HttpError,
 	idParam,
 	ids,
@@ -17,7 +19,24 @@ import type { Helpers } from '../helpers.ts';
 import { renderAsset } from '../images.ts';
 import { rng } from '../library.ts';
 
+/** An account's own marks on a photo (favourite, pinned, hidden); `undefined` leaves one be. */
+type Marks = Partial<Record<'favourite' | 'pinned' | 'hidden', boolean>>;
+
 export function assetRoutes(h: Helpers): Route[] {
+	function setMarks(userId: number, assetId: number, marks: Marks) {
+		const sets = {
+			favourite: h.state().favourites,
+			pinned: h.state().pinned,
+			hidden: h.state().hidden
+		};
+		for (const key of ['favourite', 'pinned', 'hidden'] as const) {
+			if (marks[key] === undefined) continue;
+			const set = setFor(sets[key], userId);
+			if (marks[key]) set.add(assetId);
+			else set.delete(assetId);
+		}
+	}
+
 	return [
 		[
 			'GET',
@@ -104,20 +123,8 @@ export function assetRoutes(h: Helpers): Route[] {
 			'POST',
 			/^\/api\/assets\/state$/,
 			(ctx) => {
-				const body = ctx.body as { favourite?: boolean; hidden?: boolean };
 				const list = ids(ctx.body).map((id) => h.findAsset(me(ctx), id));
-				for (const a of list) {
-					if (body.favourite !== undefined) {
-						const set = setFor(h.state().favourites, me(ctx).id);
-						if (body.favourite) set.add(a.id);
-						else set.delete(a.id);
-					}
-					if (body.hidden !== undefined) {
-						const set = setFor(h.state().hidden, me(ctx).id);
-						if (body.hidden) set.add(a.id);
-						else set.delete(a.id);
-					}
-				}
+				for (const a of list) setMarks(me(ctx).id, a.id, ctx.body as Marks);
 				return ok({ updated: list.length });
 			}
 		],
@@ -183,15 +190,12 @@ export function assetRoutes(h: Helpers): Route[] {
 				const asset = h.findAsset(me(ctx), idParam(ctx));
 				h.needLevel(me(ctx), asset, 'download');
 				const edited = ctx.params[1] === 'download';
-				const name = asset.sources[0].relative_path
-					.split('/')
-					.pop()!
-					.replace(/\.\w+$/, '');
+				const name = displayName(asset, h.visible(me(ctx)));
 				return {
 					status: 200,
 					raw: renderAsset(asset, !edited),
 					type: 'image/svg+xml',
-					headers: { 'content-disposition': `attachment; filename="${name}.svg"` }
+					headers: { 'content-disposition': attachment(`${name}.svg`) }
 				};
 			}
 		],
@@ -200,20 +204,8 @@ export function assetRoutes(h: Helpers): Route[] {
 			/^\/api\/assets\/(\d+)\/state$/,
 			(ctx) => {
 				const asset = h.findAsset(me(ctx), idParam(ctx));
-				const body = (ctx.body ?? {}) as {
-					favourite?: boolean;
-					hidden?: boolean;
-					private?: boolean;
-				};
-				for (const key of ['favourite', 'hidden'] as const) {
-					if (body[key] === undefined) continue;
-					const set = setFor(
-						key === 'favourite' ? h.state().favourites : h.state().hidden,
-						me(ctx).id
-					);
-					if (body[key]) set.add(asset.id);
-					else set.delete(asset.id);
-				}
+				const body = (ctx.body ?? {}) as Marks & { private?: boolean };
+				setMarks(me(ctx).id, asset.id, body);
 				if (body.private !== undefined) {
 					// v1.2: the marker needs edit on the photo (the mock hides it from all others).
 					h.needLevel(me(ctx), asset, 'edit');

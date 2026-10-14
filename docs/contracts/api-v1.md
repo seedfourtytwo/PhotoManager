@@ -13,7 +13,8 @@ Conventions
   does so every 15 days of use, together with its marker cookie `pa_session_fresh`), so a
   session that is used does not end; clients have nothing to do.
   Every `/api/*` route needs a session **except** `/api/health`, `/api/setup` (GET/POST),
-  `/api/auth/accounts`, `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
+  `/api/auth/accounts`, `/api/auth/login`, and the two `/api/sync/…` routes of "Keep on my
+  phone", which take a device token instead (v1.7). No session → `401`. Not allowed → `403`. Hidden from you → `404`.
 - Roles: `admin` (everything, manages users/sources/access), `member`, `guest`
   (view + download only; never edits).
 - Access levels on a source: `view` < `download` < `edit`. Admins have `edit` everywhere.
@@ -122,7 +123,8 @@ mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases
   the app unusable.
 - `PUT /api/me/look` changes the mode of the sheet as it is stored at that moment, in one
   step: an admin's save at the same time is never half undone.
-- `showToday` and `startPage` are stored and answered but have no effect until the Today page exists.
+- `showToday: false` takes Home out of the dock; `startPage` is where a session opens (Home or
+  Library; `web/src/lib/start-page.svelte.ts`).
 
 ## Sources (existing, plus access)
 
@@ -162,6 +164,28 @@ least that long ago (a failed check counts, so it is not retried at once), unles
 already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
 off or disabled, possibly a moment already past (it runs at the server's next look).
 
+**Stop watching a folder (v1.8).** `GET /api/sources/{id}/removal` (admin) answers
+`{photos, only_here}`: the live photos in the source, and those no other source holds.
+`DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
+answers `{only_here, trashed, detached}`. Photos another source also holds are not touched.
+
+- `keep` on a watched source *detaches* it (`detached: true`): `kind` becomes `"kept"`, it is
+  disabled, `recheck` is `off` and `path` is `null`. Its access list and its photos stay, so
+  everyone who sees them still does, at the same level, and the folder is free to be added
+  again. Scanning it, `enabled: true` or a `recheck` other than `off` is `422` ("this folder
+  is no longer watched; add it again to watch it"). It is never in "Check all" or a timed
+  check. Its label, owner and access can still be changed.
+- `keep` on a `"kept"` source, or `trash` on any source, removes it (`detached: false`): the
+  source, its access list and its import history. With `keep` the photos found only there
+  stay with no source, so by the access rule only admins see them, plus members of an album
+  they are in. With `trash` they go to the trash (`trashed_by` is the admin, restorable for
+  30 days).
+
+Either way its checks that have not started are dropped. Nothing in the folder itself is
+changed. A cloud source's own pulled copy (`staging/<id>`) is deleted. An upload inbox is
+`422`. A check of that source running right now, or any import into the library, is `409`
+(try again when it ends).
+
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
 | PUT | `/api/sources/{id}/access` | `Access` | `Access` (admin) |
@@ -178,10 +202,12 @@ New sources default to `{everyone: "download", users: []}`.
 | `from`, `to` | inclusive day range `YYYY-MM-DD` |
 | `year`, `month` | shortcuts (month needs year) |
 | `source_id` | repeatable; only sources you can see count (a hidden source's id selects nothing, v1.2) |
+| `person_id` | repeatable: photos with **any** of these people on them (v1.9); an unknown id selects nothing, one outside 1…2⁶³−1 is `400` |
 | `camera` | exact `camera_model` |
 | `place` | matches country, region or city (case-insensitive) |
 | `q` | free text over file names (in sources you can see, v1.2), place names, camera, album titles (of albums you can see) |
 | `favourite` | `true` = only my favourites |
+| `pinned` | `true` = only the photos I pinned to my Home, `false` = the others (v1.9) |
 | `hidden` | `true` = only my hidden; default hides them |
 | `guessed_date` | `true` = only photos whose date came from the file (`file_mtime`) |
 | `has_location` | `true`/`false` |
@@ -190,7 +216,7 @@ New sources default to `{everyone: "download", users: []}`.
 `AssetOut` (list item):
 ```
 {id, taken_at, tz_offset_minutes, date_source, width, height, kind,
- thumb: {url} | null, preview_ready, favourite, hidden, private,
+ thumb: {url} | null, preview_ready, favourite, pinned, hidden, private,
  place: {country, region, city} | null, edited: bool, variant_of: id|null,
  group_id: id|null}          # bursts / near-duplicates share a group
 ```
@@ -201,11 +227,11 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/facets` | same filters | `{years:[{year,count}], sources:[{id,label,count}], cameras:[{name,count}], places:[{name,count}], guessed_dates:int, total:int}` |
 | GET | `/api/calendar` | same filters | `[{day:"YYYY-MM-DD", count}]` |
 | GET | `/api/map` | same filters | `[{id, lat, lon}]` |
-| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
+| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{name, byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
-| PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
-| POST | `/api/assets/state` | `{ids, favourite?, hidden?}` | `{updated}` |
+| PATCH | `/api/assets/{id}/state` | `{favourite?, pinned?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above). `pinned` (v1.9) is per account like `favourite`: `true` pins (a photo pinned again keeps its first time), `false` unpins |
+| POST | `/api/assets/state` | `{ids, favourite?, pinned?, hidden?}` | `{updated}` |
 | POST | `/api/assets/dates` | `{ids, set?: "YYYY-MM-DDTHH:MM:SS", shift_minutes?: int}` (exactly one) | `{updated}`; needs `edit`; sets `date_source="manual"`, keeps the previous value. `422` if a photo would end up more than a day after the server's local now (v1.2) |
 | GET | `/api/assets/{id}/edit` | – | `Recipe` |
 | PUT | `/api/assets/{id}/edit` | `Recipe` | `Recipe`; needs `edit` |
@@ -229,7 +255,7 @@ DownloadRequest = {
   ids?: [id], album_id?: id, filters?: {…same as /api/assets query…},   # exactly one scope
   format: "original"|"jpeg"|"png"|"webp", quality: 1..100 (default 90),
   max_edge: int|null, strip_location: bool, strip_all_metadata: bool,
-  naming: "original"|"date", folders: "flat"|"year"|"month"
+  naming: "name"|"original"|"date" (default "name"), folders: "flat"|"year"|"month"
 }
 ```
 Needs `download` on every included asset (others are silently left out and counted in the
@@ -239,17 +265,67 @@ goes on; the archive then ends with a `manifest.txt` entry listing each left-out
 (`X-Skipped` is sent before streaming starts, so it only counts access) (v1.2). `original` + no resize streams the untouched file; any other option
 renders via libvips with the edit recipe applied.
 
+**Photo names (v1.7).** `AssetDetail.name` is the photo's display name (FEATURES 4b.10, `domain/display_name.py`): computed per viewer, never stored. `/api/assets/{id}/original`, `/api/assets/{id}/download` and ZIP entries with `naming: "name"` are named `<name><extension>`, the extension the original's own (or the output format's).
+
 **ZIP name (v1.3).** `Content-Disposition: attachment; filename="<ASCII>"; filename*=UTF-8''<name>`
 (RFC 6266/5987). `<name>` is: `album_id` → `<album title>.zip`; `filters` →
 `photos-<words>.zip` (`photos-all.zip` with no filter); `ids` → `photos-<n>.zip` (`n` = distinct ids
 asked for). Filter words, in this order, lowercase, joined by `-`: day range (`2019-07-04`,
 `2019-07-01-to-2019-08-31`, `from-…`, `to-…`), `year[-month]` (`2019`, `2019-07`),
-`<n>-source(s)`, camera, place, `q` (each slugged: runs of non-letters/digits → `-`),
-`favourites`, `hidden`, `guessed-dates`, `with-location`/`without-location`. E.g.
+`<n>-source(s)`, `1-person`/`<n>-people` (v1.9), camera, place, `q` (each slugged: runs of
+non-letters/digits → `-`), `favourites`, `pinned` (v1.9), `hidden`, `guessed-dates`,
+`with-location`/`without-location`. E.g.
 `{year: 2019, place: "France"}` → `photos-2019-france.zip`. Names are sanitised (no `/ \ : * ? " < > |`
 or control characters → `_`; blank titles → `album.zip`) and at most 100 characters. The ASCII
 `filename` drops accents and turns other non-ASCII characters into `_`. Single-photo downloads
 use the same header shape.
+
+## Home (v1.9, issue 54)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/home` | – | `Home` for the signed-in account (below) |
+
+```
+Home = {
+  on_this_day: null | {day: "YYYY-MM-DD", years_ago, exact: bool, count, cover: AssetOut,
+                       place: str|null, people: [{id, name}], filter: HomeFilter},
+  memories: [{key, title, from: "YYYY-MM-DD", to: "YYYY-MM-DD", count, cover: AssetOut,
+              filter: HomeFilter}],                                   # at most 8
+  new: {count, days: 7, sources: [{id, label, count}], items: AssetOut[]}  # items: ≤ 12
+}
+HomeFilter = {from, to, guessed_date: false}   # /api/assets filters listing exactly `count`
+```
+Everything is what the timeline shows you: photos you may see, not in the trash, not held
+for review, not hidden by you. Photos whose date was guessed from the file
+(`date_source: "file_mtime"`) never make a memory or an "on this day": a copy's date is not
+the day it was taken; each `filter` carries `guessed_date: false` for that reason.
+
+- **on_this_day**: the photos taken on today's month and day (the server's local date) in an
+  earlier year; of those years the one with the most photos, a tie going to the most recent.
+  When no earlier year has a photo on the day, three days either side count instead and
+  `exact` is `false`. 29 February is 28 February in other years. `day` is today's date in
+  that year; `cover` is your first favourite among them, else the first by time; `place` the
+  place most of them have (city, else region, else country); `people` the named, listed
+  people on them, most photos first. `null` when no earlier year has any.
+- **memories** come in two kinds. *Home* is the city with the most of your photos (a tie: the
+  one seen first). A photo without a place goes with the nearest photo (in time) that has one,
+  within two days; when two places are as near, or none is, it counts as home.
+  - *Trips*: photos away from home, split where more than two days pass between two of them
+    (exactly two days stays one trip) or the city changes, 21 days long at most, at least 10
+    photos. `title` is the city and the months in English: `"Lisbon, July 2024"`,
+    `"Lisbon, July and August 2024"`, `"December 2023 and January 2024"`. `from`/`to`: its
+    first and last day.
+  - *Months at home*: a calendar month with at least 20 photos at home, titled
+    `"October 2024"`; `from`/`to` are the month's first and last day and `count` is every
+    photo of that month (what `filter` lists, a trip included), the `cover` one taken at home.
+
+  `key` = `"<from>_<to>"`, stable while the memory is. Newest `to` first: the two newest
+  come first; the others take turns, six a day, so the list changes each day and stays the
+  same all day. `cover` as for on_this_day.
+- **new**: photos imported (not taken) in the last `days` days, newest arrival first;
+  `items` the newest 12; `sources` the folders they came from (each photo counts once, for
+  the folder that brought it, when you may see that folder), most first.
 
 ## Albums
 
@@ -307,7 +383,7 @@ access `{everyone: null, users: [{owner, edit}]}`: **private to the uploader** u
 | POST | `/api/upload` | session or device | multipart, any field name, many files | `{files: [{name, outcome: "stored"\|"duplicate"\|"rejected", stored_as, content_hash, asset_id, reason}], import_job_id\|null}`; `400` broken multipart, `415` not multipart. `duplicate` = you already have it (or it was purged); `asset_id` is only ever the id of a photo you can see, else `null` (v1.2) |
 | POST | `/api/upload/check` | session or device | `{hashes: [blake3 hex]}` (≤ 5000) | `{missing: [...]}` — missing **for you** (v1.2): purged photos count as present; a photo that exists but is hidden from you is missing (uploading it links the existing photo to your inbox: one library copy, and you gain access through your inbox) |
 | GET | `/api/upload/jobs/{import_job_id}` | session or device | – | `{id, status: "queued"\|"running"\|"done"\|"failed", run_after}`: the import your own upload queued (`import_job_id` of `POST /api/upload`). `run_after` (UTC time, else `null`) is set while a failed import waits for its next attempt. Any other job, anyone else's upload and an unknown id are all `404` (admins too: they have `GET /api/jobs`); guests `403`. The web app waits for this job after an upload, not for the whole queue. |
-| GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, revoked}]` |
+| GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, last_sync_at, revoked}]` (`last_sync_at` v1.7: when it last asked for its "Keep on my phone" list) |
 | POST | `/api/devices` | session | `{name, platform: "ios"\|"android"\|"desktop"\|"other"}` | `201 {device, token}` (the token is shown once) |
 | DELETE | `/api/devices/{id}` | session | – | `204`; `404` if not yours |
 
@@ -319,6 +395,42 @@ byte of them is stored (v1.4). The answer is still `200`: each such file comes b
 `outcome: "rejected"` and a `reason` that says so ("the library disk is almost full (… GB
 free; uploads keep at least … GB free): free up space on the server, then send it again"),
 and `import_job_id` is `null` when nothing was stored.
+
+## Keep on my phone (v1.7)
+
+Server → device, one way (FEATURES 10.6). Each device has its own rules: an album, a person or
+filters, each kept on it (`include`) or off it (`exclude`). Its **list** is every photo some
+include names minus every photo some exclude names, each once, and only photos its owner may
+**download** (an album grants view only, so a shared album's photos go only where a source
+gives download) and has not hidden; nothing in the trash or held for review. The list follows
+the library: it is computed on every request. What the device deletes is **not** deleted here.
+
+Rules are chosen from a signed-in browser (session only; a device token gets `401`; guests
+have no devices). `404` for a device that is not yours or is revoked.
+
+| Method | Path | Auth | Body | Response |
+|---|---|---|---|---|
+| GET | `/api/devices/{id}/sync` | session | – | `{device: Device, rules: [Rule], count, bytes, sent}`: the list's size, and how many of it the phone said it saved |
+| POST | `/api/devices/{id}/sync/rules` | session | `{kind: "album"\|"person"\|"filter", mode: "include"\|"exclude", album_id?, person_id?, filters?}` | `Rule`. Naming the same thing again changes its mode (same `id`). `filters` is the `/api/assets` query as JSON (as in downloads; search facets such as `tag:screenshot` or `person:Lea` go in `q` and mean what they mean in search, words matched without ranking). `404` an album or person you cannot see, `422` a rule that names the wrong thing or more than 50 rules, `400` filters that make no sense |
+| DELETE | `/api/devices/{id}/sync/rules/{rule_id}` | session | – | `204`; `404` |
+| POST | `/api/devices/{id}/sync/resend` | session | – | `{forgotten}`: the photos the phone said it saved count as new again |
+
+`Rule` = `{id, kind, mode, album_id, person_id, filters, label, count, gone, view_only}`:
+`label` is the album's title or the person's name (`null` for filters: the app describes them),
+`count` the photos it names that you can see, `gone` true when it names nothing you can see any
+more, `view_only` (includes only, else 0) how many of them you may only view, so they can't go
+to the phone (typically an album shared with you whose photos no source lets you download).
+
+The device reads its list with its own token, `Authorization: Bearer <device token>` and
+nothing else (a session gets `401`). It changes nothing in the library; it only says which
+photos it saved. A run killed between fetching and saving offers those photos again, and the
+`hash` in the manifest lets a phone skip one it already has.
+
+| Method | Path | Auth | Body | Response |
+|---|---|---|---|---|
+| GET | `/api/sync/manifest` | device | query `new`, `after`, `limit` | `{device, total, total_bytes, remaining, items: [{id, hash, name, taken_at, bytes, mime_type, url}], next_after}`, in id order. `new=true`: only photos the phone has not said it saved. `limit` 1–200 (default 50); `next_after` (else `null`) is the `after` of the next page. Records `last_sync_at` |
+| GET | `/api/sync/assets/{id}/original` | device | – | the untouched original, `Content-Disposition` with its file name (the photo's display name, as in downloads); `404` for a photo not on this device's list (whatever else its owner may see). Fetching marks nothing |
+| POST | `/api/sync/sent` | device | `{ids: [id]}` (1–200) | `{sent}`: the phone saved these, so `new=true` leaves them out from now on. Every id must be on this device's list, else `422` and nothing is marked. Saying it again is harmless |
 
 ## Remote sources (admin)
 
@@ -477,3 +589,37 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Assets | `AssetDetail` (`GET /api/assets/{id}`) carries `f_number`, `exposure_time` (seconds), `iso` and `focal_length` (millimetres); each is `null` when the photo does not carry it. The timeline's `AssetOut` rows are unchanged. | The photo bar's second line reads aperture · shutter · ISO · focal length · file name (`$lib/readout`, `$lib/exposure`), with only the values that are there; a photo with none keeps camera · pixel size · file name. The details list them under the camera. A photo imported before this has `null` everywhere until the admin runs `just exposure-backfill`. |
+
+---
+
+# v1.7 changes (Keep on my phone, FEATURES 10.6)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Devices | `Device` has `last_sync_at`. New: `GET /api/devices/{id}/sync`, `POST /api/devices/{id}/sync/rules`, `DELETE /api/devices/{id}/sync/rules/{rule_id}`, `POST /api/devices/{id}/sync/resend` (see "Keep on my phone" above). | Settings → Phones and devices shows each device's list (what it keeps and leaves off, count, size, last sync) and offers "Leave out screenshots" and "Send everything again"; album, person, library and search screens have "Keep on phone". |
+| Sync | New, device token only: `GET /api/sync/manifest`, `GET /api/sync/assets/{id}/original`, `POST /api/sync/sent`. | None: the Apple Shortcut calls them (`docs/guides/keep-on-my-phone.md`). |
+
+---
+
+# v1.8 changes (stop watching a folder)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Sources | New: `GET /api/sources/{id}/removal` and `DELETE /api/sources/{id}` (see "Sources" above). | Admin → Folders has "Stop watching" with a confirm sheet (`api.sourceRemoval`, `api.removeSource`); the enabled switch reads "Pause checking" / "Resume checking". |
+
+---
+
+# v1.9 changes (person filter, pinned photos, Home)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Assets | New filter `person_id` (repeatable: photos with any of those people) on `/api/assets`, `/facets`, `/calendar`, `/map`, `/api/search` and download `filters`. | `AssetFilters.person_id`; `filtersFromParams`/`filtersToParams` read and write it; `describeFilters(filters, names)` names the people when given an id → name map, else counts them ("2 people"). |
+| Assets | `AssetOut.pinned` (per account); `pinned` in `PATCH /api/assets/{id}/state` and `POST /api/assets/state`; filter `pinned=true\|false`. Migration `0032` (`user_asset.pinned_at`). | `AssetOut.pinned`, `StatePatch`/`BulkState` `pinned`, `AssetFilters.pinned`; Home's Pinned block lists `api.assets({pinned: true})`. |
+| Downloads | ZIP words `1-person`/`<n>-people` and `pinned`. | None. |
+| Home | New: `GET /api/home` (see "Home" above). | `api.home()` → `HomeData` (`OnThisDay`, `Memory`, `NewArrivals`, `HomeFilter`); a block's `filter` goes straight into `api.assets()` to list its photos. |

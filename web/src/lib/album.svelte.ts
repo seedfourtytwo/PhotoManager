@@ -14,7 +14,7 @@ export class AlbumView {
 	album = $state.raw<Omit<AlbumDetail, 'items'> | null>(null);
 	items = $state.raw<AssetOut[]>([]);
 	selection = $state<Selection>(EMPTY);
-	dialog = $state<'share' | 'download' | 'rename' | 'delete' | null>(null);
+	dialog = $state<'add' | 'share' | 'download' | 'rename' | 'delete' | null>(null);
 	error = $state('');
 	/** Renaming or deleting: one request at a time, a double click must not send two. */
 	busy = $state(false);

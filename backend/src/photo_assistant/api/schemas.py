@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 from pydantic.alias_generators import to_camel
 
-from photo_assistant.domain.access import Role, User
+from photo_assistant.domain.access import KEPT_KIND, Role, User
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
@@ -132,6 +132,19 @@ class SourcePatch(BaseModel):
     recheck: Recheck | None = None  # check it again by itself: off, hourly, daily or weekly
 
 
+class SourceRemoval(BaseModel):
+    """What stopping watching a source would do: its photos, and those no other source holds."""
+
+    photos: int
+    only_here: int
+
+
+class SourceRemoved(BaseModel):
+    only_here: int
+    trashed: int
+    detached: bool  # kept as a source no longer watched (its photos seen as before)
+
+
 class SourceOut(BaseModel):
     id: int
     label: str
@@ -158,7 +171,7 @@ class SourceOut(BaseModel):
         return cls(
             id=s.id,
             label=s.label,
-            path=(place or s.root) if show_path else None,
+            path=(place or s.root) if show_path and s.kind != KEPT_KIND else None,
             enabled=s.enabled,
             kind=s.kind,
             owner_id=s.owner_id,
@@ -213,6 +226,7 @@ class AssetOut(BaseModel):
     thumb: ImageRef | None
     preview_ready: bool
     favourite: bool
+    pinned: bool
     hidden: bool
     private: bool
     place: PlaceOut | None
@@ -238,6 +252,7 @@ class AssetOut(BaseModel):
             thumb=thumb,
             preview_ready=a.preview_path is not None,
             favourite=v.favourite,
+            pinned=v.pinned,
             hidden=v.hidden,
             private=v.private,
             place=place,
@@ -259,6 +274,7 @@ class AlbumRef(BaseModel):
 
 
 class AssetDetail(AssetOut):
+    name: str  # the display name (domain/display_name.py); downloads carry it
     byte_size: int
     mime_type: str | None
     camera_make: str | None
@@ -282,6 +298,7 @@ class AssetPage(BaseModel):
 
 class StatePatch(BaseModel):
     favourite: bool | None = None
+    pinned: bool | None = None
     hidden: bool | None = None
     private: bool | None = None
 
@@ -292,6 +309,7 @@ Ids = Annotated[list[Id], Field(min_length=1, max_length=10_000)]
 class BulkState(BaseModel):
     ids: Ids
     favourite: bool | None = None
+    pinned: bool | None = None
     hidden: bool | None = None
 
 
@@ -431,17 +449,21 @@ class FiltersIn(BaseModel):
     year: int | None = None
     month: int | None = None
     source_id: list[Id] = Field(default_factory=list)
+    person_id: list[Id] = Field(default_factory=list)
     camera: str | None = None
     place: str | None = None
     q: str | None = None
     favourite: bool | None = None
+    pinned: bool | None = None
     hidden: bool | None = None
     guessed_date: bool | None = None
     has_location: bool | None = None
 
     def to_filter(self) -> AssetFilter:
-        values = self.model_dump(exclude={"source_id"})
-        return AssetFilter(**values, source_ids=tuple(self.source_id))
+        values = self.model_dump(exclude={"source_id", "person_id"})
+        return AssetFilter(
+            **values, source_ids=tuple(self.source_id), person_ids=tuple(self.person_id)
+        )
 
 
 class DownloadRequest(BaseModel):
@@ -453,7 +475,7 @@ class DownloadRequest(BaseModel):
     max_edge: int | None = Field(default=None, ge=1, le=MAX_EDGE)
     strip_location: bool = False
     strip_all_metadata: bool = False
-    naming: Naming = Naming.ORIGINAL
+    naming: Naming = Naming.NAME
     folders: Folders = Folders.FLAT
 
     def options(self) -> ExportOptions:

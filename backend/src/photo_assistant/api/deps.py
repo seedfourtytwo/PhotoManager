@@ -1,5 +1,6 @@
 """Shared FastAPI dependencies: services, the logged-in user, lookups that 404."""
 
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -11,6 +12,7 @@ from photo_assistant.domain.access import Level, Role, User, Viewer
 from photo_assistant.domain.errors import ForbiddenError
 from photo_assistant.domain.model import MAX_ID, Source
 from photo_assistant.ports.library import AssetView
+from photo_assistant.ports.upload import Device
 
 __all__ = ["SESSION_COOKIE"]  # where the routes and tests import it from
 _BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
@@ -63,21 +65,27 @@ def current_user(request: Request, services: ServicesDep) -> User:
 CurrentUser = Annotated[User, Depends(current_user)]
 
 
-def _device_user(services: Services, authorization: str) -> User:
+@dataclass(frozen=True, slots=True)
+class DeviceCaller:
+    user: User
+    device: Device
+
+
+def _device_caller(services: Services, authorization: str) -> DeviceCaller:
     scheme, _, token = authorization.partition(" ")
-    user_id = (
+    device = (
         services.integrations.devices.authenticate(token.strip())
         if scheme.lower() == "bearer"
         else None
     )
-    user = services.accounts.get_user(user_id) if user_id is not None else None
-    if user is None or user.disabled:
+    user = services.accounts.get_user(device.user_id) if device is not None else None
+    if device is None or user is None or user.disabled:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "device token not valid (revoked, mistyped, or its account is disabled)",
             headers=_BEARER_CHALLENGE,
         )
-    return user
+    return DeviceCaller(user, device)
 
 
 def session_or_device_user(request: Request, services: ServicesDep) -> User:
@@ -85,7 +93,7 @@ def session_or_device_user(request: Request, services: ServicesDep) -> User:
     A presented token must be valid: it never falls back to the cookie. Fails closed."""
     authorization = request.headers.get("authorization")
     if authorization is not None:
-        return _device_user(services, authorization)
+        return _device_caller(services, authorization).user
     user = _session_user(request, services)
     if user is None:
         raise HTTPException(
@@ -97,6 +105,22 @@ def session_or_device_user(request: Request, services: ServicesDep) -> User:
 
 
 SessionOrDeviceUser = Annotated[User, Depends(session_or_device_user)]
+
+
+def device_only(request: Request, services: ServicesDep) -> DeviceCaller:
+    """``Authorization: Bearer <device token>`` and nothing else ("Keep on my phone": the
+    list belongs to a device, so a browser session has none). Guests have no devices."""
+    authorization = request.headers.get("authorization")
+    if authorization is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "send this device's token", headers=_BEARER_CHALLENGE
+        )
+    caller = _device_caller(services, authorization)
+    require_not_guest(caller.user)
+    return caller
+
+
+DeviceOnly = Annotated[DeviceCaller, Depends(device_only)]
 
 
 def session_only_user(request: Request, user: CurrentUser) -> User:

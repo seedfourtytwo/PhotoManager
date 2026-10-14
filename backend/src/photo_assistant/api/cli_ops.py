@@ -19,6 +19,7 @@ from photo_assistant.api.ops_services import (
     build_doctor_config,
     build_library_transfer,
 )
+from photo_assistant.api.services import watched_roots
 from photo_assistant.api.settings import Settings, get_settings
 from photo_assistant.app.backup import BackupService, UnknownTargetError
 from photo_assistant.app.doctor import exit_code, render, run_doctor
@@ -236,7 +237,7 @@ def _backup(args: argparse.Namespace, settings: Settings) -> int:
         settings.ops,
         db=db,
         rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
-        source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
+        source_roots=lambda: watched_roots(repo),
     )
     try:
         return _BACKUP[args.backup_command](service, args)

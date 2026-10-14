@@ -117,9 +117,9 @@ test.describe('photo view', () => {
 		await touchSwipe(page, photo, { x: photo.x + 200, y: photo.y });
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', first!);
 
-		// Up for the details, and Info.
-		const details = viewer.getByRole('complementary', { name: 'About this photo' });
-		const info = viewer.getByRole('button', { name: 'Info' });
+		// Up for the details, and Details.
+		const details = viewer.getByRole('complementary', { name: 'Details' });
+		const info = viewer.getByRole('button', { name: 'Details' });
 		await touchSwipe(page, photo, { x: photo.x, y: photo.y - 200 });
 		await expect(details).toBeVisible();
 		await expect(info).toHaveAttribute('aria-pressed', 'true');

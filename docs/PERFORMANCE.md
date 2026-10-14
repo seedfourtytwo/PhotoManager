@@ -235,6 +235,35 @@ second pass. The read is 0.4 ms per photo slower (5 % of the read, under 0.5 % o
 the import lane spends per photo), which is inside the run-to-run spread of the import
 benchmark; not re-timed end to end.
 
+## Home, the person filter and pinned photos (issue 54)
+
+Synthetic rows only (no files), built by `uv run python scripts/perf/bench_home.py <photos>
+<runs>`: 4 viewers, 6 sources with mixed access, ~15 years of bursts and trips, 70 % with a
+place, 8 % with a guessed date, 2 % imported in the last week, faces of 20 people on 30 % of
+the photos. Development machine with other work running (load average ~10 on 16 cores: the
+timeline page, 4–5 ms in the table above, took 8–13 ms here), so read the calendar column, a
+whole-library read timed in the same runs, as the yardstick. ms, admin / alice / bob / guest:
+
+| | 10k photos (median of 15) | 50k photos (median of 9) |
+|---|---|---|
+| `GET /api/home` (all of it) | **57 / 76 / 61 / 57** | 271 / 366 / 353 / 287 |
+| the same with trips away from home and months at home | 62 / 82 / 64 / 51 | 341 / 410 / 343 / 211 |
+| of which: every visible photo's time and place | 45 / 61 / 44 / 40 | 203 / 302 / 231 / 204 |
+| of which: the week's arrivals | 2.4 / 3.0 / 3.0 / 3.7 | 14 / 19 / 19 / 17 |
+| calendar (same runs, for scale) | 17 / 33 / 38 / 35 | 96 / 183 / 163 / 145 |
+| first 200 of `person_id=1&person_id=2` | 17 / 23 / 21 / 22 | 16 / 21 / 20 / 24 |
+| first 200 of `pinned=true` | 0.1 / 0.1 / 0.1 / 0.0 | 0.3 / 0.3 / 0.3 / 0.0 |
+
+Home reads every photo the viewer sees once (memories need all of their times); about half of
+that is SQL (the visibility rule per photo, as for the calendar), half building one small
+tuple per photo in Python. Only the eight trips shown are named and get a cover. At 10k it is
+well inside the 200 ms budget, which is set for 10k photos (ARCHITECTURE §5; the v1 target
+is under 10,000); at 50k it works in a third of a second, two to three times the calendar,
+so it is not cached. Working out home and the months at home costs a few ms at 10k (the
+second Home row, from a later and as loaded run). The person filter is an
+`EXISTS` on `face_by_person` per photo and stops at the page's `LIMIT`; pinned starts from the
+viewer's own marks, like favourites.
+
 ## Download estimates (A14)
 
 Estimates now start from each photo's real bytes: `bytes × as-JPEG factor (per source type) ×

@@ -18,3 +18,9 @@ export function retryText(runAfter: string | null, now: number = Date.now()): st
 	if (!when) return '';
 	return Date.parse(runAfter!) > now ? `retrying at ${when}` : 'retrying now';
 }
+
+/** The Problems tile in words: "Nothing has failed", "3 failed, 2 waiting to be retried". */
+export function problemsLine(failed: number, waiting: number): string {
+	const parts = [failed && `${failed} failed`, waiting && `${waiting} waiting to be retried`];
+	return parts.filter(Boolean).join(', ') || 'Nothing has failed';
+}

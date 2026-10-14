@@ -1,5 +1,5 @@
 /** Import jobs: queued, then running, then done with a report, as the clock moves. */
-import { nowIso } from './http.ts';
+import { isoAt, nowIso } from './http.ts';
 import { makeAsset, PLACES, rng } from './library.ts';
 import type { MockAsset, World } from './types.ts';
 
@@ -76,6 +76,7 @@ export function jobHelpers(h: World) {
 			const t = new Date(Date.UTC(2026, 8, 20 + (i % 5), 10 + i));
 			const asset = makeAsset(h.state().nextId.asset++, t, r.pick(PLACES), 'phone', r);
 			asset.sources = [{ source_id: sourceId, relative_path: `new/IMG_${asset.id}.HEIC` }];
+			asset.imported_at = isoAt(h.now());
 			added.push(asset);
 		}
 		h.state().assets.push(...added);

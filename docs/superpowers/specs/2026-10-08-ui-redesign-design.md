@@ -141,8 +141,10 @@ Download, Fix date, Delete, and More. `Esc` clears.
   The file is the one a download gives, under the same name: as it was taken for a JPEG, PNG,
   WebP or GIF; a full-size JPEG for anything else (HEIC, raw), for an edited photo and for an
   original over 50 MB. If fetching takes longer than the browser lets a tap count, the
-  button asks for one more tap (`web/src/lib/share.ts`). Not in the pill: sharing several
-  photos at once is still to be decided.
+  button asks for one more tap (`web/src/lib/share.ts`). The pill shares up to ten selected
+  photos in one go, each in the form the photo view would share it, and at most 50 MB
+  together (past ten, only Download); it says "Getting 3 photos…" while they come. On a
+  phone Share takes Download's place on the pill and Download is under More.
 - **Aperture, shutter, ISO and focal length** are stored since migration `0030` and shown
   (2026-10-13): the readout's second line is aperture · shutter · ISO · focal length · file
   name, with only the values the photo carries. A photo that carries none (a scan, a

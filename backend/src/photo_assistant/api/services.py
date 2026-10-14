@@ -25,10 +25,19 @@ from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.adapters.sqlite_database import Database, open_library_database
+from photo_assistant.adapters.sqlite_device_sync import SqliteDeviceSync
+from photo_assistant.adapters.sqlite_integrations import SqliteDevices
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from photo_assistant.adapters.staging_folders import StagingFolders
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
-from photo_assistant.api.integrations import Integrations, build_integrations, with_source_areas
+from photo_assistant.api.integrations import (
+    Integrations,
+    build_integrations,
+    staging_root,
+    with_source_areas,
+)
+from photo_assistant.api.library_scopes import LibraryScopes
 from photo_assistant.api.ml_services import MlServices, build_ml_services
 from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.settings import Settings
@@ -36,6 +45,7 @@ from photo_assistant.app.accounts import Accounts
 from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
 from photo_assistant.app.backup import LONG_JOBS
 from photo_assistant.app.derivatives import GeneratePreview
+from photo_assistant.app.device_sync import DeviceSync
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import RENDER_EDIT_JOB, Editor
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, GroupSimilar
@@ -45,11 +55,12 @@ from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.recheck import ScheduledChecks
 from photo_assistant.app.review import Review
+from photo_assistant.app.stop_watching import StopWatching
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
 from photo_assistant.app.worker import Lanes, StaleJobSweep, new_owner_id
-from photo_assistant.domain.access import SESSION_IDLE_LIMIT
+from photo_assistant.domain.access import KEPT_KIND, SESSION_IDLE_LIMIT
 from photo_assistant.domain.job_queue import STALE_SWEEP_INTERVAL
 
 # What the daily "prune old records" task keeps (these tables otherwise only grow):
@@ -79,6 +90,8 @@ class Services:
     printer: AlbumPrinter
     stale_jobs: StaleJobSweep  # queues jobs again whose process died (server only)
     rechecks: ScheduledChecks
+    device_sync: DeviceSync  # Keep on my phone: each device's list (FEATURES 10.6)
+    stop_watching: StopWatching  # removes a source; the folder itself is never touched
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -97,6 +110,11 @@ class Services:
         self.integrations.ai.close()
         self.exiftool.close()
         self.db.close()
+
+
+def watched_roots(repo: SqliteRepository) -> list[Path]:
+    """The folders the library reads from (a detached source's root is no folder)."""
+    return [Path(s.root) for s in repo.list_sources() if s.kind != KEPT_KIND]
 
 
 def build_services(settings: Settings, role: str = "cli") -> Services:
@@ -187,7 +205,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         queue=repo,
         housekeeping=housekeeping,
-        source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
+        source_roots=lambda: watched_roots(repo),
         mirror=ProtonMirror(integrations.proton),
     )
     editor = Editor(
@@ -250,4 +268,6 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         printer,
         stale_jobs,
         rechecks,
+        DeviceSync(SqliteDevices(db), SqliteDeviceSync(db), LibraryScopes(repo, ml), repo, clock),
+        StopWatching(repo, store, StagingFolders(staging_root(root)), clock),
     )
