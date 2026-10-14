@@ -377,6 +377,7 @@ test.describe('a double click sends one request', () => {
 	test('Analyse photos queues once', async ({ page }) => {
 		const posts = await countSlow(page, '**/api/ml/backfill', 'POST');
 		await signIn(page, '/admin');
+		await page.getByRole('region', { name: 'Search and faces' }).getByRole('button').click();
 		await page.getByRole('button', { name: 'Analyse photos not done yet' }).dblclick();
 		await expect(page.getByRole('status').filter({ hasText: /Queued/ })).toBeVisible();
 		expect(posts.count).toBe(1);

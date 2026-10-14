@@ -1,7 +1,21 @@
 /** Admin → People: adding a person, roles, disabling, and a new PIN. */
+import type { Page } from '@playwright/test';
 import { expect, openAdmin, REAL_BACKEND, test, toast } from './helpers.ts';
 
 test.beforeEach(({ page }) => openAdmin(page));
+
+/** A person is a tile under People; it opens their sheet: role, user name and actions. */
+async function openPerson(page: Page, name: string) {
+	await page
+		.getByRole('region', { name: 'People' })
+		.getByRole('button', { name: new RegExp(`^${name}\\b`) })
+		.click();
+	return page.getByRole('dialog', { name });
+}
+const personTile = (page: Page, name: string) =>
+	page
+		.getByRole('region', { name: 'People' })
+		.getByRole('button', { name: new RegExp(`^${name}\\b`) });
 
 test('admin adds a person and disables them', async ({ page }) => {
 	await page.getByRole('button', { name: 'Add person' }).click();
@@ -11,24 +25,25 @@ test('admin adds a person and disables them', async ({ page }) => {
 	await dialog.getByLabel('PIN').fill('4321');
 	await dialog.getByLabel('Role').selectOption('guest');
 	await dialog.getByRole('button', { name: 'Add' }).click();
-	const row = page.getByRole('row').filter({ hasText: 'grandma' });
-	await row.getByRole('button', { name: 'Disable' }).click();
-	await expect(row.getByRole('button', { name: 'Enable' })).toBeVisible();
+	const sheet = await openPerson(page, 'Grandma');
+	await expect(sheet.getByText('grandma')).toBeVisible();
+	await sheet.getByRole('button', { name: 'Disable' }).click();
+	await expect(sheet.getByRole('button', { name: 'Enable' })).toBeVisible();
+	await expect(personTile(page, 'Grandma')).toContainText('Disabled');
 });
 
 test('a refused role change puts the old role back; disabled people say so', async ({ page }) => {
-	const rowOf = (username: string) =>
-		page.getByRole('row').filter({ has: page.getByRole('cell', { name: username, exact: true }) });
-	const me = rowOf('admin');
-	const role = me.getByRole('combobox');
+	const me = await openPerson(page, 'C');
+	const role = me.getByRole('combobox', { name: 'Role' });
 	await role.selectOption('member');
 	await expect(toast(page)).toContainText(/at least one (active )?admin/i);
 	await expect(role).toHaveValue('admin');
+	await me.getByRole('button', { name: 'Close' }).click();
 
-	const guest = rowOf('guest');
-	await expect(guest.getByText('Active')).toBeVisible();
+	await expect(personTile(page, 'Guest')).not.toContainText('Disabled');
+	const guest = await openPerson(page, 'Guest');
 	await guest.getByRole('button', { name: 'Disable' }).click();
-	await expect(guest.getByText('Disabled')).toBeVisible();
+	await expect(personTile(page, 'Guest')).toContainText('Disabled');
 });
 
 test('“Add person” needs a 4-digit PIN', async ({ page }) => {
@@ -52,10 +67,7 @@ test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialo
 			? route.fulfill({ status: 503, json: { detail: 'The library is busy; try again.' } })
 			: route.fallback()
 	);
-	const row = page
-		.getByRole('row')
-		.filter({ has: page.getByRole('cell', { name: 'partner', exact: true }) });
-	await row.getByRole('button', { name: 'Reset PIN' }).click();
+	await (await openPerson(page, 'Partner')).getByRole('button', { name: 'Reset PIN' }).click();
 	const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
 	await dialog.getByLabel('PIN').fill('8642');
 	await dialog.getByRole('button', { name: 'Set PIN' }).click();
@@ -72,11 +84,7 @@ test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialo
 	).toBeVisible();
 	await expect(dialog).toBeHidden();
 	// The next person's dialog starts empty.
-	await page
-		.getByRole('row')
-		.filter({ has: page.getByRole('cell', { name: 'guest', exact: true }) })
-		.getByRole('button', { name: 'Reset PIN' })
-		.click();
+	await (await openPerson(page, 'Guest')).getByRole('button', { name: 'Reset PIN' }).click();
 	await expect(
 		page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabel('PIN')
 	).toHaveValue('');

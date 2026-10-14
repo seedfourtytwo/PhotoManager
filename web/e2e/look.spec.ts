@@ -20,11 +20,16 @@ const root = (page: Page) => page.locator('html');
 const variable = (page: Page, name: string) =>
 	page.evaluate((n) => document.documentElement.style.getPropertyValue(n), name);
 
-const userRow = (page: Page, username: string) =>
-	page.getByRole('row').filter({ has: page.getByRole('cell', { name: username, exact: true }) });
-
-async function openLookOf(page: Page, username: string, name: string) {
-	await userRow(page, username).getByRole('button', { name: 'Look', exact: true }).click();
+/** Admin → People: the person's tile opens their sheet, whose Look card opens the form. */
+async function openLookOf(page: Page, name: string) {
+	await page
+		.getByRole('region', { name: 'People' })
+		.getByRole('button', { name: new RegExp(`^${name}\\b`) })
+		.click();
+	await page
+		.getByRole('dialog', { name })
+		.getByRole('button', { name: 'Look', exact: true })
+		.click();
 	const form = page.getByRole('dialog', { name: `Look for ${name}` });
 	await expect(form.getByRole('combobox', { name: 'Theme', exact: true })).toBeVisible();
 	return form;
@@ -105,7 +110,7 @@ test('an admin tries a look for Partner on their own screen, stops, then saves i
 }) => {
 	await resetMock();
 	await signIn(page, '/admin');
-	let form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	let form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('checkbox', { name: 'Accent colour: the theme’s own' }).uncheck();
 	await form.getByRole('slider', { name: 'Accent hue' }).fill('200');
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
@@ -138,7 +143,7 @@ test('an admin tries a look for Partner on their own screen, stops, then saves i
 	expect(await variable(page, '--acc-h')).toBe('');
 
 	await page.goto('/admin');
-	form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('checkbox', { name: 'Accent colour: the theme’s own' }).uncheck();
 	await form.getByRole('slider', { name: 'Accent hue' }).fill('200');
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
@@ -159,7 +164,7 @@ test('an admin tries a look for Partner on their own screen, stops, then saves i
 test('a trial ends when the page is reloaded', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/admin');
-	const form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	const form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
 	await form.getByRole('button', { name: 'Try on my screen' }).click();
 	await expect(root(page)).toHaveAttribute('data-look', 'album');
@@ -172,7 +177,7 @@ test('a trial ends when the page is reloaded', async ({ page }) => {
 test('a trial ends when the admin signs out: the next person does not get it', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/admin');
-	const form = await openLookOf(page, MEMBER.username, MEMBER.name);
+	const form = await openLookOf(page, MEMBER.name);
 	await form.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('album');
 	await form.getByRole('button', { name: 'Try on my screen' }).click();
 	await form.getByRole('button', { name: 'Cancel' }).click();

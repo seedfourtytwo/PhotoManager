@@ -33,7 +33,8 @@
 	});
 
 	const active = $derived(stats ? stats.jobs.queued + stats.jobs.running : 0);
-	const work = $derived(stats ? queueText(stats.jobs) : '');
+	// What runs and waits its turn; the jobs waiting for another try are on the Problems tile.
+	const work = $derived(stats ? queueText({ ...stats.jobs, waiting: 0 }) : '');
 	const backingUp = $derived(backups.some((b) => b.last_run?.status === 'running'));
 	const libraryLine = $derived(
 		stats

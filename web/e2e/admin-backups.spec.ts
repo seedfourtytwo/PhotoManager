@@ -1,4 +1,5 @@
 /** Admin → Backups: the guided setup, the copy on Proton Drive, the warning when a backup fails. */
+import type { Page } from '@playwright/test';
 import {
 	expect,
 	expectAccessible,
@@ -11,12 +12,22 @@ import {
 
 test.beforeEach(({ page }) => openAdmin(page));
 
+/** Backups is a status tile on Admin; the places and their actions open as its sheet. */
+async function openBackups(page: Page) {
+	await page.getByRole('button', { name: /^Backups/ }).click();
+	return page.getByRole('dialog', { name: 'Backups' });
+}
+
 test('backups: guided setup refuses a place too small, then backs up and proves the restore', async ({
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'the mock simulates the disks and the runs (real restic: API tests)');
 	await expect(page.getByRole('alert')).toContainText(/Home server: the last backup failed/);
-	const backups = page.getByRole('region', { name: 'Backups' });
+	// the tile says it in one sentence, with the red dot
+	const tile = page.getByRole('button', { name: /^Backups/ });
+	await expect(tile).toContainText(/Home server: the last backup failed/);
+	await expect(tile.getByRole('img', { name: 'Needs attention' })).toBeVisible();
+	const backups = await openBackups(page);
 	await expect(backups.getByText('Home server')).toBeVisible();
 	await expect(backups.getByText(/repository not reachable/)).toBeVisible();
 
@@ -85,7 +96,7 @@ test('backups: guided setup refuses a place too small, then backs up and proves 
 
 test('backups: “Back” from “It fits” returns to the folder that was chosen', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'the mock simulates the disks');
-	await page.getByRole('region', { name: 'Backups' }).getByRole('button', { name: 'Add backup' }).click(); // prettier-ignore
+	await (await openBackups(page)).getByRole('button', { name: 'Add backup' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Set up a backup' });
 	await dialog.getByLabel('Another folder').check();
 	await dialog.getByRole('button', { name: 'Documents' }).click();
@@ -120,7 +131,7 @@ test('backups: keep a copy on Proton Drive in a folder made on the spot, then st
 		})
 	);
 	await page.reload();
-	const backups = page.getByRole('region', { name: 'Backups' });
+	const backups = await openBackups(page);
 	const cloud = backups.getByRole('listitem').filter({ hasText: 'Home server' });
 	await expect(cloud.getByRole('button', { name: 'Copy to Proton' })).toHaveCount(0);
 	const row = backups.getByRole('listitem').filter({ hasText: 'USB disk' });
@@ -159,7 +170,8 @@ test('backups: an admin sees the warning on every page, with one row per place',
 	await banner.getByRole('link', { name: 'Backups' }).click();
 	await expect(page).toHaveURL(/\/admin#a-backups$/);
 
-	const backups = page.getByRole('region', { name: 'Backups' });
+	// the old link to the backups opens their sheet
+	const backups = page.getByRole('dialog', { name: 'Backups' });
 	await expect(backups.getByText('Only 0 of 1 places up to date')).toBeVisible();
 	await expect(backups.getByRole('img', { name: 'needs attention' })).toBeVisible();
 });
