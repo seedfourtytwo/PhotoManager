@@ -51,3 +51,14 @@ def test_set_exposures_fills_the_named_photos_and_no_other(repo: SqliteRepositor
     read = {i: a.exposure for i in (first, second, third) if (a := repo.get_asset(i))}
     assert read == {first: SHOT, second: Exposure(), third: Exposure(focal_length=4.25)}
     assert [i for i, _ in repo.assets_without_exposure(0, 10)] == [second]
+
+
+def test_photos_still_to_read_are_counted_the_same_way_they_are_listed(
+    repo: SqliteRepository,
+) -> None:
+    assert repo.count_without_exposure() == 0
+    bare = [repo.add_asset(new_asset(n), NOW) for n in (1, 2, 3)]
+    repo.add_asset(new_asset(4, exposure=Exposure(iso=100)), NOW)
+    assert repo.count_without_exposure() == 3
+    repo.set_exposures([(bare[0], SHOT)])
+    assert repo.count_without_exposure() == len(repo.assets_without_exposure(0, 10)) == 2

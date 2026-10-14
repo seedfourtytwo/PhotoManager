@@ -236,7 +236,8 @@ def test_exposure_backfill_queues_one_job_for_the_server_and_no_second_while_it_
     data_root: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert cli.main(["exposure-backfill"]) == 0
-    assert "Queued" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Queued" in out and "0 photos to read" in out, "says how much there is to do"
     assert cli.main(["exposure-backfill"]) == 0
     assert "Already waiting" in capsys.readouterr().out
     services = build_services(get_settings())

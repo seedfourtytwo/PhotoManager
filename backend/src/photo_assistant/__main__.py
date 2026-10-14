@@ -199,14 +199,16 @@ def _exposure_backfill() -> int:
     services = build_services(get_settings())
     try:
         queued = services.repo.enqueue_once(EXPOSURE_BACKFILL_JOB)
+        todo = services.repo.count_without_exposure()
     finally:
         services.close()
     if queued is None:
-        print("Already waiting in the queue; the server's worker runs it.")
+        print(f"Already waiting in the queue; the server's worker runs it ({todo} photos to read).")
     else:
         print(
-            "Queued: the server's worker reads aperture, shutter, ISO and focal length from "
-            "the library copy of every photo that has none yet."
+            f"Queued, {todo} photos to read: the server's worker reads aperture, shutter, ISO "
+            "and focal length from the library copy of every photo that has none yet. "
+            "Admin shows it working until it is done."
         )
     return 0
 

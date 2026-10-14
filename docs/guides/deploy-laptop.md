@@ -116,8 +116,9 @@ just doctor
 
 After the update that brings exposure settings into the photo view (aperture, shutter, ISO,
 focal length), run `just exposure-backfill` once: the app then reads them from its own copies
-of the photos you already have, in the background. New imports need nothing. It can be
-stopped and run again without harm.
+of the photos you already have, in the background (about 9 ms a photo: under 2 minutes for
+10,000). It says how many photos it will read, and Admin shows "working" until it is done.
+New imports need nothing. It can be stopped and run again without harm.
 
 The database is snapshotted automatically before any schema change
 (`data/db-backups/`), so an update can always be rolled back. The newest 5 of those

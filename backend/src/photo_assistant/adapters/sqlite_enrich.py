@@ -8,6 +8,9 @@ from photo_assistant.domain.exposure import Exposure
 from photo_assistant.domain.grouping import Shot
 from photo_assistant.domain.places import Place
 
+# A photo with none of the four values: not read yet, or it carries none (a scan).
+_NO_EXPOSURE = "f_number IS NULL AND exposure_time IS NULL AND iso IS NULL AND focal_length IS NULL"
+
 
 class EnrichMixin(SqliteBase):
     def assets_to_geocode(self, after_id: int, limit: int) -> list[tuple[int, float, float]]:
@@ -44,13 +47,15 @@ class EnrichMixin(SqliteBase):
 
     def assets_without_exposure(self, after_id: int, limit: int) -> list[tuple[int, str]]:
         rows = self._all(
-            """SELECT id, library_path FROM asset
-               WHERE id > ? AND f_number IS NULL AND exposure_time IS NULL AND iso IS NULL
-                 AND focal_length IS NULL
+            f"""SELECT id, library_path FROM asset WHERE id > ? AND {_NO_EXPOSURE}
                ORDER BY id LIMIT ?""",
             (after_id, limit),
         )
         return [(int(r["id"]), str(r["library_path"])) for r in rows]
+
+    def count_without_exposure(self) -> int:
+        """How many photos the exposure backfill still has to read."""
+        return self._scalar(f"SELECT COUNT(*) FROM asset WHERE {_NO_EXPOSURE}")
 
     def set_exposures(self, exposures: Sequence[tuple[int, Exposure]]) -> None:
         with self._transaction():
