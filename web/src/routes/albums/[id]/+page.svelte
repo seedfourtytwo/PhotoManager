@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { ALBUM_TITLE_MAX, type Id } from '$lib/api';
 	import { AlbumView } from '$lib/album.svelte';
-	import { settings, viewport } from '$lib/app.svelte';
+	import { session, settings, viewport } from '$lib/app.svelte';
 	import { albumLine } from '$lib/album-line';
 	import type { MenuItem } from '$lib/menu';
 	import { EMPTY, applyClick } from '$lib/selection';
@@ -13,6 +13,7 @@
 	import AlbumHero from '$lib/components/AlbumHero.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
+	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import Menu from '$lib/components/Menu.svelte';
 	import PageHead from '$lib/components/PageHead.svelte';
@@ -101,7 +102,13 @@
 		line={albumLine(items)}
 		onadd={canEdit ? () => (view.dialog = 'add') : undefined}
 		onshare={album.role === 'owner' ? () => (view.dialog = 'share') : undefined}
-	/>
+	>
+		{#snippet actions()}
+			{#if album && session.canEdit}
+				<KeepOnPhone target={{ kind: 'album', album_id: album.id }} what="this album" />
+			{/if}
+		{/snippet}
+	</AlbumHero>
 {/if}
 
 <div class="page">

@@ -12,6 +12,7 @@
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import { groupByYear } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 	import Menu from '$lib/components/Menu.svelte';
 	import PageHead from '$lib/components/PageHead.svelte';
 	import PersonHero from '$lib/components/PersonHero.svelte';
@@ -159,7 +160,16 @@
 		{person}
 		{line}
 		onportrait={session.canEdit ? () => (dialog = 'portrait') : undefined}
-	/>
+	>
+		{#snippet actions()}
+			{#if person && session.canEdit}
+				<KeepOnPhone
+					target={{ kind: 'person', person_id: person.id }}
+					what={person.name ?? 'this person'}
+				/>
+			{/if}
+		{/snippet}
+	</PersonHero>
 {/if}
 
 <div class="page">
