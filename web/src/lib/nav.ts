@@ -15,8 +15,12 @@ export type Place = {
 /** True for the route itself and anything below it, never for a longer look-alike name. */
 const under = (path: string, route: string) => path === route || path.startsWith(`${route}/`);
 
-/** Calendar is a view of Library; people, places and albums are reached through Collections. */
+/**
+ * Home tells the family's story (spec 2026-10-14 §9); Calendar is a view of Library; people,
+ * places and albums are reached through Collections.
+ */
 export const PLACES: Place[] = [
+	{ href: '/home', label: 'Home', icon: 'home', match: (path) => path === '/home' },
 	{
 		href: '/',
 		label: 'Library',
@@ -31,6 +35,11 @@ export const PLACES: Place[] = [
 			['/collections', '/people', '/map', '/albums'].some((route) => under(path, route))
 	}
 ];
+
+/** The places of the dock: Home only when the account's look shows it (`showToday`). */
+export function placesFor(showHome: boolean): Place[] {
+	return showHome ? PLACES : PLACES.filter((place) => place.href !== '/home');
+}
 
 const COLLECTIONS: Record<CollectionsRow, { href: string; label: string }> = {
 	people: { href: '/people', label: 'People' },

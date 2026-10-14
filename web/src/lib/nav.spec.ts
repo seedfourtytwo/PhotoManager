@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { PLACES, accountItems, attentionOf, collectionRows, initialOf } from './nav';
+import { PLACES, accountItems, attentionOf, collectionRows, initialOf, placesFor } from './nav';
 
 const current = (path: string) => PLACES.find((place) => place.match(path))?.label;
 
 describe('places', () => {
-	it('are Library and Collections, in that order', () => {
-		expect(PLACES.map((place) => [place.label, place.href])).toEqual([
-			['Library', '/'],
-			['Collections', '/collections']
+	it('are Home, Library and Collections, in that order', () => {
+		expect(PLACES.map((place) => [place.label, place.href, place.icon])).toEqual([
+			['Home', '/home', 'home'],
+			['Library', '/', 'library'],
+			['Collections', '/collections', 'collections']
 		]);
 	});
+	it('leave Home out when the look does not show it', () => {
+		expect(placesFor(true)).toEqual(PLACES);
+		expect(placesFor(false).map((place) => place.label)).toEqual(['Library', 'Collections']);
+	});
 	it.each([
+		['/home', 'Home'],
 		['/', 'Library'],
 		['/calendar', 'Library'],
 		['/collections', 'Collections'],
@@ -23,12 +29,18 @@ describe('places', () => {
 	])('%s belongs to %s', (path, label) => {
 		expect(current(path)).toBe(label);
 	});
-	it.each(['/search', '/trash', '/settings', '/admin', '/review', '/albumsx', '/mapping'])(
-		'%s belongs to no place',
-		(path) => {
-			expect(current(path)).toBeUndefined();
-		}
-	);
+	it.each([
+		'/search',
+		'/trash',
+		'/settings',
+		'/admin',
+		'/review',
+		'/albumsx',
+		'/mapping',
+		'/homes'
+	])('%s belongs to no place', (path) => {
+		expect(current(path)).toBeUndefined();
+	});
 });
 
 describe('account menu', () => {

@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { api, library, session } from '$lib/app.svelte';
 	import { look } from '$lib/look';
-	import { PLACES, accountItems, initialOf } from '$lib/nav';
+	import { accountItems, initialOf, placesFor } from '$lib/nav';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 
@@ -28,7 +28,7 @@
 <nav aria-label="Main">
 	<span class="mark" aria-hidden="true">Photos</span>
 	<ul class="places" class:wordless={!look.shown.dockLabels}>
-		{#each PLACES as place (place.href)}
+		{#each placesFor(look.shown.showToday) as place (place.href)}
 			<li>
 				<a href={place.href} aria-current={place.match(path) ? 'page' : undefined}>
 					<Icon name={place.icon} />
