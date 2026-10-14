@@ -264,6 +264,23 @@ second Home row, from a later and as loaded run). The person filter is an
 `EXISTS` on `face_by_person` per photo and stops at the page's `LIMIT`; pinned starts from the
 viewer's own marks, like favourites.
 
+Rediscover and Years (issue 54, later) work on the moments Home already reads, finding months
+and years by bisection. At 100,000 photos (`bench_home.py 100000 5`, same machine, quiet:
+load average under 1), ms, admin / alice / bob / guest:
+
+| | 100k photos (median of 5) |
+|---|---|
+| `GET /api/home` (all of it) | 417 / 607 / 492 / 434 |
+| of which: every visible photo's time and place | 257 / 355 / 322 / 311 |
+| of which: Rediscover | 0.3 / 0.3 / 0.3 / 0.3 |
+| of which: Years | 3.6 / 3.5 / 3.1 / 2.5 |
+| calendar (same runs, for scale) | 125 / 230 / 217 / 194 |
+
+Before them the same run gave 410 / 549 / 431 / 374 for all of Home, inside the run-to-run
+spread (the moments alone moved 205 → 257 for admin between the two runs). The rest of Home
+at 100k, about 150–230 ms, is memories and On this day walking every photo in Python: the
+first place to look if Home ever has to be faster.
+
 ## Download estimates (A14)
 
 Estimates now start from each photo's real bytes: `bytes × as-JPEG factor (per source type) ×

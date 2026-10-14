@@ -3,12 +3,15 @@
 	import { memoryLine } from '$lib/home';
 	import Icon from '../Icon.svelte';
 
-	/** Memories side by side, each a 3:4 cover with its title and dates; a tap plays it. */
-	type Props = { memories: Memory[]; onplay: (memory: Memory) => void };
-	let { memories, onplay }: Props = $props();
+	/**
+	 * Memories side by side, each a 3:4 cover with its title and dates; a tap plays it. `small`:
+	 * square covers, narrower, for the years (small multiples of one size).
+	 */
+	type Props = { memories: Memory[]; onplay: (memory: Memory) => void; small?: boolean };
+	let { memories, onplay, small = false }: Props = $props();
 </script>
 
-<ul class="rail">
+<ul class="rail" class:small>
 	{#each memories as memory (memory.key)}
 		<li>
 			<button type="button" class="memory" onclick={() => onplay(memory)}>
@@ -101,9 +104,18 @@
 		color: var(--on-photo);
 		background: var(--photo-shade-55);
 	}
+	.small li {
+		width: 9.5rem;
+	}
+	.small .cover {
+		aspect-ratio: 1;
+	}
 	@media (min-width: 1024px) {
 		li {
 			width: 15rem;
+		}
+		.small li {
+			width: 11rem;
 		}
 	}
 	@media (max-width: 639px) {
