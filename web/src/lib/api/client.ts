@@ -55,6 +55,8 @@ import type {
 	NewUser,
 	PinBody,
 	Person,
+	Portrait,
+	PortraitChoice,
 	PrintedPdf,
 	SingleDownloadOptions,
 	PrintOptions,
@@ -363,6 +365,12 @@ export function createApi(options: ApiOptions = {}) {
 			request<Person>('PATCH', `/api/people/${id}`, { name }),
 		hidePerson: (id: Id, hidden: boolean) =>
 			request<Person>('PATCH', `/api/people/${id}`, { hidden }),
+		/** The faces a portrait can be chosen from, the best first, each as its automatic one. */
+		personFaces: (id: Id, limit = 24) =>
+			get<Portrait[]>(query(`/api/people/${id}/faces`, { limit })),
+		setPortrait: (id: Id, choice: PortraitChoice) =>
+			request<Person>('PUT', `/api/people/${id}/portrait`, choice),
+		clearPortrait: (id: Id) => request<Person>('DELETE', `/api/people/${id}/portrait`),
 		mergePeople: (id: Id, sourceIds: Id[]) =>
 			request<Person>('POST', `/api/people/${id}/merge`, { source_ids: sourceIds }),
 		personAssets: (id: Id, cursor: string | null = null, limit = 200) =>

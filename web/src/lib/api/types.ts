@@ -317,9 +317,18 @@ export type Person = {
 	/** Left out of People: a stranger someone chose not to list. */
 	hidden: boolean;
 	asset_count: number;
-	/** Crop the asset's thumbnail to this box for the People grid. */
+	/** The face the portrait is of. */
 	cover: Face | null;
+	/** The round picture, as you get it: only ever from a photo you may see. */
+	portrait: Portrait | null;
 };
+/**
+ * A round picture: a circle on photo `asset_id` as displayed without its edits. `cx`, `cy`:
+ * the centre as fractions of the width and height; `size`: the square round it as a fraction
+ * of the shorter edge. `url` is the picture itself and changes whenever the picture does.
+ */
+export type Portrait = PortraitChoice & { asset_id: Id; chosen: boolean; url: string };
+export type PortraitChoice = { face_id: Id; cx: number; cy: number; size: number };
 export type MlStatus = {
 	clip: { ready: boolean; detail: string };
 	faces: { ready: boolean; detail: string };

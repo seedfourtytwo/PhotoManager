@@ -140,6 +140,52 @@ describe('search and people', () => {
 		const guest = await h.signedIn('guest', '3456');
 		await expect(guest.hidePerson(a.id, true)).rejects.toMatchObject({ status: 403 });
 	});
+
+	it('gives every person a portrait, lets it be chosen, and goes back to automatic', async () => {
+		const api = await h.signedIn();
+		const [a] = await api.people();
+		const automatic = a.portrait!;
+		expect(automatic).toMatchObject({ face_id: a.cover!.id, chosen: false });
+		expect(automatic.url).toMatch(new RegExp(`^/api/people/${a.id}/portrait\\?v=`));
+		expect(automatic.size).toBeGreaterThan(0);
+		expect(automatic.size).toBeLessThanOrEqual(1);
+
+		const faces = await api.personFaces(a.id);
+		expect(faces.length).toBeGreaterThan(1);
+		expect(faces.every((f) => !f.chosen && f.url.startsWith(`/api/faces/${f.face_id}/`))).toBe(true); // prettier-ignore
+		expect(await api.personFaces(a.id, 1)).toHaveLength(1);
+		for (const url of [automatic.url, faces[1].url]) {
+			const image = await api.raw(url);
+			expect([image.status, image.headers.get('content-type')]).toEqual([200, 'image/svg+xml']);
+		}
+
+		const cut = { face_id: faces[1].face_id, cx: 0.5, cy: 0.5, size: 0.4 };
+		const chosen = await api.setPortrait(a.id, cut);
+		expect(chosen.portrait).toMatchObject({ ...cut, asset_id: faces[1].asset_id, chosen: true });
+		expect(chosen.portrait!.url).not.toBe(automatic.url);
+		expect((await api.people()).find((p) => p.id === a.id)!.portrait).toEqual(chosen.portrait);
+		const outside = await api.setPortrait(a.id, { ...cut, cx: -4, size: 9 });
+		expect(outside.portrait!.size).toBe(1);
+		expect(outside.portrait!.cx).toBeGreaterThan(0);
+
+		const cleared = await api.clearPortrait(a.id);
+		expect(cleared.portrait).toMatchObject({ face_id: cut.face_id, chosen: false });
+		expect(cleared.portrait!.url).toBe(faces[1].url.replace(/^\/api\/faces\/\d+/, `/api/people/${a.id}`)); // prettier-ignore
+	});
+
+	it('refuses a portrait from a guest, from someone else’s face, or of nobody', async () => {
+		const api = await h.signedIn();
+		const [a, b] = await api.people();
+		const cut = { face_id: b.cover!.id, cx: 0.5, cy: 0.5, size: 0.4 };
+		await expect(api.setPortrait(a.id, cut)).rejects.toMatchObject({ status: 404 });
+		await expect(api.setPortrait(9999, cut)).rejects.toMatchObject({ status: 404 });
+		await expect(api.personFaces(9999)).rejects.toMatchObject({ status: 404 });
+		expect((await api.raw('/api/faces/99999/portrait')).status).toBe(404);
+		const guest = await h.signedIn('guest', '3456');
+		const mine = { ...cut, face_id: a.cover!.id };
+		await expect(guest.setPortrait(a.id, mine)).rejects.toMatchObject({ status: 403 });
+		await expect(guest.clearPortrait(a.id)).rejects.toMatchObject({ status: 403 });
+	});
 });
 
 describe('print', () => {
