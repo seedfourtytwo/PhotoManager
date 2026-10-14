@@ -337,22 +337,27 @@ have no devices). `404` for a device that is not yours or is revoked.
 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
-| GET | `/api/devices/{id}/sync` | session | – | `{device: Device, rules: [Rule], count, bytes, sent}`: the list's size, and how many of it the device has fetched |
+| GET | `/api/devices/{id}/sync` | session | – | `{device: Device, rules: [Rule], count, bytes, sent}`: the list's size, and how many of it the phone said it saved |
 | POST | `/api/devices/{id}/sync/rules` | session | `{kind: "album"\|"person"\|"filter", mode: "include"\|"exclude", album_id?, person_id?, filters?}` | `Rule`. Naming the same thing again changes its mode (same `id`). `filters` is the `/api/assets` query as JSON (as in downloads; search facets such as `tag:screenshot` or `person:Lea` go in `q` and mean what they mean in search, words matched without ranking). `404` an album or person you cannot see, `422` a rule that names the wrong thing or more than 50 rules, `400` filters that make no sense |
 | DELETE | `/api/devices/{id}/sync/rules/{rule_id}` | session | – | `204`; `404` |
-| POST | `/api/devices/{id}/sync/resend` | session | – | `{forgotten}`: the device's fetched photos count as new again |
+| POST | `/api/devices/{id}/sync/resend` | session | – | `{forgotten}`: the photos the phone said it saved count as new again |
 
-`Rule` = `{id, kind, mode, album_id, person_id, filters, label, count, gone}`: `label` is the
-album's title or the person's name (`null` for filters: the app describes them), `count` the
-photos it names that you can see, `gone` true when it names nothing you can see any more.
+`Rule` = `{id, kind, mode, album_id, person_id, filters, label, count, gone, view_only}`:
+`label` is the album's title or the person's name (`null` for filters: the app describes them),
+`count` the photos it names that you can see, `gone` true when it names nothing you can see any
+more, `view_only` (includes only, else 0) how many of them you may only view, so they can't go
+to the phone (typically an album shared with you whose photos no source lets you download).
 
 The device reads its list with its own token, `Authorization: Bearer <device token>` and
-nothing else (a session gets `401`). Read-only.
+nothing else (a session gets `401`). It changes nothing in the library; it only says which
+photos it saved. A run killed between fetching and saving offers those photos again, and the
+`hash` in the manifest lets a phone skip one it already has.
 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
-| GET | `/api/sync/manifest` | device | query `new`, `after`, `limit` | `{device, total, total_bytes, remaining, items: [{id, hash, name, taken_at, bytes, mime_type, url}], next_after}`, in id order. `new=true`: only photos the device has not fetched. `limit` 1–200 (default 50); `next_after` (else `null`) is the `after` of the next page. Records `last_sync_at` |
-| GET | `/api/sync/assets/{id}/original` | device | – | the untouched original, `Content-Disposition` with its file name; `404` for a photo not on this device's list (whatever else its owner may see). Once the whole file has been sent it counts as fetched |
+| GET | `/api/sync/manifest` | device | query `new`, `after`, `limit` | `{device, total, total_bytes, remaining, items: [{id, hash, name, taken_at, bytes, mime_type, url}], next_after}`, in id order. `new=true`: only photos the phone has not said it saved. `limit` 1–200 (default 50); `next_after` (else `null`) is the `after` of the next page. Records `last_sync_at` |
+| GET | `/api/sync/assets/{id}/original` | device | – | the untouched original, `Content-Disposition` with its file name (the photo's display name, as in downloads); `404` for a photo not on this device's list (whatever else its owner may see). Fetching marks nothing |
+| POST | `/api/sync/sent` | device | `{ids: [id]}` (1–200) | `{sent}`: the phone saved these, so `new=true` leaves them out from now on. Every id must be on this device's list, else `422` and nothing is marked. Saying it again is harmless |
 
 ## Remote sources (admin)
 
@@ -521,4 +526,4 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Devices | `Device` has `last_sync_at`. New: `GET /api/devices/{id}/sync`, `POST /api/devices/{id}/sync/rules`, `DELETE /api/devices/{id}/sync/rules/{rule_id}`, `POST /api/devices/{id}/sync/resend` (see "Keep on my phone" above). | Settings → Phones and devices shows each device's list (what it keeps and leaves off, count, size, last sync) and offers "Leave out screenshots" and "Send everything again"; album, person, library and search screens have "Keep on phone". |
-| Sync | New, device token only: `GET /api/sync/manifest`, `GET /api/sync/assets/{id}/original`. | None: the Apple Shortcut calls them (`docs/guides/keep-on-my-phone.md`). |
+| Sync | New, device token only: `GET /api/sync/manifest`, `GET /api/sync/assets/{id}/original`, `POST /api/sync/sent`. | None: the Apple Shortcut calls them (`docs/guides/keep-on-my-phone.md`). |

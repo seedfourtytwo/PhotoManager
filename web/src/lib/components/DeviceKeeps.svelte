@@ -4,7 +4,7 @@
 	import type { DeviceSync, Id, SyncRule } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatBytes, formatWhen, photos } from '$lib/format';
-	import { SCREENSHOTS, ruleFor, ruleLabel, splitRules } from '$lib/keep';
+	import { SCREENSHOTS, ruleFor, ruleLabel, splitRules, viewOnlyNote } from '$lib/keep';
 
 	let { deviceId }: { deviceId: Id } = $props();
 	let sync = $state<DeviceSync | null>(null);
@@ -80,6 +80,7 @@
 								aria-label={`Remove ${ruleLabel(rule)}`}
 								onclick={() => drop(rule)}>Remove</button
 							>
+							{#if viewOnlyNote(rule)}<p class="small note">{viewOnlyNote(rule)}</p>{/if}
 						</li>
 					{/each}
 				</ul>
@@ -124,6 +125,10 @@
 		gap: var(--s-1) var(--s-3);
 		align-items: baseline;
 		padding: var(--s-1) 0;
+	}
+	.note {
+		flex-basis: 100%;
+		margin: 0;
 	}
 	li button {
 		margin-left: auto;

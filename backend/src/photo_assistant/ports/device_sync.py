@@ -23,7 +23,9 @@ class SyncStore(Protocol):
 
     def sent_ids(self, device_id: int) -> set[int]: ...
 
-    def mark_sent(self, device_id: int, asset_id: int, now: datetime) -> None: ...
+    def mark_sent(self, device_id: int, asset_ids: Collection[int], now: datetime) -> None:
+        """The phone saved these photos."""
+        ...
 
     def forget_sent(self, device_id: int) -> int:
         """Send everything again: how many photos were marked sent."""

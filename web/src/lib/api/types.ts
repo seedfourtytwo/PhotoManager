@@ -510,6 +510,8 @@ export type SyncRule = {
 	count: number;
 	/** It names nothing you can see any more (an album unshared or deleted, a person merged). */
 	gone: boolean;
+	/** Of an include's photos, those you may only view: they can't go to the phone. */
+	view_only: number;
 };
 /** One device's list: what it keeps and leaves off, its size, and how much it has fetched. */
 export type DeviceSync = {

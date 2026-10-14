@@ -4,6 +4,7 @@
  */
 import type { AssetFilters, SyncMode, SyncRule, SyncTarget } from './api/types';
 import { describeFilters, filtersToQuery } from './filters';
+import { plural } from './format';
 
 /** "Leave out screenshots": the search facet the auto-tagger answers (needs its models). */
 const SCREENSHOT_FILTERS: AssetFilters = { q: 'tag:screenshot' };
@@ -42,4 +43,21 @@ export function splitRules(rules: readonly SyncRule[]) {
 		keeps: rules.filter((r) => r.mode === 'include'),
 		leavesOff: rules.filter((r) => r.mode === 'exclude')
 	};
+}
+
+const WHERE = {
+	album: (photos: string) => `${photos} in this album`,
+	person: (photos: string) => `${photos} of this person`,
+	filter: (photos: string) => `${photos.split(' ')[0]} of these photos`
+} as const;
+
+/**
+ * Why a kept album (or person, or search) holds photos that never reach the phone: the user
+ * may only view them (an album grants view, not download). Null when there are none.
+ */
+export function viewOnlyNote(rule: SyncRule): string | null {
+	const n = rule.mode === 'include' ? rule.view_only : 0;
+	if (!n) return null;
+	const them = n === 1 ? 'it' : 'them';
+	return `${WHERE[rule.kind](plural(n, 'photo'))} can’t go to your phone: you can only view ${them}.`;
 }

@@ -1,6 +1,7 @@
 """SQLite storage of "Keep on my phone" (migration 0031): rules per device, photos sent."""
 
 import sqlite3
+from collections.abc import Collection
 from datetime import datetime
 
 from photo_assistant.adapters.sqlite_base import SqliteBase
@@ -56,12 +57,15 @@ class SqliteDeviceSync(SqliteBase):
         rows = self._all("SELECT asset_id FROM sync_sent WHERE device_id = ?", (device_id,))
         return {int(r["asset_id"]) for r in rows}
 
-    def mark_sent(self, device_id: int, asset_id: int, now: datetime) -> None:
-        self._write(
-            """INSERT INTO sync_sent (device_id, asset_id, sent_at) VALUES (?, ?, ?)
-               ON CONFLICT (device_id, asset_id) DO UPDATE SET sent_at = excluded.sent_at""",
-            (device_id, asset_id, now.isoformat()),
-        )
+    def mark_sent(self, device_id: int, asset_ids: Collection[int], now: datetime) -> None:
+        with self._transaction():
+            for asset_id in asset_ids:
+                self._write(
+                    """INSERT INTO sync_sent (device_id, asset_id, sent_at) VALUES (?, ?, ?)
+                       ON CONFLICT (device_id, asset_id)
+                       DO UPDATE SET sent_at = excluded.sent_at""",
+                    (device_id, asset_id, now.isoformat()),
+                )
 
     def forget_sent(self, device_id: int) -> int:
         return self._count("DELETE FROM sync_sent WHERE device_id = ?", (device_id,))

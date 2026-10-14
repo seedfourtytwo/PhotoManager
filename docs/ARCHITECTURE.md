@@ -57,7 +57,7 @@ admin (see Visibility in §7); `0026` keeps what the last global face-clustering
 (`person.portrait_cx/cy/size`, empty = automatic; the round picture is cut from the original
 on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`); `0030` keeps how a
 photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`); `0031` keeps what
-each device keeps on it (`sync_rule`) and what it has fetched (`sync_sent`), for "Keep on my
+each device keeps on it (`sync_rule`) and what the phone said it saved (`sync_sent`), for "Keep on my
 phone". `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
@@ -277,8 +277,12 @@ rule's photos come from `api/library_scopes.LibraryScopes` (the album, person an
 the screens use, all under the visibility rule), `domain/device_sync.kept_ids` takes the union
 of the includes minus the excludes, and `views_by_ids` keeps only photos the owner may
 **download** and has not hidden (live ones only: trash and held photos are out). A device
-fetches originals only from its own list. What it fetched is kept in `sync_sent`, so
-`?new=true` offers the rest; paging is by asset id (`after`), so a photo joining or leaving the
+fetches originals only from its own list. Fetching marks nothing: after saving, the phone
+posts the ids it saved (`POST /api/sync/sent`, ids on its list only), kept in `sync_sent`, so
+`?new=true` offers the rest and a run killed between fetching and saving offers those photos
+again (the manifest's `hash` lets a phone skip a repeat). Each include rule also counts its
+photos the owner may only view (`view_only`, typically album-only photos), so the app can say
+why they stay off the phone; paging is by asset id (`after`), so a photo joining or leaving the
 list moves nothing else. A cursor (`device.sync_cursor`) was not used: it cannot tell that an
 old photo joined a kept album. Cost: the list is recomputed for each manifest page and each
 original; fine for a family library, the first place to cache if it ever is not.

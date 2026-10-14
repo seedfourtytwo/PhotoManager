@@ -45,13 +45,26 @@ export function deviceSyncRoutes(h: Helpers): Route[] {
 		const rules: SyncRule[] = [];
 		const kept = new Set<number>();
 		const left = new Set<number>();
+		const hidden = setFor(h.state().hidden, user.id);
 		for (const rule of h.state().syncRules.filter((r) => r.device_id === deviceId)) {
 			const found = resolve(user, rule);
 			const ids = found?.ids ?? [];
-			rules.push({ ...out(rule), label: found?.label ?? null, count: ids.length, gone: !found });
+			const viewOnly =
+				rule.mode === 'include'
+					? ids.filter((id) => {
+							const a = h.state().assets.find((x) => x.id === id)!;
+							return rank(h.assetLevel(user, a)) < rank('download') && !hidden.has(id);
+						}).length
+					: 0;
+			rules.push({
+				...out(rule),
+				label: found?.label ?? null,
+				count: ids.length,
+				gone: !found,
+				view_only: viewOnly
+			});
 			for (const id of ids) (rule.mode === 'include' ? kept : left).add(id);
 		}
-		const hidden = setFor(h.state().hidden, user.id);
 		const list = h
 			.state()
 			.assets.filter(

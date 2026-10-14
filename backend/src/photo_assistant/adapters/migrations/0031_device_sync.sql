@@ -22,8 +22,9 @@ CREATE UNIQUE INDEX sync_rule_once
 CREATE INDEX sync_rule_by_album ON sync_rule (album_id) WHERE album_id IS NOT NULL;
 CREATE INDEX sync_rule_by_person ON sync_rule (person_id) WHERE person_id IS NOT NULL;
 
--- sync_sent: the photos a device has downloaded through the sync, so "only new" leaves them
--- out. Nothing comes back from the phone: a photo deleted there stays sent (one way).
+-- sync_sent: the photos the phone said it saved (POST /api/sync/sent; downloading marks
+-- nothing), so "only new" leaves them out. Deletions on the phone never come back: a photo
+-- deleted there stays sent (one way).
 -- device.sync_cursor (0014) stays unused: a cursor cannot tell that an old photo joined an album.
 CREATE TABLE sync_sent (
     device_id  INTEGER NOT NULL REFERENCES device(id) ON DELETE CASCADE,

@@ -3,13 +3,14 @@
 Each of a person's devices has its own rules (albums, people, filters; kept or left off). The
 list is computed on every request, never stored: it follows the library (a photo added to a
 kept album, a photo trashed, an album unshared) without any bookkeeping. Only what the device
-already fetched is stored, so it can ask for "only new".
+said it saved is stored, so it can ask for "only new".
 
 Access: a rule's photos come narrowed to what the owner may see; on top of that the list keeps
 only photos they may *download* (a sync is a download) and have not hidden. A device fetches
 only photos on its own list, whatever else its owner may see.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from photo_assistant.domain.access import Level, Viewer
@@ -51,6 +52,7 @@ class RuleSummary:
     label: str | None  # the album's title or the person's name
     count: int  # photos the rule names that the owner can see
     gone: bool  # it names nothing the owner can see any more (unshared, merged away)
+    view_only: int  # of an include's photos, those the owner may view but not download
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +61,7 @@ class SyncSummary:
     rules: list[RuleSummary]
     count: int  # photos on the list
     bytes: int
-    sent: int  # of them, already fetched by the device
+    sent: int  # of them, saved on the phone (it said so)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +69,7 @@ class ManifestPage:
     items: list[AssetView]
     total: int  # the whole list
     total_bytes: int
-    remaining: int  # on the list and not fetched yet
+    remaining: int  # on the list and not saved on the phone yet
     next_after: int | None
 
 
@@ -138,8 +140,8 @@ class DeviceSync:
     def manifest(
         self, viewer: Viewer, device: Device, *, new_only: bool, after: int | None, limit: int
     ) -> ManifestPage:
-        """One page of the device's list in id order; ``new_only`` leaves out what it has
-        fetched before."""
+        """One page of the device's list in id order; ``new_only`` leaves out what the phone
+        said it saved."""
         _, kept = self._list(viewer, device.id)
         sent = self._store.sent_ids(device.id)
         wanted = [v for v in kept if not (new_only and v.id in sent)]
@@ -162,24 +164,44 @@ class DeviceSync:
             raise SyncPhotoNotFoundError("photo not found")
         return found
 
-    def sent(self, device: Device, asset_id: int) -> None:
-        """The device received the whole file."""
-        self._store.mark_sent(device.id, asset_id, self._clock.now())
+    def saved(self, viewer: Viewer, device: Device, asset_ids: Collection[int]) -> int:
+        """The phone says it saved these: ``new_only`` leaves them out from now on. Every id
+        must be on the device's list, or none is marked. Fetching an original marks nothing,
+        so a run killed between fetching and saving offers the photo again."""
+        _, kept = self._list(viewer, device.id)
+        on_list = {v.id for v in kept}
+        if not set(asset_ids) <= on_list:
+            raise InvalidSyncRuleError("some of these photos are not on this device's list")
+        self._store.mark_sent(device.id, set(asset_ids), self._clock.now())
+        return len(set(asset_ids))
 
     # --- the list ------------------------------------------------------------------------------
 
     def _list(self, viewer: Viewer, device_id: int) -> tuple[list[RuleSummary], list[AssetView]]:
         """Each rule as the viewer sees it, and the list: photos they may download and have
         not hidden, in id order."""
-        summaries: list[RuleSummary] = []
-        includes: list[list[int]] = []
-        excludes: list[list[int]] = []
-        for rule in self._store.sync_rules(device_id):
-            resolved = self._scopes.resolve(viewer, rule.target)
-            ids = list(resolved.ids) if resolved else []
-            label = resolved.label if resolved else None
-            summaries.append(RuleSummary(rule, label, len(ids), resolved is None))
-            (includes if rule.mode is SyncMode.INCLUDE else excludes).append(ids)
-        views = self._views.views_by_ids(viewer, kept_ids(includes, excludes))
-        kept = [v for v in views if v.level >= Level.DOWNLOAD and not v.hidden]
+        rules = [
+            (rule, self._scopes.resolve(viewer, rule.target))
+            for rule in self._store.sync_rules(device_id)
+        ]
+        names = {r.id: list(found.ids) if found else [] for r, found in rules}
+        includes = [names[r.id] for r, _ in rules if r.mode is SyncMode.INCLUDE]
+        excludes = [names[r.id] for r, _ in rules if r.mode is SyncMode.EXCLUDE]
+        # every photo an include names, once: what may go, and what she may only view
+        views = self._views.views_by_ids(viewer, kept_ids(includes, []))
+        view_only = {v.id for v in views if v.level < Level.DOWNLOAD and not v.hidden}
+        summaries = [
+            RuleSummary(
+                rule,
+                found.label if found else None,
+                len(names[rule.id]),
+                found is None,
+                sum(1 for i in names[rule.id] if i in view_only)
+                if rule.mode is SyncMode.INCLUDE
+                else 0,
+            )
+            for rule, found in rules
+        ]
+        listed = set(kept_ids(includes, excludes))
+        kept = [v for v in views if v.id in listed and v.level >= Level.DOWNLOAD and not v.hidden]
         return summaries, sorted(kept, key=lambda v: v.id)

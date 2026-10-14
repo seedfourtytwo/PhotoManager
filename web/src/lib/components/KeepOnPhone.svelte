@@ -6,7 +6,7 @@
 	import type { DeviceSync, SyncTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { errorMessage, formatBytes, photos } from '$lib/format';
-	import { choiceFor, ruleFor, type Choice } from '$lib/keep';
+	import { choiceFor, ruleFor, viewOnlyNote, type Choice } from '$lib/keep';
 	import Dialog from './Dialog.svelte';
 
 	type Props = {
@@ -76,6 +76,8 @@
 		{:else}
 			{#each lists as list (list.device.id)}
 				{@const current = choiceFor(list.rules, target)}
+				{@const rule = ruleFor(list.rules, target)}
+				{@const note = rule ? viewOnlyNote(rule) : null}
 				<fieldset disabled={busy === list.device.id}>
 					<legend>{list.device.name}</legend>
 					{#each CHOICES as [value, label] (value)}
@@ -91,6 +93,7 @@
 						</label>
 					{/each}
 					<p class="quiet small data">{photos(list.count)} · {formatBytes(list.bytes)} in all</p>
+					{#if note}<p class="small note">{note}</p>{/if}
 				</fieldset>
 			{/each}
 		{/if}
@@ -111,7 +114,8 @@
 	legend {
 		padding: var(--s-2) 0 var(--s-1);
 	}
-	.data {
+	.data,
+	.note {
 		margin: var(--s-1) 0 0;
 	}
 </style>
