@@ -110,7 +110,7 @@ filter. Opening a sheet or a photo adds a history step, so Back on the phone clo
 ### 4.3 Photo view (the loupe)
 
 - Phone: swipe sideways for previous/next, pull down to close, swipe up for details,
-  double-tap to favourite. A glass bar at the bottom holds a two-line readout (date · time ·
+  double-tap to favourite (now: to zoom, see "As built" under §4.5). A glass bar at the bottom holds a two-line readout (date · time ·
   place / aperture · shutter · ISO · focal length · file name, in `--font-data`) and five
   actions with icon and label: Favourite, Share, Album, Edit, More.
 - Laptop: same bar; details open as a right-hand panel; keyboard shortcuts unchanged.
@@ -134,7 +134,7 @@ Download, Fix date, Delete, and More. `Esc` clears.
 - **Share** is not built, in the photo bar or in the pill: nothing here says what sharing one
   photo does, and handing it to the phone's share sheet sends photo data to other apps.
   Download holds its place (Favourite · Download · Album · Edit · More).
-- **Aperture, shutter, ISO and focal length** are stored since migration `0029` and shown
+- **Aperture, shutter, ISO and focal length** are stored since migration `0030` and shown
   (2026-10-13): the readout's second line is aperture · shutter · ISO · focal length · file
   name, with only the values the photo carries. A photo that carries none (a scan, a
   screenshot) keeps camera · pixel size · file name. The details list the settings under the
@@ -145,6 +145,9 @@ Download, Fix date, Delete, and More. `Esc` clears.
   transform), not native snap-scrolling (§6).
 - The ruler jumps where a drag ends, not while the finger moves: a far month may need many
   pages. Long-press then drag adds photos to the run; dragging back does not take them out.
+- **Double-tap zooms** instead of favouriting (C, 2026-10-13), as on an iPhone; two fingers
+  zoom too, and the bar's Favourite button is how a photo is hearted here. The photo shown
+  is the 2048 px preview, so zoom stops at four times the fit.
 
 ### 4.6 System (admin)
 

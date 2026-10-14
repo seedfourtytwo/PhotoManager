@@ -114,3 +114,16 @@ def test_a_full_path_is_fine(path: str) -> None:
 def test_other_paths_are_refused_with_the_reason(path: str, word: str) -> None:
     problem = folder_path_problem(path)
     assert problem is not None and word in problem
+
+
+def test_portraits_are_keyed_by_content_and_cut() -> None:
+    from photo_assistant.domain.library_paths import portrait_relpath
+
+    digest = "ab" + "0" * 62
+    assert portrait_relpath(digest, "0123456789abcdef").as_posix() == (
+        f"derived/portrait/ab/{digest}-0123456789abcdef.webp"
+    )
+    with pytest.raises(InvalidLibraryPathError):
+        portrait_relpath(digest, "../x")
+    with pytest.raises(InvalidLibraryPathError):
+        portrait_relpath("nothex", "0123456789abcdef")

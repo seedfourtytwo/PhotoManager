@@ -12,7 +12,7 @@ from typing import Protocol
 
 from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.errors import UnavailableError
-from photo_assistant.domain.faces import BoundingBox, Face
+from photo_assistant.domain.faces import BoundingBox, Circle, Face, circle_box
 from photo_assistant.domain.tags import TagScore
 from photo_assistant.domain.vectors import Vector
 
@@ -29,6 +29,7 @@ __all__ = [
     "ModelStatus",
     "ModelUnavailableError",
     "PersonSummary",
+    "Portrait",
     "ScoredAsset",
     "StoredFace",
     "TextEmbedder",
@@ -127,10 +128,28 @@ class FaceChanges:
 
 
 @dataclass(frozen=True, slots=True)
+class Portrait:
+    """The round picture of one face: a circle on its photo as displayed, without edits."""
+
+    face: StoredFace
+    circle: Circle
+    chosen: bool  # by a person; else the automatic circle round the face
+    content_hash: str  # the photo's: with the cut, it names the picture once rendered
+    library_path: str  # the original the picture is cut from
+    photo_size: tuple[int, int]  # as displayed; only its shape is certain
+
+    @property
+    def crop(self) -> BoundingBox:
+        """The square round the circle, as fractions of the photo."""
+        return circle_box(self.circle, *self.photo_size)
+
+
+@dataclass(frozen=True, slots=True)
 class PersonSummary:
     id: int
     name: str | None
     cover_face: StoredFace | None  # a face the viewer may see
+    portrait: Portrait | None  # of the cover face; chosen only if that is the chosen face
     face_count: int  # faces in assets the viewer may see
     asset_count: int
     hidden: bool  # left out of People: a stranger someone chose not to list
@@ -168,7 +187,8 @@ class MlStore(Protocol):
 
     # faces
     def replace_faces(self, asset_id: int, model: str, faces: Sequence[Face]) -> list[int]:
-        """Drop this asset's model-assigned faces for the model and store new ones."""
+        """Drop this asset's model-assigned faces for the model and store new ones. A person
+        whose cover was one of them gets the new face found in the same place as cover."""
         ...
 
     def faces_to_cluster(
@@ -198,6 +218,9 @@ class MlStore(Protocol):
     def create_person(self, cover_face_id: int) -> int: ...
     def faces_of_asset(self, asset_id: int) -> list[StoredFace]: ...
     def get_face(self, face_id: int) -> StoredFace | None: ...
+    def face_portrait(self, face_id: int) -> Portrait | None:
+        """The automatic portrait of one face, whoever may see its photo."""
+        ...
 
     # people (visibility-scoped reads)
     def list_persons(self, visible: Visible, *, hidden: bool | None = False) -> list[PersonSummary]:
@@ -207,6 +230,19 @@ class MlStore(Protocol):
     def get_person(self, person_id: int, visible: Visible) -> PersonSummary | None: ...
     def rename_person(self, person_id: int, name: str | None) -> None: ...
     def set_person_hidden(self, person_id: int, hidden: bool) -> None: ...
+    def set_portrait(self, person_id: int, face_id: int, circle: Circle) -> None:
+        """That face is the cover, and ``circle`` its portrait."""
+        ...
+
+    def clear_portrait(self, person_id: int) -> None:
+        """The cover stays; its portrait is the automatic circle again."""
+        ...
+
+    def person_faces(self, person_id: int, visible: Visible, limit: int) -> list[Portrait]:
+        """The person's faces on photos ``visible`` covers, each with its automatic
+        portrait: the best first (score, then id)."""
+        ...
+
     def merge_persons(self, target_id: int, source_ids: Sequence[int]) -> None: ...
     def move_faces(self, face_ids: Sequence[int], person_id: int) -> None: ...
     def create_empty_person(self, name: str | None) -> int: ...

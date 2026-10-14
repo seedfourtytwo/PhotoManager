@@ -1,4 +1,5 @@
 /** What the mock keeps in memory: the API's shapes plus what only a server knows. */
+import type { Circle } from '../src/lib/portrait.ts';
 import type { Look } from '../src/lib/look/sheet.ts';
 import type {
 	Access,
@@ -102,7 +103,13 @@ export type MockFace = {
 	score: number;
 	person_id: number | null;
 };
-export type MockPerson = { id: number; name: string | null; hidden?: boolean };
+export type MockPerson = {
+	id: number;
+	name: string | null;
+	hidden?: boolean;
+	/** The face chosen as cover, and the circle put on its photo (null: the automatic one). */
+	portrait?: { face_id: number; circle: Circle | null };
+};
 export type MockBackup = {
 	id: number;
 	label: string;

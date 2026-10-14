@@ -53,8 +53,10 @@ faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, f
 `taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
 admin (see Visibility in §7); `0026` keeps what the last global face-clustering pass saw
 (`face_cluster_pass`, `face_cluster_mark`); `0027` gives each account its look
-(`user.look`); `0029` keeps how a photo was exposed (`asset.f_number`, `exposure_time`, `iso`,
-`focal_length`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+(`user.look`); `0029` lets a person's portrait be a chosen circle on one of their photos
+(`person.portrait_cx/cy/size`, empty = automatic; the round picture is cut from the original
+on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`); `0030` keeps how a
+photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -70,7 +72,7 @@ source_access(source_id, user_id NULL=everyone, level 1 view|2 download|3 edit)
 asset(id, content_hash UNIQUE, kind, mime_type, byte_size, width, height,
       taken_at, tz_offset_min, date_source[exif|exif_create|xmp|filename|file_mtime|manual],
       latitude, longitude, camera_make, camera_model, orientation,
-      f_number, exposure_time, iso, focal_length,  -- 0029: each NULL when the photo has none;
+      f_number, exposure_time, iso, focal_length,  -- 0030: each NULL when the photo has none;
                            -- seconds and millimetres; the rules are in domain/exposure.py
       library_path, thumb_path, thumb_w, thumb_h, preview_path, variant_of, imported_at,
       first_source_id  -- where it was first found (informational; grants nothing)
@@ -161,7 +163,7 @@ does not put its hash on the never-import-again list, which is for what a person
 **Exposure settings** (aperture, shutter time, ISO, focal length) come from the same ExifTool
 read as the dates, go through the rules of `domain/exposure.py` (fractions, text with units,
 several values, placeholders → a clean number or nothing) and are stored with the photo.
-Photos imported before migration `0029` get them from `just exposure-backfill`: the command
+Photos imported before migration `0030` get them from `just exposure-backfill`: the command
 queues one `exposure_backfill` job and the server's worker runs it on the quick lane
 (`app/exposure_backfill.py`). A job is one batch of 200 photos that still have none of the
 four values, read from the **library copy** (never a source folder, and reading changes

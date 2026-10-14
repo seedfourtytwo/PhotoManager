@@ -62,7 +62,7 @@ def stored(services: Services) -> dict[str, Exposure]:
 
 
 def forget_exposure(services: Services) -> None:
-    """Make the library look as one imported before migration 0029 does."""
+    """Make the library look as one imported before migration 0030 does."""
     with services.db.transaction() as conn:
         conn.execute(
             "UPDATE asset SET f_number = NULL, exposure_time = NULL, iso = NULL, "

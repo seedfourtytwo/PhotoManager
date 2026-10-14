@@ -1,4 +1,4 @@
--- 0029: how a photo was exposed (redesign spec §4.3; approved by C 2026-10-13).
+-- 0030: how a photo was exposed (redesign spec §4.3; approved by C 2026-10-13).
 --
 -- Aperture (f-number), shutter time (seconds), ISO and focal length (millimetres), each on
 -- its own and nullable: a scan has none, an old camera may have left one out. What a value

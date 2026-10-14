@@ -111,9 +111,11 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   rewrites that entry and adds none. The photo's own entry under it then names an earlier
   photo; when Back arrives there, the photo on screen is held and written into it. Chrome fades after 2.5 s and returns on any
   touch, key or mouse movement; a tap on the photo toggles it (after 300 ms, in case it is
-  the first half of a double tap, which favourites). The photo area has `touch-action: none`,
-  so vertical swipes (up = info, down = close) are not taken by the browser; `lib/gesture.ts`
-  says what each press means. Favourite/Private are optimistic and single-flight. View-only
+  the first half of a double tap, which zooms). The photo area has `touch-action: none`,
+  so vertical swipes (up = info, down = close) and two fingers are not taken by the browser;
+  `lib/gesture.ts` says what each press means, `lib/zoom.ts` how large the photo is and where
+  it sits (double tap, two fingers, one finger on a zoomed photo; the Zoom pill and Z do what
+  a double tap does). Favourite/Private are optimistic and single-flight. View-only
   photos show a disabled Download with the reason; Edit/Fix date/Private need `edit` (contract
   v1.2); Private, Fix date and More like this sit behind More. Opening and closing run through
   `withTransition` (`lib/motion.ts`); the page takes no input while a view transition runs.
@@ -121,8 +123,15 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   photos to the oldest (`GET /api/calendar`). It jumps once, where a drag ends.
 - **Grid**: one Tab stop; arrow keys, Home/End move between photos across months.
 - **Search** (`/search?q=…`, `/search?like=<id>`), **People** (`/people`, `/people/<id>`: rename, hide,
-  merge), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
+  merge, change portrait), **Print** (`/albums/<id>/print`), **Admin → Backups / Cloud folders / Search and
   faces**, **Settings → Phones and devices**.
+- **Portraits** (`Portrait`, `PortraitDialog`, `lib/portrait.ts`): a person's round picture is
+  an `<img>` of `Person.portrait.url`, which the server cuts; the address changes with the
+  picture, so a saved change shows at once. "Change portrait" (members and admins; the
+  portrait itself is the same button) lists `GET /api/people/<id>/faces`, shows the picked
+  photo without its edits (`/api/assets/<id>/preview?edit=none`) under a round window, and
+  moves and zooms it by drag, pinch, wheel, slider and keys (arrows, + and -). The circle
+  cannot leave the photo. Save is `PUT /api/people/<id>/portrait`, "Use automatic" `DELETE`.
 - **Collections** (`/collections`, `CollectionRows`): each row of the account's look shows what
   is behind it and asks only for that: People `GET /api/people`, Albums `GET /api/albums`,
   Places `GET /api/assets/facets` and then `GET /api/assets?place=<name>&limit=1` for each of

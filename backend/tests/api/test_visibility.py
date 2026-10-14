@@ -369,6 +369,43 @@ def test_people_changes_reach_only_people_and_faces_on_photos_you_see(
     assert renamed.status_code == 200 and renamed.json()["name"] == "Léa"
 
 
+@pytest.mark.parametrize("user", list(EXPECTED))
+def test_a_portrait_is_only_ever_cut_from_a_photo_you_see(world: World, user: str) -> None:
+    _fake_ml_index(world)
+    client = world.clients[user]
+    store = services_of(world.clients["admin"]).ml.store
+    should_see = {world.ids[p] for p, level in EXPECTED[user].items() if level}
+    (lea,) = client.get("/api/people").json()
+    (hidden_face,) = store.faces_of_asset(world.ids["p3"])  # p3: only the admin sees it
+    (shared_face,) = store.faces_of_asset(world.ids["p1"])  # p1: everyone sees it
+    person = f"/api/people/{lea['id']}"
+    sees_p3 = EXPECTED[user]["p3"] is not None
+    there = 200 if sees_p3 else 404
+    may_edit = user != "gus"
+
+    faces = client.get(f"{person}/faces", params={"limit": 100}).json()
+    assert {f["asset_id"] for f in faces} == should_see
+    assert client.get(f"/api/faces/{hidden_face.id}/portrait").status_code == there
+    assert client.get(f"/api/faces/{shared_face.id}/portrait").status_code == 200
+
+    circle = {"cx": 0.5, "cy": 0.5, "size": 0.5}
+    hidden = client.put(f"{person}/portrait", json={"face_id": hidden_face.id} | circle)
+    assert hidden.status_code == (there if may_edit else 403)
+    admin = world.clients["admin"]
+    assert admin.put(f"{person}/portrait", json={"face_id": hidden_face.id} | circle).is_success
+    mine = client.get(person).json()["portrait"]
+    assert mine["asset_id"] in should_see
+    assert mine["chosen"] is sees_p3, "the cut chosen on a photo you do not see is not yours"
+    assert (mine["face_id"] == hidden_face.id) is sees_p3
+    assert client.get(mine["url"]).status_code == 200
+
+    shared = client.put(f"{person}/portrait", json={"face_id": shared_face.id} | circle)
+    assert shared.status_code == (200 if may_edit else 403)
+    if may_edit:
+        assert client.get(person).json()["portrait"]["chosen"] is True
+        assert admin.get(person).json()["portrait"]["face_id"] == shared_face.id, "one for all"
+
+
 def test_the_visible_id_set_is_the_timeline(world: World) -> None:
     from photo_assistant.domain.access import Viewer
     from photo_assistant.domain.library_filter import AssetFilter

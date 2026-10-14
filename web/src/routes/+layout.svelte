@@ -167,7 +167,8 @@
 	.bare {
 		max-width: 24rem;
 		margin: 0 auto;
-		padding: max(12vh, var(--s-7)) var(--s-5) var(--s-7);
+		padding: max(12vh, var(--s-7)) calc(var(--s-5) + env(safe-area-inset-right)) var(--s-7)
+			calc(var(--s-5) + env(safe-area-inset-left));
 	}
 	.opening {
 		padding: var(--s-6) var(--page-x);
@@ -235,8 +236,11 @@
 			grid-template-columns: minmax(0, 1fr);
 			grid-template-rows: 1fr;
 		}
+		/* The page has the whole screen (viewport-fit=cover): what is read and pressed keeps
+		   clear of the clock, the notch on either side, and the home bar. */
 		main {
-			padding-bottom: calc(var(--bar) + env(safe-area-inset-bottom));
+			padding: env(safe-area-inset-top) env(safe-area-inset-right)
+				calc(var(--bar) + env(safe-area-inset-bottom)) env(safe-area-inset-left);
 		}
 		.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));

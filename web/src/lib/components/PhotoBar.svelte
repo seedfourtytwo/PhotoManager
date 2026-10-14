@@ -162,6 +162,10 @@
 	@media (max-width: 1023px) {
 		.bar {
 			bottom: calc(env(safe-area-inset-bottom) + var(--s-3));
+			/* on its side, a phone's notch takes one end: the bar keeps clear of both */
+			max-width: calc(
+				100% - 2 * var(--s-2) - 2 * max(env(safe-area-inset-left), env(safe-area-inset-right))
+			);
 		}
 	}
 </style>

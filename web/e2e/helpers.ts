@@ -263,5 +263,15 @@ export async function expectAccessible(page: Page) {
 	);
 }
 
-export const test = base;
+/**
+ * Every spec's `test`. When a test ends, its routes stop first: a handler still on its way
+ * (a polling page asks again every second or so) would otherwise lose the answer it fetched
+ * as the page closes, fail, and take down whichever test runs next.
+ */
+export const test = base.extend({
+	page: async ({ page }, use) => {
+		await use(page);
+		await page.unrouteAll({ behavior: 'ignoreErrors' });
+	}
+});
 export { expect };

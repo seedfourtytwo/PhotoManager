@@ -1,4 +1,4 @@
-"""Exposure settings for photos imported before they were kept (migration 0029).
+"""Exposure settings for photos imported before they were kept (migration 0030).
 
 New imports store them from the metadata the import reads anyway. For older photos this job
 reads the library copy (never a source folder; reading changes nothing in the file) and
