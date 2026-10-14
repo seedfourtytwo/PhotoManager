@@ -3,7 +3,8 @@
  * question in a sheet (a bottom sheet on a phone, a popover under its chip on a laptop), and a
  * set chip shows its answer with an × that clears it. The address keeps every filter.
  */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import type { Facets, Person } from '../src/lib/api/types.ts';
 import {
 	expect,
 	expectAccessible,
@@ -11,7 +12,8 @@ import {
 	isPhone,
 	resetMock,
 	signIn,
-	test
+	test,
+	touchSwipe
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -176,6 +178,88 @@ test('a sheet hangs under its chip on a laptop and rises from the bottom on a ph
 		}
 	}).toPass({ timeout: 3000 });
 });
+
+/** How many rows each list gains, so it is longer than any screen. */
+const MANY = 40;
+const many = <T>(make: (i: number) => T) => Array.from({ length: MANY }, (_, i) => make(i));
+
+/**
+ * A library with long lists: forty more years, places, cameras and named people added to
+ * what the server answers (the mock and the real backend alike). The last one added is the
+ * last row of its list.
+ */
+async function longLists(page: Page) {
+	await page.route(/\/api\/assets\/facets\b/, async (route) => {
+		const response = await route.fetch();
+		const facets = (await response.json()) as Facets;
+		await route.fulfill({
+			response,
+			json: {
+				...facets,
+				years: [...facets.years, ...many((i) => ({ year: 1900 + MANY - i, count: MANY - i }))],
+				places: [...facets.places, ...many((i) => ({ name: `Town ${i + 1}`, count: MANY - i }))],
+				cameras: [...facets.cameras, ...many((i) => ({ name: `Camera ${i + 1}`, count: MANY - i }))]
+			}
+		});
+	});
+	await page.route(/\/api\/people(\?.*)?$/, async (route) => {
+		const response = await route.fetch();
+		const people = (await response.json()) as Person[];
+		const extra = many<Person>((i) => ({
+			id: 10_000 + i,
+			name: `Person ${i + 1}`,
+			face_count: 1,
+			hidden: false,
+			asset_count: 1,
+			cover: null,
+			portrait: null
+		}));
+		await route.fulfill({ response, json: [...people, ...extra] });
+	});
+}
+
+/** The last row of each question's long list. More holds two switches: it never grows. */
+const LAST_ROW: Record<string, RegExp> = {
+	Who: new RegExp(`^Person ${MANY}$`),
+	When: /^1901\b/,
+	Where: new RegExp(`^Town ${MANY}\\b`),
+	Camera: new RegExp(`^Camera ${MANY}\\b`)
+};
+
+/** One move down the list: a finger swiping up inside the sheet, or the wheel over it. */
+async function scrollDown(page: Page, sheet: Locator) {
+	const box = (await sheet.boundingBox())!;
+	const x = box.x + box.width / 2;
+	const low = { x, y: box.y + box.height - 120 };
+	if (isPhone(page)) await touchSwipe(page, low, { x, y: low.y - 300 }, 12);
+	else {
+		await page.mouse.move(low.x, low.y);
+		await page.mouse.wheel(0, 300);
+	}
+}
+
+for (const [question, last] of Object.entries(LAST_ROW)) {
+	test(`${question}: a list longer than the screen scrolls to its last row, by finger or wheel`, async ({
+		page
+	}) => {
+		await longLists(page);
+		const sheet = await ask(page, question);
+		const row = sheet.getByRole('button', { name: last });
+		await expect(row).toBeAttached();
+		// Settled: a phone's sheet has finished rising.
+		await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
+		await expect(row).not.toBeInViewport();
+		const before = (await row.boundingBox())!.y;
+		await scrollDown(page, sheet);
+		// The list moved under the finger (or the wheel)…
+		await expect.poll(async () => (await row.boundingBox())!.y).toBeLessThan(before - 100);
+		// …and keeps moving until its last row is in sight, whole, to be pressed.
+		await expect(async () => {
+			await scrollDown(page, sheet);
+			await expect(row).toBeInViewport({ ratio: 1, timeout: 300 });
+		}).toPass({ timeout: 15_000 });
+	});
+}
 
 test('a sheet is modal: focus moves in and stays, Escape closes it and gives it back', async ({
 	page
