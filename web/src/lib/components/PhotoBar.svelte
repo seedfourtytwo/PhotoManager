@@ -20,7 +20,7 @@
 		busy: boolean;
 		/** The More menu is open. */
 		more: boolean;
-		ontoggle: (key: 'favourite' | 'private') => void;
+		ontoggle: (key: 'favourite' | 'private' | 'pinned') => void;
 		onopen: (dialog: PhotoDialog) => void;
 		onrestore: () => void;
 	};
@@ -57,6 +57,14 @@
 			? [{ label: 'Private', pressed: asset.private, run: () => ontoggle('private') }]
 			: []),
 		...(canEdit ? [{ label: 'Fix date', run: () => onopen('date') }] : []),
+		...(detail && !trash
+			? [
+					{
+						label: asset.pinned ? 'Unpin from Home' : 'Pin to Home',
+						run: () => ontoggle('pinned')
+					}
+				]
+			: []),
 		...(similarReady && !trash ? [{ label: 'More like this', run: moreLikeThis }] : [])
 	]);
 

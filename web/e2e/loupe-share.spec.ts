@@ -175,7 +175,11 @@ test('a guest shares what a guest may download; a view-only photo has no Share',
 	await expect(loupe(page).getByRole('button', { name: 'Download' })).toBeDisabled();
 	await expect(loupe(page).getByText('view only', { exact: true })).toBeVisible();
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveCount(0);
-	await expect(loupe(page).getByRole('button', { name: 'More' })).toHaveCount(0);
+	// More holds only Pin to Home, a mark of the guest's own (issue 54): no Share there either.
+	await loupe(page).getByRole('button', { name: 'More' }).click();
+	await expect(loupe(page).getByRole('button', { name: 'Pin to Home' })).toBeVisible();
+	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveCount(0);
+	await page.keyboard.press('Escape');
 	// The phone's photos (source 1) may be downloaded by everyone.
 	const list = await (await page.request.get('/api/assets?source_id=1&limit=1')).json();
 	await page.goto(`/?photo=${list.items[0].id}`);

@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { AssetDetail, AssetOut } from '$lib/api';
-import { session } from '$lib/app.svelte';
+import { notice, session } from '$lib/app.svelte';
 import { makeAsset } from '$lib/testing/fixtures';
 import Loupe from './Loupe.svelte';
 
@@ -325,6 +325,19 @@ describe('Loupe: details and actions', () => {
 		// Another photo: its own details.
 		await view.rerender({ index: 1 });
 		await vi.waitFor(() => expect(api.count('GET', '/api/assets/2')).toBe(1));
+	});
+
+	it('Pin to Home (under More) pins the photo for this account, and says so', async () => {
+		const api = server();
+		const release = api.hold('PATCH /api/assets/1/state');
+		const { onchanged } = open();
+		await page.getByRole('button', { name: 'More' }).click();
+		await page.getByRole('button', { name: 'Pin to Home' }).click();
+		expect(onchanged).toHaveBeenLastCalledWith({ ...photos[0], pinned: true });
+		release({ ...photos[0], pinned: true });
+		await vi.waitFor(() => expect(notice.text).toBe('Pinned to Home.'));
+		expect(api.count('PATCH', '/api/assets/1/state')).toBe(1);
+		notice.show('');
 	});
 
 	it('Favourite works on the next photo while the previous one is still being saved', async () => {
