@@ -14,10 +14,12 @@ test.beforeEach(async () => {
 	await resetMock();
 });
 
-test('shell: two places, one search, and the rest behind the account button', async ({ page }) => {
+test('shell: three places, one search, and the rest behind the account button', async ({
+	page
+}) => {
 	await signIn(page);
 	const nav = page.getByRole('navigation', { name: 'Main' });
-	for (const name of ['Library', 'Collections', 'Search'])
+	for (const name of ['Home', 'Library', 'Collections', 'Search'])
 		await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
 	for (const name of ['Map', 'People', 'Albums', 'Trash', 'Settings', 'Admin'])
 		await expect(nav.getByRole('link', { name, exact: true })).toBeHidden();
