@@ -20,6 +20,7 @@ class AssetView:
     asset: Asset
     level: Level
     favourite: bool = False
+    pinned: bool = False
     hidden: bool = False
     private: bool = False
     place: Place | None = None

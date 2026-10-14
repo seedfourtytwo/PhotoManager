@@ -213,6 +213,7 @@ class AssetOut(BaseModel):
     thumb: ImageRef | None
     preview_ready: bool
     favourite: bool
+    pinned: bool
     hidden: bool
     private: bool
     place: PlaceOut | None
@@ -238,6 +239,7 @@ class AssetOut(BaseModel):
             thumb=thumb,
             preview_ready=a.preview_path is not None,
             favourite=v.favourite,
+            pinned=v.pinned,
             hidden=v.hidden,
             private=v.private,
             place=place,
@@ -283,6 +285,7 @@ class AssetPage(BaseModel):
 
 class StatePatch(BaseModel):
     favourite: bool | None = None
+    pinned: bool | None = None
     hidden: bool | None = None
     private: bool | None = None
 
@@ -293,6 +296,7 @@ Ids = Annotated[list[Id], Field(min_length=1, max_length=10_000)]
 class BulkState(BaseModel):
     ids: Ids
     favourite: bool | None = None
+    pinned: bool | None = None
     hidden: bool | None = None
 
 
@@ -432,17 +436,21 @@ class FiltersIn(BaseModel):
     year: int | None = None
     month: int | None = None
     source_id: list[Id] = Field(default_factory=list)
+    person_id: list[Id] = Field(default_factory=list)
     camera: str | None = None
     place: str | None = None
     q: str | None = None
     favourite: bool | None = None
+    pinned: bool | None = None
     hidden: bool | None = None
     guessed_date: bool | None = None
     has_location: bool | None = None
 
     def to_filter(self) -> AssetFilter:
-        values = self.model_dump(exclude={"source_id"})
-        return AssetFilter(**values, source_ids=tuple(self.source_id))
+        values = self.model_dump(exclude={"source_id", "person_id"})
+        return AssetFilter(
+            **values, source_ids=tuple(self.source_id), person_ids=tuple(self.person_id)
+        )
 
 
 class DownloadRequest(BaseModel):

@@ -72,14 +72,27 @@ def facets(services: ServicesDep, viewer: ViewerDep, f: FilterDep) -> FacetsOut:
     )
 
 
+def _set_marks(
+    services: Services,
+    viewer: Viewer,
+    ids: list[int],
+    body: StatePatch | BulkState,
+) -> None:
+    """My own marks on photos I may see: favourite, pinned, hidden."""
+    if body.favourite is not None or body.hidden is not None:
+        services.repo.set_user_state(
+            viewer.user_id, ids, favourite=body.favourite, hidden=body.hidden
+        )
+    if body.pinned is not None:
+        services.repo.set_pinned(viewer.user_id, ids, body.pinned, services.clock.now())
+
+
 @router.post("/state")
 def bulk_state(services: ServicesDep, viewer: ViewerDep, body: BulkState) -> Updated:
-    """Favourite / hide many at once; photos you can't see are ignored."""
+    """Favourite / pin / hide many at once; photos you can't see are ignored."""
     visible = [v.id for v in services.repo.views_by_ids(viewer, body.ids)]
-    updated = services.repo.set_user_state(
-        viewer.user_id, visible, favourite=body.favourite, hidden=body.hidden
-    )
-    return Updated(updated=updated)
+    _set_marks(services, viewer, visible, body)
+    return Updated(updated=len(visible))
 
 
 def detail_of(services: Services, viewer: Viewer, view: AssetView) -> AssetDetail:
@@ -140,10 +153,7 @@ def patch_state(
         services.repo.set_private(asset_id, body.private, viewer.user_id)
     else:
         require_view(services, viewer, asset_id)
-    if body.favourite is not None or body.hidden is not None:
-        services.repo.set_user_state(
-            viewer.user_id, [asset_id], favourite=body.favourite, hidden=body.hidden
-        )
+    _set_marks(services, viewer, [asset_id], body)
     return asset_out(require_view(services, viewer, asset_id))
 
 

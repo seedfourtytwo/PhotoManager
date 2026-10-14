@@ -82,7 +82,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 31
+    assert _latest() == 32
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -589,3 +589,34 @@ def test_devices_from_before_0031_keep_nothing_and_their_rules_go_with_them(
     assert [k[0] for k in kinds] == ["filter"]
     upgraded.execute("DELETE FROM user WHERE id = 1")
     assert upgraded.execute("SELECT COUNT(*) FROM sync_rule").fetchone()[0] == 0
+
+
+def test_marks_from_before_0032_come_through_with_nothing_pinned(tmp_path: Path) -> None:
+    """0032: an account pins photos (issue 54) on its own row per photo, next to favourite and
+    hidden; the marks made before it stay as they were."""
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 32)
+    for number, sql in _migrations():
+        if 3 < number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """
+        INSERT INTO user (id, username, display_name, password_hash, role, disabled)
+            VALUES (1, 'c', 'C', 'x', 'admin', 0);
+        INSERT INTO user_asset (user_id, asset_id, favourite, hidden)
+            VALUES (1, 1, 1, 0), (1, 2, 0, 1);
+        """
+    )
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    rows = upgraded.execute(
+        "SELECT asset_id, favourite, hidden, pinned_at FROM user_asset ORDER BY asset_id"
+    )
+    assert [tuple(r) for r in rows] == [(1, 1, 0, None), (2, 0, 1, None)]
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
