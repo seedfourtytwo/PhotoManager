@@ -5,8 +5,10 @@
  */
 import type { Page } from '@playwright/test';
 import {
+	MANY,
 	expect,
 	isPhone,
+	longLists,
 	loupe,
 	loupeAction,
 	resetMock,
@@ -146,6 +148,20 @@ test('every screen', async ({ page }, info) => {
 	await when.getByRole('button', { name: /^2019/ }).click();
 	await shot(page, '05-filters', p);
 	await when.getByRole('button', { name: 'Done' }).click();
+	// A list longer than the screen, scrolled down: forty more cameras, the last one in sight.
+	const shorten = await longLists(page);
+	await page
+		.getByRole('group', { name: 'Filters' })
+		.getByRole('button', { name: 'Camera', exact: true })
+		.click();
+	const camera = page.getByRole('dialog', { name: 'Camera' });
+	await camera
+		.getByRole('button', { name: new RegExp(`^Camera ${MANY}\\b`) })
+		.scrollIntoViewIfNeeded();
+	await shot(page, '05b-filters-long', p);
+	await camera.getByRole('button', { name: 'Done' }).click();
+	await sheetStepGone(page);
+	await shorten();
 
 	await page.goto('/');
 	await selectTiles(page, [1, 2, 4]);

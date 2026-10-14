@@ -4,12 +4,13 @@
  * set chip shows its answer with an × that clears it. The address keeps every filter.
  */
 import type { Locator, Page } from '@playwright/test';
-import type { Facets, Person } from '../src/lib/api/types.ts';
 import {
+	MANY,
 	expect,
 	expectAccessible,
 	firstMonthWithPhotos,
 	isPhone,
+	longLists,
 	resetMock,
 	signIn,
 	test,
@@ -178,45 +179,6 @@ test('a sheet hangs under its chip on a laptop and rises from the bottom on a ph
 		}
 	}).toPass({ timeout: 3000 });
 });
-
-/** How many rows each list gains, so it is longer than any screen. */
-const MANY = 40;
-const many = <T>(make: (i: number) => T) => Array.from({ length: MANY }, (_, i) => make(i));
-
-/**
- * A library with long lists: forty more years, places, cameras and named people added to
- * what the server answers (the mock and the real backend alike). The last one added is the
- * last row of its list.
- */
-async function longLists(page: Page) {
-	await page.route(/\/api\/assets\/facets\b/, async (route) => {
-		const response = await route.fetch();
-		const facets = (await response.json()) as Facets;
-		await route.fulfill({
-			response,
-			json: {
-				...facets,
-				years: [...facets.years, ...many((i) => ({ year: 1900 + MANY - i, count: MANY - i }))],
-				places: [...facets.places, ...many((i) => ({ name: `Town ${i + 1}`, count: MANY - i }))],
-				cameras: [...facets.cameras, ...many((i) => ({ name: `Camera ${i + 1}`, count: MANY - i }))]
-			}
-		});
-	});
-	await page.route(/\/api\/people(\?.*)?$/, async (route) => {
-		const response = await route.fetch();
-		const people = (await response.json()) as Person[];
-		const extra = many<Person>((i) => ({
-			id: 10_000 + i,
-			name: `Person ${i + 1}`,
-			face_count: 1,
-			hidden: false,
-			asset_count: 1,
-			cover: null,
-			portrait: null
-		}));
-		await route.fulfill({ response, json: [...people, ...extra] });
-	});
-}
 
 /** The last row of each question's long list. More holds two switches: it never grows. */
 const LAST_ROW: Record<string, RegExp> = {
