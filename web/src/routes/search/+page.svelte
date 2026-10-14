@@ -221,5 +221,10 @@
 		.page > :global(section) {
 			padding-inline: var(--s-2);
 		}
+		/* How far a section's words are from the screen's edge: a row of faces bleeds that far
+		   (SearchSuggestions) and no further, or the page is wider than the screen. */
+		.page > :global(section) {
+			--page-x: calc(var(--gutter) + var(--s-2));
+		}
 	}
 </style>
