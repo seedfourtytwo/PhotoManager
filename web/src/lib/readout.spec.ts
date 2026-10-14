@@ -8,6 +8,7 @@ const asset = makeAsset(1, '2019-08-14T18:42:07', 4032, 3024, {
 });
 const detail = (extra: Partial<AssetDetail> = {}): AssetDetail => ({
 	...asset,
+	name: 'Nice at dusk',
 	byte_size: 1,
 	mime_type: 'image/heic',
 	camera_make: 'Apple',
@@ -32,10 +33,16 @@ describe('readout', () => {
 		expect(readout({ ...asset, place: null }, null)[0]).toBe('2019-08-14 · 18:42');
 	});
 
-	it('line two is camera · size · file name, the name without its folders', () => {
-		expect(readout(asset, detail())[1]).toBe('iPhone 11 · 4032 × 3024 · IMG_4471.HEIC');
-		expect(readout(asset, detail({ camera_model: null }))[1]).toBe('4032 × 3024 · IMG_4471.HEIC');
-		expect(readout(asset, detail({ origins: [] }))[1]).toBe('iPhone 11 · 4032 × 3024');
+	it('line two is camera · size · the name of the photo, never its file name', () => {
+		expect(readout(asset, detail())[1]).toBe('iPhone 11 · 4032 × 3024 · Nice at dusk');
+		expect(readout(asset, detail({ camera_model: null }))[1]).toBe('4032 × 3024 · Nice at dusk');
+	});
+
+	it('line two leaves out a name that only repeats the date and time of line one', () => {
+		const dated = (name: string) => readout(asset, detail({ name }))[1];
+		expect(dated('2019-08-14 18.42')).toBe('iPhone 11 · 4032 × 3024');
+		expect(dated('2019-08-14 18.42 · 2')).toBe('iPhone 11 · 4032 × 3024');
+		expect(dated('2019-08-14 18.43')).toBe('iPhone 11 · 4032 × 3024 · 2019-08-14 18.43');
 	});
 
 	it('line two is the size alone before the details arrive', () => {
@@ -55,14 +62,14 @@ describe('cameFrom (where a photo came from, in the details)', () => {
 		]
 	});
 
-	it('a member reads the folder it came from and the file name, never the path', () => {
+	it('a member reads the folder it came from, not the original file name', () => {
 		expect(cameFrom(two, false).map((o) => [o.label, o.file])).toEqual([
-			['Phone', 'IMG_4471.HEIC'],
-			['Old hard disk', 'IMG_4471.HEIC']
+			['Phone', null],
+			['Old hard disk', null]
 		]);
 	});
 
-	it('an admin reads the whole path, to find the file', () => {
+	it('an admin reads the original file with its whole path, to find it', () => {
 		expect(cameFrom(two, true).map((o) => o.file)).toEqual([
 			'2019/08/IMG_4471.HEIC',
 			'IMG_4471.HEIC'

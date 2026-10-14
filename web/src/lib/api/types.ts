@@ -164,6 +164,8 @@ export type AssetOut = {
 export type AssetPage = { items: AssetOut[]; next_cursor: string | null };
 
 export type AssetDetail = AssetOut & {
+	/** What people call the photo, and what a download of it is named (without extension). */
+	name: string;
 	byte_size: number;
 	mime_type: string | null;
 	camera_make: string | null;
@@ -237,7 +239,7 @@ export type DownloadOptions = {
 	max_edge: number | null;
 	strip_location: boolean;
 	strip_all_metadata: boolean;
-	naming: 'original' | 'date';
+	naming: 'name' | 'original' | 'date';
 	folders: 'flat' | 'year' | 'month';
 };
 export type DownloadScope = { ids: Id[] } | { album_id: Id } | { filters: AssetFilters };

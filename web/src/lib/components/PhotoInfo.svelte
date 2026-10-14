@@ -57,10 +57,16 @@
 				detail.byte_size
 			)}{#if asset.edited}&nbsp;· edited{/if}
 		</p>
+		<p class="quiet small">Named <span class="data">{detail.name}</span></p>
 		<h3>Came from</h3>
 		<ul>
 			{#each cameFrom(detail, session.isAdmin) as origin (origin.key)}
-				<li>{origin.label} <span class="quiet small">{origin.file}</span></li>
+				<li>
+					{origin.label}
+					{#if origin.file}
+						<span class="quiet small original">Original file <span>{origin.file}</span></span>
+					{/if}
+				</li>
 			{/each}
 		</ul>
 		{#if detail.albums.length}
@@ -114,6 +120,9 @@
 	li {
 		margin-bottom: var(--s-1);
 		overflow-wrap: anywhere;
+	}
+	.original {
+		display: block;
 	}
 	.keys {
 		margin-top: var(--s-6) !important;

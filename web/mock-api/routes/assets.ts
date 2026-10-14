@@ -2,7 +2,9 @@
 import type { Recipe } from '../../src/lib/api/types.ts';
 import { setFor } from '../access.ts';
 import { countBy } from '../filters.ts';
+import { displayName } from '../names.ts';
 import {
+	attachment,
 	HttpError,
 	idParam,
 	ids,
@@ -183,15 +185,12 @@ export function assetRoutes(h: Helpers): Route[] {
 				const asset = h.findAsset(me(ctx), idParam(ctx));
 				h.needLevel(me(ctx), asset, 'download');
 				const edited = ctx.params[1] === 'download';
-				const name = asset.sources[0].relative_path
-					.split('/')
-					.pop()!
-					.replace(/\.\w+$/, '');
+				const name = displayName(asset, h.visible(me(ctx)));
 				return {
 					status: 200,
 					raw: renderAsset(asset, !edited),
 					type: 'image/svg+xml',
-					headers: { 'content-disposition': `attachment; filename="${name}.svg"` }
+					headers: { 'content-disposition': attachment(`${name}.svg`) }
 				};
 			}
 		],

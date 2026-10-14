@@ -13,6 +13,7 @@ const photos = [1, 2, 3].map((id) =>
 );
 const detailOf = (asset: AssetOut, camera = `Camera ${asset.id}`): AssetDetail => ({
 	...asset,
+	name: `Photo ${asset.id}`,
 	byte_size: 1000,
 	mime_type: 'image/jpeg',
 	camera_make: null,
