@@ -62,7 +62,7 @@ test('admin adds a folder, sees the import progress and every skip/failure reaso
 		{ timeout: 10_000 }
 	);
 	await (await openFolder(page, 'Scans')).getByRole('button', { name: 'Report' }).click();
-	const report = page.getByRole('dialog', { name: 'Last import · Scans' });
+	const report = page.getByRole('dialog', { name: 'Last import, Scans' });
 	// Every skip, failure and duplicate says why (wording differs between mock and server).
 	await expect(report.getByText(/file is corrupt|cannot decode|cannot read/)).toBeVisible();
 	await expect(report.getByText(/not supported yet/)).toBeVisible();
@@ -111,7 +111,7 @@ test('a scan of a folder that has gone says “folder not found” on the folder
 		}
 	);
 	await (await openFolder(page, 'USB disk')).getByRole('button', { name: 'Report' }).click();
-	const report = page.getByRole('dialog', { name: 'Last import · USB disk' });
+	const report = page.getByRole('dialog', { name: 'Last import, USB disk' });
 	await expect(report.getByText(/failed/i).first()).toBeVisible();
 	await expect(report.getByText(/folder not found on this machine/)).toBeVisible();
 });
@@ -145,7 +145,7 @@ test('import progress is live while a scan runs', async ({ page }) => {
 	const sheet = await openFolder(page, 'Old hard disk');
 	await sheet.getByRole('button', { name: 'Check again' }).click();
 	// the open sheet follows the import as it runs
-	await expect(sheet.getByText(/importing · \d+ files? so far/)).toBeVisible({ timeout: 5000 });
+	await expect(sheet.getByText(/importing, \d+ files? so far/)).toBeVisible({ timeout: 5000 });
 	await expect(sheet.getByText(/last import\s+6\s+new/)).toBeVisible({ timeout: 10_000 });
 });
 

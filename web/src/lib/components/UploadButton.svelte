@@ -51,7 +51,7 @@
 		const taken = result.files.filter((f) => f.outcome !== 'rejected');
 		const named = refused.slice(0, NAMED).map((f) => `${f.name}: ${f.reason ?? 'refused'}`);
 		const tail = `${refused.length} refused (${named.join(', ')}, and ${refused.length - NAMED} more)`;
-		return taken.length ? `${summarizeUpload({ ...result, files: taken })} · ${tail}` : tail;
+		return taken.length ? `${summarizeUpload({ ...result, files: taken })}, ${tail}` : tail;
 	}
 
 	async function send(files: File[]) {

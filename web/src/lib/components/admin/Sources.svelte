@@ -95,7 +95,7 @@
 
 	const place = (source: Source) =>
 		source.kind === 'proton' && source.path
-			? `Proton Drive · ${protonPlaceName(source.path)}`
+			? `Proton Drive, ${protonPlaceName(source.path)}`
 			: (source.path ?? '');
 
 	async function pull(source: Source) {

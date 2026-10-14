@@ -104,7 +104,7 @@ describe('Devices: what a phone keeps', () => {
 		const keeps = page.getByRole('group', { name: 'What Léa’s iPhone keeps' });
 		await expect.element(keeps.getByText('Summer', { exact: true })).toBeInTheDocument();
 		await expect
-			.element(keeps.getByText(/38 photos · 76.0 MB · 12 sent · last synced/))
+			.element(keeps.getByText(/38 photos, 76.0 MB, 12 sent, last synced/))
 			.toBeInTheDocument();
 		await keeps.getByRole('switch', { name: 'Leave out screenshots' }).click();
 		await vi.waitFor(() =>

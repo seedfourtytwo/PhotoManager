@@ -169,7 +169,7 @@ describe('Folders list', () => {
 
 	it('offers “Pause checking”, and a paused folder says its photos stay', async () => {
 		const calls = list([folder, paused]);
-		await expect.element(tile('Scans')).toHaveTextContent(/· paused/);
+		await expect.element(tile('Scans')).toHaveTextContent(/, paused/);
 		const scans = await sheetOf('Scans');
 		await expect
 			.element(

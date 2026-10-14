@@ -19,20 +19,22 @@
 	let { title, line, back, actions, hideTitle = false, avatar = true }: Props = $props();
 
 	// The large title scrolls away; a compact glass title takes its place (phone). Observed, not
-	// computed on every scroll event.
+	// computed on every scroll event. A page that leaves its title to a hero is watched by its head.
 	let heading = $state<HTMLElement>();
+	let head = $state<HTMLElement>();
 	let gone = $state(false);
 	$effect(() => {
-		if (!heading) return;
+		const target = heading ?? head;
+		if (!target) return;
 		const watch = new IntersectionObserver(([entry]) => (gone = !entry.isIntersecting), {
 			rootMargin: '-48px 0px 0px 0px'
 		});
-		watch.observe(heading);
+		watch.observe(target);
 		return () => watch.disconnect();
 	});
 </script>
 
-<header class="page-head">
+<header class="page-head" bind:this={head}>
 	<div class="row">
 		{#if back}
 			<a class="back" href={back.href} data-move="back" onclick={back.onclick}

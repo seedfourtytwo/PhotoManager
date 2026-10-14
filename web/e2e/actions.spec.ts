@@ -73,7 +73,7 @@ test('download everything matching a filter', async ({ page }) => {
 	await expect(dialog.getByText(/all \d+ matching photos/)).toBeVisible();
 	await dialog.getByRole('button', { name: 'More options' }).click();
 	const estimate = page.waitForRequest((r) => r.url().endsWith('/api/downloads/estimate'));
-	await dialog.getByLabel('Email · 1280').check();
+	await dialog.getByLabel('Email, 1280 px').check();
 	expect((await estimate).postDataJSON()).toMatchObject({
 		filters: { year: 2019 },
 		max_edge: 1280

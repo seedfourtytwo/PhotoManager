@@ -111,7 +111,7 @@
 							{label}
 						</label>
 					{/each}
-					<p class="quiet small data">{photos(list.count)} · {formatBytes(list.bytes)} in all</p>
+					<p class="quiet small data">{photos(list.count)}, {formatBytes(list.bytes)} in all</p>
 					{#if note}<p class="small note">{note}</p>{/if}
 				</fieldset>
 			{/each}

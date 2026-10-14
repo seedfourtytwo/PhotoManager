@@ -32,7 +32,7 @@ test('keep an album on a phone, leave out screenshots, and see it on You', async
 	const phone = dialog.getByRole('group', { name: 'Léa’s iPhone' });
 	await expect(phone.getByRole('radio', { name: 'Not chosen' })).toBeChecked();
 	await phone.getByRole('radio', { name: 'Keep on it' }).check();
-	await expect(phone).toContainText(/\d+ photos ·/);
+	await expect(phone).toContainText(/\d+ photos,/);
 	await expect(phone).not.toContainText('0 photos');
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Done' }).click();

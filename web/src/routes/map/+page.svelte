@@ -176,7 +176,7 @@
 	<header>
 		<h1>Map</h1>
 		<p class="quiet">
-			{photos(points.length)} with a location{#if describeFilters(filters)}&ensp;·&ensp;{describeFilters(
+			{photos(points.length)} with a location{#if describeFilters(filters)},&ensp;{describeFilters(
 					filters
 				)}{/if}
 		</p>

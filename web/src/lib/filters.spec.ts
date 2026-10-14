@@ -103,7 +103,7 @@ describe('withFilter', () => {
 describe('describeFilters', () => {
 	it('says what narrows the view in words', () => {
 		const filters = { year: 2019, place: 'Paris', favourite: true, guessed_date: true };
-		expect(describeFilters(filters)).toBe('2019 · Paris · favourites · guessed dates');
+		expect(describeFilters(filters)).toBe('2019, Paris, favourites, guessed dates');
 		expect(describeFilters({})).toBe('');
 	});
 
@@ -115,7 +115,7 @@ describe('describeFilters', () => {
 	it('names day ranges compactly', () => {
 		expect(describeFilters({ from: '2019-07-04', to: '2019-07-04' })).toBe('4 Jul 2019');
 		expect(describeFilters({ from: '2019-07-01', to: '2019-07-31', has_location: false })).toBe(
-			'1 Jul 2019 – 31 Jul 2019 · without location'
+			'1 Jul 2019 – 31 Jul 2019, without location'
 		);
 	});
 });

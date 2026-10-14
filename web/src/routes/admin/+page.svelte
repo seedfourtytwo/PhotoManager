@@ -40,7 +40,7 @@
 		stats
 			? [`${photos(stats.assets)}, ${formatBytes(stats.free_bytes)} free`, work]
 					.filter(Boolean)
-					.join(' · ')
+					.join(', ')
 			: ''
 	);
 	const problemCount = $derived(failed.length + retrying.length);
@@ -173,10 +173,10 @@
 					<li class="tile-row">
 						<span class="tile-main">
 							<span class="tile-title"
-								>{job.kind}{#if job.payload.asset_id}&nbsp;· photo {job.payload.asset_id}{/if}</span
+								>{job.kind}{#if job.payload.asset_id}, photo {job.payload.asset_id}{/if}</span
 							>
 							<span class="tile-line"
-								>{job.error} · {job.attempts} attempt{job.attempts === 1 ? '' : 's'}</span
+								>{job.error}, {job.attempts} attempt{job.attempts === 1 ? '' : 's'}</span
 							>
 						</span>
 						<button type="button" onclick={() => retry(job)}>Retry</button>
@@ -186,9 +186,9 @@
 					<li class="tile-row">
 						<span class="tile-main">
 							<span class="tile-title"
-								>{job.kind}{#if job.payload.asset_id}&nbsp;· photo {job.payload.asset_id}{/if}</span
+								>{job.kind}{#if job.payload.asset_id}, photo {job.payload.asset_id}{/if}</span
 							>
-							<span class="tile-line">{job.error} · {retryText(job.run_after)}</span>
+							<span class="tile-line">{job.error}, {retryText(job.run_after)}</span>
 						</span>
 					</li>
 				{/each}

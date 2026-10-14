@@ -50,7 +50,7 @@ describe('rules in words', () => {
 	it('names albums and people, describes filters', () => {
 		expect(ruleLabel(summer)).toBe('Summer');
 		expect(ruleLabel(lea)).toBe('Léa');
-		expect(ruleLabel(year)).toBe('2019 · Paris');
+		expect(ruleLabel(year)).toBe('2019, Paris');
 		expect(ruleLabel(shots)).toBe('Screenshots');
 		expect(ruleLabel(rule({ kind: 'filter', filters: {} }))).toBe('All photos');
 	});

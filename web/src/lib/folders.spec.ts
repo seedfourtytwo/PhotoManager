@@ -37,7 +37,7 @@ const run = (over: Partial<ImportRun> = {}): ImportRun => ({
 describe('folderLine: a folder tile in one line', () => {
 	it('says how many photos, and what the last import found and when', () => {
 		expect(folderLine(source(), run())).toBe(
-			`198 photos · last import 199 new, 1 failed, 2 skipped · checked ${formatWhen('2026-09-28T21:14:00')}`
+			`198 photos, last import 199 new, 1 failed, 2 skipped, checked ${formatWhen('2026-09-28T21:14:00')}`
 		);
 	});
 	it('says the count alone before any import', () => {
@@ -45,27 +45,27 @@ describe('folderLine: a folder tile in one line', () => {
 	});
 	it('says an import that is running, with the files seen so far', () => {
 		const running = run({ status: 'running', finished_at: null });
-		expect(folderLine(source(), running)).toBe('198 photos · importing · 202 files so far');
+		expect(folderLine(source(), running)).toBe('198 photos, importing, 202 files so far');
 		expect(
 			folderLine(source(), { ...running, summary: { ...running.summary, files_seen: 1 } })
-		).toBe('198 photos · importing · 1 file so far');
+		).toBe('198 photos, importing, 1 file so far');
 	});
 	it('says why the last import failed', () => {
 		expect(folderLine(source(), run({ status: 'failed', message: 'folder not found' }))).toBe(
-			'198 photos · last import failed: folder not found'
+			'198 photos, last import failed: folder not found'
 		);
 		expect(folderLine(source(), run({ status: 'failed' }))).toBe(
-			'198 photos · last import failed: no reason given'
+			'198 photos, last import failed: no reason given'
 		);
 	});
 	it('says a paused folder is paused', () => {
-		expect(folderLine(source({ enabled: false }))).toBe('198 photos · paused');
+		expect(folderLine(source({ enabled: false }))).toBe('198 photos, paused');
 	});
 	it('names a run that ended another way, and its message', () => {
 		expect(
 			folderLine(source(), run({ status: 'paused_low_disk', message: 'the disk is nearly full' }))
 		).toBe(
-			`198 photos · last import paused_low_disk · 199 new, 1 failed, 2 skipped · checked ${formatWhen('2026-09-28T21:14:00')} · the disk is nearly full`
+			`198 photos, last import paused_low_disk, 199 new, 1 failed, 2 skipped, checked ${formatWhen('2026-09-28T21:14:00')}, the disk is nearly full`
 		);
 	});
 });

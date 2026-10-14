@@ -64,7 +64,7 @@
 {#if sync}
 	<div aria-label={`What ${sync.device.name} keeps`} role="group">
 		<p class="quiet data">
-			{photos(sync.count)} · {formatBytes(sync.bytes)} · {sync.sent} sent · {lastSync}
+			{photos(sync.count)}, {formatBytes(sync.bytes)}, {sync.sent} sent, {lastSync}
 		</p>
 		{#if !sync.rules.length}
 			<p class="quiet">

@@ -35,9 +35,9 @@
 		if (run.status === 'skipped')
 			return `not connected since ${formatWhen(t.skipped_since ?? run.started_at)}`;
 		const when = formatWhen(run.finished_at ?? run.started_at);
-		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when} · failed: ${run.error ?? 'no reason given'}`;
-		const added = run.bytes_added !== null ? ` · ${formatBytes(run.bytes_added)} added` : '';
-		return `last ${KIND[run.kind]} ${when} · succeeded${added}`;
+		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when}, failed: ${run.error ?? 'no reason given'}`;
+		const added = run.bytes_added !== null ? `, ${formatBytes(run.bytes_added)} added` : '';
+		return `last ${KIND[run.kind]} ${when}, succeeded${added}`;
 	} // prettier-ignore
 
 	function protonLine(t: BackupTarget): string {
@@ -127,15 +127,11 @@
 						<span>{t.label}</span>
 					</div>
 					<p class="small status" class:attention={t.needs_attention}>
-						{t.overdue ? 'overdue · ' : ''}{lastLine(t)}{#if proofLine(t)}&nbsp;· {proofLine(
-								t
-							)}{/if}
+						{t.overdue ? 'overdue, ' : ''}{lastLine(t)}{#if proofLine(t)}, {proofLine(t)}{/if}
 					</p>
 					<p class="quiet small">
-						{t.schedule}{#if t.quiet_window}&nbsp;· only {t.quiet_window}{/if}{#if !t.enabled}&nbsp;·
-							disabled{:else if t.next_run_at}&nbsp;· next {formatWhen(
-								t.next_run_at
-							)}{/if}{#if t.repo_bytes}&nbsp;·
+						{t.schedule}{#if t.quiet_window}, only {t.quiet_window}{/if}{#if !t.enabled}, disabled{:else if t.next_run_at},
+							next {formatWhen(t.next_run_at)}{/if}{#if t.repo_bytes},
 							{formatBytes(t.repo_bytes)} stored{/if}
 					</p>
 					{#if t.mirror_path}
@@ -145,7 +141,7 @@
 								role="img"
 								aria-label={copyPlaceState(t)}
 							></span>
-							Copy on Proton Drive · {protonPlaceName(t.mirror_path)} · {protonLine(t)}
+							Copy on Proton Drive, {protonPlaceName(t.mirror_path)}, {protonLine(t)}
 						</p>
 					{/if}
 					{#if !t.key_saved}

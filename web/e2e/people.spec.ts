@@ -61,7 +61,7 @@ test('hidden people wait in their own list and can be shown again', async ({ pag
 	await page.keyboard.press('Escape');
 
 	await page.goto('/people');
-	await page.getByText('Hidden · 1').click();
+	await page.getByText('Hidden (1)').click();
 	await page.getByRole('button', { name: 'Show again' }).click();
 	await expect(strangers).toHaveCount(before);
 	await expect(page.getByText(/^Hidden/)).toHaveCount(0);

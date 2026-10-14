@@ -99,7 +99,7 @@
 	}
 </script>
 
-<svelte:head><title>Print {album?.title ?? 'album'} · Photos</title></svelte:head>
+<svelte:head><title>Print {album?.title ?? 'album'}, Photos</title></svelte:head>
 
 <div class="page">
 	<p class="small crumb"><a href={`/albums/${id}`}>{album?.title ?? 'Album'}</a></p>
@@ -134,7 +134,7 @@
 				>
 
 				<p class="quiet small summary">
-					{#if plan}{plan.page_count} pages · {trimLabel} · {photos(album?.items.length ?? 0)}{/if}
+					{#if plan}{plan.page_count} pages, {trimLabel}, {photos(album?.items.length ?? 0)}{/if}
 				</p>
 
 				<section aria-labelledby="p-res" class="issues">
@@ -148,7 +148,7 @@
 							<li>
 								{#if asset?.thumb}<img src={asset.thumb.url} alt="" />{/if}
 								<span>
-									{describe(asset)} · {Math.round(issue.ppi)} ppi ·
+									{describe(asset)}, {Math.round(issue.ppi)} ppi,
 									{issue.level === 'block' ? 'too small to print sharply' : 'may look soft'}
 								</span>
 							</li>

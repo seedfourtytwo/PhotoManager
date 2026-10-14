@@ -144,7 +144,7 @@ function describeParts(f: AssetFilters): string[] {
 	return parts;
 }
 
-/** Filters in words, e.g. "2019 · Paris · favourites". */
+/** Filters in words, e.g. "2019, Paris, favourites". */
 export function describeFilters(filters: AssetFilters): string {
-	return describeParts(filters).join(' · ');
+	return describeParts(filters).join(', ');
 }

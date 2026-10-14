@@ -86,7 +86,7 @@
 
 	{#if hidden.length}
 		<details class="hidden">
-			<summary class="quiet">Hidden · {hidden.length}</summary>
+			<summary class="quiet">Hidden ({hidden.length})</summary>
 			<ul class="tiles">
 				{#each hidden as person (person.id)}
 					<li class="tile-row">

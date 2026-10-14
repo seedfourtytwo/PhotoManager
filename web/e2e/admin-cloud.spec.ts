@@ -45,7 +45,7 @@ test('Proton Drive: bring in the Photos section, or one folder picked by browsin
 	await expect(dialog.getByLabel('Name')).toHaveValue('Proton photos');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 	const photos = await openFolder(page, 'Proton photos');
-	await expect(photos.getByText('Proton Drive · Photos')).toBeVisible();
+	await expect(photos.getByText('Proton Drive, Photos')).toBeVisible();
 	await photos.getByRole('button', { name: 'Close' }).click();
 
 	await addFrom(page, 'Add from Proton');
@@ -59,7 +59,7 @@ test('Proton Drive: bring in the Photos section, or one folder picked by browsin
 	await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 	const trips = await openFolder(page, 'Trips');
-	await expect(trips.getByText('Proton Drive · My files / Trips')).toBeVisible();
+	await expect(trips.getByText('Proton Drive, My files / Trips')).toBeVisible();
 	const pull = page.waitForRequest((r) => /\/api\/remote-sources\/\d+\/pull$/.test(r.url()));
 	await trips.getByRole('button', { name: 'Check again' }).click();
 	await pull;
@@ -167,7 +167,7 @@ test.describe('Proton Drive: one folder, on a slow or failing listing', () => {
 		await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
 		await add.click();
 		await expect(
-			(await openFolder(page, 'Trips')).getByText('Proton Drive · My files / Trips')
+			(await openFolder(page, 'Trips')).getByText('Proton Drive, My files / Trips')
 		).toBeVisible();
 	});
 

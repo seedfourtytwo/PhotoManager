@@ -22,10 +22,10 @@
 	let openId = $state<number | null>(null);
 	const open = $derived(users.find((u) => u.id === openId) ?? null);
 
-	/** "Member", "Admin, you", "Guest · Disabled · Locked". */
+	/** "Member", "Admin, you", "Guest, Disabled, Locked". */
 	function lineOf(user: ManagedUser): string {
 		const role = user.id === session.user?.id ? `${ROLE[user.role]}, you` : ROLE[user.role];
-		return [role, user.disabled && 'Disabled', user.locked && 'Locked'].filter(Boolean).join(' · ');
+		return [role, user.disabled && 'Disabled', user.locked && 'Locked'].filter(Boolean).join(', ');
 	}
 
 	/** An action that opens its own dialog takes the sheet's place. */

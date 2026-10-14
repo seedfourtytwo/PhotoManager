@@ -145,7 +145,7 @@ test('backups: keep a copy on Proton Drive in a folder made on the spot, then st
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	await expect(dialog.getByText('My files / Photo backup')).toBeVisible();
 	await dialog.getByRole('button', { name: 'Keep a copy here' }).click();
-	await expect(row.getByText(/Copy on Proton Drive · My files \/ Photo backup/)).toBeVisible();
+	await expect(row.getByText(/Copy on Proton Drive, My files \/ Photo backup/)).toBeVisible();
 	await expect(row.getByText(/first copy after the next backup/)).toBeVisible();
 
 	await row.getByRole('button', { name: 'Copy to Proton' }).click();

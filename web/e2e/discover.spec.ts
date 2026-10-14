@@ -32,7 +32,7 @@ test('search without models: word matches, and a calm note that leads an admin t
 	await box.fill('sarlat');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
-	await expect(page.locator('.meta')).toContainText(/\d+ photos? · matching words/);
+	await expect(page.locator('.meta')).toContainText(/\d+ photos?, matching words/);
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await expectAccessible(page);
 	await page.locator('.tile').first().click();
@@ -100,7 +100,7 @@ test('search before typing, without models: no things to suggest, they would fin
 test('search with models ranks by meaning; facets are read back', async ({ page }) => {
 	await resetMock('seed', { models: true });
 	await signIn(page, '/search?q=sunset%20date%3A2019');
-	await expect(page.locator('.meta')).toContainText(/ranked by meaning · date: 2019/);
+	await expect(page.locator('.meta')).toContainText(/ranked by meaning, date: 2019/);
 	await expect(page.getByRole('note')).toHaveCount(0);
 });
 

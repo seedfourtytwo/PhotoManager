@@ -173,7 +173,7 @@ describe('DownloadDialog', () => {
 		await page.getByRole('button', { name: 'More options' }).click();
 		await page.getByRole('radio', { name: 'WebP' }).click();
 		await expect.element(page.getByRole('slider')).toBeInTheDocument();
-		await page.getByRole('radio', { name: '4K · 3840' }).click();
+		await page.getByRole('radio', { name: '4K, 3840' }).click();
 		await vi.waitFor(() =>
 			expect(sent.at(-1)?.body).toMatchObject({ ids: [1, 2, 3], format: 'webp', max_edge: 3840 })
 		);

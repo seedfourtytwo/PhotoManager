@@ -79,7 +79,7 @@
 			...(result?.facets ?? []).map((f) => `${f.name}: ${f.value}`)
 		]
 			.filter(Boolean)
-			.join(' · ')
+			.join(', ')
 	);
 
 	function submit(event: SubmitEvent) {

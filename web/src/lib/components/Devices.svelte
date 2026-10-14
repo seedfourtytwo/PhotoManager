@@ -98,7 +98,7 @@
 			<TileRow
 				icon="phone"
 				title={device.name}
-				line={`${kindLabel(device.platform)} · ${used(device)}`}
+				line={`${kindLabel(device.platform)}, ${used(device)}`}
 				onclick={() => (open = device)}
 			/>
 		{/if}
@@ -129,7 +129,7 @@
 	{@const device = open}
 	<Dialog title={device.name} onclose={() => (open = null)} cancelLabel="Close" wide>
 		<p class="quiet about">
-			{kindLabel(device.platform)} · added {formatWhen(device.created_at)} · {used(device)}
+			{kindLabel(device.platform)}, added {formatWhen(device.created_at)}, {used(device)}
 		</p>
 		<DeviceKeeps deviceId={device.id} />
 		<div class="apart">
