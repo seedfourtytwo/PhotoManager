@@ -219,6 +219,8 @@
 		min-height: 7.5rem;
 	}
 	.item {
+		/* holds the count's hidden word, which the strip's scroller would not clip otherwise */
+		position: relative;
 		flex: none;
 		display: grid;
 		justify-items: start;
