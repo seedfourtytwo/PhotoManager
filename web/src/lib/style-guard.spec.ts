@@ -95,7 +95,6 @@ describe('style guard', () => {
 		'/src/lib/components/admin/Sources.svelte', // (d), after the folder-pause PR
 		'/src/lib/components/admin/Users.svelte', // (d)
 		'/src/routes/admin/+page.svelte', // (d)
-		'/src/routes/review/+page.svelte', // (d)
 		'/src/routes/settings/+page.svelte' // (a)
 	]);
 	const lines = Object.entries(sources).flatMap(([path, text]) =>

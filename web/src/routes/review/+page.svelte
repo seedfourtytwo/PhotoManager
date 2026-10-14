@@ -1,13 +1,19 @@
 <script lang="ts">
-	import type { AssetOut, Id, ReviewGroup } from '$lib/api';
+	import type { AssetOut, HeldItem, Id, ReviewGroup } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
 	import { formatShort } from '$lib/dates';
 	import { photos } from '$lib/format';
-	import { reviewTitle } from '$lib/review';
+	import { reviewOne, reviewTitle } from '$lib/review';
+	import Dialog from '$lib/components/Dialog.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
 
 	let groups = $state.raw<ReviewGroup[] | null>(null);
 	let busy = $state(false); // one decision at a time: a double click must not act twice
+	/** One photo opened to decide on its own, with the reason it waits. */
+	let open = $state<{ item: HeldItem; reason: string } | null>(null);
+
+	const waiting = $derived(groups?.reduce((n, g) => n + g.items.length, 0) ?? 0);
 
 	async function load() {
 		try {
@@ -29,6 +35,7 @@
 				const { discarded } = await api.discardHeld(ids);
 				notice.show(`Moved ${photos(discarded)} to the trash.`);
 			}
+			open = null;
 			library.changed();
 			await load();
 		} catch (e) {
@@ -45,31 +52,34 @@
 
 <svelte:head><title>To review · Photos</title></svelte:head>
 
-{#snippet picture(asset: AssetOut, caption: string)}
+{#snippet picture(asset: AssetOut, caption?: string)}
 	<figure>
 		{#if asset.thumb}
 			<img src={asset.thumb.url} alt={describePhoto(asset)} loading="lazy" decoding="async" />
 		{:else}
-			<span class="blank quiet small">preview not ready</span>
+			<span class="blank" role="img" aria-label={`${describePhoto(asset)} (preview not ready)`}
+			></span>
 		{/if}
-		<figcaption class="small">
-			{#if caption}<strong>{caption}</strong>{/if}
-			<span class="quiet"
-				>{formatShort(asset.taken_at)}{size(asset) ? ` · ${size(asset)}` : ''}</span
-			>
-		</figcaption>
+		{#if caption !== undefined}
+			<figcaption class="small">
+				<strong>{caption}</strong>
+				<span class="quiet data">{size(asset)}</span>
+			</figcaption>
+		{/if}
 	</figure>
 {/snippet}
 
+<PageHead
+	title="To review"
+	line={groups?.length ? photos(waiting) : undefined}
+	back={{ href: '/collections', label: 'Collections' }}
+/>
+
 <div class="page">
-	<header>
-		<h1>To review</h1>
-		<p class="prose">
-			These photos were copied in but kept out of your library until you decide. Keep adds a photo
-			to the library. Discard moves it to the trash, where it stays 30 days. Your folders and cloud
-			drives are never touched.
-		</p>
-	</header>
+	<p class="lede">
+		These were copied in but held back. Keep what you want in your library; the rest goes to the
+		trash.
+	</p>
 
 	{#if groups && groups.length === 0}
 		<div class="empty-state">
@@ -79,89 +89,108 @@
 	{/if}
 
 	{#each groups ?? [] as group (group.reason)}
+		{@const one = group.items.length === 1}
 		<section aria-labelledby="r-{group.reason}">
-			<div class="head">
-				<h2 id="r-{group.reason}">
-					{reviewTitle(group.reason)} <span class="quiet">{group.items.length}</span>
-				</h2>
-				<div class="tools">
-					<button type="button" disabled={busy} onclick={() => decide(all(group), true)}
-						>Keep all</button
-					>
-					<button type="button" disabled={busy} onclick={() => decide(all(group), false)}
-						>Discard all</button
-					>
-				</div>
-			</div>
+			<h2 id="r-{group.reason}">{reviewTitle(group.reason)}</h2>
 			<ul class:pairs={group.reason === 'lookalike'}>
 				{#each group.items as item (item.asset.id)}
 					<li>
-						<div class="pictures">
-							{@render picture(item.asset, item.like ? 'New' : '')}
+						<button
+							type="button"
+							class="tile"
+							aria-label={`${describePhoto(item.asset)}: keep or move to trash`}
+							onclick={() => (open = { item, reason: group.reason })}
+						>
+							{@render picture(item.asset, item.like ? 'New' : undefined)}
 							{#if item.like}{@render picture(item.like, 'In your library')}{/if}
-						</div>
-						<div class="tools">
-							<button type="button" disabled={busy} onclick={() => decide([item.asset.id], true)}
-								>Keep</button
-							>
-							<button type="button" disabled={busy} onclick={() => decide([item.asset.id], false)}
-								>Discard</button
-							>
-						</div>
+						</button>
 					</li>
 				{/each}
 			</ul>
+			<!-- One decision for the whole group; a photo on its own opens from its tile. -->
+			<div class="decide">
+				<button
+					type="button"
+					class="primary pill"
+					disabled={busy}
+					onclick={() => decide(all(group), true)}>{one ? 'Keep' : 'Keep all'}</button
+				>
+				<button type="button" class="pill" disabled={busy} onclick={() => decide(all(group), false)}
+					>{one ? 'Move to trash' : 'Move all to trash'}</button
+				>
+			</div>
 		</section>
 	{/each}
 </div>
+
+{#if open}
+	{@const { item, reason } = open}
+	<Dialog title={reviewOne(reason)} onclose={() => (open = null)}>
+		<div class="one" class:pair={!!item.like}>
+			{@render picture(item.asset, item.like ? 'New' : '')}
+			{#if item.like}{@render picture(item.like, 'In your library')}{/if}
+		</div>
+		<p class="quiet small">{formatShort(item.asset.taken_at)}</p>
+		{#snippet actions()}
+			<button type="button" disabled={busy} onclick={() => decide([item.asset.id], false)}
+				>Move to trash</button
+			>
+			<button
+				type="button"
+				class="primary"
+				disabled={busy}
+				onclick={() => decide([item.asset.id], true)}>Keep</button
+			>
+		{/snippet}
+	</Dialog>
+{/if}
 
 <style>
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}
-	header {
-		padding: var(--s-5) 0 var(--s-4);
+	.lede {
+		max-width: var(--measure);
+		margin: 0 0 var(--s-5);
+		color: var(--ink-2);
+		line-height: var(--lh-text);
 	}
-	header p {
-		margin: var(--s-3) 0 0;
-	}
-	section {
-		padding: var(--s-4) 0;
-		border-top: 1px solid var(--hairline);
-	}
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--s-2);
-		margin-bottom: var(--s-3);
+	section + section {
+		margin-top: var(--s-7);
 	}
 	h2 {
-		margin: 0;
-	}
-	.tools {
-		display: flex;
-		gap: 0 2px;
-		margin-left: calc(-1 * var(--s-2));
-	}
-	.tools button {
-		color: var(--ink-2);
+		margin: 0 0 var(--s-3);
 	}
 	ul {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-		gap: var(--s-4) var(--s-3);
+		grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+		gap: var(--fine);
 	}
 	ul.pairs {
-		grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+		gap: var(--s-3);
 	}
-	.pictures {
+	/* A tile is the photo (or the pair) itself: a press opens it to decide on its own. */
+	.tile {
 		display: flex;
-		gap: var(--s-2);
+		gap: var(--fine);
+		width: 100%;
+		padding: 0;
+		border-radius: 0;
+		text-align: left;
+		transition: transform var(--press) var(--ease);
+	}
+	.tile:active {
+		transform: scale(0.98);
+	}
+	@media (hover: hover) {
+		.tile:hover {
+			background: none;
+			opacity: 0.9;
+		}
 	}
 	figure {
 		flex: 1;
@@ -176,24 +205,46 @@
 		object-fit: contain;
 		background: var(--hairline);
 	}
-	.blank {
-		display: grid;
-		place-items: center;
-	}
 	figcaption {
 		display: flex;
-		flex-direction: column;
-		padding-top: var(--s-1);
+		flex-wrap: wrap;
+		gap: 0 var(--s-2);
+		padding: var(--s-1) var(--s-1) 0;
+	}
+	.decide {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--s-2);
+		margin-top: var(--s-3);
+	}
+	.pill {
+		min-height: var(--target);
+		padding: 0 var(--s-5);
+		border-radius: var(--r-pill);
+		background: var(--fill);
+		font-weight: 600;
+	}
+	.pill.primary {
+		background: var(--ink);
+		color: var(--bg);
+	}
+	.one {
+		display: flex;
+		gap: var(--fine);
+	}
+	.one + p {
+		margin: var(--s-2) 0 0;
 	}
 	.empty-state {
-		padding-top: var(--s-4);
+		padding-top: 0;
 	}
 	@media (max-width: 639px) {
 		.page {
 			padding: 0 var(--gutter) var(--s-7);
 		}
-		header,
-		section,
+		.lede,
+		h2,
+		.decide,
 		.empty-state {
 			padding-inline: var(--s-2);
 		}
