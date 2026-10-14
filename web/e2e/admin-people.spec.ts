@@ -26,7 +26,7 @@ test('admin adds a person and disables them', async ({ page }) => {
 	await dialog.getByLabel('Role').selectOption('guest');
 	await dialog.getByRole('button', { name: 'Add' }).click();
 	const sheet = await openPerson(page, 'Grandma');
-	await expect(sheet.getByText('grandma')).toBeVisible();
+	await expect(sheet.getByText('grandma', { exact: true })).toBeVisible();
 	await sheet.getByRole('button', { name: 'Disable' }).click();
 	await expect(sheet.getByRole('button', { name: 'Enable' })).toBeVisible();
 	await expect(personTile(page, 'Grandma')).toContainText('Disabled');

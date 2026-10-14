@@ -168,7 +168,8 @@ test('backups: an admin sees the warning on every page, with one row per place',
 	]);
 	expect(width[0]).toBeLessThanOrEqual(width[1]);
 	await banner.getByRole('link', { name: 'Backups' }).click();
-	await expect(page).toHaveURL(/\/admin#a-backups$/);
+	// the link still points at #a-backups; opening the sheet takes a history step, which drops it
+	await expect(page).toHaveURL(/\/admin(#a-backups)?$/);
 
 	// the old link to the backups opens their sheet
 	const backups = page.getByRole('dialog', { name: 'Backups' });

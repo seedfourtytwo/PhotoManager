@@ -393,11 +393,11 @@ test('pausing a folder says its photos stay and that new ones wait until it resu
 	await sheet.getByRole('button', { name: 'Pause checking' }).click();
 	const hint =
 		'Photos already in the library stay; new photos in this folder aren’t picked up until you resume.';
-	await expect(sheet.getByText(hint)).toBeVisible();
+	await expect(sheet.getByText(hint, { exact: true })).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Check again' })).toBeDisabled();
 	await expect(folderTile(page, 'Old hard disk')).toContainText('paused');
 	await expectAccessible(page);
 	await sheet.getByRole('button', { name: 'Resume checking' }).click();
-	await expect(sheet.getByText(hint)).toHaveCount(0);
+	await expect(sheet.getByText(hint, { exact: true })).toHaveCount(0);
 	await expect(sheet.getByRole('button', { name: 'Check again' })).toBeEnabled();
 });
