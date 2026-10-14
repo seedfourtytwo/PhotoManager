@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { AssetDetail, AssetOut } from '$lib/api';
-	import { library, notice, photoShare, session, SHARE_AGAIN } from '$lib/app.svelte';
+	import { library, notice, photoShare, session, shareAgain } from '$lib/app.svelte';
 	import type { MenuItem } from '$lib/menu';
 	import { readout, readoutSpoken } from '$lib/readout';
 	import { canShare, shareOptions } from '$lib/share';
@@ -77,8 +77,8 @@
 		if (!detail || sharing) return;
 		sharing = true;
 		try {
-			const outcome = await photoShare.share(asset, shareOptions(detail));
-			if (outcome === 'ready') notice.show(SHARE_AGAIN);
+			const outcome = await photoShare.share([asset.id], shareOptions(detail));
+			if (outcome === 'ready') notice.show(shareAgain(1));
 		} catch (e) {
 			notice.error(e);
 		} finally {

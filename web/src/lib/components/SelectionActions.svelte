@@ -1,7 +1,18 @@
 <script lang="ts">
 	import type { AssetOut, Id } from '$lib/api';
-	import { api, library, notice, session } from '$lib/app.svelte';
+	import {
+		api,
+		formFromDetails,
+		gettingPhotos,
+		library,
+		notice,
+		photoShare,
+		session,
+		shareAgain,
+		viewport
+	} from '$lib/app.svelte';
 	import { photos } from '$lib/format';
+	import { canShareSome } from '$lib/share';
 	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
 	import FixDateDialog from './FixDateDialog.svelte';
@@ -118,8 +129,27 @@
 			});
 		});
 
-	// On the pill: the four the spec names (§4.5). Everything else, and what a page adds, is
-	// under More.
+	/** The device's share sheet, for a few photos: one call with every file (`$lib/share`). */
+	const share = () =>
+		once(async () => {
+			const these = [...ids];
+			const saying = gettingPhotos(these.length);
+			const outcome = await photoShare.share(these, formFromDetails, {
+				onslow: () => notice.show(saying, { ms: 60_000 })
+			});
+			if (outcome === 'ready') notice.show(shareAgain(these.length));
+			else if (notice.text === saying) notice.show('');
+		});
+	// Files kept for a second tap belong to the selection they were fetched for.
+	$effect(() => {
+		void ids.join();
+		return () => photoShare.forget();
+	});
+	const shareable = $derived(canShareSome(selected.length));
+
+	// On the pill: the four the spec names (§4.5), and Share where the device has a sheet (on a
+	// phone in Download's place, as on the photo view's bar). Everything else, and what a page
+	// adds, is under More.
 	const actions = $derived<Action[]>([
 		{
 			label: 'Add to album',
@@ -127,7 +157,13 @@
 			run: () => (dialog = 'album'),
 			hidden: !session.canEdit
 		},
-		{ label: 'Download', icon: 'download', run: () => (dialog = 'download') },
+		{ label: 'Share', icon: 'share', run: share, hidden: !shareable },
+		{
+			label: 'Download',
+			icon: 'download',
+			run: () => (dialog = 'download'),
+			more: shareable && viewport.phone
+		},
 		{ label: 'Fix date', icon: 'date', run: () => (dialog = 'date'), hidden: !session.canEdit },
 		{ label: 'Move to trash', icon: 'trash', run: trash, hidden: !session.canEdit },
 		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite, more: true },

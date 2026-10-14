@@ -183,7 +183,8 @@ not a token):
 - **Selection**: a 3 px accent frame inset on the photo (with a 1 px shade so it reads on any
   photo) and a filled accent circle with a check. The actions come to the photos as a floating
   glass pill at the bottom centre: the count (the only accent text), Add to album, Download,
-  Fix date, Move to trash, and More for the rest. What does not fit beside the count and Clear
+  Fix date, Move to trash, and More for the rest. With a share sheet and up to ten photos,
+  Share comes after Add to album (on a phone in Download's place, Download under More). What does not fit beside the count and Clear
   (a narrow phone, large text, a long count) joins More: nothing leaves the glass. Escape clears.
 - **Focus**: 2 px accent outline, 2 px offset (inset on photo tiles).
 - **Icons**: a small set of 1.6 px-stroke SVGs drawn for this app, one component, no icon

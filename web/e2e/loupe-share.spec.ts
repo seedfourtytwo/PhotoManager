@@ -16,26 +16,8 @@ import {
 	toast,
 	viewOnlyPhoto
 } from './helpers.ts';
+import { attachmentName, shared, withShareSheet } from './share-sheet.ts';
 
-type SharedFile = { name: string; type: string; size: number };
-
-/** A share sheet that notes the files it is handed, and opens (or is closed by the person) at once. */
-const withShareSheet = (page: Page, sheet: 'opens' | 'closed' = 'opens') =>
-	page.addInitScript((closed) => {
-		const seen = window as unknown as { shared: SharedFile[][] };
-		seen.shared = [];
-		Object.defineProperty(navigator, 'canShare', {
-			value: (data?: ShareData) => !!data?.files?.length
-		});
-		Object.defineProperty(navigator, 'share', {
-			value: async (data: ShareData) => {
-				seen.shared.push((data.files ?? []).map(({ name, type, size }) => ({ name, type, size })));
-				if (closed) throw new DOMException('Share canceled', 'AbortError');
-			}
-		});
-	}, sheet === 'closed');
-const shared = (page: Page) =>
-	page.evaluate(() => (window as unknown as { shared: SharedFile[][] }).shared);
 const barActions = (page: Page) =>
 	loupe(page).locator('.bar').locator('.acts > button, .acts > .menu > button');
 const DOWNLOAD = /\/api\/assets\/\d+\/download\?/;
@@ -82,6 +64,7 @@ test('Share hands the sheet one file: the photo’s download, under its name', a
 	await withShareSheet(page);
 	await signIn(page);
 	await page.locator('.tile').first().click();
+	await expect(page).toHaveURL(/photo=\d+/);
 	const id = new URL(page.url()).searchParams.get('photo');
 	const fetched = page.waitForResponse(DOWNLOAD);
 	await loupe(page).getByRole('button', { name: 'Share' }).click();
@@ -89,9 +72,7 @@ test('Share hands the sheet one file: the photo’s download, under its name', a
 	expect(response.url()).toMatch(new RegExp(`/api/assets/${id}/download\\?format=original&`));
 	await expect.poll(() => shared(page)).toHaveLength(1);
 	const [files] = await shared(page);
-	const header = response.headers()['content-disposition'];
-	const starred = /filename\*=UTF-8''([^;]+)/.exec(header)?.[1];
-	const name = starred ? decodeURIComponent(starred) : /filename="([^"]+)"/.exec(header)![1];
+	const name = attachmentName(response.headers()['content-disposition']);
 	expect(files).toEqual([
 		{ name, type: response.headers()['content-type'].split(';')[0], size: expect.any(Number) }
 	]);
