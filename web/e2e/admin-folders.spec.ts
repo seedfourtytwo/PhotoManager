@@ -279,3 +279,81 @@ test('a long import report shows its first files and loads the rest on request',
 	await expect(report.getByText('first.jpg')).toBeVisible();
 	await expect(report.getByRole('button', { name: /Show more files/ })).toHaveCount(0);
 });
+
+test('admin stops watching a folder: the sheet says what happens, nothing changes until confirmed', async ({
+	page
+}) => {
+	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	await row.getByRole('button', { name: 'Stop watching' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Stop watching “Old hard disk”?' });
+	await expect(sheet.getByText('Nothing in the folder on your computer is changed.')).toBeVisible();
+	await expect(sheet.getByText(/[\d,]+ of its [\d,]+ photos\s+come only from this folder/)).toBeVisible(); // prettier-ignore
+	await expect(sheet.getByRole('radio', { name: 'Keep them in the library' })).toBeChecked();
+	await expect(
+		sheet.getByText('The photos stay, and everyone who sees them now still will.')
+	).toBeVisible();
+	await expectAccessible(page);
+	await sheet.getByRole('button', { name: 'Cancel' }).click();
+	await expect(row).toBeVisible();
+
+	await row.getByRole('button', { name: 'Stop watching' }).click();
+	await sheet.getByRole('radio', { name: 'Move them to the trash' }).check();
+	const removal = page.waitForRequest((r) => r.method() === 'DELETE');
+	await sheet.getByRole('button', { name: 'Stop watching' }).click();
+	expect(new URL((await removal).url()).search).toBe('?photos=trash');
+	await expect(sheet).toBeHidden();
+	await expect(
+		page.getByRole('status').filter({ hasText: /Stopped watching “Old hard disk”\. .*moved to the trash/ }) // prettier-ignore
+	).toBeVisible();
+	await expect(row).toHaveCount(0);
+	await page.reload();
+	await expect(page.getByRole('listitem').filter({ hasText: 'Phone' })).toBeVisible();
+	await expect(row).toHaveCount(0);
+});
+
+test('a folder kept after “Stop watching” is listed apart, and can be removed for good later', async ({
+	page
+}) => {
+	const folders = page.getByRole('region', { name: 'Folders' });
+	const unwatched = page.getByRole('region', { name: 'No longer watched' });
+	await folders
+		.getByRole('listitem')
+		.filter({ hasText: 'Old hard disk' })
+		.getByRole('button', { name: 'Stop watching' })
+		.click();
+	await page
+		.getByRole('dialog', { name: 'Stop watching “Old hard disk”?' })
+		.getByRole('button', { name: 'Stop watching' })
+		.click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Its photos stay, seen by the same people.' })
+	).toBeVisible();
+	await expect(folders.getByText('Old hard disk')).toHaveCount(0);
+	const kept = unwatched.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	await expect(kept.getByText(/[\d,]+ photos/)).toBeVisible();
+	await expectAccessible(page);
+
+	await kept.getByRole('button', { name: 'Remove' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Remove “Old hard disk”?' });
+	await expect(sheet.getByText(/only through this folder will no longer see them/)).toBeVisible();
+	await sheet.getByRole('button', { name: 'Remove' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: /Removed “Old hard disk”/ })
+	).toBeVisible();
+	await expect(unwatched).toHaveCount(0);
+});
+
+test('pausing a folder says its photos stay and that new ones wait until it resumes', async ({
+	page
+}) => {
+	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	await row.getByRole('button', { name: 'Pause checking' }).click();
+	const hint =
+		'Photos already in the library stay; new photos in this folder aren’t picked up until you resume.';
+	await expect(row.getByText(hint)).toBeVisible();
+	await expect(row.getByRole('button', { name: 'Check again' })).toBeDisabled();
+	await expectAccessible(page);
+	await row.getByRole('button', { name: 'Resume checking' }).click();
+	await expect(row.getByText(hint)).toHaveCount(0);
+	await expect(row.getByRole('button', { name: 'Check again' })).toBeEnabled();
+});

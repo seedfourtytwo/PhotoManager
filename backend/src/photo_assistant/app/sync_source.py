@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from photo_assistant.app.import_source import SourceUnavailableError
+from photo_assistant.domain.access import KEPT_KIND
 from photo_assistant.domain.model import ImportReport, RunStatus, Source
 from photo_assistant.domain.remote_source import (
     PROTON_PHOTOS,
@@ -182,6 +183,8 @@ class SyncSource:
 
     def run(self, source_id: int) -> SyncOutcome:
         source = self._sources.get_source(source_id)
+        if source is not None and source.kind == KEPT_KIND:
+            raise SourceUnavailableError(f"source '{source.label}' is no longer watched")
         if source is None or not source.enabled:
             raise SourceUnavailableError(f"source {source_id} is missing or disabled")
         started = self._clock.now()

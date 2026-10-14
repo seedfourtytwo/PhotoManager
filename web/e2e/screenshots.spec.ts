@@ -197,6 +197,12 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '14-admin', p, true);
 	await page.getByRole('region', { name: 'Backups' }).scrollIntoViewIfNeeded();
 	await shot(page, '14b-backups', p);
+	const oldDisk = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
+	await oldDisk.getByRole('button', { name: 'Stop watching' }).click();
+	const stop = page.getByRole('dialog', { name: 'Stop watching “Old hard disk”?' });
+	await expect(stop.getByRole('radio', { name: 'Keep them in the library' })).toBeVisible();
+	await shot(page, '14c-stop-watching', p);
+	await stop.getByRole('button', { name: 'Cancel' }).click();
 
 	// The look of one account: the form, then that look tried on the admin's own screen.
 	await page
