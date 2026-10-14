@@ -126,11 +126,13 @@ def test_only_photos_she_may_download_and_has_not_hidden_or_trashed(world: World
     assert page.total_bytes == 1000 + 2000
 
 
-def test_new_only_leaves_out_what_the_device_already_fetched(world: World) -> None:
+def test_new_only_leaves_out_what_the_phone_said_it_saved(world: World) -> None:
     world.scopes.names = {SUMMER: _names(world, "p1", "p2")}
     world.sync.keep(world.lea, world.phone.id, SUMMER, SyncMode.INCLUDE)
-    sent = world.sync.original(world.lea, world.phone, world.photos["p1"])
-    world.sync.sent(world.phone, sent.id)
+    world.sync.original(world.lea, world.phone, world.photos["p1"])
+    fetched = world.sync.manifest(world.lea, world.phone, new_only=True, after=None, limit=50)
+    assert len(fetched.items) == 2, "fetching alone marks nothing: the phone may not have saved it"
+    assert world.sync.saved(world.lea, world.phone, [world.photos["p1"]]) == 1
 
     page = world.sync.manifest(world.lea, world.phone, new_only=True, after=None, limit=50)
     assert [v.id for v in page.items] == _ids(world, "p2")
@@ -139,6 +141,15 @@ def test_new_only_leaves_out_what_the_device_already_fetched(world: World) -> No
     assert world.sync.resend(world.lea, world.phone.id) == 1
     again = world.sync.manifest(world.lea, world.phone, new_only=True, after=None, limit=50)
     assert [v.id for v in again.items] == _ids(world, "p1", "p2")
+
+
+def test_only_photos_on_the_list_can_be_said_saved(world: World) -> None:
+    world.scopes.names = {SUMMER: _names(world, "p1")}
+    world.sync.keep(world.lea, world.phone.id, SUMMER, SyncMode.INCLUDE)
+    with pytest.raises(InvalidSyncRuleError, match="not on this device's list"):
+        world.sync.saved(world.lea, world.phone, [world.photos["p1"], world.photos["p2"]])
+    page = world.sync.manifest(world.lea, world.phone, new_only=True, after=None, limit=50)
+    assert [v.id for v in page.items] == _ids(world, "p1"), "nothing was marked"
 
 
 def test_pages_follow_one_another(world: World) -> None:
@@ -182,6 +193,15 @@ def test_the_summary_counts_each_rule_and_the_whole_list(world: World) -> None:
         (None, 2, SyncMode.EXCLUDE),
     ]
     assert (summary.count, summary.bytes, summary.sent) == (1, 1000, 0)
+
+
+def test_a_rule_says_how_many_of_its_photos_she_may_only_view(world: World) -> None:
+    """p5 comes from a source that lets Lea view, not download: it can't go to her phone,
+    and the summary says so rather than leave her wondering."""
+    world.scopes.names = {SUMMER: Resolved("Summer", _ids(world, "p1", "p3", "p5"))}
+    world.sync.keep(world.lea, world.phone.id, SUMMER, SyncMode.INCLUDE)
+    (rule,) = world.sync.summary(world.lea, world.phone.id).rules
+    assert (rule.count, rule.view_only) == (3, 1), "p3 is hidden, not view-only"
 
 
 def test_a_rule_whose_album_she_can_no_longer_see_names_nothing(world: World) -> None:

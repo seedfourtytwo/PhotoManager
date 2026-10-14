@@ -440,6 +440,22 @@ describe('backups, devices and remote sources', () => {
 		await expect(api.deviceSync(device.id)).rejects.toMatchObject({ status: 404 });
 	});
 
+	it('counts the photos of a kept album its owner may only view', async () => {
+		h.mock.state.access.set(2, { everyone: 'view', users: [] });
+		const partner = await h.signedIn('partner', '2345');
+		const { device } = await partner.createDevice({ name: 'Phone', platform: 'ios' });
+		const free = h.mock.state.assets.find((a) => a.sources[0].source_id === 1)!;
+		const viewOnly = h.mock.state.assets.find((a) => a.sources[0].source_id === 2)!;
+		const album = await partner.createAlbum({ title: 'Mixed', asset_ids: [free.id, viewOnly.id] });
+		const rule = await partner.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect([rule.count, rule.view_only]).toEqual([2, 1]);
+		expect((await partner.deviceSync(device.id)).count).toBe(1);
+	});
+
 	it('lists rclone remotes, adds a remote source and pulls it', async () => {
 		const api = await h.signedIn();
 		const { remotes } = await api.remotes();

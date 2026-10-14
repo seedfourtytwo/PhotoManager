@@ -97,13 +97,22 @@ def test_the_phone_gets_the_album_but_not_what_its_owner_may_only_view(world: Wo
     assert _ids(body) == sorted([world.ids["beach"], world.ids["garden"]])
     first = body["items"][0]
     assert set(first) == {"id", "hash", "name", "taken_at", "bytes", "mime_type", "url"}
-    assert first["name"] in {"beach.jpg", "garden.jpg"}
+    assert first["name"].endswith(".jpg")
     assert first["url"] == f"/api/sync/assets/{first['id']}/original"
     assert (body["total"], body["remaining"], body["next_after"]) == (2, 2, None)
     assert body["total_bytes"] == sum(i["bytes"] for i in body["items"])
 
 
-def test_an_original_comes_whole_and_is_then_no_longer_new(world: World) -> None:
+def _saved(world: World, *names: str) -> dict:  # type: ignore[type-arg]
+    response = world.phone.post("/api/sync/sent", json={"ids": [world.ids[n] for n in names]})
+    assert response.status_code == 200, response.text
+    body: dict = response.json()  # type: ignore[type-arg]
+    return body
+
+
+def test_an_original_comes_whole_and_is_new_until_the_phone_says_it_saved_it(
+    world: World,
+) -> None:
     _keep(world, kind="album", album_id=world.album_id)
     beach = world.ids["beach"]
     library_file = services_of(world.admin).repo.get_asset(beach)
@@ -114,7 +123,9 @@ def test_an_original_comes_whole_and_is_then_no_longer_new(world: World) -> None
     assert got.status_code == 200
     stored = services_of(world.admin).store.absolute(library_file.library_path)
     assert got.content == stored.read_bytes(), "the untouched original"
-    assert "beach.jpg" in got.headers["content-disposition"]
+    assert "attachment" in got.headers["content-disposition"]
+    assert len(_manifest(world, new="true")["items"]) == 2, "downloaded is not saved"
+    assert _saved(world, "beach") == {"sent": 1}
     assert _ids(_manifest(world, new="true")) == [world.ids["garden"]]
     assert _manifest(world, new="true")["remaining"] == 1
     assert _ids(_manifest(world)) == sorted([beach, world.ids["garden"]]), "still on the list"
@@ -122,12 +133,24 @@ def test_an_original_comes_whole_and_is_then_no_longer_new(world: World) -> None
 
 def test_send_everything_again(world: World) -> None:
     _keep(world, kind="album", album_id=world.album_id)
-    for name in ("beach", "garden"):
-        world.phone.get(f"/api/sync/assets/{world.ids[name]}/original")
+    _saved(world, "beach", "garden")
+    _saved(world, "beach")  # said twice: harmless
     assert _manifest(world, new="true")["items"] == []
     answer = world.lea.post(f"/api/devices/{world.device_id}/sync/resend")
     assert answer.json() == {"forgotten": 2}
     assert len(_manifest(world, new="true")["items"]) == 2
+
+
+def test_only_photos_on_the_list_can_be_said_saved(world: World) -> None:
+    _keep(world, kind="album", album_id=world.album_id)
+    for off_list in ("snow", "look"):  # Lea may see both; neither is on the list
+        ids = [world.ids["beach"], world.ids[off_list]]
+        answer = world.phone.post("/api/sync/sent", json={"ids": ids})
+        assert answer.status_code == 422
+    assert len(_manifest(world, new="true")["items"]) == 2, "nothing was marked"
+    assert world.lea.post("/api/sync/sent", json={"ids": [world.ids["beach"]]}).status_code == 401
+    too_many = world.phone.post("/api/sync/sent", json={"ids": list(range(1, 202))})
+    assert too_many.status_code == 422
 
 
 def test_a_photo_off_the_list_is_not_served_to_the_device(world: World) -> None:
@@ -199,7 +222,7 @@ def test_the_device_token_cannot_change_its_own_rules(world: World) -> None:
 def test_the_summary_lists_rules_counts_size_and_last_sync(world: World) -> None:
     kept = _keep(world, kind="album", album_id=world.album_id)
     _keep(world, "exclude", kind="filter", filters={"q": "tag:screenshot"})
-    world.phone.get(f"/api/sync/assets/{world.ids['beach']}/original")
+    _saved(world, "beach")
     _manifest(world)
 
     body = world.lea.get(f"/api/devices/{world.device_id}/sync").json()
@@ -210,6 +233,7 @@ def test_the_summary_lists_rules_counts_size_and_last_sync(world: World) -> None
         ("filter", "exclude", None, 0),
     ]
     assert body["rules"][0] == kept | {"count": 3}
+    assert body["rules"][0]["view_only"] == 1, "look: Lea may only view it"
     assert body["rules"][1]["filters"] == {"q": "tag:screenshot"}
     assert (body["count"], body["sent"]) == (2, 1)
     assert body["bytes"] > 0

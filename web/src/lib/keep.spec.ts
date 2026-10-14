@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SyncRule } from './api/types';
-import { SCREENSHOTS, choiceFor, ruleFor, ruleLabel, splitRules } from './keep';
+import { SCREENSHOTS, choiceFor, ruleFor, ruleLabel, splitRules, viewOnlyNote } from './keep';
 
 function rule(over: Partial<SyncRule>): SyncRule {
 	return {
@@ -13,6 +13,7 @@ function rule(over: Partial<SyncRule>): SyncRule {
 		label: null,
 		count: 0,
 		gone: false,
+		view_only: 0,
 		...over
 	};
 }
@@ -65,5 +66,27 @@ describe('rules in words', () => {
 			keeps: [summer, year],
 			leavesOff: [lea, shots]
 		});
+	});
+});
+
+describe('photos that cannot go', () => {
+	it('says plainly how many of a kept album’s photos she may only view', () => {
+		expect(viewOnlyNote({ ...summer, view_only: 12 })).toBe(
+			'12 photos in this album can’t go to your phone: you can only view them.'
+		);
+		expect(viewOnlyNote({ ...summer, view_only: 1 })).toBe(
+			'1 photo in this album can’t go to your phone: you can only view it.'
+		);
+		expect(viewOnlyNote({ ...lea, mode: 'include', view_only: 3 })).toBe(
+			'3 photos of this person can’t go to your phone: you can only view them.'
+		);
+		expect(viewOnlyNote({ ...year, view_only: 2 })).toBe(
+			'2 of these photos can’t go to your phone: you can only view them.'
+		);
+	});
+
+	it('says nothing when every photo can go, or for what is left off', () => {
+		expect(viewOnlyNote(summer)).toBeNull();
+		expect(viewOnlyNote({ ...lea, view_only: 4 })).toBeNull();
 	});
 });

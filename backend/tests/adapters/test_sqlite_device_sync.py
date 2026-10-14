@@ -66,9 +66,8 @@ def test_sent_photos_are_remembered_per_device_until_forgotten(
 ) -> None:
     repo = SqliteRepository(db)
     a, b = (repo.add_asset(new_asset(n), NOW) for n in (1, 2))
-    store.mark_sent(1, a, NOW)
-    store.mark_sent(1, a, NOW + timedelta(minutes=1))  # sent twice: harmless
-    store.mark_sent(1, b, NOW)
+    store.mark_sent(1, [a], NOW)
+    store.mark_sent(1, [a, b], NOW + timedelta(minutes=1))  # a saved twice: harmless
     assert store.sent_ids(1) == {a, b}
     assert store.sent_ids(2) == set()
     assert store.forget_sent(1) == 2
