@@ -82,6 +82,95 @@
 	pointer-events: none;
 }
 
+/* Page changes (spec §2, Motion): a page opened from this one slides in from the right, Back
+   from the left, another place of the bar cross-fades. Only while one runs (`data-page-move`,
+   motion.ts) is the page area in the picture, so the photo view's transition still leaves it
+   out. The root stays out of it too: a page whose root is in the picture takes no tap while it
+   runs. <main> is as long as its page, so its old picture is put back where it was on the
+   screen (`--page-shift`) instead of travelling from the old place to the new. The bars are
+   pictures of their own (Nav.svelte), held still over the page's. */
+:root[data-page-move] #main {
+	view-transition-name: page;
+}
+:root[data-page-move]::view-transition-group(page) {
+	animation: none;
+}
+:root[data-page-move]::view-transition-old(page) {
+	translate: 0 var(--page-shift, 0px);
+}
+:root[data-page-move]::view-transition-old(page),
+:root[data-page-move]::view-transition-new(page) {
+	animation-duration: var(--motion-sheet);
+	animation-timing-function: var(--ease-sheet);
+	animation-fill-mode: both;
+}
+:root[data-page-move='forward']::view-transition-old(page) {
+	animation-name: page-out-left;
+}
+:root[data-page-move='forward']::view-transition-new(page) {
+	animation-name: page-in-right;
+}
+:root[data-page-move='back']::view-transition-old(page) {
+	animation-name: page-out-right;
+}
+:root[data-page-move='back']::view-transition-new(page) {
+	animation-name: page-in-left;
+}
+:root[data-page-move='switch']::view-transition-old(page) {
+	animation-name: page-fade-out;
+}
+:root[data-page-move='switch']::view-transition-new(page) {
+	animation-name: page-fade-in;
+}
+:root[data-page-move]::view-transition-group(bar),
+:root[data-page-move]::view-transition-group(dock),
+:root[data-page-move]::view-transition-group(dock-search),
+:root[data-page-move]::view-transition-new(bar),
+:root[data-page-move]::view-transition-new(dock),
+:root[data-page-move]::view-transition-new(dock-search) {
+	animation: none;
+}
+/* The bar as it is now, live (the lens slides inside it), not under a copy of how it was. */
+:root[data-page-move]::view-transition-old(bar),
+:root[data-page-move]::view-transition-old(dock),
+:root[data-page-move]::view-transition-old(dock-search) {
+	display: none;
+}
+@keyframes page-out-left {
+	to {
+		opacity: 0;
+		transform: translateX(calc(-1 * var(--s-5)));
+	}
+}
+@keyframes page-in-right {
+	from {
+		opacity: 0;
+		transform: translateX(var(--s-7));
+	}
+}
+@keyframes page-out-right {
+	to {
+		opacity: 0;
+		transform: translateX(var(--s-7));
+	}
+}
+@keyframes page-in-left {
+	from {
+		opacity: 0;
+		transform: translateX(calc(-1 * var(--s-5)));
+	}
+}
+@keyframes page-fade-out {
+	to {
+		opacity: 0;
+	}
+}
+@keyframes page-fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	* {
 		transition: none !important;

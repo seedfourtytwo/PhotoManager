@@ -1,11 +1,10 @@
 <script lang="ts">
 	import '$lib/tokens.css';
 	import { onMount, untrack } from 'svelte';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
-	import BackupBanner from '$lib/components/BackupBanner.svelte';
 	import LookTrial from '$lib/components/LookTrial.svelte';
 	import {
 		backupWatch,
@@ -17,6 +16,8 @@
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
 	import { dropBadPhotoParam } from '$lib/loupe.svelte';
+	import { movePage } from '$lib/motion';
+	import { pageMove } from '$lib/nav';
 
 	let { children } = $props();
 
@@ -24,6 +25,26 @@
 
 	afterNavigate(({ to }) => {
 		if (to) dropBadPhotoParam(to.url);
+	});
+
+	// A page change slides or fades the page while the bars stay (motion.ts, utilities.css).
+	// Not to or from sign-in, which has no bars; not when only the query or the photo changes.
+	onNavigate((navigation) => {
+		const from = navigation.from?.url.pathname;
+		const to = navigation.to?.url.pathname;
+		if (!from || !to || isPublicRoute(from) || isPublicRoute(to)) return;
+		const pressed = navigation.type === 'link' ? navigation.event.target : null;
+		const move = pageMove({
+			from,
+			to,
+			delta: navigation.delta,
+			asked:
+				pressed instanceof Element
+					? pressed.closest('[data-move]')?.getAttribute('data-move')
+					: null,
+			shown: navigation.type === 'popstate' && navigation.event.hasUAVisualTransition
+		});
+		if (move) return movePage(move, navigation.complete);
 	});
 
 	onMount(() => {
@@ -79,8 +100,8 @@
 		return () => watch.disconnect();
 	});
 
-	// Admins see the backup warning on every page: ask again on each navigation, and
-	// forget it for anyone who is not (or no longer) an admin.
+	// An admin's avatar carries a dot while a backup needs them: ask again on each navigation,
+	// and forget it for anyone who is not (or no longer) an admin. Members never see it.
 	$effect(() => {
 		void page.url.pathname;
 		if (!bare) void backupWatch.refresh(session.isAdmin);
@@ -108,7 +129,6 @@
 		<Nav />
 		<main id="main" tabindex="-1">
 			<LookTrial />
-			<BackupBanner health={session.isAdmin ? backupWatch.health : null} />
 			{@render children()}
 		</main>
 	</div>

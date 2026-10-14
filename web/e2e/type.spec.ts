@@ -69,21 +69,25 @@ const px = (target: Locator, property: 'fontSize' | 'marginTop') =>
 
 test('type and space render at the sizes the design table states', async ({ page }) => {
 	await resetMock();
-	await signIn(page, '/settings');
-	const signOut = page.getByRole('button', { name: 'Sign out' });
+	await signIn(page, '/settings'); // You
+	const line = page.getByText('Folders, backups and people'); // a tile's quiet line
+	// a group's label line, and the space above it
+	const label = page.getByRole('heading', { name: 'Look', level: 3 }).locator('..');
 
 	expect(await px(page.locator('html'), 'fontSize')).toBe(16); // 1rem: the browser's own size
-	expect(await px(signOut, 'fontSize')).toBe(14); // interface text, --fs-14
+	expect(await px(line, 'fontSize')).toBe(14); // --fs-14
 	expect(await px(page.getByText(/^Library server/), 'fontSize')).toBe(12); // .small, --fs-12
-	expect(await px(page.getByRole('heading', { name: 'Settings', level: 1 }), 'fontSize')).toBe(28);
-	expect(await px(page.getByRole('heading', { name: 'Look', level: 2 }), 'fontSize')).toBe(20);
-	expect(await px(signOut, 'marginTop')).toBe(16); // --s-4
+	expect(await px(page.getByRole('heading', { name: ADMIN.name, level: 1 }), 'fontSize')).toBe(28);
+	expect(await px(label, 'marginTop')).toBe(24); // --s-5
+	await page.getByRole('button', { name: 'Change PIN' }).click();
+	const sheetTitle = page.getByRole('heading', { name: 'Change PIN', level: 2 });
+	expect(await px(sheetTitle, 'fontSize')).toBe(20);
 });
 
 test('the text dial multiplies the table: 125 % and 90 % of every size', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/settings');
-	const title = page.getByRole('heading', { name: 'Settings', level: 1 });
+	const title = page.getByRole('heading', { name: ADMIN.name, level: 1 });
 
 	// After a reload the stylesheet arrives a moment after the page: the sizes are polled.
 	await setTextScale(page, 1.25);

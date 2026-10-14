@@ -45,7 +45,7 @@ colours, corners and the title face, never layout.
 
 **Each account has its own look** (`docs/adr/0001`): a theme, a mode (dark, light, or like
 the device), a few dials and a few switches, kept as a validated sheet of values and never as
-CSS. The account chooses its mode in Settings; an admin sets the rest in Admin → People → Look.
+CSS. The account chooses its mode on You; an admin sets the rest in Admin → People → Look.
 The dials only move tokens (`--acc-h`, `--r-1`/`--r-2`, `--gutter`, the root text size); the
 switches choose from fixed lists (which Collections rows, words under the dock icons). So the
 rules on this page hold for every look: any accent hue passes contrast because lightness and
@@ -196,8 +196,22 @@ not a token):
   The editor with changes that are not saved asks first, whichever way it is left (Back,
   Escape, Cancel): "Keep editing" or "Discard changes". With nothing changed it just closes.
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
-  together. Escape or a press outside closes it. The account button shows the person's initial;
-  a count that needs attention sits on it in full ink, never the accent.
+  together. Escape or a press outside closes it.
+- **Navigation** (`Nav`): the places (`PLACES` in `lib/nav.ts`) and Search, nothing else. On a
+  phone a floating glass capsule holds the places, icon over word, the chosen one under a
+  `--lens` that slides to it (transform only; gone on a page that is no place), with Search a
+  round glass button beside it; the look's "dock labels" switch takes the words off the screen,
+  not from screen readers. On a laptop a glass top bar: the places as icon and word, the search
+  field's place in the middle, the avatar at the right. No wordmark, no account menu.
+- **The avatar** (`Avatar`): the person's initial, opening You. On a phone it sits at the right
+  of each page's title row (`PageHead`); on a laptop in the top bar. An admin sees a red dot on
+  it while something needs them, and its name says what in one sentence. Members never see
+  backup state; there is no banner.
+- **Page changes** are view transitions of the page area alone (`movePage` in `lib/motion.ts`,
+  `pageMove` in `lib/nav.ts`): a page opened from this one slides in from the right, Back
+  slides it out to the right, another place of the bar cross-fades; the bars stay still. Not
+  when only the query or the photo changes, not after the browser's own swipe back, not under
+  reduced motion. A tap made while the page slides is not taken, as on an iPhone.
 - **Toasts**: one line on a raised slip, bottom centre, the action (Undo) as a bold word. It
   steps over the selection pill and a phone's lying ruler. In the photo view the bottom is the
   bar's, so it sits under Close and Info; it is always on top of an open dialog and inside it,
@@ -276,7 +290,12 @@ not a token):
   pixel sizes and file naming wait under "More options"; picking a plain choice again wins.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
-- **Section headers** in Settings sit in the left margin (book margin heads).
+- **You** (`/settings`, from the avatar): Back to where it was opened from (the history's, so
+  that page keeps its scroll), the initial large with the name and role, then tile groups:
+  Look (Dark · Light · Like the device, a segmented control), Needs you (admins, only when
+  something does: the dot and its sentence, leading to it), Admin (admins), Phones that send
+  photos here (each phone a tile that opens its sheet: what it keeps, Leave out screenshots,
+  Send everything again, Revoke; + adds one), Account (Change PIN in a sheet, Sign out).
 - **Admin** puts status first: three tiles, Backups (the red dot and one plain sentence),
   Library (photos and free space, and the work running) and Problems (a count). Then Folders,
   Search and faces and People as tile groups, their + (and Check all) on the label line. A
@@ -315,15 +334,15 @@ not a token):
 
 ## 3. Layout by device
 
-|                 | Laptop (≥ 1024 px)                                                 | Phone (< 640 px)                                                                                          |
-| --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Navigation      | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
-| Filters         | a row of chips under the title; a question opens under its chip    | the same chips; a question opens as a bottom sheet                                                        |
-| Loupe metadata  | Details: a panel of label/value tiles beside the photo             | Details opens a bottom sheet of the same tiles                                                            |
-| Loupe actions   | round Close and Details at the top, one glass bar at the bottom    | the same                                                                                                  |
-| Time ruler      | upright at the right edge                                          | lying above the dock, fading when idle                                                                    |
-| Selection       | click / shift-click / drag-lasso                                   | long-press, then drag or tap                                                                              |
-| Grid row height | ~220 px                                                            | ~110 px, pinch to change                                                                                  |
+|                 | Laptop (≥ 1024 px)                                              | Phone (< 640 px)                                                                                                                  |
+| --------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation      | glass top bar: the places, the search field's place, the avatar | floating glass capsule with the places under a sliding lens, Search a round button beside it; the avatar in each page's title row |
+| Filters         | a row of chips under the title; a question opens under its chip | the same chips; a question opens as a bottom sheet                                                                                |
+| Loupe metadata  | Details: a panel of label/value tiles beside the photo          | Details opens a bottom sheet of the same tiles                                                                                    |
+| Loupe actions   | round Close and Details at the top, one glass bar at the bottom | the same                                                                                                                          |
+| Time ruler      | upright at the right edge                                       | lying above the dock, fading when idle                                                                                            |
+| Selection       | click / shift-click / drag-lasso                                | long-press, then drag or tap                                                                                                      |
+| Grid row height | ~220 px                                                         | ~110 px, pinch to change                                                                                                          |
 
 The row heights are for the look's medium photo size; small is ¾ of it and large 1.4 times.
 Only the look sets it: there is no photo size setting per device.

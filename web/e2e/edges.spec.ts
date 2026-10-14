@@ -53,7 +53,6 @@ for (const [name, insets, size] of [
 		await signIn(page);
 		const nav = page.getByRole('navigation', { name: 'Main' });
 		for (const link of await nav.getByRole('link').all()) await expectClear(page, link, insets);
-		await expectClear(page, nav.getByRole('button', { name: 'Account' }), insets);
 		await expectClear(page, page.getByRole('heading', { level: 1 }), insets);
 		// A month heading sticks under the clock, not behind it, and under the page's compact
 		// title, which is a touch target (44 px) tall.

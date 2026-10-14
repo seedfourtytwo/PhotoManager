@@ -81,10 +81,7 @@ describe('style guard', () => {
 	// Groups separate by space or by a seam of --fine (DESIGN_PRINCIPLES §2): no hairlines.
 	// The redesign's area branches (docs/superpowers/specs/2026-10-14-ui-redesign-2-design.md
 	// §11) take their files off this list; it must be empty when the redesign is done.
-	const LINES_PENDING = new Set([
-		'/src/lib/components/Devices.svelte', // (a) You, after the phone-sync PR
-		'/src/routes/settings/+page.svelte' // (a)
-	]);
+	const LINES_PENDING = new Set([]);
 	const lines = Object.entries(sources).flatMap(([path, text]) =>
 		[
 			...text.matchAll(

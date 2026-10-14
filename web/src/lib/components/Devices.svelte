@@ -4,6 +4,9 @@
 	import { errorMessage, formatWhen } from '$lib/format';
 	import DeviceKeeps from './DeviceKeeps.svelte';
 	import Dialog from './Dialog.svelte';
+	import IconButton from './ui/IconButton.svelte';
+	import TileGroup from './ui/TileGroup.svelte';
+	import TileRow from './ui/TileRow.svelte';
 
 	let devices = $state<Device[] | null>(null);
 	let adding = $state(false);
@@ -21,6 +24,8 @@
 		['other', 'Something else']
 	];
 	const kindLabel = (p: string) => KINDS.find(([k]) => k === p)?.[1] ?? p;
+	const used = (device: Device) =>
+		device.last_used_at ? `last used ${formatWhen(device.last_used_at)}` : 'never used';
 
 	async function load() {
 		try {
@@ -40,7 +45,7 @@
 			token = created.token;
 			await load();
 		} catch (e) {
-			error = errorMessage(e, 'Could not add the device.');
+			error = errorMessage(e, 'Could not add the phone.');
 		} finally {
 			busy = false;
 		}
@@ -63,6 +68,8 @@
 		name = '';
 	}
 
+	/** The phone whose sheet is open: what it keeps, and the way to revoke it. */
+	let open = $state<Device | null>(null);
 	/** Revoking cannot be undone (the token is shown only once), so it asks first. */
 	let revoking = $state<Device | null>(null);
 
@@ -78,46 +85,78 @@
 	}
 </script>
 
-<section aria-labelledby="s-devices">
-	<h2 id="s-devices">Phones and devices</h2>
-	<p class="quiet small intro">
-		A device token lets a phone send its new photos here on its own (for example with Apple
-		Shortcuts while charging), and fetch what you choose to keep on it. It can upload into your own
-		uploads and download what you keep on it; it cannot see anything else or delete anything.
-	</p>
-	<ul>
-		{#each devices ?? [] as device (device.id)}
-			<li class:off={device.revoked}>
-				<span>{device.name}</span>
-				<span class="quiet small">
-					{kindLabel(device.platform)} · added {formatWhen(device.created_at)} · {device.last_used_at
-						? `last used ${formatWhen(device.last_used_at)}`
-						: 'never used'}{#if device.revoked}&nbsp;· revoked{/if}
-				</span>
-				{#if !device.revoked}
-					<button type="button" onclick={() => (revoking = device)}>Revoke</button>
-					<DeviceKeeps deviceId={device.id} />
-				{/if}
-			</li>
-		{/each}
-	</ul>
-	<button type="button" class="add" onclick={() => (adding = true)}>Add a device</button>
-</section>
+<TileGroup label="Phones that send photos here">
+	{#snippet action()}
+		{#if devices?.length}
+			<IconButton icon="plus" label="Add a phone" onclick={() => (adding = true)} />
+		{/if}
+	{/snippet}
+	{#each devices ?? [] as device (device.id)}
+		{#if device.revoked}
+			<TileRow icon="phone" title={device.name} line="Revoked" />
+		{:else}
+			<TileRow
+				icon="phone"
+				title={device.name}
+				line={`${kindLabel(device.platform)} · ${used(device)}`}
+				onclick={() => (open = device)}
+			/>
+		{/if}
+	{:else}
+		{#if devices}
+			<TileRow
+				icon="plus"
+				title="Add a phone"
+				line="It sends its new photos here on its own"
+				onclick={() => (adding = true)}
+			/>
+		{/if}
+	{/each}
+</TileGroup>
 
 {#if revoking}
 	{@const device = revoking}
 	<Dialog title={`Revoke “${device.name}”?`} onclose={() => (revoking = null)}>
 		<p>
-			It stops uploading at once. Its token cannot be shown again: to use this device later, add it
+			It stops uploading at once. Its token cannot be shown again: to use this phone later, add it
 			again and put the new token in it.
 		</p>
 		{#snippet actions()}
 			<button class="primary" type="button" onclick={() => revoke(device)}>Revoke</button>
 		{/snippet}
 	</Dialog>
+{:else if open}
+	{@const device = open}
+	<Dialog title={device.name} onclose={() => (open = null)} cancelLabel="Close" wide>
+		<p class="quiet about">
+			{kindLabel(device.platform)} · added {formatWhen(device.created_at)} · {used(device)}
+		</p>
+		<DeviceKeeps deviceId={device.id} />
+		<div class="apart">
+			<TileGroup>
+				<TileRow
+					icon="x"
+					title="Revoke"
+					line="It can no longer send or fetch photos"
+					danger
+					onclick={() => {
+						revoking = device; // first: `device` follows `open`
+						open = null;
+					}}
+				>
+					{#snippet trailing()}{/snippet}
+				</TileRow>
+			</TileGroup>
+		</div>
+	</Dialog>
 {:else if adding}
-	<Dialog title="Add a device" onclose={close} cancelLabel={token ? 'Done' : 'Cancel'} wide>
+	<Dialog title="Add a phone" onclose={close} cancelLabel={token ? 'Done' : 'Cancel'} wide>
 		{#if !token}
+			<p class="quiet small intro">
+				A phone with its own token sends its new photos here (for example with Apple Shortcuts while
+				charging) and fetches what you keep on it. It can only upload into your own uploads and
+				download what you keep on it; it cannot see anything else or delete anything.
+			</p>
 			<label class="field">Name <input bind:value={name} placeholder="Léa’s iPhone" /></label>
 			<label class="field"
 				>Kind
@@ -136,8 +175,8 @@
 				{#if copied}<span class="quiet" role="status">Copied.</span>{/if}
 			</p>
 			<p class="small">
-				This token is shown only once. Put it in the phone now; if it is lost, revoke this device
-				and add it again.
+				This token is shown only once. Put it in the phone now; if it is lost, revoke this phone and
+				add it again.
 			</p>
 			<h3>iPhone: upload with Shortcuts</h3>
 			<ol class="small">
@@ -166,40 +205,19 @@
 {/if}
 
 <style>
+	.about {
+		margin: calc(-1 * var(--s-2)) 0 var(--s-4);
+	}
+	.apart {
+		margin-top: var(--s-5);
+	}
 	.intro {
-		margin: var(--s-1) 0 var(--s-2);
+		margin: 0 0 var(--s-4);
 		line-height: var(--lh-text);
-		max-width: var(--measure);
 	}
 	h3 {
 		margin: var(--s-5) 0 var(--s-1);
-		font-size: var(--fs-14);
 		color: var(--ink);
-	}
-	ul {
-		list-style: none;
-		margin: var(--s-2) 0;
-		padding: 0;
-	}
-	li {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--s-1) var(--s-3);
-		align-items: baseline;
-		padding: var(--s-2) 0;
-		border-bottom: 1px solid var(--hairline);
-	}
-	li.off span:first-child {
-		color: var(--ink-2);
-	}
-	li button {
-		margin-left: auto;
-		color: var(--ink-2);
-	}
-	.add {
-		justify-self: start;
-		margin-left: calc(-1 * var(--s-2));
-		color: var(--ink-2);
 	}
 	.token {
 		font-family: var(--font-data);
@@ -222,8 +240,6 @@
 		line-height: var(--lh-text);
 	}
 	ol li {
-		display: list-item;
-		border: 0;
 		padding: var(--s-1) 0;
 	}
 	.plain {

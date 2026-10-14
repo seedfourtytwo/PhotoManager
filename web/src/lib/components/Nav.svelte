@@ -1,55 +1,43 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { api, library, session } from '$lib/app.svelte';
 	import { look } from '$lib/look';
-	import { PLACES, accountItems, initialOf } from '$lib/nav';
+	import { PLACES } from '$lib/nav';
+	import Avatar from './Avatar.svelte';
 	import Icon from './Icon.svelte';
-	import Menu from './Menu.svelte';
 
 	const path = $derived(page.url.pathname);
-
-	let waiting = $state(0); // photos held for review; asked again as you move around
-	$effect(() => {
-		void path;
-		void library.version;
-		api
-			.reviewCount()
-			.then((r) => (waiting = r.count))
-			.catch(() => undefined); // the menu works without it
-	});
-
-	const initial = $derived(initialOf(session.user?.display_name));
-	const items = $derived(
-		accountItems({ isAdmin: session.isAdmin, waiting }, path, () => void session.signOut())
-	);
+	const current = $derived(PLACES.findIndex((place) => place.match(path)));
 </script>
 
-<!-- Laptop: one glass bar on top. Phone: a floating dock, Search and the account beside it. -->
+<!-- Laptop: one glass bar on top, the avatar at its right. Phone: a floating dock with the
+     places and a round Search beside it; the avatar sits in each page's title row (PageHead). -->
 <nav aria-label="Main">
-	<span class="mark" aria-hidden="true">Photos</span>
-	<ul class="places" class:wordless={!look.shown.dockLabels}>
-		{#each PLACES as place (place.href)}
+	<ul
+		class="places"
+		class:wordless={!look.shown.dockLabels}
+		class:elsewhere={current < 0}
+		style:--i={Math.max(current, 0)}
+		style:--n={PLACES.length}
+	>
+		{#each PLACES as place, i (place.href)}
 			<li>
-				<a href={place.href} aria-current={place.match(path) ? 'page' : undefined}>
+				<a href={place.href} data-move="switch" aria-current={i === current ? 'page' : undefined}>
 					<Icon name={place.icon} />
-					<span>{place.label}</span>
+					<span class="word">{place.label}</span>
 				</a>
 			</li>
 		{/each}
 	</ul>
-	<a class="search" href="/search" aria-current={path === '/search' ? 'page' : undefined}>
+	<a
+		class="search"
+		href="/search"
+		data-move="switch"
+		aria-current={path === '/search' ? 'page' : undefined}
+	>
 		<Icon name="search" />
-		<span>Search</span>
+		<span class="word">Search</span>
 	</a>
-	<div class="account">
-		<Menu
-			label="Account"
-			text={initial}
-			badge={waiting}
-			badgeLabel={`${waiting} to review`}
-			{items}
-		/>
-	</div>
+	<span class="me"><Avatar /></span>
 </nav>
 
 <style>
@@ -62,37 +50,38 @@
 		box-sizing: border-box;
 		display: flex;
 		align-items: center;
-		gap: var(--s-5);
+		gap: var(--s-4);
 		padding: 0 var(--page-x);
-		background: var(--fill);
+		background: var(--glass-fill);
 		-webkit-backdrop-filter: var(--backdrop);
 		backdrop-filter: var(--backdrop);
 		/* Frosted glass where the browser can blur and the person has not asked for less;
 		   a solid bar otherwise (the same rule as .glass in utilities.css). */
-		--fill: var(--raised);
+		--glass-fill: var(--raised);
 		--backdrop: none;
 	}
 	@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
 		nav {
-			--fill: var(--glass);
+			--glass-fill: var(--glass);
 			--backdrop: var(--blur);
 		}
 		@media (prefers-reduced-transparency: reduce) {
 			nav {
-				--fill: var(--raised);
+				--glass-fill: var(--raised);
 				--backdrop: none;
 			}
 		}
 	}
+	/* A page change moves the page only: the bar is its own still picture (utilities.css). */
+	:global(:root[data-page-move]) nav {
+		view-transition-name: bar;
+	}
 	a {
 		text-decoration: none;
+		transition: transform var(--press) var(--ease);
 	}
-	.mark {
-		font-family: var(--font-title);
-		font-weight: var(--title-weight);
-		font-style: var(--voice-style);
-		font-size: var(--fs-20);
-		color: var(--ink);
+	a:active {
+		transform: scale(0.95);
 	}
 	.places {
 		display: flex;
@@ -105,25 +94,32 @@
 		display: flex;
 		align-items: center;
 		gap: var(--s-2);
-		padding: var(--s-2) var(--s-3);
+		min-height: 2.5rem;
+		padding: 0 var(--s-4) 0 var(--s-3);
 		border-radius: var(--r-pill);
 		color: var(--ink-2);
-		font-weight: 600;
+		font-weight: 650;
+		transition:
+			background-color var(--motion) var(--ease),
+			color var(--motion) var(--ease),
+			transform var(--press) var(--ease);
 	}
 	.places a[aria-current='page'] {
 		color: var(--ink);
-		background: var(--tint);
+		background: var(--lens);
 	}
+	/* The search field's place: pressing it opens Search, where the field is. */
 	.search {
 		flex: 1;
-		max-width: calc(var(--margin) * 1.75);
+		max-width: calc(var(--margin) * 2);
 		margin-inline: auto;
 		display: flex;
 		align-items: center;
 		gap: var(--s-2);
-		padding: var(--s-2) var(--s-3);
-		border-radius: var(--r-1);
-		background: var(--tint);
+		min-height: 2.5rem;
+		padding: 0 var(--s-4) 0 var(--s-3);
+		border-radius: var(--r-pill);
+		background: var(--fill);
 		color: var(--ink-2);
 	}
 	.search[aria-current='page'] {
@@ -136,7 +132,8 @@
 		}
 	}
 
-	/* Phone: the same things as a dock that floats over the bottom of the page. */
+	/* Phone: the places as a floating glass capsule, icon over word, the chosen one under a lens
+	   that slides between them; Search a round glass button beside it. */
 	@media (max-width: 1023px) {
 		nav {
 			position: fixed;
@@ -147,60 +144,100 @@
 			height: auto;
 			justify-content: center;
 			gap: var(--s-2);
-			/* over the selection bar so the open menu is not covered, under the filter sheet */
+			/* over the selection bar, under the filter sheet */
 			z-index: var(--z-dock);
 			padding: 0 calc(var(--s-3) + env(safe-area-inset-right))
 				calc(var(--s-3) + env(safe-area-inset-bottom)) calc(var(--s-3) + env(safe-area-inset-left));
 			background: none;
 			-webkit-backdrop-filter: none;
 			backdrop-filter: none;
-			border-bottom: 0;
-			pointer-events: none; /* only the three glass pieces take touches */
+			pointer-events: none; /* only the glass pieces take touches */
 		}
-		.mark {
-			display: none;
+		:global(:root[data-page-move]) nav {
+			view-transition-name: none;
 		}
 		.places,
-		.search,
-		.account {
+		.search {
 			pointer-events: auto;
 			height: var(--dock);
 			box-sizing: border-box;
 			border-radius: var(--r-pill);
-			background: var(--fill);
+			background: var(--glass-fill);
 			-webkit-backdrop-filter: var(--backdrop);
 			backdrop-filter: var(--backdrop);
+			box-shadow: var(--lift);
+		}
+		:global(:root[data-page-move]) .places {
+			view-transition-name: dock;
+		}
+		:global(:root[data-page-move]) .search {
+			view-transition-name: dock-search;
 		}
 		.places {
+			position: relative;
 			flex: 1;
-			max-width: 26rem; /* a pill, not a bar, on a tablet or a landscape phone */
+			max-width: 26rem; /* a capsule, not a bar, on a tablet or a landscape phone */
+			gap: 0;
 			padding: var(--s-1);
 		}
+		/* The lens: one width of a place, moved (transform only) to the chosen one. */
+		.places::before {
+			content: '';
+			position: absolute;
+			top: var(--s-1);
+			bottom: var(--s-1);
+			left: var(--s-1);
+			width: calc((100% - 2 * var(--s-1)) / var(--n));
+			border-radius: var(--r-pill);
+			background: var(--lens);
+			transform: translateX(calc(var(--i) * 100%));
+			transition:
+				transform var(--motion-sheet) var(--ease-sheet),
+				opacity var(--motion) var(--ease);
+		}
+		.places.elsewhere::before {
+			opacity: 0;
+		}
 		.places li {
+			position: relative; /* over the lens */
 			flex: 1;
+			min-width: 0;
 		}
 		.places a {
 			flex-direction: column;
 			justify-content: center;
 			gap: 0;
 			height: 100%;
-			padding: 0;
+			min-height: 0;
+			padding: 0 var(--s-1);
 			font-size: var(--fs-12);
-			/* Over a bright photo the dimmer ink is weak; the pill marks the page you are on. */
+			/* Over a bright photo the dimmer ink is weak; the lens marks the page you are on. */
 			color: var(--ink);
+		}
+		.places a[aria-current='page'] {
+			background: none;
+		}
+		.places .word {
+			max-width: 100%;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 		.search {
 			flex: none;
-			color: var(--ink);
 			width: var(--dock);
 			max-width: none;
 			margin: 0;
 			padding: 0;
 			justify-content: center;
+			color: var(--ink);
+		}
+		.search[aria-current='page'] {
+			background: color-mix(in oklab, var(--ink) 18%, var(--glass-fill));
 		}
 		/* Still read out: the look's "dock labels" switch only takes the words off the screen. */
-		.places.wordless span,
-		.search span {
+		.places.wordless .word,
+		.search .word {
 			position: absolute;
 			width: 1px;
 			height: 1px;
@@ -208,12 +245,8 @@
 			clip-path: inset(50%);
 			white-space: nowrap;
 		}
-		.account {
-			display: grid;
-			place-items: center;
-			width: var(--dock);
-			--menu-top: auto;
-			--menu-bottom: calc(100% + var(--s-2));
+		.me {
+			display: none;
 		}
 	}
 </style>

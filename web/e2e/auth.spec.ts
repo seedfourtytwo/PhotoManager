@@ -111,17 +111,21 @@ test.describe('first run and sign-in', () => {
 		await expect(page).toHaveURL(/\/$/);
 	});
 
-	test('sign out, and change PIN from settings', async ({ page }) => {
+	test('sign out, and change PIN in its sheet on You', async ({ page }) => {
 		await resetMock();
 		await signIn(page, '/settings');
 		await expectAccessible(page);
-		await page.getByLabel('Current PIN').fill('0000');
-		await page.getByLabel('New PIN').fill('5678');
+		await expect(page.getByLabel('Current PIN')).toHaveCount(0); // not on the page itself
 		await page.getByRole('button', { name: 'Change PIN' }).click();
-		// The admin's backup warning is also an alert on every page: pick this one by its words.
-		await expect(page.getByRole('alert').filter({ hasText: 'current PIN' })).toBeVisible();
-		await page.getByLabel('Current PIN').fill(ADMIN.pin);
-		await page.getByRole('button', { name: 'Change PIN' }).click();
+		const sheet = page.getByRole('dialog', { name: 'Change PIN' });
+		await sheet.getByLabel('Current PIN').fill('0000');
+		await sheet.getByLabel('New PIN').fill('5678');
+		await expectAccessible(page);
+		await sheet.getByRole('button', { name: 'Change PIN' }).click();
+		await expect(sheet.getByRole('alert')).toContainText('current PIN');
+		await sheet.getByLabel('Current PIN').fill(ADMIN.pin);
+		await sheet.getByRole('button', { name: 'Change PIN' }).click();
+		await expect(sheet).toBeHidden();
 		await expect(toast(page)).toContainText('PIN changed');
 		await page.getByRole('button', { name: 'Sign out' }).click();
 		await expect(page).toHaveURL(/\/login$/);

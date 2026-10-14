@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { backupWatch, session } from '$lib/app.svelte';
 	import { attentionOf, initialOf } from '$lib/nav';
 
@@ -10,6 +11,7 @@
 <a
 	class="avatar"
 	href="/settings"
+	aria-current={page.url.pathname === '/settings' ? 'page' : undefined}
 	aria-label={attention ? `You: ${attention}` : 'You'}
 	title={attention ?? 'You'}
 >

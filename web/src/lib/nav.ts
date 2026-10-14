@@ -1,9 +1,8 @@
-/** Where things are: the places of the app and what sits behind the account button. */
+/** Where things are: the places of the app, how a page change moves, and who you are. */
 import type { BackupHealth } from './api';
-import { photos } from './format';
 import type { IconName } from './icons';
 import type { CollectionsRow } from './look';
-import type { MenuItem } from './menu';
+import type { PageMove } from './motion';
 
 export type Place = {
 	href: string;
@@ -43,28 +42,7 @@ export function collectionRows(shown: readonly CollectionsRow[]) {
 	return shown.map((row) => ({ row, ...COLLECTIONS[row] }));
 }
 
-export function accountItems(
-	who: { isAdmin: boolean; waiting: number },
-	path: string,
-	signOut: () => void
-): MenuItem[] {
-	const link = (label: string, href: string, count?: number, countLabel?: string): MenuItem => ({
-		label,
-		href,
-		count,
-		countLabel,
-		current: under(path, href)
-	});
-	return [
-		link('To review', '/review', who.waiting, photos(who.waiting)),
-		link('Trash', '/trash'),
-		link('Settings', '/settings'),
-		...(who.isAdmin ? [link('Admin', '/admin')] : []),
-		{ label: 'Sign out', run: signOut }
-	];
-}
-
-/** The first letter of a name for the account button; a whole emoji counts as one character. */
+/** The first letter of a name for the avatar; a whole emoji counts as one character. */
 export function initialOf(name: string | undefined): string {
 	return ([...(name ?? '').trim()][0] ?? '?').toUpperCase();
 }
@@ -76,4 +54,45 @@ export function initialOf(name: string | undefined): string {
 export function attentionOf(isAdmin: boolean, health: BackupHealth | null): string | null {
 	if (!isAdmin || !health) return null;
 	return health.problems[0]?.message ?? null;
+}
+
+/** The pages the bar leads to: going from one to another is switching places. */
+const TOPS = new Set([...PLACES.map((place) => place.href), '/calendar', '/search']);
+
+/** The word on a Back that leads to `path`: the bar's name for its own pages, else Back. */
+export function backLabel(path: string): string {
+	if (path === '/search') return 'Search';
+	if (!TOPS.has(path)) return 'Back';
+	return PLACES.find((place) => place.match(path))?.label ?? 'Back';
+}
+
+/** How far in a page sits: the bar's pages 0, a page opened from one 1, and so on. */
+function depthOf(path: string): number {
+	if (TOPS.has(path)) return 0;
+	const depth = path.split('/').filter(Boolean).length;
+	return under(path, '/admin') ? depth + 1 : depth; // Admin opens from You (/settings)
+}
+
+const MOVES: readonly string[] = ['forward', 'back', 'switch'] satisfies PageMove[];
+
+/**
+ * How a page change looks (spec §2, Motion): a page opened from this one slides in from the
+ * right, Back slides from the left, another place of the bar cross-fades. `asked` is what the
+ * pressed link says (`data-move`), `delta` the history's step, `shown` that the browser has
+ * already drawn the way back itself (a swipe), so drawing it again would show it twice.
+ * Nothing moves when only the query or the photo changes.
+ */
+export function pageMove(step: {
+	from: string;
+	to: string;
+	delta?: number;
+	asked?: string | null;
+	shown?: boolean;
+}): PageMove | null {
+	const { from, to, delta, asked } = step;
+	if (from === to || step.shown) return null;
+	if (asked && MOVES.includes(asked)) return asked as PageMove;
+	if (TOPS.has(from) && TOPS.has(to)) return 'switch';
+	if (delta) return delta < 0 ? 'back' : 'forward';
+	return depthOf(to) < depthOf(from) ? 'back' : 'forward';
 }
