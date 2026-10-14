@@ -81,6 +81,7 @@ export function downloadRoutes(h: Helpers): Route[] {
 							? `to-${f.to}`
 							: '';
 		const n = f.source_id?.length ?? 0;
+		const people = f.person_id?.length ?? 0;
 		return [
 			days,
 			f.year === undefined
@@ -89,8 +90,10 @@ export function downloadRoutes(h: Helpers): Route[] {
 					? `${f.year}-${String(f.month).padStart(2, '0')}`
 					: `${f.year}`,
 			n ? `${n}-source${n === 1 ? '' : 's'}` : '',
+			people ? (people === 1 ? '1-person' : `${people}-people`) : '',
 			...[f.camera, f.place, f.q].map((t) => (t ? slug(t) : '')),
 			f.favourite ? 'favourites' : '',
+			f.pinned ? 'pinned' : '',
 			f.hidden ? 'hidden' : '',
 			f.guessed_date ? 'guessed-dates' : '',
 			f.has_location === true ? 'with-location' : f.has_location === false ? 'without-location' : ''

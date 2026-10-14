@@ -80,6 +80,15 @@ export function accessHelpers(h: World) {
 		return album;
 	}
 
-	return { albumRole, assetLevel, visible, heldFor, findAsset, needLevel, findAlbum };
+	return {
+		albumRole,
+		assetLevel,
+		sourceLevel,
+		visible,
+		heldFor,
+		findAsset,
+		needLevel,
+		findAlbum
+	};
 }
 export type AccessHelpers = ReturnType<typeof accessHelpers>;

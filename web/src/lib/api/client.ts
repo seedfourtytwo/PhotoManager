@@ -37,6 +37,7 @@ import type {
 	Face,
 	Facets,
 	Health,
+	HomeData,
 	Id,
 	ImportReport,
 	ImportReportPage,
@@ -279,6 +280,9 @@ export function createApi(options: ApiOptions = {}) {
 		jobs: (status?: JobStatus | 'waiting') => get<Job[]>(query('/api/jobs', { status })),
 		retryJob: (id: Id) => request<{ queued: boolean }>('POST', `/api/jobs/${id}/retry`),
 		stats: () => get<Stats>('/api/stats'),
+
+		// Home (issue 54): on this day, memories, what is new
+		home: () => get<HomeData>('/api/home'),
 
 		// assets
 		assets: (filters: AssetFilters, cursor: string | null = null, limit = 200) => {
