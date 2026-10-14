@@ -30,6 +30,8 @@ EXPECTED_TABLES = {
     "face_cluster_pass", "face_cluster_mark",
     # ops
     "backup_target", "backup_run",
+    # keep on my phone (0031)
+    "sync_rule", "sync_sent",
 }  # fmt: skip
 
 
@@ -80,7 +82,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 30
+    assert _latest() == 31
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -540,3 +542,50 @@ def test_photos_from_before_0030_come_through_with_no_exposure(tmp_path: Path) -
     repo = SqliteRepository(Database(upgraded, db))
     assert [i for i, _ in repo.assets_without_exposure(0, 10)] == [1, 2]
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
+
+
+def test_devices_from_before_0031_keep_nothing_and_their_rules_go_with_them(
+    tmp_path: Path,
+) -> None:
+    """0031: Keep on my phone. An existing device starts with no rules; deleting what a rule
+    names (an album, a person) or the device's account deletes the rule."""
+    db = tmp_path / "library.db"
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 31)
+    for number, sql in _migrations():
+        if number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.executescript(
+        """INSERT INTO user (id, username, display_name, password_hash, role)
+               VALUES (1, 'c', 'C', 'x', 'admin');
+           INSERT INTO device (id, user_id, name, token_hash, created_at)
+               VALUES (1, 1, 'iPhone', 'h', '2026-10-01T10:00:00+00:00');
+           INSERT INTO album (id, owner_id, title, created_at, updated_at)
+               VALUES (1, 1, 'Summer', '2026-10-01', '2026-10-01');
+           INSERT INTO person (id, name) VALUES (1, 'Lea');"""
+    )
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+    upgraded.execute("PRAGMA foreign_keys = ON")
+
+    assert upgraded.execute("SELECT COUNT(*) FROM sync_rule").fetchone()[0] == 0
+    add = (
+        "INSERT INTO sync_rule (device_id, kind, {col}, mode, created_at) "
+        "VALUES (1, ?, ?, ?, 'now')"
+    )
+    upgraded.execute(add.format(col="album_id"), ("album", 1, "include"))
+    upgraded.execute(add.format(col="person_id"), ("person", 1, "exclude"))
+    upgraded.execute(
+        add.format(col="filter_json"), ("filter", '{"q": "tag:screenshot"}', "exclude")
+    )
+    with pytest.raises(sqlite3.IntegrityError):  # one rule per thing
+        upgraded.execute(add.format(col="album_id"), ("album", 1, "exclude"))
+    with pytest.raises(sqlite3.IntegrityError):  # an album rule names an album
+        upgraded.execute(add.format(col="person_id"), ("album", 1, "include"))
+    upgraded.execute("DELETE FROM album WHERE id = 1")
+    upgraded.execute("DELETE FROM person WHERE id = 1")
+    kinds = upgraded.execute("SELECT kind FROM sync_rule").fetchall()
+    assert [k[0] for k in kinds] == ["filter"]
+    upgraded.execute("DELETE FROM user WHERE id = 1")
+    assert upgraded.execute("SELECT COUNT(*) FROM sync_rule").fetchone()[0] == 0

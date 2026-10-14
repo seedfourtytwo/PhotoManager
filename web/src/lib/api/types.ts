@@ -481,10 +481,46 @@ export type Device = {
 	platform: DevicePlatform;
 	created_at: string;
 	last_used_at: string | null;
+	/** When it last asked for its "Keep on my phone" list (v1.7). */
+	last_sync_at: string | null;
 	revoked: boolean;
 };
 /** The token is shown once. */
 export type NewDevice = { device: Device; token: string };
+
+// --- keep on my phone (v1.7) ----------------------------------------------------------------
+
+export type SyncMode = 'include' | 'exclude';
+/** What a device keeps on it or leaves off: an album, a person, or filters (search facets in `q`). */
+export type SyncTarget =
+	| { kind: 'album'; album_id: Id }
+	| { kind: 'person'; person_id: Id }
+	| { kind: 'filter'; filters: AssetFilters };
+export type SyncRuleIn = SyncTarget & { mode: SyncMode };
+export type SyncRule = {
+	id: Id;
+	kind: SyncTarget['kind'];
+	mode: SyncMode;
+	album_id: Id | null;
+	person_id: Id | null;
+	filters: AssetFilters | null;
+	/** The album's title or the person's name; null for filters (described by the app). */
+	label: string | null;
+	/** Photos it names that you can see. */
+	count: number;
+	/** It names nothing you can see any more (an album unshared or deleted, a person merged). */
+	gone: boolean;
+	/** Of an include's photos, those you may only view: they can't go to the phone. */
+	view_only: number;
+};
+/** One device's list: what it keeps and leaves off, its size, and how much it has fetched. */
+export type DeviceSync = {
+	device: Device;
+	rules: SyncRule[];
+	count: number;
+	bytes: number;
+	sent: number;
+};
 
 export type RemoteSourceIn = { label: string; remote: string; path: string };
 export type RemoteSource = RemoteSourceIn & { id: Id };

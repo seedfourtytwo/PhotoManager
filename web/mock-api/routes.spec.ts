@@ -406,6 +406,56 @@ describe('backups, devices and remote sources', () => {
 		expect((await api.devices()).find((d) => d.id === created.device.id)?.revoked).toBe(true);
 	});
 
+	it('keeps albums, people and filters on a device, minus what it leaves off', async () => {
+		const api = await h.signedIn();
+		const { device } = await api.createDevice({ name: 'iPhone', platform: 'ios' });
+		const [a, b] = (await api.assets({}, null, 2)).items;
+		const album = await api.createAlbum({ title: 'Summer', asset_ids: [a.id, b.id] });
+		const kept = await api.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect(kept).toMatchObject({ kind: 'album', label: 'Summer', count: 2, gone: false });
+		const again = await api.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'exclude'
+		});
+		expect(again.id).toBe(kept.id);
+		await api.keepOnDevice(device.id, { kind: 'album', album_id: album.id, mode: 'include' });
+		await api.trashAssets([b.id]);
+		const sync = await api.deviceSync(device.id);
+		expect(sync.rules.map((r) => [r.kind, r.mode, r.count])).toEqual([['album', 'include', 1]]);
+		expect(sync.count).toBe(1);
+		expect(sync.bytes).toBe((await api.asset(a.id)).byte_size);
+		expect(sync.device.last_sync_at).toBeNull();
+		await api.dropFromDevice(device.id, kept.id);
+		expect((await api.deviceSync(device.id)).rules).toEqual([]);
+		expect(await api.resendToDevice(device.id)).toEqual({ forgotten: 0 });
+		await expect(
+			api.keepOnDevice(device.id, { kind: 'album', album_id: 999, mode: 'include' })
+		).rejects.toMatchObject({ status: 404 });
+		await api.revokeDevice(device.id);
+		await expect(api.deviceSync(device.id)).rejects.toMatchObject({ status: 404 });
+	});
+
+	it('counts the photos of a kept album its owner may only view', async () => {
+		h.mock.state.access.set(2, { everyone: 'view', users: [] });
+		const partner = await h.signedIn('partner', '2345');
+		const { device } = await partner.createDevice({ name: 'Phone', platform: 'ios' });
+		const free = h.mock.state.assets.find((a) => a.sources[0].source_id === 1)!;
+		const viewOnly = h.mock.state.assets.find((a) => a.sources[0].source_id === 2)!;
+		const album = await partner.createAlbum({ title: 'Mixed', asset_ids: [free.id, viewOnly.id] });
+		const rule = await partner.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect([rule.count, rule.view_only]).toEqual([2, 1]);
+		expect((await partner.deviceSync(device.id)).count).toBe(1);
+	});
+
 	it('lists rclone remotes, adds a remote source and pulls it', async () => {
 		const api = await h.signedIn();
 		const { remotes } = await api.remotes();
