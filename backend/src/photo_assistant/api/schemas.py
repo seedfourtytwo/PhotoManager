@@ -132,6 +132,18 @@ class SourcePatch(BaseModel):
     recheck: Recheck | None = None  # check it again by itself: off, hourly, daily or weekly
 
 
+class SourceRemoval(BaseModel):
+    """What stopping watching a source would do: its photos, and those no other source holds."""
+
+    photos: int
+    only_here: int
+
+
+class SourceRemoved(BaseModel):
+    only_here: int
+    trashed: int
+
+
 class SourceOut(BaseModel):
     id: int
     label: str

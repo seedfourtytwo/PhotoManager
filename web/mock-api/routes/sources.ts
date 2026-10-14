@@ -1,7 +1,7 @@
 /** Sources (folders the library imports from): adding, checking, scanning, who may see them. */
-import type { Access, Source, SourcePatch } from '../../src/lib/api/types.ts';
+import type { Access, PhotosOnlyHere, Source, SourcePatch } from '../../src/lib/api/types.ts';
 import { live } from '../access.ts';
-import { admin, HttpError, idParam, me, ok, requireFields, type Route } from '../http.ts';
+import { admin, HttpError, idParam, me, nowIso, ok, requireFields, type Route } from '../http.ts';
 import type { Helpers } from '../helpers.ts';
 import type { MockSource } from '../types.ts';
 
@@ -31,7 +31,66 @@ export function sourceRoutes(h: Helpers): Route[] {
 		};
 	}
 
+	function findSource(id: number): MockSource {
+		const source = h.state().sources.find((s) => s.id === id);
+		if (!source) throw new HttpError(404, 'source not found');
+		return source;
+	}
+
+	/** Live photos in the folder, and those no other folder holds (as the server counts). */
+	function holdings(id: number) {
+		const photos = h
+			.state()
+			.assets.filter((a) => a.trashed_at === null && a.sources.some((o) => o.source_id === id));
+		const onlyHere = photos.filter((a) => a.sources.every((o) => o.source_id === id));
+		return { photos, onlyHere };
+	}
+
+	/** Stop watching (v1.6), with the server's statuses and sentences (app/stop_watching.py). */
+	function removeSource(id: number, photos: PhotosOnlyHere) {
+		const source = findSource(id);
+		if (source.kind === 'inbox')
+			throw new HttpError(422, 'an upload inbox belongs to its account and cannot be removed');
+		const state = h.state();
+		const itsCheck = (job: (typeof state.jobs)[number]) =>
+			job.kind === 'import' && Number(job.payload.source_id) === id;
+		if (state.jobs.some((job) => itsCheck(job) && job.status === 'running'))
+			throw new HttpError(
+				409,
+				'this folder is being checked right now; try again when the check is done'
+			);
+		const { onlyHere } = holdings(id);
+		if (photos === 'trash') for (const a of onlyHere) a.trashed_at = nowIso();
+		for (const a of state.assets) a.sources = a.sources.filter((o) => o.source_id !== id);
+		state.jobs = state.jobs.filter((job) => !itsCheck(job));
+		state.reports = state.reports.filter((r) => r.source_id !== id);
+		state.access.delete(id);
+		state.sources = state.sources.filter((s) => s !== source);
+		return { only_here: onlyHere.length, trashed: photos === 'trash' ? onlyHere.length : 0 };
+	}
+
 	return [
+		[
+			'GET',
+			/^\/api\/sources\/(\d+)\/removal$/,
+			(ctx) => {
+				admin(ctx);
+				findSource(idParam(ctx));
+				const { photos, onlyHere } = holdings(idParam(ctx));
+				return ok({ photos: photos.length, only_here: onlyHere.length });
+			}
+		],
+		[
+			'DELETE',
+			/^\/api\/sources\/(\d+)$/,
+			(ctx) => {
+				admin(ctx);
+				const photos = ctx.url.searchParams.get('photos') ?? 'keep';
+				if (photos !== 'keep' && photos !== 'trash')
+					throw new HttpError(422, 'photos: keep or trash');
+				return ok(removeSource(idParam(ctx), photos));
+			}
+		],
 		[
 			'GET',
 			/^\/api\/sources$/,

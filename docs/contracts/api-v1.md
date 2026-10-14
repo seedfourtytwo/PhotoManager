@@ -162,6 +162,18 @@ least that long ago (a failed check counts, so it is not retried at once), unles
 already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
 off or disabled, possibly a moment already past (it runs at the server's next look).
 
+**Stop watching a folder (v1.6).** `GET /api/sources/{id}/removal` (admin) answers
+`{photos, only_here}`: the live photos in the source, and those no other source holds.
+`DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
+removes the source, its access list, its import history and its checks that have not started, and answers
+`{only_here, trashed}`. Photos another source also holds are not touched. With `keep` the
+photos found only there stay in the library with no source: by the access rule only admins
+see them, plus the members of an album they are in. With `trash` they go to the trash
+(`trashed_by` = the admin, restorable for 30 days). Nothing in the folder itself is read,
+changed or deleted; a cloud source's own pulled copy (`staging/<id>`) is deleted. An upload
+inbox is `422`; a check of that source running right now, or any import into the library,
+is `409` (try again when it ends). Adding the same folder again later finds the same photos.
+
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
 | PUT | `/api/sources/{id}/access` | `Access` | `Access` (admin) |
@@ -467,3 +479,13 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Look | New: `GET/PUT /api/me/look` and `GET/PUT /api/admin/accounts/{id}/look` (see "Look" above). | The mode switch in Settings saves on the account (`api.setMyMode`); Admin → People has a "Look" form per account (`api.accountLook`, `api.setAccountLook`). The browser's old `pa.theme` setting is removed after the first `GET /api/me/look` that answers; it is sent as the mode first only when that answer is still the defaults (the API does not say whether a look was ever stored, so a sheet equal to the defaults counts as none). |
+
+---
+
+# v1.6 changes (stop watching a folder)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Sources | New: `GET /api/sources/{id}/removal` and `DELETE /api/sources/{id}` (see "Sources" above). | Admin → Folders has "Stop watching" with a confirm sheet (`api.sourceRemoval`, `api.removeSource`); the enabled switch reads "Pause checking" / "Resume checking". |

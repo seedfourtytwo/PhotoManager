@@ -1,8 +1,9 @@
 """Sources (the folders photos come from) and who may see them (contract: Sources)."""
 
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from photo_assistant.api.deps import (
     ADMIN_ONLY,
@@ -18,9 +19,13 @@ from photo_assistant.api.schemas import (
     SourceIn,
     SourceOut,
     SourcePatch,
+    SourceRemoval,
+    SourceRemoved,
     UserAccess,
 )
 from photo_assistant.api.services import Services
+from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
+from photo_assistant.app.stop_watching import PhotosOnlyHere
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.library_paths import folder_path_problem
@@ -99,6 +104,27 @@ def patch_source(
     if body.recheck is not None:
         services.repo.set_source_recheck(source_id, body.recheck)
     return _out(services, viewer, source_id)
+
+
+@router.get("/{source_id}/removal", dependencies=ADMIN_ONLY)
+def removal(services: ServicesDep, source_id: int) -> SourceRemoval:
+    """What "Stop watching" would do: the confirm sheet shows it before anything changes."""
+    preview = services.stop_watching.preview(source_id)
+    return SourceRemoval(photos=preview.photos, only_here=preview.only_here)
+
+
+@router.delete("/{source_id}")
+def remove_source(
+    services: ServicesDep,
+    admin: AdminUser,
+    source_id: int,
+    photos: Annotated[PhotosOnlyHere, Query()] = PhotosOnlyHere.KEEP,
+) -> SourceRemoved:
+    """Stop watching a folder. Only the library's records change, never the folder itself."""
+    removed = services.stop_watching.stop(source_id, photos, admin.id)
+    if removed.trashed:
+        services.repo.enqueue_once(GROUP_JOB, FULL_REGROUP)  # groups lose members
+    return SourceRemoved(only_here=removed.only_here, trashed=removed.trashed)
 
 
 @router.get("/{source_id}/access", dependencies=ADMIN_ONLY)

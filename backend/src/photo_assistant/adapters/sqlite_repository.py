@@ -4,7 +4,7 @@ connections live in ``sqlite_database``; ``open_database`` is re-exported here).
 import json
 import sqlite3
 import uuid
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -45,6 +45,7 @@ from photo_assistant.ports import (
     Job,
     Page,
     RenderedImage,
+    SourceBusyError,
     SourceExistsError,
 )
 
@@ -202,6 +203,53 @@ class SqliteRepository(
 
     def rename_source(self, source_id: int, label: str) -> None:
         self._write("UPDATE source SET label = ? WHERE id = ?", (label, source_id))
+
+    def source_holdings(self, source_id: int) -> dict[int, frozenset[int]]:
+        """Each live photo in this source → every source that holds it (this one included)."""
+        rows = self._all(
+            """SELECT x.asset_id, y.source_id FROM asset_source x
+               JOIN asset a ON a.id = x.asset_id AND a.trashed_at IS NULL
+               JOIN asset_source y ON y.asset_id = x.asset_id
+               WHERE x.source_id = ?""",
+            (source_id,),
+        )
+        holders: dict[int, set[int]] = {}
+        for r in rows:
+            holders.setdefault(int(r["asset_id"]), set()).add(int(r["source_id"]))
+        return {asset_id: frozenset(s) for asset_id, s in holders.items()}
+
+    def remove_source(
+        self, source_id: int, *, check_kind: str, trash: Sequence[int], by: int, now: datetime
+    ) -> int:
+        """One transaction: forget the source and every row that points at it, after moving
+        ``trash`` to the trash (by ``by``); answers how many went there. Its checks that have
+        not started go with it; a running one raises SourceBusyError and nothing changes.
+        Photos stay: their other sources' rows, albums and edits are not touched."""
+        source = (source_id,)
+        its_checks = "kind = ? AND json_extract(payload_json, '$.source_id') = ?"
+        with self._transaction():
+            running = f"SELECT 1 FROM job WHERE {its_checks} AND status = 'running'"
+            if self._one(running, (check_kind, source_id)):
+                raise SourceBusyError(
+                    "this folder is being checked right now; try again when the check is done"
+                )
+            self._write(f"DELETE FROM job WHERE {its_checks}", (check_kind, source_id))
+            trashed = self._count(
+                """UPDATE asset SET trashed_at = ?, trashed_by = ?
+                   WHERE trashed_at IS NULL AND id IN (SELECT value FROM json_each(?))""",
+                (utc_text(now), by, json.dumps(list(trash))),
+            )
+            self._write("UPDATE asset SET first_source_id = NULL WHERE first_source_id = ?", source)
+            self._write("DELETE FROM asset_source WHERE source_id = ?", source)
+            self._write("DELETE FROM source_access WHERE source_id = ?", source)
+            self._write(
+                """DELETE FROM import_item
+                   WHERE run_id IN (SELECT id FROM import_run WHERE source_id = ?)""",
+                source,
+            )
+            self._write("DELETE FROM import_run WHERE source_id = ?", source)
+            self._write("DELETE FROM source WHERE id = ?", source)
+        return trashed
 
     # --- assets ----------------------------------------------------------------------------
 

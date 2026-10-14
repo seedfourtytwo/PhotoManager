@@ -162,6 +162,20 @@ Each `source` row is scanned independently (local path, or an rclone remote pull
 into `staging/<source_id>/`). Because assets are keyed by content hash, the same photo found in
 three sources is one asset with three `asset_source` rows — aggregation is a consequence of the
 data model, not extra logic. "Rescan all" enqueues one scan job per enabled source.
+A disabled source ("Pause checking") is only left out of scans and re-checks; it still grants
+access, so its photos stay visible.
+
+### Stop watching a source
+`StopWatching` (app/stop_watching.py) removes a source; no migration, nothing on disk but a
+cloud source's own `staging/<id>` copy. Holding the library's import lock (so no import links
+a photo elsewhere meanwhile) it asks for each live photo of the source which sources hold it;
+the photos held only there (`only_from`, in app/) are kept or trashed (`trashed_by` = the
+admin). Then one transaction (`SqliteRepository.remove_source`) refuses if a check of that
+source is running (409), drops its checks that have not started, nulls
+`asset.first_source_id`, and deletes its `asset_source`, `source_access`, `import_run`/
+`import_item` rows and the `source` row (the foreign keys have no cascade; `inbox` rows are
+never reached, because an inbox source is refused with 422). A kept photo has no source left:
+by the visibility rule only admins see it, plus members of an album it is in.
 
 ### Download / convert
 `Downloads` (app/downloads.py) takes the scope (ids, album or filter) resolved through the

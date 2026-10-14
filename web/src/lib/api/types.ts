@@ -70,6 +70,11 @@ export type Source = {
 export type Recheck = 'off' | 'hourly' | 'daily' | 'weekly';
 export type SourceIn = { label: string; path: string };
 export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Recheck }>;
+/** What "Stop watching" would do: the folder's photos, and those no other folder holds. */
+export type SourceRemoval = { photos: number; only_here: number };
+/** v1.6: photos found only in a removed folder stay (admins and album members see them) or go to the trash. */
+export type PhotosOnlyHere = 'keep' | 'trash';
+export type SourceRemoved = { only_here: number; trashed: number };
 
 export type Access = { everyone: Level | null; users: { user_id: Id; level: Level }[] };
 

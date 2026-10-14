@@ -75,9 +75,12 @@ import type {
 	SearchResult,
 	SetupBody,
 	SetupState,
+	PhotosOnlyHere,
 	Source,
 	SourceIn,
 	SourcePatch,
+	SourceRemoval,
+	SourceRemoved,
 	StatePatch,
 	Stats,
 	TrashItem,
@@ -265,6 +268,11 @@ export function createApi(options: ApiOptions = {}) {
 		updateSource: (id: Id, body: SourcePatch) =>
 			request<Source>('PATCH', `/api/sources/${id}`, body),
 		scanSource: (id: Id) => request<Queued>('POST', `/api/sources/${id}/scan`),
+		/** Admin: what stopping watching this folder would do (nothing changes yet). */
+		sourceRemoval: (id: Id) => get<SourceRemoval>(`/api/sources/${id}/removal`),
+		/** Admin: stop watching a folder; the folder itself is never touched. */
+		removeSource: (id: Id, photos: PhotosOnlyHere) =>
+			request<SourceRemoved>('DELETE', query(`/api/sources/${id}`, { photos })),
 		scanAll: () => request<Queued[]>('POST', '/api/sources/scan-all'),
 		sourceAccess: (id: Id) => get<Access>(`/api/sources/${id}/access`),
 		setSourceAccess: (id: Id, body: Access) =>

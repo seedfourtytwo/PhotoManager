@@ -26,9 +26,15 @@ from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.adapters.sqlite_database import Database, open_library_database
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from photo_assistant.adapters.staging_folders import StagingFolders
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
-from photo_assistant.api.integrations import Integrations, build_integrations, with_source_areas
+from photo_assistant.api.integrations import (
+    Integrations,
+    build_integrations,
+    staging_root,
+    with_source_areas,
+)
 from photo_assistant.api.ml_services import MlServices, build_ml_services
 from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.settings import Settings
@@ -44,6 +50,7 @@ from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
 from photo_assistant.app.recheck import ScheduledChecks
 from photo_assistant.app.review import Review
+from photo_assistant.app.stop_watching import StopWatching
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
@@ -78,6 +85,7 @@ class Services:
     printer: AlbumPrinter
     stale_jobs: StaleJobSweep  # queues jobs again whose process died (server only)
     rechecks: ScheduledChecks
+    stop_watching: StopWatching  # removes a source; the folder itself is never touched
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -247,4 +255,5 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         printer,
         stale_jobs,
         rechecks,
+        StopWatching(repo, store, StagingFolders(staging_root(root)), clock),
     )
