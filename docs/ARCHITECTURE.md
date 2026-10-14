@@ -184,6 +184,27 @@ Each `source` row is scanned independently (local path, or an rclone remote pull
 into `staging/<source_id>/`). Because assets are keyed by content hash, the same photo found in
 three sources is one asset with three `asset_source` rows — aggregation is a consequence of the
 data model, not extra logic. "Rescan all" enqueues one scan job per enabled source.
+A disabled source ("Pause checking") is only left out of scans and re-checks; it still grants
+access, so its photos stay visible.
+
+### Stop watching a source
+`StopWatching` (app/stop_watching.py) needs no migration. On disk it only deletes a cloud
+source's own `staging/<id>` copy. It holds the library's import lock, so no import can link a
+photo elsewhere meanwhile. Under that lock it asks, for each live photo of the source, which
+sources hold it; the photos held only there are picked out by `only_from` (in app/). Then one
+transaction refuses if a check of that source is running (409) and drops its checks that
+have not started. The rest depends on the choice:
+- **Keep** *detaches* the source (`SqliteRepository.detach_source`): kind `kept`, root
+  `kept:<id>` (frees the folder; `root` is UNIQUE), disabled, re-check off, no remote config.
+  Its `source_access` and `asset_source` rows stay, so visibility and levels are exactly as
+  before. Scans and re-checks only take enabled sources; the routes refuse to scan or
+  re-enable it, `SyncSource` refuses a queued check of it, and the backup overlap check leaves
+  its root out (`watched_roots`).
+- **Trash, or removing a detached source** (`SqliteRepository.remove_source`): the photos
+  found only there are trashed (`trashed_by` is the admin) or left with no source. Then
+  `asset.first_source_id` is nulled and its `asset_source`, `source_access`, `import_run` /
+  `import_item` rows and the `source` row go. The foreign keys have no cascade. `inbox` rows
+  are never reached, because an inbox source is refused with 422.
 
 ### Download / convert
 `Downloads` (app/downloads.py) takes the scope (ids, album or filter) resolved through the
