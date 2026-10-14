@@ -36,9 +36,9 @@ test('keep an album on a phone, leave out screenshots, and see it on You', async
 	await expect(phone).not.toContainText('0 photos');
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Done' }).click();
-	await expect(dialog).toBeHidden(); // its history step is undone before leaving
-
-	// In the app, as a person goes: a reload could be cut short by the step's way out.
+	await expect(dialog).toBeHidden();
+	// Its history step is undone a moment after it closes: going on before that is cut short.
+	await page.waitForFunction(() => !JSON.stringify(history.state ?? {}).includes('"sheet"'));
 	await follow(page, '/settings');
 	keeps = await openPhone(page);
 	await expect(keeps.getByRole('region', { name: 'Keeps' })).toContainText('Summers at the house');
