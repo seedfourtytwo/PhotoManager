@@ -2,8 +2,11 @@
 	import type { MlStatus, Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { photos } from '$lib/format';
+	import PageHead from '$lib/components/PageHead.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
 
+	/** One size for every face (small multiples); three fit across a 320 px phone. */
+	const PORTRAIT = 84;
 	let people = $state<Person[] | null>(null);
 	let hidden = $state<Person[]>([]);
 	let status = $state<MlStatus | null>(null);
@@ -44,8 +47,9 @@
 
 <svelte:head><title>People · Photos</title></svelte:head>
 
+<PageHead title="People" back={{ href: '/collections', label: 'Collections' }} />
+
 <div class="page">
-	<h1>People</h1>
 	{#if status && !status.faces.ready}
 		<p class="quiet small note" role="note">
 			New faces are not being found yet. People found so far stay listed.
@@ -71,9 +75,8 @@
 				{#each group.list as person (person.id)}
 					<li>
 						<a href={`/people/${person.id}`}>
-							<Portrait portrait={person.portrait} />
+							<Portrait portrait={person.portrait} size={PORTRAIT} />
 							<span class="name" class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
-							<span class="quiet small">{photos(person.asset_count)}</span>
 						</a>
 					</li>
 				{/each}
@@ -84,14 +87,17 @@
 	{#if hidden.length}
 		<details class="hidden">
 			<summary class="quiet">Hidden · {hidden.length}</summary>
-			<ul>
+			<ul class="tiles">
 				{#each hidden as person (person.id)}
-					<li>
+					<li class="tile-row">
 						<a href={`/people/${person.id}`}>
 							<Portrait portrait={person.portrait} size={40} />
-							<span class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
+							<span class="tile-main">
+								<span class="tile-title" class:quiet={!person.name}>{person.name ?? 'Someone'}</span
+								>
+								<span class="tile-line">{photos(person.asset_count)}</span>
+							</span>
 						</a>
-						<span class="quiet small">{photos(person.asset_count)}</span>
 						<button type="button" onclick={() => showAgain(person)}>Show again</button>
 					</li>
 				{/each}
@@ -102,16 +108,19 @@
 
 <style>
 	.page {
-		padding: var(--s-5) var(--page-x) var(--s-7);
+		padding: 0 var(--page-x) var(--s-7);
 	}
 	.note {
 		max-width: var(--measure);
-		margin: var(--s-2) 0 0;
+		margin: 0 0 var(--s-4);
 	}
 	h2 {
-		margin: var(--s-6) 0 var(--s-3);
+		margin: var(--s-5) 0 var(--s-3);
 	}
-	/* Small multiples: identical squares, names beneath them like captions. */
+	h2:first-of-type {
+		margin-top: var(--s-2);
+	}
+	/* Small multiples: identical faces, names beneath them like captions. */
 	.people {
 		list-style: none;
 		margin: 0;
@@ -122,16 +131,14 @@
 	}
 	.people a {
 		display: grid;
-		gap: var(--s-1);
+		justify-items: center;
+		gap: var(--s-2);
+		text-align: center;
 		text-decoration: none;
 	}
-	.people a :global(:first-child) {
-		margin-bottom: var(--s-1);
-	}
 	.name {
-		font-family: var(--font-title);
-		font-weight: var(--title-weight);
-		font-size: var(--fs-16);
+		max-width: 100%;
+		font-weight: 600;
 		line-height: var(--lh-tight);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -150,24 +157,14 @@
 		cursor: pointer;
 		min-height: var(--target);
 		align-content: center;
-	}
-	.hidden ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.hidden li {
-		display: flex;
-		align-items: center;
-		gap: var(--s-3);
-		padding: var(--s-1) 0;
+		margin-bottom: var(--s-2);
 	}
 	.hidden a {
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);
+		flex: 1;
 		min-width: 0;
-		margin-right: auto;
 		color: var(--ink);
 		text-decoration: none;
 	}
@@ -177,7 +174,6 @@
 	@media (hover: hover) {
 		.people a:hover .name {
 			text-decoration: underline;
-			text-decoration-thickness: 1px;
 			text-underline-offset: 0.2em;
 		}
 	}

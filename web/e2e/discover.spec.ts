@@ -84,12 +84,16 @@ test('people: grid of faces, rename, merge, and a person’s photos', async ({ p
 	const someone = page.getByRole('link', { name: /^Someone/ }).first();
 	await someone.click();
 	await expect(page.locator('.tile').first()).toBeVisible();
-	await page.getByRole('button', { name: 'Name' }).click();
+	// the person's tools wait behind the round ⋯
+	const more = page.getByRole('button', { name: 'More', exact: true });
+	await more.click();
+	await page.getByRole('button', { name: 'Name', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Name this person' });
 	await dialog.getByLabel('Name').fill('Uncle Jo');
 	await dialog.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('heading', { name: 'Uncle Jo' })).toBeVisible();
 
+	await more.click();
 	await page.getByRole('button', { name: 'Merge with…' }).click();
 	const merge = page.getByRole('dialog', { name: 'Merge people' });
 	await merge.getByRole('checkbox').first().check();
@@ -105,10 +109,9 @@ test('guests see people but cannot rename or merge', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await resetMock();
 	await signIn(page, '/people', GUEST);
-	await page
-		.getByRole('link', { name: /photos$/ })
-		.first()
-		.click();
+	await page.getByRole('main').locator('.people a').first().click();
+	await expect(page).toHaveURL(/\/people\/\d+$/);
+	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: /^(Name|Rename)$/ })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Merge with…' })).toHaveCount(0);
 });

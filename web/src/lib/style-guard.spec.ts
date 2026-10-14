@@ -88,8 +88,6 @@ describe('style guard', () => {
 		'/src/lib/components/Editor.svelte', // (c)
 		'/src/lib/components/PhotoGrid.svelte', // (b) library
 		'/src/lib/components/Timeline.svelte', // (b)
-		'/src/lib/components/PeopleEditor.svelte', // (d) collections
-		'/src/lib/components/PortraitDialog.svelte', // (d)
 		'/src/lib/components/admin/Backups.svelte', // (d) admin
 		'/src/lib/components/admin/FolderList.svelte', // (d)
 		'/src/lib/components/admin/ReportDialog.svelte', // (d)

@@ -260,12 +260,12 @@
 	img.waiting {
 		visibility: hidden;
 	}
-	/* The round window: what is outside it is dimmed, and will not be in the portrait. */
+	/* The round window: what is outside it is dimmed, and will not be in the portrait. The
+	   shade alone draws its edge. */
 	.window {
 		position: absolute;
 		inset: 0;
 		border-radius: 50%;
-		border: 1px solid var(--on-photo-90);
 		box-shadow: 0 0 0 100vmax var(--photo-shade-55);
 		pointer-events: none;
 	}

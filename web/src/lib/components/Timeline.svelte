@@ -1,13 +1,19 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import type { Id } from '$lib/api';
+	import type { AssetOut, Id } from '$lib/api';
 	import { settings, viewport } from '$lib/app.svelte';
 	import { createLasso } from '$lib/lasso.svelte';
 	import type { TimelineLoader } from '$lib/loader.svelte';
 	import type { Selection } from '$lib/selection';
 	import { monthLayouts } from '$lib/month-layouts';
 	import { tileOf } from '$lib/tiles';
-	import { groupByMonth, neighbour, rowHeightFor, type NavKey } from '$lib/timeline';
+	import {
+		groupByMonth,
+		neighbour,
+		rowHeightFor,
+		type MonthGroup,
+		type NavKey
+	} from '$lib/timeline';
 	import {
 		bandAround,
 		endOfGrids,
@@ -29,8 +35,18 @@
 		onselect: (next: Selection) => void;
 		/** The month at the top of the screen, for the time ruler. */
 		onmonth?: (key: string) => void;
+		/** How the photos are grouped under headings: by month, or by year (a person). */
+		grouping?: (assets: AssetOut[]) => MonthGroup[];
 	};
-	let { loader, selection, onopen, ontoggle, onselect, onmonth }: Props = $props();
+	let {
+		loader,
+		selection,
+		onopen,
+		ontoggle,
+		onselect,
+		onmonth,
+		grouping = groupByMonth
+	}: Props = $props();
 
 	const gap = $derived(settings.gap); // from the account's look
 	/**
@@ -40,7 +56,7 @@
 	const LABEL = 48;
 	let width = $state(0);
 	const rowHeight = $derived(rowHeightFor(viewport.width, settings.thumbSize));
-	const groups = $derived(groupByMonth(loader.items));
+	const groups = $derived(grouping(loader.items));
 	// Earlier months keep their layout when a page arrives (lib/month-layouts.ts).
 	const layoutsFor = monthLayouts();
 	const layouts = $derived(layoutsFor(groups, width, rowHeight, gap));

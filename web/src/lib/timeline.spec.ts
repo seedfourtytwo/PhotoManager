@@ -3,6 +3,7 @@ import { makeAsset } from './testing/fixtures';
 import {
 	aspect,
 	groupByMonth,
+	groupByYear,
 	justify,
 	letterboxed,
 	neighbour,
@@ -25,6 +26,26 @@ describe('groupByMonth', () => {
 
 	it('returns nothing for an empty library', () => {
 		expect(groupByMonth([])).toEqual([]);
+	});
+});
+
+describe('groupByYear', () => {
+	it('groups consecutive photos by local year and keeps order', () => {
+		const groups = groupByYear([
+			makeAsset(1, '2020-01-01T00:30:00'),
+			makeAsset(2, '2019-12-31T23:59:00'),
+			makeAsset(3, '2019-01-01T00:00:00'),
+			makeAsset(4, '2012-06-30T12:00:00')
+		]);
+		expect(groups.map((g) => [g.key, g.label, g.items.map((a) => a.id)])).toEqual([
+			['2020', '2020', [1]],
+			['2019', '2019', [2, 3]],
+			['2012', '2012', [4]]
+		]);
+	});
+
+	it('returns nothing for no photos', () => {
+		expect(groupByYear([])).toEqual([]);
 	});
 });
 
