@@ -55,7 +55,7 @@
 
 <script lang="ts">
 	import type { AssetOut, DownloadEstimate, DownloadOptions, DownloadScope } from '$lib/api';
-	import { api, notice, photoShare, SHARE_AGAIN, viewport } from '$lib/app.svelte';
+	import { api, notice, photoShare, shareAgain, viewport } from '$lib/app.svelte';
 	import {
 		DEFAULT_OPTIONS,
 		EDGE_PRESETS,
@@ -119,9 +119,9 @@
 	async function share(asset: AssetOut) {
 		busy = true;
 		try {
-			const outcome = await photoShare.share(asset, options);
+			const outcome = await photoShare.share([asset.id], options);
 			if (outcome === 'shared') onclose();
-			else if (outcome === 'ready') notice.show(SHARE_AGAIN);
+			else if (outcome === 'ready') notice.show(shareAgain(1));
 		} catch (e) {
 			notice.error(e);
 		} finally {

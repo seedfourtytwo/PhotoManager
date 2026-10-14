@@ -9,6 +9,6 @@ export { library } from './state/library.svelte';
 export { chooseMode, loadLook } from './state/look-loading';
 export { notice, type NoticeAction } from './state/notice.svelte';
 export { isPublicRoute, session } from './state/session.svelte';
-export { photoShare, SHARE_AGAIN } from './state/share';
+export { formFromDetails, gettingPhotos, photoShare, shareAgain } from './state/share';
 export { forgetOldDensity, settings } from './state/settings.svelte';
 export { isFilterable, ui, viewport } from './state/ui.svelte';
