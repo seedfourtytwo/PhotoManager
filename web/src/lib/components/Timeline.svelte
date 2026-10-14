@@ -280,7 +280,9 @@
 		pointer-events: none;
 	}
 	@media (max-width: 639px) {
+		/* Under the page's compact glass title (PageHead), which is a touch target tall. */
 		h2 {
+			top: calc(var(--top) + var(--target));
 			padding: var(--s-3) var(--s-2) var(--s-2);
 			font-size: var(--fs-16);
 		}

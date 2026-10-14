@@ -3,7 +3,7 @@
 	import { api } from '$lib/app.svelte';
 	import { Counts } from '$lib/counts.svelte';
 	import { filtersToQuery, withFilter } from '$lib/filters';
-	import { formatCount } from '$lib/format';
+	import { photos } from '$lib/format';
 	import { without } from '$lib/questions';
 
 	/** More: the two switches that are not a question of who, when, where or which camera. */
@@ -17,17 +17,14 @@
 		() => api.facets(others).then((f) => f.guessed_dates)
 	);
 	const switches = $derived([
-		{
-			key: 'hidden' as const,
-			title: 'Show hidden photos',
-			line: 'Only the photos you hid',
-			count: null
-		},
+		{ key: 'hidden' as const, title: 'Show hidden photos', line: 'Only the photos you hid' },
 		{
 			key: 'guessed_date' as const,
 			title: 'Only guessed dates',
-			line: 'The date was read from the file, not recorded by the camera',
-			count: guessed.value
+			line:
+				guessed.value === null
+					? 'Dated from the file, not by the camera'
+					: `${photos(guessed.value)} dated from the file, not by the camera`
 		}
 	]);
 </script>
@@ -37,10 +34,7 @@
 		<label class="tile-row" for="{uid}-{s.key}">
 			<span class="tile-main">
 				<span class="tile-title">{s.title}</span>
-				<span class="tile-line"
-					>{s.line}{#if s.count !== null}<span class="data">, {formatCount(s.count)}</span
-						>{/if}</span
-				>
+				<span class="tile-line">{s.line}</span>
 			</span>
 			<input
 				id="{uid}-{s.key}"

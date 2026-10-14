@@ -27,15 +27,35 @@
 	];
 </script>
 
-<PageHead title="Library" line={total === null ? 'Counting…' : photos(total)}>
-	{#snippet actions()}
-		<Segmented
-			label="Library view"
-			options={VIEWS}
-			value={view}
-			onchange={(to) => to !== view && goto(to === 'grid' ? `/${query}` : `/calendar${query}`)}
-		/>
-		{@render tools?.()}
-	{/snippet}
-</PageHead>
+<div class="library-head">
+	<PageHead title="Library" line={total === null ? 'Counting…' : photos(total)}>
+		{#snippet actions()}
+			<Segmented
+				label="Library view"
+				options={VIEWS}
+				value={view}
+				onchange={(to) => to !== view && goto(to === 'grid' ? `/${query}` : `/calendar${query}`)}
+			/>
+			{@render tools?.()}
+		{/snippet}
+	</PageHead>
+</div>
 <FilterChips />
+
+<style>
+	/* "Library" is one word: it never breaks. Where the row has no room for every action (a
+	   narrow phone, filters that bring Keep on my phone), the actions and the avatar go under
+	   it together (PageHead). */
+	.library-head :global(.titles) {
+		flex: 1 0 auto;
+	}
+	/* A phone: the buttons are 44 px targets already; the room between them is their own. */
+	@media (max-width: 639px) {
+		.library-head :global(:is(.row, .end)) {
+			column-gap: var(--s-1);
+		}
+		.library-head :global(.actions) {
+			gap: 0;
+		}
+	}
+</style>

@@ -127,6 +127,7 @@
 				<IconButton
 					icon="select"
 					label="Select"
+					class="select"
 					aria-pressed={choosing || selection.ids.size > 0}
 					onclick={() => (choosing || selection.ids.size ? stopChoosing() : (choosing = true))}
 				/>
@@ -228,6 +229,10 @@
 <style>
 	.head {
 		padding-right: calc(var(--s-8) - var(--page-x));
+	}
+	/* Pressed, Select takes the accent of a selection; its tick stays drawn, not filled. */
+	.head :global(.select[aria-pressed='true'] svg) {
+		fill: none;
 	}
 	.page {
 		padding: 0 var(--s-8) 0 var(--page-x);
