@@ -16,6 +16,12 @@ import { attachmentName, shared, withShareSheet } from './share-sheet.ts';
 const pill = (page: Page) => page.getByRole('toolbar', { name: 'Selected photos' });
 const onPill = (page: Page) => pill(page).locator('.actions > button');
 const DOWNLOAD = /\/api\/assets\/\d+\/download\?/;
+/**
+ * Not the first tiles: on the real backend an earlier test (actions.spec.ts, focus after
+ * "Delete for good") deletes the library files of tiles 1 and 2, and a reset restores rows,
+ * not files.
+ */
+const TWO = [3, 4];
 
 test.beforeEach(async () => {
 	await resetMock();
@@ -28,7 +34,7 @@ test('two photos selected: Share hands the sheet both files in one go', async ({
 	page.on('response', (response) => {
 		if (DOWNLOAD.test(response.url())) answers.push(response);
 	});
-	await selectTiles(page, [0, 1]);
+	await selectTiles(page, TWO);
 	await selectionAction(page, 'Share');
 	await expect.poll(() => shared(page)).toHaveLength(1);
 	const [files] = await shared(page);
@@ -52,7 +58,7 @@ test('on a phone Share is on the pill and Download is under More', async ({ page
 	test.skip(!isPhone(page), 'a phone’s pill');
 	await withShareSheet(page);
 	await signIn(page);
-	await selectTiles(page, [0, 1]);
+	await selectTiles(page, TWO);
 	await expect(onPill(page).first()).toHaveText('Add to album');
 	await expect(onPill(page).nth(1)).toHaveText('Share');
 	await expect(onPill(page).last()).toHaveText('More');
@@ -70,7 +76,7 @@ test('a slow fetch says how many photos are coming, and the pill waits', async (
 		await held;
 		await route.fallback();
 	});
-	await selectTiles(page, [0, 1]);
+	await selectTiles(page, TWO);
 	await selectionAction(page, 'Share');
 	await expect(toast(page)).toHaveText('Getting 2 photos…');
 	await expect(pill(page)).toHaveAttribute('aria-busy', 'true');
@@ -82,7 +88,7 @@ test('a slow fetch says how many photos are coming, and the pill waits', async (
 
 test('without a share sheet the pill is as it was: Download, and no Share', async ({ page }) => {
 	await signIn(page);
-	await selectTiles(page, [0, 1]);
+	await selectTiles(page, TWO);
 	await expect(onPill(page).first()).toHaveText('Add to album');
 	await expect(onPill(page).nth(1)).toHaveText('Download');
 	await pill(page).getByRole('button', { name: 'More' }).click();
@@ -96,7 +102,7 @@ test('at 320 px with the largest text the pill with Share keeps everything insid
 	test.skip(isPhone(page), 'one project sets the width itself');
 	await withShareSheet(page);
 	await signIn(page);
-	await selectTiles(page, [0, 1]);
+	await selectTiles(page, TWO);
 	await page.setViewportSize({ width: 320, height: 800 });
 	await page.evaluate(() => document.documentElement.style.setProperty('--text-scale', '1.25'));
 	await expect(async () => {
