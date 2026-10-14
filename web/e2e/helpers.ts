@@ -276,6 +276,14 @@ export async function firstMonthWithPhotos(months: Locator) {
 	return { button: all[index], name: label.split(':')[0], number: index + 1 };
 }
 
+/**
+ * A closed sheet's history step is undone a moment after it closes: going on to another page
+ * before that is cut short. Waits until it is gone.
+ */
+export async function sheetStepGone(page: Page) {
+	await page.waitForFunction(() => !JSON.stringify(history.state ?? {}).includes('"sheet"'));
+}
+
 /** The open photo: the photo view (the loupe), a modal dialog. */
 export const loupe = (page: Page) => page.getByRole('dialog', { name: 'Photo viewer' });
 

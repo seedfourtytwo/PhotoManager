@@ -7,10 +7,12 @@ import type { Page } from '@playwright/test';
 import {
 	expect,
 	isPhone,
+	loupe,
 	loupeAction,
 	resetMock,
 	selectionAction,
 	selectTiles,
+	sheetStepGone,
 	signIn,
 	test
 } from './helpers.ts';
@@ -24,6 +26,7 @@ const DIR =
 	(THEME === 'light' ? '../docs/screenshots/integrated/light' : '../docs/screenshots/integrated');
 /** The light set: the screens where the theme matters most. */
 const LIGHT = new Set([
+	'00-home',
 	'02-login',
 	'02b-login-pin',
 	'03-library',
@@ -76,7 +79,23 @@ test('every screen', async ({ page }, info) => {
 		for (const digit of '12') await page.getByRole('button', { name: digit }).tap();
 	else await page.getByLabel('PIN').fill('12');
 	await shot(page, '02b-login-pin', p);
-	await signIn(page);
+	await signIn(page, '/home');
+	const memory = page
+		.getByRole('main')
+		.getByRole('button', { name: /^Play: / })
+		.first();
+	await expect(memory.locator('img')).toBeVisible();
+	await shot(page, '00-home', p, true);
+	const title = (await memory.locator('.title').textContent())!;
+	await memory.click();
+	const story = page.getByRole('dialog', { name: title });
+	await expect(story.locator('.segment').first()).toBeVisible();
+	await shot(page, '00b-story', p);
+	await page.keyboard.press('Escape');
+	await expect(story).toBeHidden();
+	await sheetStepGone(page);
+
+	await page.goto('/');
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '03-library', p);
 	if (isPhone(page)) {
@@ -104,7 +123,7 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '13-editor', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Discard changes' }).click();
-	await page.getByRole('button', { name: 'More' }).click();
+	await loupe(page).getByRole('button', { name: 'More' }).click();
 	await shot(page, '04c-loupe-more', p);
 	await page.keyboard.press('Escape');
 	await loupeAction(page, 'Fix date');
@@ -182,7 +201,7 @@ test('every screen', async ({ page }, info) => {
 		.click();
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await shot(page, '19b-person', p);
-	await page.getByRole('button', { name: 'Change portrait', exact: true }).click();
+	await page.getByRole('button', { name: /^Change portrait of/ }).click();
 	await expect(page.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
 	await shot(page, '19c-person-portrait', p);
 
@@ -252,6 +271,7 @@ test('every screen', async ({ page }, info) => {
 	await expect(page.getByRole('dialog', { name: 'Léa’s iPhone' })).toBeVisible();
 	await shot(page, '21-phone-sheet', p);
 	await page.keyboard.press('Escape');
+	await sheetStepGone(page);
 
 	await resetMock('seed', { models: true });
 	await signIn(page, '/search?q=beach%20at%20sunset');

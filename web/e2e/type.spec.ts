@@ -1,6 +1,6 @@
 /** Type sizes that are a promise in pixels (DESIGN_PRINCIPLES §2, the type table). */
 import type { Locator, Page } from '@playwright/test';
-import { ADMIN, expect, isPhone, resetMock, signIn, test } from './helpers.ts';
+import { ADMIN, expect, isPhone, resetMock, sheetStepGone, signIn, test } from './helpers.ts';
 
 const fontSize = (field: Locator) =>
 	field.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
@@ -43,8 +43,7 @@ test('phone: every field is at least 16 px, so focusing one never zooms the page
 	expect(await fontSize(where.getByRole('searchbox'))).toBeGreaterThanOrEqual(16);
 	await where.getByRole('button', { name: 'Done' }).click();
 	await expect(where).toBeHidden();
-	// The sheet's history step is undone a moment after it closes: going on before that is cut short.
-	await page.waitForFunction(() => !JSON.stringify(history.state ?? {}).includes('"sheet"'));
+	await sheetStepGone(page);
 
 	await page.goto('/albums');
 	await page.getByRole('button', { name: 'New album' }).click();

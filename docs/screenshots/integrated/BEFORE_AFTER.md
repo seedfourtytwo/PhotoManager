@@ -19,6 +19,12 @@ the laptop's side column is still 224 px.
 > accent. The screenshots in this folder are taken from the app as it is, so they show the
 > redesign and no longer the "After" column of the marked rows; `DESIGN_PRINCIPLES.md` §2
 > describes today's look.
+>
+> **Redesign 2** (`docs/superpowers/specs/2026-10-14-ui-redesign-2-design.md`) followed: one
+> typeface, Atkinson Hyperlegible Next, for titles, text and figures (Hanken Grotesk and Martian
+> Mono are gone); no borders, capitals or letter-spacing; filters as chips; Home opens the app.
+> The set was rendered again for it: `00-home` and `00b-story` (the story player) are new,
+> `21-phone-sheet` replaces the account menu, which became You (`16-settings`).
 
 | Area | Before | After |
 |---|---|---|

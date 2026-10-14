@@ -1,5 +1,13 @@
 import type { Page } from '@playwright/test';
-import { expect, expectAccessible, follow, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	follow,
+	resetMock,
+	sheetStepGone,
+	signIn,
+	test
+} from './helpers.ts';
 
 /** The phone's sheet on You, and in it what the phone keeps. */
 async function openPhone(page: Page) {
@@ -37,8 +45,7 @@ test('keep an album on a phone, leave out screenshots, and see it on You', async
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Done' }).click();
 	await expect(dialog).toBeHidden();
-	// Its history step is undone a moment after it closes: going on before that is cut short.
-	await page.waitForFunction(() => !JSON.stringify(history.state ?? {}).includes('"sheet"'));
+	await sheetStepGone(page);
 	// The head's phone button now shows that a phone keeps this album.
 	await expect(page.getByRole('button', { name: 'Keep on my phone' })).toHaveAttribute(
 		'aria-pressed',
