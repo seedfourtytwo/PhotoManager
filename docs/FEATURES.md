@@ -63,7 +63,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
 | 3.1 | Timeline (newest first), grouped by day/month/year, fast scroll with the time ruler | Must | M2 |
-| 3.2 | Facet filters: date range (From / To take a pasted date like Fix date and show it day first), place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, source, guessed date, location; people/tags in M3* | Must | M2 |
+| 3.2 | Facet filters: date range (From / To take a pasted date like Fix date and show it day first), place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, pinned, source, people (any of several), guessed date, location; tags in M3* | Must | M2 |
 | 3.3 | Favourites (per user) and hide (per user) | Must | M2 ✅ (API) |
 | 3.4 | Keyword search over places, tags, names, captions — *API: file names, places, camera, album titles; tags/names/captions in M3* | Must | M2 |
 | 3.5 | Natural-language search ("kids in the snow at grandma's") via embeddings | Should | M3 ✅ (API) |
@@ -83,7 +83,7 @@ Each view is a way to *see* the library, not decoration. See `DESIGN_PRINCIPLES.
 | 4.4 | **Map** — clustered points, draw-to-filter | Should | M3 |
 | 4.5 | **Small multiples** — one row per year for the same week/place ("every summer at the house") | Could | M3 |
 | 4.6 | **People** — face grid, then a person's timeline | Should | M3 ✅ (API) |
-| 4.7 | **On this day** — same date, previous years | Could | M3 |
+| 4.7 | **On this day** — same date, previous years — *API: `GET /api/home` answers it with memories (trips of ten photos or more, named after place and months) and the week's new photos; each account pins photos of its own for Home (issue 54)* | Could | M3 ✅ (API) |
 | 4.8 | **Slideshow / ambient mode** for a TV or tablet | Could | M5 |
 
 ## 4b. Download & convert
