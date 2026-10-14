@@ -11,8 +11,9 @@
 		text: string;
 		/** In an action bar: the button is this icon over its word, not a round button. */
 		icon?: IconName;
-		/** With `icon`: a round icon button standing on the page (⋯), named by `label`. */
+		/** With `icon`: a round icon button (⋯), named by `label`; on a fill unless `filled` is false. */
 		round?: boolean;
+		filled?: boolean;
 		badge?: number;
 		badgeLabel?: string;
 		items: MenuItem[];
@@ -23,6 +24,7 @@
 		text,
 		icon,
 		round = false,
+		filled = true,
 		badge = 0,
 		badgeLabel,
 		items,
@@ -62,7 +64,7 @@
 	<button
 		bind:this={button}
 		type="button"
-		class={icon && round ? 'icon-button filled' : icon ? 'action' : 'trigger'}
+		class={icon && round ? `icon-button${filled ? ' filled' : ''}` : icon ? 'action' : 'trigger'}
 		aria-label={label}
 		title={round ? label : undefined}
 		aria-expanded={open}

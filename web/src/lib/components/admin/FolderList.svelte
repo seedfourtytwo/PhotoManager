@@ -59,8 +59,10 @@
 		padding: 0;
 		max-height: 14rem;
 		overflow-y: auto;
-		border-top: 1px solid var(--hairline);
-		border-bottom: 1px solid var(--hairline);
+		/* the list scrolls inside a soft box, the way a field sits on the sheet */
+		padding: var(--s-1);
+		border-radius: var(--r-1);
+		background: var(--fill);
 	}
 	li button {
 		width: 100%;
@@ -72,7 +74,6 @@
 	}
 	p[role='alert'] {
 		margin: 0 0 var(--s-2);
-		border-left: 2px solid var(--ink);
-		padding-left: var(--s-2);
+		font-weight: 600;
 	}
 </style>
