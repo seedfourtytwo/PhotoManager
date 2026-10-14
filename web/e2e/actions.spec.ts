@@ -33,7 +33,7 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 	await selectTiles(page, [0, 1]);
 	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
-	await expect(dialog.getByText(/2 selected photos\s+· about [\d.]+ [KMG]B/)).toBeVisible();
+	await expect(dialog.getByText(/2 selected photos, about [\d.]+ [KMG]B/)).toBeVisible();
 	await expectAccessible(page);
 
 	await dialog.getByRole('button', { name: 'More options' }).click();

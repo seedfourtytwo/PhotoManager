@@ -174,12 +174,11 @@
 				you only lets you see its photos.
 			</span>
 		{:else if estimate}
-			{single ? '1 photo' : scopeLabel(scope, estimate.count)}
-			<span class="quiet"
-				>· about {formatBytes(
+			{single ? '1 photo' : scopeLabel(scope, estimate.count)}<span class="quiet"
+				>, about {formatBytes(
 					estimate.bytes
-				)}{#if !single && 'ids' in scope && estimate.count < scope.ids.length}
-					· {scope.ids.length - estimate.count} you may only view are left out{/if}</span
+				)}{#if !single && 'ids' in scope && estimate.count < scope.ids.length}; {scope.ids.length -
+						estimate.count} you may only view are left out{/if}</span
 			>
 		{:else if estimateError}
 			<span class="quiet">{estimateError}</span>
