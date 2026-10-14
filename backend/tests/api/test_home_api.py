@@ -46,7 +46,7 @@ def home(admin: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[i
     for days, asset_id in enumerate(new):
         imported = (NOW - timedelta(days=days)).isoformat()
         repo._write("UPDATE asset SET imported_at = ? WHERE id = ?", (imported, asset_id))
-    return {"trip": trip, "that_day": that_day, "new": new}
+    return {"at_home": at_home, "trip": trip, "that_day": that_day, "new": new}
 
 
 def test_home_answers_on_this_day_memories_and_what_is_new(
@@ -81,11 +81,34 @@ def test_home_answers_on_this_day_memories_and_what_is_new(
     assert set(new["items"][0]) >= {"id", "thumb", "favourite", "pinned", "taken_at"}
 
 
+def test_home_answers_photos_to_rediscover_and_the_years(
+    admin: TestClient, home: dict[str, list[int]]
+) -> None:
+    body = admin.get("/api/home").json()
+    picks = [a["id"] for a in body["rediscover"]]
+    # one from each month before the last 30 days: March 2022, October 2023, July 2024
+    assert len(picks) == 3 and set(picks) <= set(home["at_home"] + home["trip"] + home["that_day"])
+    assert set(body["rediscover"][0]) >= {"id", "thumb", "taken_at", "date_source", "place"}
+    # 2024 (the trip, 10 photos) and 2022 (12 at home); 2023 and 2026 have too few
+    assert [(y["title"], y["count"]) for y in body["years"]] == [("2024", 10), ("2022", 12)]
+    year = body["years"][0]
+    assert year | {"cover": year["cover"]["id"]} == {
+        "key": "2024-01-01_2024-12-31",
+        "title": "2024",
+        "from": "2024-01-01",
+        "to": "2024-12-31",
+        "count": 10,
+        "cover": year["cover"]["id"],
+        "filter": {"from": "2024-01-01", "to": "2024-12-31", "guessed_date": False},
+    }
+    assert year["cover"]["id"] in home["trip"]
+
+
 def test_the_filter_lists_exactly_the_photos_counted(
     admin: TestClient, home: dict[str, list[int]]
 ) -> None:
     body = admin.get("/api/home").json()
-    for block in (body["on_this_day"], *body["memories"]):
+    for block in (body["on_this_day"], *body["memories"], *body["years"]):
         listed = admin.get("/api/assets", params=block["filter"]).json()["items"]
         assert len(listed) == block["count"]
 

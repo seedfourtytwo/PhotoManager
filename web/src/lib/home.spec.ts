@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Memory, NewArrivals, OnThisDay } from './api/types';
+import type { AssetOut, HomeData, Memory, NewArrivals, OnThisDay } from './api/types';
 import {
 	arrivalsSentence,
 	dateRange,
@@ -9,6 +9,9 @@ import {
 	inWords,
 	memoryLine,
 	previewOf,
+	rediscoverNote,
+	rediscoverTitle,
+	storyYears,
 	yearsAgo
 } from './home';
 import { makeAsset } from './testing/fixtures';
@@ -148,8 +151,64 @@ describe('arrivalsSentence: what came this week', () => {
 	});
 });
 
+describe('rediscoverTitle: the large photo of Rediscover, in plain words', () => {
+	const today = new Date(2026, 9, 14, 9);
+	it.each([
+		['2016-03-12T10:00:00', 'Ten years ago'],
+		['2025-10-14T08:00:00', 'A year ago'],
+		['2025-10-15T08:00:00', 'October 2025'],
+		['2004-01-01T00:00:00', '22 years ago'],
+		['2026-03-01T10:00:00', 'March 2026']
+	])('taken %s: %j', (taken, title) => {
+		expect(rediscoverTitle(makeAsset(1, taken), today)).toBe(title);
+	});
+	it('counts whole years over a leap day', () => {
+		const leapDay = makeAsset(1, '2024-02-29T12:00:00');
+		expect(rediscoverTitle(leapDay, new Date(2025, 1, 28, 23))).toBe('February 2024');
+		expect(rediscoverTitle(leapDay, new Date(2025, 2, 1, 0, 5))).toBe('A year ago');
+	});
+	it('does not tell a date guessed from the file', () => {
+		const guessed = makeAsset(1, '2016-03-12T10:00:00', 4, 3, { date_source: 'file_mtime' });
+		expect(rediscoverTitle(guessed, today)).toBe('From your library');
+	});
+});
+
+describe('rediscoverNote: the day and the place under it', () => {
+	const lisbon = { country: 'Portugal', region: 'Lisboa', city: 'Lisbon' };
+	const at = (extra: Partial<AssetOut>) => makeAsset(1, '2016-03-12T10:00:00', 4, 3, extra);
+	it.each([
+		['the day and the city', at({ place: lisbon }), '12 March 2016, Lisbon'],
+		['the day alone', at({ place: null }), '12 March 2016'],
+		['a region without a city', at({ place: { ...lisbon, city: '' } }), '12 March 2016, Lisboa'],
+		['a guessed date: the place alone', at({ date_source: 'file_mtime', place: lisbon }), 'Lisbon'],
+		['a guessed date and no place: nothing', at({ date_source: 'file_mtime', place: null }), '']
+	])('%s', (_, asset, note) => {
+		expect(rediscoverNote(asset)).toBe(note);
+	});
+});
+
+describe('storyYears: the years a story of single photos spans', () => {
+	it.each([
+		[['2016-03-12T10:00:00'], '2016'],
+		[['2019-01-01T10:00:00', '2012-05-01T10:00:00', '2016-03-12T10:00:00'], '2012 to 2019'],
+		[[], '']
+	])('%j → %j', (dates, words) => {
+		expect(storyYears(dates.map((taken, i) => makeAsset(i + 1, taken)))).toBe(words);
+	});
+	it('leaves out dates guessed from the file', () => {
+		const guessed = makeAsset(2, '2026-01-01T10:00:00', 4, 3, { date_source: 'file_mtime' });
+		expect(storyYears([makeAsset(1, '2016-03-12T10:00:00'), guessed])).toBe('2016');
+	});
+});
+
 describe('homeIsEmpty: nothing to tell yet', () => {
-	const nothing = { on_this_day: null, memories: [], new: fresh(0, []) };
+	const nothing: HomeData = {
+		on_this_day: null,
+		rediscover: [],
+		memories: [],
+		years: [],
+		new: fresh(0, [])
+	};
 	it('is empty with no block to show', () => {
 		expect(homeIsEmpty(nothing, [], [])).toBe(true);
 	});
@@ -157,6 +216,8 @@ describe('homeIsEmpty: nothing to tell yet', () => {
 		['on this day', { ...nothing, on_this_day: day() }, [], []],
 		['a memory', { ...nothing, memories: [memory('2024-07-12', '2024-07-19')] }, [], []],
 		['new photos', { ...nothing, new: fresh(3, []) }, [], []],
+		['a photo to rediscover', { ...nothing, rediscover: [cover] }, [], []],
+		['a year', { ...nothing, years: [memory('2016-01-01', '2016-12-31')] }, [], []],
 		['a pinned photo', nothing, [cover], []],
 		['a person', nothing, [], [{ id: 1 }]]
 	])('is not empty with %s', (_, home, pinned, people) => {

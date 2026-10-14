@@ -1,6 +1,6 @@
 /** Home (issue 54, spec 2026-10-14 §9): a story read top to bottom, and the story player. */
 import type { Page } from '@playwright/test';
-import type { AssetOut, AssetPage, HomeData } from '../src/lib/api/types.ts';
+import type { AssetOut, AssetPage, HomeData, Memory } from '../src/lib/api/types.ts';
 import {
 	ADMIN,
 	expect,
@@ -47,6 +47,23 @@ async function dayOfPhoto(page: Page, years = 3): Promise<HomeData['on_this_day'
 	};
 }
 
+/** A year of the library as Years shows it: the year of one of its photos with a real date. */
+async function yearOfPhoto(page: Page): Promise<Memory> {
+	const answer = await page.request.get('/api/assets?limit=1&guessed_date=false');
+	const [cover] = ((await answer.json()) as AssetPage).items;
+	const year = cover.taken_at.slice(0, 4);
+	const [from, to] = [`${year}-01-01`, `${year}-12-31`];
+	return {
+		key: `${from}_${to}`,
+		title: year,
+		from,
+		to,
+		count: 12,
+		cover,
+		filter: { from, to, guessed_date: false }
+	};
+}
+
 const block = (page: Page, name: string) =>
 	page.getByRole('main').getByRole('heading', { level: 2, name, exact: true });
 
@@ -69,7 +86,14 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 		'Lisbon, with Sam'
 	);
 	const titles = main.getByRole('heading', { level: 2 });
-	await expect(titles).toHaveText(['Memories', 'Pinned', 'People', 'New this week']);
+	await expect(titles).toHaveText([
+		'Rediscover',
+		'Memories',
+		'Years',
+		'Pinned',
+		'People',
+		'New this week'
+	]);
 	await expect(main.getByText(/^\d+ photos arrived from /)).toBeVisible();
 	await expect(main.getByRole('link', { name: /^Choose/ })).toHaveAttribute('href', '/');
 	await expect(main.getByRole('link', { name: 'All photos' })).toHaveAttribute('href', '/');
@@ -80,11 +104,13 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 	expect(shape).toBe('contain');
 	await expectAccessible(page);
 
-	// Nothing on this day, no memories, nothing new: those blocks are not there at all.
+	// Nothing on this day, to rediscover, no memories or years, nothing new: not there at all.
 	await page.unrouteAll();
 	await homeWith(page, (home) => ({
 		on_this_day: null,
+		rediscover: [],
 		memories: [],
+		years: [],
 		new: { ...home.new, count: 0, sources: [], items: [] }
 	}));
 	await page.reload();
@@ -97,7 +123,9 @@ test('home: with nothing to show it says so in one sentence, and what to do', as
 	await signIn(page, '/admin');
 	const nothing: HomeData = {
 		on_this_day: null,
+		rediscover: [],
 		memories: [],
+		years: [],
 		new: { count: 0, days: 7, sources: [], items: [] }
 	};
 	await page.route('**/api/home', (route) => route.fulfill({ json: nothing }));
@@ -130,6 +158,7 @@ test('home: a memory plays full screen, steps on a tap, and closes with ×, Esca
 	await signIn(page, '/home');
 	const first = page
 		.getByRole('main')
+		.getByRole('region', { name: 'Memories' })
 		.getByRole('button', { name: /^Play: / })
 		.first();
 	const title = (await first.locator('.title').textContent())!;
@@ -168,6 +197,58 @@ test('home: On this day plays its day, titled in words', async ({ page }) => {
 	await page.reload();
 	await page.getByRole('button', { name: /A year ago this week/ }).click();
 	const player = page.getByRole('dialog', { name: 'A year ago this week' });
+	await expect(player).toBeVisible();
+	await expect(player.locator('.segment').first()).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(player).toBeHidden();
+});
+
+test('home: without On this day, Rediscover opens Home on a large photo that plays the dozen', async ({
+	page
+}) => {
+	await signIn(page, '/home');
+	await homeWith(page, () => ({ on_this_day: null }));
+	await page.reload();
+	const main = page.getByRole('main');
+	const rediscover = main.getByRole('region', { name: 'Rediscover' });
+	await expect(main.getByRole('heading', { level: 2 }).first()).toHaveText('Rediscover');
+	const picks = ((await (await page.request.get('/api/home')).json()) as HomeData).rediscover;
+	expect(picks.length).toBeGreaterThan(1);
+	expect(picks.length).toBeLessThanOrEqual(12);
+
+	// The first photo, large and whole, titled in plain words; it plays all of them.
+	const hero = rediscover.getByRole('button', { name: /^Play: / });
+	await expect(hero).toContainText(/ years? ago|From your library|\d{4}/);
+	const shape = await hero
+		.locator('img')
+		.evaluate((img: HTMLImageElement) => getComputedStyle(img).objectFit);
+	expect(shape).toBe('contain');
+	await hero.click();
+	const player = page.getByRole('dialog', { name: 'Rediscover' });
+	await expect(player).toBeVisible();
+	await expect(player.locator('.segment')).toHaveCount(picks.length);
+	await expectAccessible(page);
+	await page.keyboard.press('Escape');
+	await expect(player).toBeHidden();
+
+	// The others open the photo view, which steps through all of them.
+	const grid = rediscover.getByRole('group', { name: 'Photos to rediscover' });
+	await grid.locator(`[data-id="${picks[1].id}"]`).click();
+	await expect(loupe(page)).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(loupe(page)).toBeHidden();
+});
+
+test('home: a year plays its story, and its heading opens the Library', async ({ page }) => {
+	await signIn(page, '/home');
+	const year = await yearOfPhoto(page);
+	await homeWith(page, () => ({ years: [year] }));
+	await page.reload();
+	const years = page.getByRole('main').getByRole('region', { name: 'Years' });
+	await expect(years.getByRole('link', { name: 'Years' })).toHaveAttribute('href', '/');
+	const cover = years.getByRole('button', { name: `Play: ${year.title} 12 photos` });
+	await cover.click();
+	const player = page.getByRole('dialog', { name: year.title });
 	await expect(player).toBeVisible();
 	await expect(player.locator('.segment').first()).toBeVisible();
 	await page.keyboard.press('Escape');
