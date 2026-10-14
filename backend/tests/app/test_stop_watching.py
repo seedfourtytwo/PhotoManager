@@ -10,6 +10,7 @@ import pytest
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.app.stop_watching import (
     InboxNotRemovableError,
+    KeptSourceError,
     PhotosOnlyHere,
     Removal,
     Removed,
@@ -18,9 +19,10 @@ from photo_assistant.app.stop_watching import (
     only_from,
 )
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
-from photo_assistant.domain.access import INBOX_KIND, Role, SourceAccess
+from photo_assistant.domain.access import INBOX_KIND, KEPT_KIND, Role, SourceAccess
 from photo_assistant.domain.errors import ConflictError, InvalidError, NotFoundError
-from photo_assistant.domain.model import ImportReport, RunStatus
+from photo_assistant.domain.model import ImportReport, Source
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.ports import ImportBusyError, SourceBusyError
 from tests.factories import NOW, new_asset
 from tests.fakes import FakeClock
@@ -118,41 +120,81 @@ def test_the_preview_of_an_unknown_source_is_not_found(world: World) -> None:
     assert issubclass(SourceNotFoundError, NotFoundError)
 
 
-# --- keep -------------------------------------------------------------------------------
+# --- keep: the source is detached, so everyone who sees the photos still does --------------
 
 
-def test_keep_removes_the_source_and_every_row_that_points_at_it(world: World) -> None:
-    only = world.photo(1, world.folder)
-    shared = world.photo(2, world.folder, world.other)
-    report = ImportReport(source_id=world.folder, status=RunStatus.DONE)
-    world.repo.save_import_report(report, NOW, NOW)
+def _links(world: World, source_id: int) -> tuple[int, int, int]:
+    return tuple(  # type: ignore[return-value]
+        world.count(f"SELECT COUNT(*) FROM {table} WHERE source_id = ?", source_id)
+        for table in ("asset_source", "source_access", "import_run")
+    )
+
+
+def test_keep_detaches_the_source_and_keeps_every_link_to_its_photos(world: World) -> None:
+    world.photo(1, world.folder)
+    world.photo(2, world.folder, world.other)
+    world.repo.save_import_report(ImportReport(source_id=world.folder), NOW, NOW)
+    world.repo.set_source_recheck(world.folder, Recheck.DAILY)
+    links = _links(world, world.folder)
 
     removed = world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
 
-    assert removed == Removed(only_here=1, trashed=0)
+    assert removed == Removed(only_here=1, trashed=0, detached=True)
+    kept = world.repo.get_source(world.folder)
+    assert kept == Source(
+        world.folder,
+        "Old disk",
+        f"kept:{world.folder}",
+        enabled=False,
+        kind=KEPT_KIND,
+        owner_id=world.admin,
+        recheck=Recheck.OFF,
+    )
+    assert _links(world, world.folder) == links, "access and photos exactly as they were"
+    assert world.trashed() == {}
+
+
+def test_after_keep_the_same_folder_can_be_added_again(world: World) -> None:
+    world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
+    again = world.repo.add_source("Old disk", "/media/old", owner_id=world.admin)
+    assert again.id != world.folder
+
+
+def test_removing_a_kept_source_deletes_it_and_every_row_that_points_at_it(
+    world: World,
+) -> None:
+    only = world.photo(1, world.folder)
+    shared = world.photo(2, world.folder, world.other)
+    world.repo.save_import_report(ImportReport(source_id=world.folder), NOW, NOW)
+    world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
+
+    removed = world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
+
+    assert removed == Removed(only_here=1, trashed=0, detached=False)
     assert world.repo.get_source(world.folder) is None
-    assert [s.id for s in world.repo.list_sources()] == [world.other]
-    for table in ("asset_source", "source_access", "import_run"):
-        assert world.count(f"SELECT COUNT(*) FROM {table} WHERE source_id = ?", world.folder) == 0
+    assert _links(world, world.folder) == (0, 0, 0)
     assert world.count("SELECT COUNT(*) FROM asset WHERE first_source_id = ?", world.folder) == 0
     assert world.trashed() == {}, "kept photos stay in the library"
     assert world.count("SELECT COUNT(*) FROM asset WHERE id IN (?, ?)", only, shared) == 2
-
-
-def test_keep_leaves_photos_also_in_another_folder_exactly_as_they_were(world: World) -> None:
-    shared = world.photo(2, world.folder, world.other)
-    world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
     rows = world.repo._all("SELECT source_id FROM asset_source WHERE asset_id = ?", (shared,))
     assert [r["source_id"] for r in rows] == [world.other]
 
 
-def test_a_photo_first_found_in_the_folder_forgets_where_it_was_first_found(
-    world: World,
-) -> None:
-    first_here = world.photo(1, world.folder, world.other)
+def test_a_kept_source_can_also_be_removed_with_its_photos_to_the_trash(world: World) -> None:
+    only = world.photo(1, world.folder)
     world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
-    row = world.repo._one("SELECT first_source_id FROM asset WHERE id = ?", (first_here,))
-    assert row is not None and row["first_source_id"] is None
+    removed = world.use.stop(world.folder, PhotosOnlyHere.TRASH, world.admin)
+    assert removed == Removed(only_here=1, trashed=1, detached=False)
+    assert world.trashed() == {only: world.admin}
+    assert world.repo.get_source(world.folder) is None
+
+
+def test_a_kept_source_cannot_be_watched_again(world: World) -> None:
+    world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
+    with pytest.raises(KeptSourceError):
+        world.use.require_watchable(world.folder)
+    world.use.require_watchable(world.other)
+    assert issubclass(KeptSourceError, InvalidError)
 
 
 # --- trash ------------------------------------------------------------------------------
@@ -165,7 +207,8 @@ def test_trash_moves_only_the_photos_found_nowhere_else_and_says_who(world: Worl
 
     removed = world.use.stop(world.folder, PhotosOnlyHere.TRASH, world.admin)
 
-    assert removed == Removed(only_here=1, trashed=1)
+    assert removed == Removed(only_here=1, trashed=1, detached=False)
+    assert world.repo.get_source(world.folder) is None
     assert world.trashed() == {only: world.admin}
     row = world.repo._one("SELECT trashed_at FROM asset WHERE id = ?", (only,))
     assert row is not None and row["trashed_at"].startswith("2026-10-01T09:00")
@@ -176,14 +219,14 @@ def test_a_photo_already_in_the_trash_keeps_who_put_it_there(world: World) -> No
     earlier = world.photo(1, world.folder)
     world.repo.trash_assets([earlier], member, NOW)
     removed = world.use.stop(world.folder, PhotosOnlyHere.TRASH, world.admin)
-    assert removed == Removed(only_here=0, trashed=0)
+    assert removed == Removed(only_here=0, trashed=0, detached=False)
     assert world.trashed() == {earlier: member}
 
 
 def test_trash_handles_a_folder_bigger_than_sqlites_variable_limit(world: World) -> None:
     ids = [world.photo(n, world.folder) for n in range(1, 1201)]
     removed = world.use.stop(world.folder, PhotosOnlyHere.TRASH, world.admin)
-    assert removed == Removed(only_here=1200, trashed=1200)
+    assert removed == Removed(only_here=1200, trashed=1200, detached=False)
     assert set(world.trashed()) == set(ids)
 
 
@@ -220,11 +263,21 @@ def test_refused_while_a_check_of_the_folder_runs(world: World) -> None:
     assert world.trashed() == {}, "nothing changed"
 
 
-def test_refused_while_any_import_holds_the_library(world: World) -> None:
+@pytest.mark.parametrize("photos", list(PhotosOnlyHere))
+def test_refused_while_any_import_holds_the_library(world: World, photos: PhotosOnlyHere) -> None:
     world.lock.busy = True
     with pytest.raises(SourceBusyError):
+        world.use.stop(world.folder, photos, world.admin)
+    assert world.repo.get_source(world.folder) == world.repo.list_sources()[0]
+
+
+def test_keep_is_refused_too_while_a_check_of_the_folder_runs(world: World) -> None:
+    world.repo.enqueue(SCAN_JOB_KIND, {"source_id": world.folder})
+    assert world.repo.claim_next_job(NOW) is not None
+    with pytest.raises(SourceBusyError):
         world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
-    assert world.repo.get_source(world.folder) is not None
+    source = world.repo.get_source(world.folder)
+    assert source is not None and source.kind == "folder"
 
 
 def test_a_check_still_waiting_is_cancelled_with_the_folder(world: World) -> None:
@@ -240,7 +293,7 @@ def test_a_check_still_waiting_is_cancelled_with_the_folder(world: World) -> Non
 def test_another_folders_running_check_does_not_block(world: World) -> None:
     world.repo.enqueue(SCAN_JOB_KIND, {"source_id": world.other})
     assert world.repo.claim_next_job(NOW) is not None
-    world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
+    world.use.stop(world.folder, PhotosOnlyHere.TRASH, world.admin)
     assert world.repo.get_source(world.folder) is None
 
 
@@ -253,7 +306,7 @@ def test_the_work_happens_while_holding_the_import_lock(world: World) -> None:
         return real(*args, **kwargs)  # type: ignore[arg-type]
 
     world.repo.remove_source = spy  # type: ignore[method-assign]
-    world.use.stop(world.folder, PhotosOnlyHere.KEEP, world.admin)
+    world.use.stop(world.folder, PhotosOnlyHere.TRASH, world.admin)
     assert seen == [True]
 
 
@@ -277,6 +330,6 @@ def test_a_staging_copy_that_cannot_be_deleted_does_not_undo_the_removal(
 ) -> None:
     cloud = world.repo.add_source("Cloud", "/data/staging/9", owner_id=world.admin, kind="rclone")
     world.staging.fails = True
-    world.use.stop(cloud.id, PhotosOnlyHere.KEEP, world.admin)
+    world.use.stop(cloud.id, PhotosOnlyHere.TRASH, world.admin)
     assert world.repo.get_source(cloud.id) is None
     assert "staging" in caplog.text

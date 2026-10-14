@@ -36,17 +36,40 @@ describe('stop watching a folder', () => {
 		});
 	});
 
-	it('keep: the folder goes, its only photos stay for admins and leave members', async () => {
+	it('keep: the folder is no longer watched, and everyone still sees its photos', async () => {
+		const api = await h.signedIn();
+		const partner = await h.signedIn('partner', '2345');
+		const only = plain(OLD_DISK).id;
+		const level = (await partner.asset(only)).level;
+
+		const removed = await api.removeSource(OLD_DISK, 'keep');
+
+		expect(removed).toMatchObject({ trashed: 0, detached: true });
+		const kept = (await api.sources()).find((s) => s.id === OLD_DISK)!;
+		expect([kept.kind, kept.enabled, kept.path, kept.recheck]).toEqual([
+			'kept',
+			false,
+			null,
+			'off'
+		]);
+		expect((await partner.asset(only)).level).toBe(level);
+		await expect(api.scanSource(OLD_DISK)).rejects.toMatchObject({ status: 422 });
+		await expect(api.updateSource(OLD_DISK, { enabled: true })).rejects.toMatchObject({
+			status: 422
+		});
+		expect((await api.scanAll()).map((q) => q.source_id)).not.toContain(OLD_DISK);
+	});
+
+	it('removing a kept folder for good leaves its only photos to admins', async () => {
 		const api = await h.signedIn();
 		const partner = await h.signedIn('partner', '2345');
 		const shared = shareOne();
 		const only = plain(OLD_DISK).id;
-		expect((await partner.asset(only)).id).toBe(only);
+		await api.removeSource(OLD_DISK, 'keep');
 
 		const removed = await api.removeSource(OLD_DISK, 'keep');
 
-		expect(removed.trashed).toBe(0);
-		expect(removed.only_here).toBeGreaterThan(0);
+		expect(removed).toMatchObject({ trashed: 0, detached: false });
 		expect((await api.sources()).map((s) => s.id)).not.toContain(OLD_DISK);
 		expect((await api.asset(only)).id).toBe(only);
 		await expect(partner.asset(only)).rejects.toMatchObject({ status: 404 });
@@ -61,7 +84,7 @@ describe('stop watching a folder', () => {
 
 		const removed = await api.removeSource(OLD_DISK, 'trash');
 
-		expect(removed).toEqual({ only_here: only.length, trashed: only.length });
+		expect(removed).toEqual({ only_here: only.length, trashed: only.length, detached: false });
 		const trashed = (await api.trash()).map((a) => a.id);
 		expect(trashed.filter((id) => !trashedBefore.includes(id)).sort()).toEqual(only.sort());
 		expect((await api.asset(shared)).id).toBe(shared);

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from photo_assistant.api.services import watched_roots
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.domain.access import INBOX_KIND, SourceAccess
 from tests.api.conftest import (
@@ -54,32 +55,111 @@ def test_the_preview_says_how_many_photos_are_found_only_there(
     assert admin.get(f"/api/sources/{laptop_id}/removal").json() == {"photos": 1, "only_here": 0}
 
 
-def test_keep_the_source_goes_and_its_only_photos_stay_for_admins_only(
+def _source(client: TestClient, source_id: int) -> dict[str, object] | None:
+    return next((s for s in client.get("/api/sources").json() if s["id"] == source_id), None)
+
+
+def _level(client: TestClient, asset_id: int) -> object:
+    return client.get(f"/api/assets/{asset_id}").json()["level"]
+
+
+def test_keep_everyone_who_sees_the_photos_still_does_at_the_same_level(
     admin: TestClient, two_folders: tuple[int, int, int, int]
 ) -> None:
     old_id, _, only, shared = two_folders
     lea = add_user(admin, "lea")
-    assert _ids(lea) == {only, shared}
+    levels = (_level(lea, only), _level(lea, shared))
 
     response = admin.delete(f"/api/sources/{old_id}")
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"only_here": 1, "trashed": 0}
-    assert old_id not in {s["id"] for s in admin.get("/api/sources").json()}
-    assert _ids(admin) == {only, shared}, "kept: still in the library for admins"
-    assert _ids(lea) == {shared}, "a member reached it only through that folder"
+    assert response.json() == {"only_here": 1, "trashed": 0, "detached": True}
+    assert _ids(admin) == {only, shared} and _ids(lea) == {only, shared}
+    assert (_level(lea, only), _level(lea, shared)) == levels
     assert _ids(admin, "/api/trash") == set()
 
 
-def test_keep_is_the_default_and_can_be_asked_for_by_name(
+def test_a_kept_source_is_no_longer_watched_and_shows_no_folder(
+    admin: TestClient, two_folders: tuple[int, int, int, int]
+) -> None:
+    old_id, _, _, _ = two_folders
+    admin.patch(f"/api/sources/{old_id}", json={"recheck": "daily"})
+    admin.delete(f"/api/sources/{old_id}", params={"photos": "keep"})
+    kept = _source(admin, old_id)
+    assert kept is not None
+    assert {k: kept[k] for k in ("kind", "label", "path", "enabled", "recheck", "problem")} == {
+        "kind": "kept",
+        "label": "Old disk",
+        "path": None,
+        "enabled": False,
+        "recheck": "off",
+        "problem": None,
+    }
+    assert kept["next_check_at"] is None and kept["asset_count"] == 2
+
+
+def test_a_kept_source_is_never_checked_again(
     admin: TestClient, two_folders: tuple[int, int, int, int]
 ) -> None:
     old_id, laptop_id, _, _ = two_folders
-    assert admin.delete(f"/api/sources/{old_id}", params={"photos": "keep"}).json() == {
-        "only_here": 1,
-        "trashed": 0,
-    }
-    assert admin.delete(f"/api/sources/{laptop_id}").json() == {"only_here": 1, "trashed": 0}
+    admin.delete(f"/api/sources/{old_id}")
+    unwatched = "this folder is no longer watched; add it again to watch it"
+    assert refusal(admin.post(f"/api/sources/{old_id}/scan")) == (422, {"detail": unwatched})
+    assert admin.post(f"/api/remote-sources/{old_id}/pull").status_code == 404
+    for change in ({"enabled": True}, {"recheck": "hourly"}):
+        assert refusal(admin.patch(f"/api/sources/{old_id}", json=change)) == (
+            422,
+            {"detail": unwatched},
+        )
+    assert [q["source_id"] for q in admin.post("/api/sources/scan-all").json()] == [laptop_id]
+    assert services_of(admin).rechecks.queue_due() == []
+    services = services_of(admin)
+    services.repo.enqueue(SCAN_JOB_KIND, {"source_id": old_id})  # e.g. queued by an old client
+    services.worker.run_until_idle()
+    (job,) = [j for j in services.repo.list_jobs("failed") if j["payload"] == {"source_id": old_id}]
+    assert "no longer watched" in str(job["error"])
+
+
+def test_a_kept_sources_label_and_access_can_still_be_changed(
+    admin: TestClient, two_folders: tuple[int, int, int, int]
+) -> None:
+    old_id, _, only, _ = two_folders
+    lea = add_user(admin, "lea")
+    admin.delete(f"/api/sources/{old_id}")
+    assert (
+        admin.patch(f"/api/sources/{old_id}", json={"label": "Old disk (2019)"}).status_code == 200
+    )
+    put = admin.put(f"/api/sources/{old_id}/access", json={"everyone": None, "users": []})
+    assert put.status_code == 200
+    assert only not in _ids(lea)
+
+
+def test_a_kept_folder_is_no_source_root_for_the_backup_overlap_check(
+    admin: TestClient, two_folders: tuple[int, int, int, int]
+) -> None:
+    old_id, _, _, _ = two_folders
+    admin.delete(f"/api/sources/{old_id}")
+    roots = watched_roots(services_of(admin).repo)
+    assert old_id not in [
+        s.id for s in services_of(admin).repo.list_sources() if Path(s.root) in roots
+    ]
+    assert all(not str(root).startswith("kept:") for root in roots) and len(roots) == 1
+
+
+def test_removing_a_kept_source_for_good_leaves_its_only_photos_to_admins(
+    admin: TestClient, two_folders: tuple[int, int, int, int]
+) -> None:
+    old_id, _, only, shared = two_folders
+    lea = add_user(admin, "lea")
+    admin.delete(f"/api/sources/{old_id}")
+    assert admin.get(f"/api/sources/{old_id}/removal").json() == {"photos": 2, "only_here": 1}
+
+    response = admin.delete(f"/api/sources/{old_id}", params={"photos": "keep"})
+
+    assert response.json() == {"only_here": 1, "trashed": 0, "detached": False}
+    assert _source(admin, old_id) is None
+    assert _ids(admin) == {only, shared}
+    assert _ids(lea) == {shared}, "a member reached it only through that folder"
 
 
 def test_trash_moves_the_photos_found_only_there_to_the_trash_restorable(
@@ -90,7 +170,8 @@ def test_trash_moves_the_photos_found_only_there_to_the_trash_restorable(
 
     response = admin.delete(f"/api/sources/{old_id}", params={"photos": "trash"})
 
-    assert response.json() == {"only_here": 1, "trashed": 1}
+    assert response.json() == {"only_here": 1, "trashed": 1, "detached": False}
+    assert _source(admin, old_id) is None
     assert _ids(admin) == {shared} and _ids(lea) == {shared}
     assert _ids(admin, "/api/trash") == {only}
     row = services_of(admin).repo._one("SELECT trashed_by FROM asset WHERE id = ?", (only,))
