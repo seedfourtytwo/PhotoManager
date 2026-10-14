@@ -26,7 +26,11 @@ test('keep an album on a phone, leave out screenshots, and see it in Settings', 
 	await expect(phone).not.toContainText('0 photos');
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Done' }).click();
-	await expect(dialog).toBeHidden(); // its history step is undone before leaving
+	await expect(dialog).toBeHidden();
+	// Its history step goes back a moment later (lib/history-step.ts); a goto meanwhile is aborted.
+	await expect
+		.poll(() => page.evaluate(() => history.state?.['sveltekit:states']?.sheet ?? null))
+		.toBeNull();
 
 	await page.goto('/settings');
 	await expect(
