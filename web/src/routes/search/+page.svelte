@@ -5,10 +5,14 @@
 	import { api, library, session } from '$lib/app.svelte';
 	import { errorMessage, photos } from '$lib/format';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
+	import { searchHref } from '$lib/search';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
+	import SearchSuggestions from '$lib/components/SearchSuggestions.svelte';
 
 	const q = $derived(page.url.searchParams.get('q')?.trim() ?? '');
 	const like = $derived(Number(page.url.searchParams.get('like')) || null);
@@ -81,7 +85,7 @@
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
 		const words = text.trim();
-		void goto(words ? `/search?q=${encodeURIComponent(words)}` : '/search', { keepFocus: true });
+		void goto(words ? searchHref(words) : '/search', { keepFocus: true });
 	}
 
 	const loupeId = $derived(openPhotoId(page));
@@ -94,19 +98,22 @@
 
 <svelte:head><title>{q ? `${q} · ` : ''}Search · Photos</title></svelte:head>
 
-<div class="page">
-	<h1>{like ? 'Like this photo' : 'Search'}</h1>
+<PageHead title={like ? 'Like this photo' : 'Search'} />
 
+<div class="page">
+	<!-- The field comes first; Enter (the keyboard's search key on a phone) searches. -->
 	<form role="search" onsubmit={submit}>
-		<input
-			bind:this={input}
-			bind:value={text}
-			type="search"
-			aria-label="Search"
-			placeholder="Words, or date:2019 place:Paris person:Léa camera:X100"
-			enterkeyhint="search"
-		/>
-		<button type="submit" class="primary">Search</button>
+		<label class="find">
+			<Icon name="search" />
+			<input
+				bind:this={input}
+				bind:value={text}
+				type="search"
+				aria-label="Search"
+				placeholder="People, places, things"
+				enterkeyhint="search"
+			/>
+		</label>
 	</form>
 
 	{#if status && !semantic}
@@ -143,14 +150,8 @@
 			</div>
 		{/if}
 		<JustifiedGrid {items} onopen={openPhoto} label="Search results" />
-	{:else}
-		<div class="empty-state">
-			<p>Find photos by what is in them, when and where.</p>
-			<p>
-				Try <a href="/search?q=beach">beach</a>, <a href="/search?q=date%3A2019">date:2019</a> or
-				<a href="/search?q=place%3AParis">place:Paris</a>.
-			</p>
-		</div>
+	{:else if !like}
+		<SearchSuggestions things={semantic} />
 	{/if}
 </div>
 
@@ -173,47 +174,52 @@
 
 <style>
 	.page {
-		padding: var(--s-5) var(--page-x) var(--s-7);
+		padding: 0 var(--page-x) var(--s-7);
 	}
-	form {
+	/* The search field: a pill to write in, its magnifier inside. */
+	.find {
 		display: flex;
-		gap: var(--s-3);
 		align-items: center;
-		margin: var(--s-4) 0 var(--s-2);
+		gap: var(--s-2);
 		max-width: 40rem;
+		min-height: 3rem;
+		padding: 0 var(--s-4);
+		border-radius: var(--r-pill);
+		background: var(--fill);
+		color: var(--ink-2);
 	}
-	/* The search field: a large line to write on. */
-	input {
+	.find:focus-within {
+		box-shadow: inset 0 0 0 2px var(--accent);
+	}
+	.find input {
 		flex: 1;
-		font-family: var(--font-title);
-		font-weight: 400;
-		font-size: var(--fs-20) !important;
-		padding-block: var(--s-1);
-	}
-	input::placeholder {
+		align-self: stretch;
+		padding: 0;
+		background: none;
+		border-radius: 0;
+		color: var(--ink);
 		font-size: var(--fs-16);
-		font-style: var(--voice-style);
+	}
+	.find input:focus-visible {
+		box-shadow: none;
 	}
 	.hint,
 	.source {
 		max-width: 40rem;
-		margin: var(--s-2) 0;
+		margin: var(--s-3) 0;
 	}
 	.meta {
 		margin: var(--s-4) 0 var(--s-2);
 	}
 	@media (max-width: 639px) {
 		.page {
-			padding: var(--s-4) var(--gutter) var(--s-7);
+			padding: 0 var(--gutter) var(--s-7);
 		}
-		h1,
 		form,
 		p,
-		.empty-state {
+		.empty-state,
+		.page > :global(section) {
 			padding-inline: var(--s-2);
-		}
-		input::placeholder {
-			font-size: var(--fs-14);
 		}
 	}
 </style>

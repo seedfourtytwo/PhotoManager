@@ -162,10 +162,12 @@ test('search: clearing the search while one is running does not leave “Searchi
 	await box.fill('');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search$/);
-	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	// nothing typed: the suggestions are back
+	const places = page.getByRole('region', { name: 'Places' });
+	await expect(places).toBeVisible();
 	await page.waitForTimeout(1000); // the abandoned search answers; nothing may change
 	await expect(page.getByText('Searching…')).toHaveCount(0);
-	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	await expect(places).toBeVisible();
 });
 
 test('search: “like this photo” never names the previous photo as its source', async ({ page }) => {

@@ -68,6 +68,35 @@ test('without models, People leads an admin to where faces are set up', async ({
 	await expect(page.getByRole('heading', { name: 'Search and faces' })).toBeVisible();
 });
 
+test('search before typing: faces, places and, once search by meaning is set up, things', async ({
+	page
+}) => {
+	await resetMock('seed', { models: true });
+	await signIn(page, '/search');
+	const people = page.getByRole('region', { name: 'People' });
+	await expect(people.getByRole('link', { name: 'Sam', exact: true })).toBeVisible();
+	await expect(people.getByRole('link', { name: /^Someone/ })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Things' }).getByRole('link')).not.toHaveCount(0);
+	await expectAccessible(page);
+	const place = page.getByRole('region', { name: 'Places' }).getByRole('link').first();
+	const name = (await place.textContent())!.trim();
+	await place.click();
+	await expect.poll(() => new URL(page.url()).searchParams.get('q')).toMatch(`place:`);
+	await expect(page.getByRole('searchbox', { name: 'Search' })).toHaveValue(
+		new RegExp(`^place:"?${name}"?$`)
+	);
+	await expect(page.locator('.tile').first()).toBeVisible();
+});
+
+test('search before typing, without models: no things to suggest, they would find nothing', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page, '/search');
+	await expect(page.getByRole('region', { name: 'Places' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Things' })).toHaveCount(0);
+});
+
 test('search with models ranks by meaning; facets are read back', async ({ page }) => {
 	await resetMock('seed', { models: true });
 	await signIn(page, '/search?q=sunset%20date%3A2019');
