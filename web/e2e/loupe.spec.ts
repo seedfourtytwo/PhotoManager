@@ -424,6 +424,7 @@ test.describe('photo view', () => {
 		await page.locator('.tile').nth(2).click();
 		const viewer = loupe(page);
 		await expect(viewer).toBeVisible();
+		await expect(page).toHaveURL(/photo=\d+/);
 		const url = page.url();
 		// The very same viewer afterwards, not one that closed and opened again.
 		await viewer.evaluate((el) => ((el as HTMLElement).dataset.kept = 'yes'));
