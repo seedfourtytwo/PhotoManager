@@ -377,6 +377,12 @@
 		.right {
 			top: calc(env(safe-area-inset-top) + var(--s-2));
 		}
+		.pill {
+			left: calc(env(safe-area-inset-left) + var(--s-3));
+		}
+		.right {
+			right: calc(env(safe-area-inset-right) + var(--s-3));
+		}
 		.fullscreen {
 			display: none;
 		}

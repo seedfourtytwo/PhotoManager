@@ -102,6 +102,7 @@
 @media (max-width: 1023px) {
 	:root {
 		--page-x: var(--s-3);
-		--top: 0px;
+		/* No bar on top, but a phone's clock and notch: sticky things stop under them. */
+		--top: env(safe-area-inset-top, 0px);
 	}
 }
