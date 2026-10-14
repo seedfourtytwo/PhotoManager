@@ -8,6 +8,7 @@
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import {
 		EMPTY,
+		MAX_SELECTION,
 		TOO_MANY_SELECTED,
 		applyClick,
 		limitSelection,
@@ -15,18 +16,35 @@
 		type Selection
 	} from '$lib/selection';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
+	import { TRASH_DAYS, daysLeft, daysLeftLabel } from '$lib/trash';
+	import type { MenuItem } from '$lib/menu';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
+	import Menu from '$lib/components/Menu.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 	import SelectionBar from '$lib/components/SelectionBar.svelte';
+	import IconButton from '$lib/components/ui/IconButton.svelte';
 
 	let items = $state.raw<TrashItem[] | null>(null);
+	/** When the list came: the days left on each tile count from then. */
+	let loadedAt = $state(new Date());
 	let selection = $state<Selection>(EMPTY);
+	/** Select was pressed: a tap picks a photo even before one is picked. */
+	let choosing = $state(false);
 	let confirmEmpty = $state(false);
 	let width = $state(0);
 
 	const list = $derived(items ?? []);
 	const order = $derived(list.map((a) => a.id));
+	const left = $derived(
+		new Map(list.map((a) => [a.id, daysLeftLabel(daysLeft(a.trashed_at, loadedAt))]))
+	);
+	const more = $derived<MenuItem[]>([
+		// One request carries at most MAX_SELECTION; a larger trash restores the rest next time.
+		{ label: 'Restore all', run: () => void restore(order.slice(0, MAX_SELECTION)) },
+		...(session.isAdmin ? [{ label: 'Empty trash', danger: true, run: () => emptyAll() }] : [])
+	]);
 	/** What "Delete for good" removes: the selected photos, or the whole trash. */
 	const doomed = $derived(selection.ids.size || list.length);
 	const layout = $derived(
@@ -45,9 +63,21 @@
 		selection = kept;
 	}
 
+	function clear() {
+		selection = EMPTY;
+		choosing = false;
+	}
+
+	/** Empty trash takes every photo on screen, whatever was picked. */
+	function emptyAll() {
+		clear();
+		confirmEmpty = true;
+	}
+
 	async function load() {
 		try {
 			items = await api.trash();
+			loadedAt = new Date();
 		} catch (e) {
 			notice.error(e);
 		}
@@ -73,7 +103,7 @@
 		try {
 			const { restored } = await api.restore(ids);
 			notice.show(`Restored ${photos(restored)}.`);
-			selection = EMPTY;
+			clear();
 			library.changed();
 			await load();
 		} catch (e) {
@@ -90,7 +120,7 @@
 			const { purged } = await api.emptyTrash(selection.ids.size ? [...selection.ids] : order);
 			notice.show(`Deleted ${plural(purged, 'library copy', 'library copies')} for good.`);
 			confirmEmpty = false;
-			selection = EMPTY;
+			clear();
 			await load();
 		} catch (e) {
 			notice.error(e);
@@ -100,29 +130,28 @@
 
 <svelte:head><title>Trash · Photos</title></svelte:head>
 
-<div class="page">
-	<header>
-		<h1>Trash</h1>
-		<p class="prose">
-			Photos stay here for 30 days, then the library copy is removed. Your source folders are never
-			touched. Open a photo to see it full size; select photos (the circle, or a long press) to
-			restore several.
-		</p>
+<PageHead title="Trash" back={{ href: '/collections', label: 'Collections' }}>
+	{#snippet actions()}
 		{#if list.length}
-			<div class="tools">
-				<button type="button" onclick={() => select(selectAll(order))}>Select all</button>
-				{#if session.isAdmin}
-					<button type="button" onclick={() => (confirmEmpty = true)}>Empty trash</button>
-				{/if}
-			</div>
+			<IconButton
+				icon="select"
+				label="Select"
+				aria-pressed={choosing || selection.ids.size > 0}
+				onclick={() => (choosing || selection.ids.size ? clear() : (choosing = true))}
+			/>
+			<Menu label="More" text="More" icon="more" round items={more} />
 		{/if}
-	</header>
+	{/snippet}
+</PageHead>
+
+<div class="page">
+	<p class="lede">
+		Photos are deleted for good {TRASH_DAYS} days after they arrive here. Your original files are never
+		touched.
+	</p>
 
 	{#if items && list.length === 0}
-		<div class="empty-state">
-			<p>The trash is empty.</p>
-			<p>Photos you move to the trash wait here for 30 days before they go.</p>
-		</div>
+		<div class="empty-state"><p>The trash is empty.</p></div>
 	{/if}
 
 	<div bind:clientWidth={width}>
@@ -130,7 +159,8 @@
 			items={list}
 			{layout}
 			selected={selection.ids}
-			selecting={selection.ids.size > 0}
+			selecting={choosing || selection.ids.size > 0}
+			note={(item) => left.get(item.id)}
 			onopen={openPhoto}
 			ontoggle={(id, range) =>
 				select(applyClick(selection, id, order, { shift: range, toggle: true }))}
@@ -147,9 +177,15 @@
 					icon: 'trash',
 					run: () => (confirmEmpty = true),
 					hidden: !session.isAdmin
+				},
+				{
+					label: 'Select all',
+					run: () => select(selectAll(order)),
+					hidden: selection.ids.size === list.length,
+					more: true
 				}
 			]}
-			onclear={() => (selection = EMPTY)}
+			onclear={clear}
 		/>
 	{/if}
 </div>
@@ -186,28 +222,20 @@
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}
-	header {
-		padding: var(--s-5) 0 var(--s-4);
-	}
-	header p {
-		margin: var(--s-3) 0 0;
-	}
-	.tools {
-		display: flex;
-		gap: 0 2px;
-		margin: var(--s-2) 0 0 calc(-1 * var(--s-2));
-	}
-	.tools button {
+	.lede {
+		max-width: var(--measure);
+		margin: 0 0 var(--s-5);
 		color: var(--ink-2);
+		line-height: var(--lh-text);
 	}
 	.empty-state {
-		padding-top: var(--s-4);
+		padding-top: 0;
 	}
 	@media (max-width: 639px) {
 		.page {
 			padding: 0 var(--gutter) var(--s-7);
 		}
-		header,
+		.lede,
 		.empty-state {
 			padding-inline: var(--s-2);
 		}

@@ -1,19 +1,22 @@
 <script lang="ts">
 	import type { AlbumSummary, Person } from '$lib/api';
-	import { api, notice } from '$lib/app.svelte';
+	import { api, notice, session } from '$lib/app.svelte';
 	import {
 		STRIP_LIMIT,
 		albumStrip,
 		peopleStrip,
 		personName,
-		photoCount,
 		placeStrip,
 		withoutEchoes,
 		type SeenPlace
 	} from '$lib/collections';
 	import type { CollectionsRow } from '$lib/look';
+	import { formatCount } from '$lib/format';
 	import { collectionRows } from '$lib/nav';
+	import Icon from './Icon.svelte';
+	import NewAlbumDialog from './NewAlbumDialog.svelte';
 	import Portrait from './Portrait.svelte';
+	import IconButton from './ui/IconButton.svelte';
 
 	/** The rows of the account's look, in its order. A row left out is not asked for. */
 	type Props = { rows: readonly CollectionsRow[] };
@@ -29,6 +32,7 @@
 	let albums = $state<AlbumSummary[] | null>(null);
 	let places = $state<(SeenPlace & { cover: string | null })[] | null>(null);
 	let failed = $state<Partial<Record<CollectionsRow, true>>>({});
+	let creating = $state(false);
 
 	/** Ask for one row; an answer that comes after the page was left is dropped. */
 	function load<T>(row: CollectionsRow, ask: () => Promise<T>, keep: (answer: T) => void) {
@@ -71,18 +75,34 @@
 	}
 </script>
 
+{#snippet count(n: number)}
+	<span class="count data"
+		>{formatCount(n)}<span class="visually-hidden">{n === 1 ? ' photo' : ' photos'}</span></span
+	>
+{/snippet}
+
+{#snippet cover(url: string | null | undefined)}
+	<span class="cover"
+		>{#if url}<img src={url} alt="" loading="lazy" />{/if}</span
+	>
+{/snippet}
+
 <ul class="rows">
 	{#each shown as { row, href, label } (row)}
 		<li>
-			<h2><a {href}>{label}</a></h2>
+			<div class="head">
+				<h2><a {href}>{label}<Icon name="chevron" /></a></h2>
+				{#if row === 'albums' && session.canEdit}
+					<IconButton icon="plus" label="New album" onclick={() => (creating = true)} />
+				{/if}
+			</div>
 			{#if row === 'people'}
 				{#if people?.length}
 					<div class="rail">
 						{#each people as person (person.id)}
 							<a class="item person" href={`/people/${person.id}`}>
-								<Portrait portrait={person.portrait} size={72} />
+								<Portrait portrait={person.portrait} size={76} />
 								<span class="name" class:unnamed={!person.name}>{personName(person)}</span>
-								<span class="data small quiet">{photoCount(person.asset_count)}</span>
 							</a>
 						{/each}
 					</div>
@@ -95,14 +115,12 @@
 				{/if}
 			{:else if row === 'albums'}
 				{#if albums?.length}
-					<div class="rail">
+					<div class="grid">
 						{#each albums as album (album.id)}
 							<a class="item" href={`/albums/${album.id}`}>
-								<span class="cover"
-									>{#if album.cover}<img src={album.cover.url} alt="" loading="lazy" />{/if}</span
-								>
+								{@render cover(album.cover?.url)}
 								<span class="name">{album.title}</span>
-								<span class="data small quiet">{photoCount(album.count)}</span>
+								{@render count(album.count)}
 							</a>
 						{/each}
 					</div>
@@ -111,17 +129,15 @@
 						No albums yet. Select photos in the <a href="/">library</a> and choose “Add to album”.
 					</p>
 				{:else if !failed.albums}
-					<div class="rail waiting" aria-hidden="true"></div>
+					<div class="grid waiting" aria-hidden="true"></div>
 				{/if}
 			{:else if places?.length}
 				<div class="rail">
 					{#each places as place (place.name)}
 						<a class="item" href={place.href}>
-							<span class="cover"
-								>{#if place.cover}<img src={place.cover} alt="" loading="lazy" />{/if}</span
-							>
+							{@render cover(place.cover)}
 							<span class="name">{place.name}</span>
-							<span class="data small quiet">{photoCount(place.count)}</span>
+							{@render count(place.count)}
 						</a>
 					{/each}
 				</div>
@@ -134,6 +150,10 @@
 	{/each}
 </ul>
 
+{#if creating}
+	<NewAlbumDialog onclose={() => (creating = false)} />
+{/if}
+
 <style>
 	.rows {
 		list-style: none;
@@ -144,33 +164,37 @@
 		grid-template-columns: minmax(0, 1fr);
 		gap: var(--s-6);
 	}
-	h2 {
+	.head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s-2);
 		margin: 0 0 var(--s-2);
+	}
+	h2 {
+		margin: 0;
 	}
 	a {
 		text-decoration: none;
 	}
+	/* The heading opens the whole of it; the chevron says so. */
 	h2 a {
-		display: inline-block;
-		padding: var(--s-1) 0;
+		display: inline-flex;
+		align-items: center;
+		gap: var(--fine);
+		min-height: var(--target);
 	}
-	/* A small arrowhead: the heading opens the whole of it. */
-	h2 a::after {
-		content: '';
-		display: inline-block;
-		width: 0.4em;
-		height: 0.4em;
-		margin-left: 0.45em;
-		border: solid var(--ink-3);
-		border-width: 1.5px 1.5px 0 0;
-		rotate: 45deg;
-		translate: 0 -0.12em;
+	h2 a :global(svg) {
+		color: var(--ink-3);
+	}
+	.head :global(.icon-button) {
+		margin-right: calc(-1 * var(--s-2));
 	}
 	/* A strip runs off the side of a phone, so it reads as "there is more": it bleeds to
 	   both screen edges and scrolls sideways. On a laptop the same items simply wrap. */
 	.rail {
 		display: flex;
-		gap: var(--s-4);
+		gap: var(--s-3);
 		overflow-x: auto;
 		scroll-snap-type: x proximity;
 		scroll-padding-inline: var(--page-x);
@@ -181,26 +205,37 @@
 	.rail::-webkit-scrollbar {
 		display: none;
 	}
+	/* Albums: a grid of covers, two across on a phone. */
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 40%), 1fr));
+		gap: var(--s-4) var(--s-3);
+	}
 	/* Hold the row's place while it loads, so the rows below do not jump. */
 	.waiting {
 		min-height: 10.25rem;
 	}
 	.waiting.faces {
-		min-height: 8rem;
+		min-height: 7.5rem;
 	}
 	.item {
+		/* holds the count's hidden word, which the strip's scroller would not clip otherwise */
+		position: relative;
 		flex: none;
 		display: grid;
 		justify-items: start;
 		align-content: start; /* a one-line name keeps its count right under it */
 		gap: var(--s-1);
-		width: 9rem;
+		width: 10.5rem;
 		scroll-snap-align: start;
+	}
+	.grid .item {
+		width: auto;
 	}
 	.person {
 		justify-items: center;
 		text-align: center;
-		width: 5rem;
+		width: 5.25rem;
 	}
 	.item :global(.face),
 	.cover {
@@ -236,6 +271,10 @@
 		font-weight: 400;
 		color: var(--ink-2);
 	}
+	.count {
+		color: var(--ink-2);
+		font-size: var(--fs-14);
+	}
 	.none {
 		max-width: var(--measure);
 		margin: 0;
@@ -248,7 +287,6 @@
 		h2 a:hover,
 		.item:hover .name {
 			text-decoration: underline;
-			text-decoration-thickness: 1px;
 			text-underline-offset: 0.2em;
 		}
 	}
@@ -260,6 +298,16 @@
 		}
 		.item:not(.person) {
 			width: 12rem;
+		}
+		.grid {
+			grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+		}
+		.grid .item {
+			width: auto;
+		}
+		/* A wide page: the + stays beside the heading it belongs to. */
+		.head {
+			justify-content: flex-start;
 		}
 	}
 </style>

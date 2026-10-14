@@ -4,12 +4,18 @@
 	import { page } from '$app/state';
 	import type { Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
-	import { errorMessage, formatCount, photos, plural } from '$lib/format';
+	import { errorMessage, formatCount } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
+	import type { MenuItem } from '$lib/menu';
+	import { personLine, yearsOf } from '$lib/person';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
+	import { groupByYear } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
+	import Menu from '$lib/components/Menu.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
+	import PersonHero from '$lib/components/PersonHero.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
 	import PortraitDialog from '$lib/components/PortraitDialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -47,6 +53,28 @@
 	});
 
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
+	const line = $derived(
+		person ? personLine(person.asset_count, yearsOf(loader.items, loader.done)) : ''
+	);
+	/** Behind the round ⋯: what changes the person, for who may. */
+	const tools = $derived<MenuItem[]>(
+		person
+			? [
+					{
+						label: person.name ? 'Rename' : 'Name',
+						run: () => {
+							name = person?.name ?? '';
+							dialog = 'rename';
+						}
+					},
+					{ label: 'Change portrait', run: () => (dialog = 'portrait') },
+					{ label: 'Merge with…', run: () => void openMerge() },
+					person.hidden
+						? { label: 'Show again', run: () => void setHidden(false) }
+						: { label: 'Hide person', run: () => void setHidden(true) }
+				]
+			: []
+	);
 
 	async function rename(event: SubmitEvent) {
 		event.preventDefault();
@@ -117,66 +145,41 @@
 
 <svelte:head><title>{person?.name ?? 'Person'} · Photos</title></svelte:head>
 
-<div class="page">
-	<p class="small crumb"><a href="/people">People</a></p>
-	{#if error}
-		<p class="quiet">{error}</p>
-	{:else if person}
-		<header>
-			{#if session.canEdit}
-				<button
-					type="button"
-					class="portrait"
-					aria-label={`Change portrait of ${person.name ?? 'this person'}`}
-					onclick={() => (dialog = 'portrait')}
-				>
-					<Portrait portrait={person.portrait} size={72} />
-				</button>
-			{:else}
-				<Portrait portrait={person.portrait} size={72} />
-			{/if}
-			<div>
-				<h1 class:quiet={!person.name}>{person.name ?? 'Someone'}</h1>
-				<p class="quiet small">
-					{photos(person.asset_count)} · {plural(person.face_count, 'face')}
-					{#if person.hidden}· Hidden from People{/if}
-				</p>
-				{#if session.canEdit}
-					<div class="tools">
-						<button
-							type="button"
-							onclick={() => {
-								name = person?.name ?? '';
-								dialog = 'rename';
-							}}>{person.name ? 'Rename' : 'Name'}</button
-						>
-						<button type="button" onclick={() => (dialog = 'portrait')}>Change portrait</button>
-						<button type="button" onclick={openMerge}>Merge with…</button>
-						<KeepOnPhone
-							target={{ kind: 'person', person_id: person.id }}
-							what={person.name ?? 'this person'}
-						/>
-						{#if person.hidden}
-							<button type="button" disabled={busy} onclick={() => setHidden(false)}
-								>Show again</button
-							>
-						{:else}
-							<button type="button" disabled={busy} onclick={() => setHidden(true)}
-								>Hide person</button
-							>
-						{/if}
-					</div>
-				{/if}
-			</div>
-		</header>
-	{/if}
+<PageHead title={person?.name ?? 'Someone'} hideTitle back={{ href: '/people', label: 'People' }}>
+	{#snippet actions()}
+		{#if person && session.canEdit}
+			<Menu label="More" text="More" icon="more" round items={tools} />
+		{/if}
+	{/snippet}
+</PageHead>
 
+{#if error}
+	<p class="quiet error">{error}</p>
+{:else if person}
+	<PersonHero
+		{person}
+		{line}
+		onportrait={session.canEdit ? () => (dialog = 'portrait') : undefined}
+	>
+		{#snippet actions()}
+			{#if person && session.canEdit}
+				<KeepOnPhone
+					target={{ kind: 'person', person_id: person.id }}
+					what={person.name ?? 'this person'}
+				/>
+			{/if}
+		{/snippet}
+	</PersonHero>
+{/if}
+
+<div class="page">
 	<!-- A person who is not there has no photos to ask for: the one line above says it. -->
 	{#if !error}
 		<Timeline
 			bind:this={timeline}
 			{loader}
 			{selection}
+			grouping={groupByYear}
 			onopen={openPhoto}
 			ontoggle={(assetId, range) =>
 				(selection = applyClick(
@@ -262,44 +265,10 @@
 
 <style>
 	.page {
-		padding: var(--s-5) var(--page-x) var(--s-7);
+		padding: 0 var(--page-x) var(--s-7);
 	}
-	.crumb {
-		margin: 0;
-	}
-	.crumb a {
-		color: var(--ink-2);
-	}
-	header {
-		display: flex;
-		gap: var(--s-4);
-		align-items: center;
-		margin: var(--s-4) 0 var(--s-2);
-	}
-	/* The portrait is its own tool: round, and nothing but the picture. */
-	.portrait {
-		flex: none;
-		padding: 0;
-		border-radius: 50%;
-	}
-	header p {
-		margin: var(--s-1) 0 0;
-	}
-	h1 {
-		font-size: var(--fs-40);
-		font-weight: var(--title-weight);
-	}
-	h1.quiet {
-		font-style: var(--voice-style);
-	}
-	.tools {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0 2px;
-		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
-	}
-	.tools button {
-		color: var(--ink-2);
+	.error {
+		padding: var(--s-4) var(--page-x);
 	}
 	.choose {
 		list-style: none;
@@ -320,14 +289,7 @@
 	}
 	@media (max-width: 639px) {
 		.page {
-			padding: var(--s-4) var(--gutter) var(--s-7);
-		}
-		.crumb,
-		header {
-			padding-inline: var(--s-2);
-		}
-		h1 {
-			font-size: var(--fs-28);
+			padding: 0 var(--gutter) var(--s-7);
 		}
 	}
 </style>

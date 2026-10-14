@@ -3,7 +3,14 @@
 	import { api, notice, session } from '$lib/app.svelte';
 	import { PIN_FIELD } from '$lib/pin';
 	import Dialog from '../Dialog.svelte';
+	import IconButton from '../ui/IconButton.svelte';
+	import TileGroup from '../ui/TileGroup.svelte';
+	import TileRow from '../ui/TileRow.svelte';
+	import ActionCard from './ActionCard.svelte';
+	import ActionCards from './ActionCards.svelte';
 	import LookForm from './LookForm.svelte';
+
+	const ROLE: Record<Role, string> = { admin: 'Admin', member: 'Member', guest: 'Guest' };
 
 	let users = $state<ManagedUser[]>([]);
 	let creating = $state(false);
@@ -11,6 +18,22 @@
 	let styling = $state<ManagedUser | null>(null);
 	let form = $state({ username: '', display_name: '', pin: '', role: 'member' as Role });
 	let newPin = $state('');
+	/** Whose sheet is open: their role, their actions, their user name. */
+	let openId = $state<number | null>(null);
+	const open = $derived(users.find((u) => u.id === openId) ?? null);
+
+	/** "Member", "Admin, you", "Guest · Disabled · Locked". */
+	function lineOf(user: ManagedUser): string {
+		const role = user.id === session.user?.id ? `${ROLE[user.role]}, you` : ROLE[user.role];
+		return [role, user.disabled && 'Disabled', user.locked && 'Locked'].filter(Boolean).join(' · ');
+	}
+
+	/** An action that opens its own dialog takes the sheet's place. */
+	function then(next: (user: ManagedUser) => void) {
+		const user = open;
+		openId = null;
+		if (user) next(user);
+	}
 
 	async function load() {
 		try {
@@ -87,66 +110,19 @@
 	}
 </script>
 
-<section aria-labelledby="a-users">
-	<header>
-		<h2 id="a-users">People</h2>
-		<button type="button" onclick={() => (creating = true)}>Add person</button>
-	</header>
-	<table>
-		<thead>
-			<tr><th>Name</th><th>User name</th><th>Role</th><th>Status</th><th></th></tr>
-		</thead>
-		<tbody>
-			{#each users as user (user.id)}
-				<tr class:off={user.disabled}>
-					<td>{user.display_name}</td>
-					<td class="quiet">{user.username}</td>
-					<td>
-						<select
-							aria-label={`Role of ${user.username}`}
-							value={user.role}
-							disabled={pending !== null}
-							onchange={(e) =>
-								patch(user, { role: e.currentTarget.value as Role }, e.currentTarget)}
-						>
-							<option value="admin">Admin</option>
-							<option value="member">Member</option>
-							<option value="guest">Guest (view and download)</option>
-						</select>
-					</td>
-					<td>
-						<span class="state" class:quiet={!user.disabled}
-							>{user.disabled ? 'Disabled' : 'Active'}</span
-						>
-						{#if user.locked}<span class="state">Locked</span>{/if}
-						{#if user.id !== session.user?.id}
-							<button
-								type="button"
-								disabled={pending !== null}
-								onclick={() => patch(user, { disabled: !user.disabled })}
-							>
-								{user.disabled ? 'Enable' : 'Disable'}
-							</button>
-						{:else}<span class="quiet">· you</span>{/if}
-					</td>
-					<td>
-						<button type="button" disabled={pending !== null} onclick={() => (styling = user)}
-							>Look</button
-						>
-						<button type="button" disabled={pending !== null} onclick={() => (resetting = user)}
-							>Reset PIN</button
-						>
-						{#if user.locked}
-							<button type="button" disabled={pending !== null} onclick={() => unlock(user)}
-								>Unlock</button
-							>
-						{/if}
-					</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
-</section>
+<TileGroup label="People">
+	{#snippet action()}
+		<IconButton icon="plus" label="Add person" onclick={() => (creating = true)} />
+	{/snippet}
+	{#each users as user (user.id)}
+		<TileRow
+			icon="person"
+			title={user.display_name}
+			line={lineOf(user)}
+			onclick={() => (openId = user.id)}
+		/>
+	{/each}
+</TileGroup>
 
 {#if creating}
 	<Dialog title="Add person" onclose={() => (creating = false)}>
@@ -197,68 +173,57 @@
 	{#key styling.id}
 		<LookForm user={styling} onclose={() => (styling = null)} />
 	{/key}
+{:else if open}
+	{@const self = open.id === session.user?.id}
+	<Dialog title={open.display_name} cancelLabel="Close" onclose={() => (openId = null)}>
+		<p class="quiet small">User name <span class="data">{open.username}</span></p>
+		<label class="field">
+			Role
+			<select
+				value={open.role}
+				disabled={pending !== null}
+				onchange={(e) => patch(open, { role: e.currentTarget.value as Role }, e.currentTarget)}
+			>
+				<option value="admin">Admin</option>
+				<option value="member">Member</option>
+				<option value="guest">Guest (view and download)</option>
+			</select>
+		</label>
+		<ActionCards>
+			<ActionCard
+				icon="sliders"
+				label="Look"
+				disabled={pending !== null}
+				onclick={() => then((user) => (styling = user))}
+			/>
+			<ActionCard
+				icon="lock"
+				label="Reset PIN"
+				disabled={pending !== null}
+				onclick={() => then((user) => (resetting = user))}
+			/>
+			{#if open.locked}
+				<ActionCard
+					icon="refresh"
+					label="Unlock"
+					disabled={pending !== null}
+					onclick={() => open && unlock(open)}
+				/>
+			{/if}
+			{#if !self}
+				<ActionCard
+					icon="power"
+					label={open.disabled ? 'Enable' : 'Disable'}
+					disabled={pending !== null}
+					onclick={() => open && patch(open, { disabled: !open.disabled })}
+				/>
+			{/if}
+		</ActionCards>
+	</Dialog>
 {/if}
 
 <style>
-	header button,
-	td button {
-		color: var(--ink-2);
-	}
-	table {
-		border-collapse: collapse;
-		width: 100%;
-	}
-	th {
-		text-align: left;
-		font-weight: 600;
-		font-size: var(--fs-12);
-		color: var(--ink-2);
-		border-bottom: 1px solid var(--hairline);
-		padding: var(--s-1) var(--s-3) var(--s-1) 0;
-	}
-	td {
-		padding: var(--s-1) var(--s-3) var(--s-1) 0;
-		border-bottom: 1px solid var(--hairline);
-	}
-	tr:last-child td {
-		border-bottom: 0;
-	}
-	td select {
-		border-bottom: 0;
-	}
-	.state {
-		margin-right: var(--s-1);
-	}
 	.hint {
 		margin: calc(-1 * var(--s-3)) 0 var(--s-4);
-	}
-	tr.off td:first-child {
-		color: var(--ink-2);
-		text-decoration: line-through;
-	}
-	@media (max-width: 639px) {
-		table,
-		tbody,
-		tr,
-		td {
-			display: block;
-		}
-		thead {
-			display: none;
-		}
-		tr {
-			padding: var(--s-2) 0;
-			border-bottom: 1px solid var(--hairline);
-		}
-		td {
-			border: 0;
-			padding: 0;
-		}
-		td:first-child {
-			font-weight: 600;
-		}
-		td button {
-			margin-left: calc(-1 * var(--s-2));
-		}
 	}
 </style>

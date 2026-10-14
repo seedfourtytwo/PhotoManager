@@ -167,6 +167,7 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: 'Share' }).click();
 	await shot(page, '12-share', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('link', { name: 'Print' }).click();
 	await expect(page.getByRole('list', { name: 'Pages' }).getByRole('img').first()).toBeVisible();
 	await shot(page, '20-print', p);
@@ -194,12 +195,21 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '15-trash', p);
 
 	await page.goto('/admin');
-	await expect(page.getByRole('region', { name: 'Backups' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Folders' })).toBeVisible();
 	await shot(page, '14-admin', p, true);
-	await page.getByRole('region', { name: 'Backups' }).scrollIntoViewIfNeeded();
+	await page.getByRole('button', { name: /^Backups/ }).click();
+	const backups = page.getByRole('dialog', { name: 'Backups' });
+	await expect(backups).toHaveCSS('opacity', '1');
 	await shot(page, '14b-backups', p);
-	const oldDisk = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await oldDisk.getByRole('button', { name: 'Stop watching' }).click();
+	await backups.getByRole('button', { name: 'Close' }).click();
+	await page
+		.getByRole('region', { name: 'Folders' })
+		.getByRole('button', { name: /^Old hard disk/ })
+		.click();
+	await page
+		.getByRole('dialog', { name: 'Old hard disk' })
+		.getByRole('button', { name: 'Stop watching' })
+		.click();
 	const stop = page.getByRole('dialog', { name: 'Stop watching “Old hard disk”?' });
 	await expect(stop.getByRole('radio', { name: 'Keep them in the library' })).toBeVisible();
 	await shot(page, '14c-stop-watching', p);
@@ -207,8 +217,11 @@ test('every screen', async ({ page }, info) => {
 
 	// The look of one account: the form, then that look tried on the admin's own screen.
 	await page
-		.getByRole('row')
-		.filter({ has: page.getByRole('cell', { name: 'partner', exact: true }) })
+		.getByRole('region', { name: 'People' })
+		.getByRole('button', { name: /^Partner/ })
+		.click();
+	await page
+		.getByRole('dialog', { name: 'Partner' })
 		.getByRole('button', { name: 'Look', exact: true })
 		.click();
 	const look = page.getByRole('dialog', { name: 'Look for Partner' });

@@ -15,12 +15,28 @@ const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
 
 test.beforeEach(({ page }) => openAdmin(page));
 
+/** A folder is a tile under Folders; it opens a sheet with what it says and its actions. */
+const folderTile = (page: Page, name: string) =>
+	page
+		.getByRole('region', { name: 'Folders' })
+		.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+async function openFolder(page: Page, name: string) {
+	await folderTile(page, name).click();
+	return page.getByRole('dialog', { name });
+}
+/** The + on the Folders line: a folder here, one from Proton, or a cloud folder. */
+async function addFrom(page: Page, kind: 'Add folder' | 'Add from Proton' | 'Add cloud folder') {
+	const folders = page.getByRole('region', { name: 'Folders' });
+	await folders.getByRole('button', { name: 'Add', exact: true }).click();
+	await folders.getByRole('button', { name: kind }).click();
+}
+
 test('admin adds a folder, sees the import progress and every skip/failure reason', async ({
 	page
 }) => {
 	await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
 	await expectAccessible(page);
-	await page.getByRole('button', { name: 'Add folder' }).click();
+	await addFrom(page, 'Add folder');
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
 	const folder = dialog.getByLabel('Folder', { exact: true });
 	// It opens on the home folder, which holds the library: that one can't be added.
@@ -41,11 +57,11 @@ test('admin adds a folder, sees the import progress and every skip/failure reaso
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
 
 	await expect(page.getByText(/working: \d running, \d queued/)).toBeVisible();
-	const row = page.getByRole('listitem').filter({ hasText: 'Scans' });
-	await expect(row.getByText(/last import\s+6\s+new,\s+1 failed,\s+1 skipped/)).toBeVisible({
-		timeout: 10_000
-	});
-	await row.getByRole('button', { name: 'Report' }).click();
+	await expect(folderTile(page, 'Scans')).toContainText(
+		/last import\s+6\s+new,\s+1 failed,\s+1 skipped/,
+		{ timeout: 10_000 }
+	);
+	await (await openFolder(page, 'Scans')).getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: 'Last import · Scans' });
 	// Every skip, failure and duplicate says why (wording differs between mock and server).
 	await expect(report.getByText(/file is corrupt|cannot decode|cannot read/)).toBeVisible();
@@ -55,8 +71,11 @@ test('admin adds a folder, sees the import progress and every skip/failure reaso
 });
 
 test('admin edits folder access and retries a failed job', async ({ page }) => {
-	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await row.getByRole('button', { name: 'Access' }).click();
+	await (
+		await openFolder(page, 'Old hard disk')
+	)
+		.getByRole('button', { name: 'Who sees it' })
+		.click();
 	const dialog = page.getByRole('dialog', { name: /Who sees/ });
 	await dialog.getByLabel('Everyone').selectOption('');
 	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/access'));
@@ -66,65 +85,74 @@ test('admin edits folder access and retries a failed job', async ({ page }) => {
 		users: [{ user_id: 2, level: 'download' }]
 	});
 
-	await expect(page.getByText(/libvips could not decode/)).toBeVisible();
-	await page.getByRole('button', { name: 'Retry' }).click();
-	await expect(page.getByText('No failed jobs.')).toBeVisible();
+	// Problems is a status tile; its list opens as a sheet.
+	await page.getByRole('button', { name: /^Problems/ }).click();
+	const problems = page.getByRole('dialog', { name: 'Problems' });
+	await expect(problems.getByText(/libvips could not decode/)).toBeVisible();
+	await problems.getByRole('button', { name: 'Retry' }).click();
+	await expect(problems.getByText('No failed jobs.')).toBeVisible();
 });
 
 test('a scan of a folder that has gone says “folder not found” on the folder and in the report', async ({
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'the mock simulates a disk that was unplugged');
-	await page.getByRole('button', { name: 'Add folder' }).click();
+	await addFrom(page, 'Add folder');
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
 	await dialog.getByLabel('Folder', { exact: true }).fill('/media/usb-gone');
 	await dialog.getByLabel('Folder', { exact: true }).press('Enter');
 	await expect(dialog.getByLabel('Name')).toHaveValue('usb-gone');
 	await dialog.getByLabel('Name').fill('USB disk');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
-	const row = page.getByRole('listitem').filter({ hasText: 'USB disk' });
-	await expect(row.getByText(/last import failed: folder not found/i)).toBeVisible({
-		timeout: 10_000
-	});
-	await row.getByRole('button', { name: 'Report' }).click();
+	await expect(folderTile(page, 'USB disk')).toContainText(
+		/last import failed: folder not found/i,
+		{
+			timeout: 10_000
+		}
+	);
+	await (await openFolder(page, 'USB disk')).getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: 'Last import · USB disk' });
 	await expect(report.getByText(/failed/i).first()).toBeVisible();
 	await expect(report.getByText(/folder not found on this machine/)).toBeVisible();
 });
 
 test('a folder can be told to check itself again on a timer', async ({ page }) => {
-	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	const auto = row.getByLabel('Check automatically');
-	await expect(auto).toHaveValue('off');
-	await expect(row.getByText(/next check/)).toHaveCount(0);
+	let sheet = await openFolder(page, 'Old hard disk');
+	await expect(sheet.getByLabel('Check by itself')).toHaveValue('off');
+	await expect(sheet.getByText(/next check/)).toHaveCount(0);
 
-	await auto.selectOption({ label: 'Every day' });
-	await expect(row.getByText(/next check (\d|within a few minutes)/)).toBeVisible();
-	await expect(row.getByRole('button', { name: 'Check again' })).toBeVisible();
+	await sheet.getByLabel('Check by itself').selectOption({ label: 'Every day' });
+	await expect(sheet.getByText(/next check (\d|within a few minutes)/)).toBeVisible();
+	await expect(sheet.getByRole('button', { name: 'Check again' })).toBeVisible();
 	await expectAccessible(page);
 
 	await page.reload();
-	await expect(auto).toHaveValue('daily');
-	await expect(row.getByText(/next check/)).toBeVisible();
-	const others = page.getByRole('listitem').filter({ hasText: 'Partner' });
-	await expect(others.getByLabel('Check automatically')).toHaveValue('off');
+	sheet = await openFolder(page, 'Old hard disk');
+	await expect(sheet.getByLabel('Check by itself')).toHaveValue('daily');
+	await expect(sheet.getByText(/next check/)).toBeVisible();
+	await sheet.getByRole('button', { name: 'Close' }).click();
+	const others = await openFolder(page, 'Partner');
+	await expect(others.getByLabel('Check by itself')).toHaveValue('off');
+	await others.getByRole('button', { name: 'Close' }).click();
 
-	await auto.selectOption({ label: 'Off' });
-	await expect(row.getByText(/next check/)).toHaveCount(0);
+	sheet = await openFolder(page, 'Old hard disk');
+	await sheet.getByLabel('Check by itself').selectOption({ label: 'Off' });
+	await expect(sheet.getByText(/next check/)).toHaveCount(0);
 });
 
 test('import progress is live while a scan runs', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'timing of the mock’s scan');
-	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await row.getByRole('button', { name: 'Check again' }).click();
-	await expect(row.getByText(/importing · \d+ files? so far/)).toBeVisible({ timeout: 5000 });
-	await expect(row.getByText(/last import\s+6\s+new/)).toBeVisible({ timeout: 10_000 });
+	const sheet = await openFolder(page, 'Old hard disk');
+	await sheet.getByRole('button', { name: 'Check again' }).click();
+	// the open sheet follows the import as it runs
+	await expect(sheet.getByText(/importing · \d+ files? so far/)).toBeVisible({ timeout: 5000 });
+	await expect(sheet.getByText(/last import\s+6\s+new/)).toBeVisible({ timeout: 10_000 });
 });
 
 test.describe('adding a folder when the second step fails or the button is pressed twice', () => {
 	test.beforeEach(() => test.skip(REAL_BACKEND, 'failures and delays are staged on the mock'));
 	async function pickScans(page: Page) {
-		await page.getByRole('button', { name: 'Add folder' }).click();
+		await addFrom(page, 'Add folder');
 		const dialog = page.getByRole('dialog', { name: 'Add a folder' });
 		await dialog.getByRole('button', { name: /^scans$/i }).click();
 		await expect(dialog.getByLabel('Name')).toHaveValue('Scans');
@@ -143,7 +171,7 @@ test.describe('adding a folder when the second step fails or the button is press
 		await expect(
 			page.getByRole('status').filter({ hasText: 'The import queue is full; try again.' })
 		).toBeVisible();
-		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toBeVisible();
+		await expect(folderTile(page, 'Scans')).toBeVisible();
 	});
 
 	test('a double click on “Add and import” adds the folder once', async ({ page }) => {
@@ -151,7 +179,7 @@ test.describe('adding a folder when the second step fails or the button is press
 		const dialog = await pickScans(page);
 		await dialog.getByRole('button', { name: 'Add and import' }).dblclick();
 		await expect(dialog).toBeHidden();
-		await expect(page.getByRole('listitem').filter({ hasText: 'Scans' })).toHaveCount(1);
+		await expect(folderTile(page, 'Scans')).toHaveCount(1);
 		expect(posts.count).toBe(1);
 	});
 
@@ -166,7 +194,7 @@ test.describe('adding a folder when the second step fails or the button is press
 		await dialog.getByRole('button', { name: 'Add and import' }).click();
 		await expect(dialog.getByText('That folder is already a source.')).toBeVisible();
 		await dialog.getByRole('button', { name: 'Cancel' }).click();
-		await page.getByRole('button', { name: 'Add folder' }).click();
+		await addFrom(page, 'Add folder');
 		await expect(dialog.getByRole('button', { name: /^scans$/i })).toBeVisible();
 		await expect(dialog.getByText('That folder is already a source.')).toHaveCount(0);
 		await expect(dialog.getByLabel('Name')).not.toHaveValue('My own name');
@@ -185,29 +213,32 @@ test('loading texts in the admin dialogs are announced as status', async ({ page
 	await page.route('**/api/proton', hold);
 	await page.route('**/api/folders**', hold);
 
-	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await row.getByRole('button', { name: 'Access' }).click();
+	await (
+		await openFolder(page, 'Old hard disk')
+	)
+		.getByRole('button', { name: 'Who sees it' })
+		.click();
 	const access = page.getByRole('dialog', { name: /Who sees/ });
 	await expect(access.getByRole('status')).toHaveText('Loading…');
 	release();
 	await expect(access.getByLabel('Everyone')).toBeVisible();
 	await access.getByRole('button', { name: 'Cancel' }).click();
 
-	await row.getByRole('button', { name: 'Report' }).click();
+	await (await openFolder(page, 'Old hard disk')).getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: /Last import/ });
 	await expect(report.getByRole('status')).toHaveText('Loading…');
 	release();
 	await expect(report.getByRole('status')).toHaveCount(0);
 	await report.getByRole('button', { name: 'Close' }).click();
 
-	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	await addFrom(page, 'Add from Proton');
 	const proton = page.getByRole('dialog', { name: 'Add from Proton Drive' });
 	await expect(proton.getByRole('status')).toHaveText('Asking Proton Drive…');
 	release();
 	await expect(proton.getByRole('radio', { name: /My Proton photos/ })).toBeVisible();
 	await proton.getByRole('button', { name: 'Cancel' }).click();
 
-	await page.getByRole('button', { name: 'Add folder' }).click();
+	await addFrom(page, 'Add folder');
 	const folder = page.getByRole('dialog', { name: 'Add a folder' });
 	await expect(folder.getByRole('status')).toHaveText('Looking…');
 	release();
@@ -218,7 +249,7 @@ test('folder picker: a folder that is not there yet can be created on the spot',
 	page
 }) => {
 	test.skip(REAL_BACKEND, "uses the mock machine's folders");
-	await page.getByRole('button', { name: 'Add folder' }).click();
+	await addFrom(page, 'Add folder');
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
 	const field = dialog.getByLabel('Folder', { exact: true });
 	// Wait for the first listing: it would otherwise land over what is typed.
@@ -270,7 +301,7 @@ test('a long import report shows its first files and loads the rest on request',
 		});
 	});
 	await signIn(page, '/admin');
-	await page.getByRole('button', { name: 'Report' }).first().click();
+	await (await openFolder(page, 'Phone')).getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: /^Last import/ });
 	await expect(report.getByText('first.jpg')).toBeVisible();
 	await expect(report.getByText('later.jpg')).toHaveCount(0);
@@ -283,8 +314,12 @@ test('a long import report shows its first files and loads the rest on request',
 test('admin stops watching a folder: the sheet says what happens, nothing changes until confirmed', async ({
 	page
 }) => {
-	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await row.getByRole('button', { name: 'Stop watching' }).click();
+	const row = folderTile(page, 'Old hard disk');
+	await (
+		await openFolder(page, 'Old hard disk')
+	)
+		.getByRole('button', { name: 'Stop watching' })
+		.click();
 	const sheet = page.getByRole('dialog', { name: 'Stop watching “Old hard disk”?' });
 	await expect(sheet.getByText('Nothing in the folder on your computer is changed.')).toBeVisible();
 	await expect(sheet.getByText(/[\d,]+ of its [\d,]+ photos\s+come only from this folder/)).toBeVisible(); // prettier-ignore
@@ -296,7 +331,11 @@ test('admin stops watching a folder: the sheet says what happens, nothing change
 	await sheet.getByRole('button', { name: 'Cancel' }).click();
 	await expect(row).toBeVisible();
 
-	await row.getByRole('button', { name: 'Stop watching' }).click();
+	await (
+		await openFolder(page, 'Old hard disk')
+	)
+		.getByRole('button', { name: 'Stop watching' })
+		.click();
 	await sheet.getByRole('radio', { name: 'Move them to the trash' }).check();
 	const removal = page.waitForRequest((r) => r.method() === 'DELETE');
 	await sheet.getByRole('button', { name: 'Stop watching' }).click();
@@ -307,7 +346,7 @@ test('admin stops watching a folder: the sheet says what happens, nothing change
 	).toBeVisible();
 	await expect(row).toHaveCount(0);
 	await page.reload();
-	await expect(page.getByRole('listitem').filter({ hasText: 'Phone' })).toBeVisible();
+	await expect(folderTile(page, 'Phone')).toBeVisible();
 	await expect(row).toHaveCount(0);
 });
 
@@ -316,9 +355,9 @@ test('a folder kept after “Stop watching” is listed apart, and can be remove
 }) => {
 	const folders = page.getByRole('region', { name: 'Folders' });
 	const unwatched = page.getByRole('region', { name: 'No longer watched' });
-	await folders
-		.getByRole('listitem')
-		.filter({ hasText: 'Old hard disk' })
+	await (
+		await openFolder(page, 'Old hard disk')
+	)
 		.getByRole('button', { name: 'Stop watching' })
 		.click();
 	await page
@@ -329,11 +368,15 @@ test('a folder kept after “Stop watching” is listed apart, and can be remove
 		page.getByRole('status').filter({ hasText: 'Its photos stay, seen by the same people.' })
 	).toBeVisible();
 	await expect(folders.getByText('Old hard disk')).toHaveCount(0);
-	const kept = unwatched.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await expect(kept.getByText(/[\d,]+ photos/)).toBeVisible();
+	const kept = unwatched.getByRole('button', { name: /^Old hard disk/ });
+	await expect(kept).toContainText(/[\d,]+ photos/);
 	await expectAccessible(page);
 
-	await kept.getByRole('button', { name: 'Remove' }).click();
+	await kept.click();
+	await page
+		.getByRole('dialog', { name: 'Old hard disk' })
+		.getByRole('button', { name: 'Remove' })
+		.click();
 	const sheet = page.getByRole('dialog', { name: 'Remove “Old hard disk”?' });
 	await expect(sheet.getByText(/only through this folder will no longer see them/)).toBeVisible();
 	await sheet.getByRole('button', { name: 'Remove' }).click();
@@ -346,14 +389,15 @@ test('a folder kept after “Stop watching” is listed apart, and can be remove
 test('pausing a folder says its photos stay and that new ones wait until it resumes', async ({
 	page
 }) => {
-	const row = page.getByRole('listitem').filter({ hasText: 'Old hard disk' });
-	await row.getByRole('button', { name: 'Pause checking' }).click();
+	const sheet = await openFolder(page, 'Old hard disk');
+	await sheet.getByRole('button', { name: 'Pause checking' }).click();
 	const hint =
 		'Photos already in the library stay; new photos in this folder aren’t picked up until you resume.';
-	await expect(row.getByText(hint)).toBeVisible();
-	await expect(row.getByRole('button', { name: 'Check again' })).toBeDisabled();
+	await expect(sheet.getByText(hint, { exact: true })).toBeVisible();
+	await expect(sheet.getByRole('button', { name: 'Check again' })).toBeDisabled();
+	await expect(folderTile(page, 'Old hard disk')).toContainText('paused');
 	await expectAccessible(page);
-	await row.getByRole('button', { name: 'Resume checking' }).click();
-	await expect(row.getByText(hint)).toHaveCount(0);
-	await expect(row.getByRole('button', { name: 'Check again' })).toBeEnabled();
+	await sheet.getByRole('button', { name: 'Resume checking' }).click();
+	await expect(sheet.getByText(hint, { exact: true })).toHaveCount(0);
+	await expect(sheet.getByRole('button', { name: 'Check again' })).toBeEnabled();
 });

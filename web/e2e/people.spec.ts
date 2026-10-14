@@ -21,12 +21,18 @@ test.beforeEach(async () => {
 
 const someone = /^Someone/;
 
+/** The person's tools wait behind the round ⋯ in the page head. */
+async function personTool(page: Page, name: string) {
+	await page.getByRole('button', { name: 'More', exact: true }).click();
+	await page.getByRole('button', { name, exact: true }).click();
+}
+
 test('a hidden person leaves People, and Undo brings them back', async ({ page }) => {
 	await signIn(page, '/people');
 	const strangers = page.getByRole('link', { name: someone });
 	const before = await strangers.count();
 	await strangers.first().click();
-	await page.getByRole('button', { name: 'Hide person' }).click();
+	await personTool(page, 'Hide person');
 
 	await expect(page).toHaveURL(/\/people$/);
 	await expect(toast(page)).toContainText('hidden from People');
@@ -43,13 +49,16 @@ test('hidden people wait in their own list and can be shown again', async ({ pag
 	await strangers.first().click();
 	await expect(page).toHaveURL(/\/people\/\d+$/);
 	const person = page.url();
-	await page.getByRole('button', { name: 'Hide person' }).click();
+	await personTool(page, 'Hide person');
 	await expect(strangers).toHaveCount(before - 1);
 
 	// Their own page still opens, says so, and offers the way back.
 	await page.goto(person);
 	await expect(page.getByText('Hidden from People')).toBeVisible();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Show again' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Hide person' })).toHaveCount(0);
+	await page.keyboard.press('Escape');
 
 	await page.goto('/people');
 	await page.getByText('Hidden · 1').click();
@@ -61,19 +70,17 @@ test('hidden people wait in their own list and can be shown again', async ({ pag
 test('a guest cannot hide anyone and is not shown the hidden list', async ({ page }) => {
 	await signIn(page, '/people');
 	await page.getByRole('link', { name: someone }).first().click();
-	await page.getByRole('button', { name: 'Hide person' }).click();
+	await personTool(page, 'Hide person');
 	await expect(toast(page)).toContainText('hidden from People');
 	await page.context().clearCookies();
 
 	await signIn(page, '/people', GUEST);
 	await expect(page.getByRole('heading', { name: 'People' })).toBeVisible();
 	await expect(page.getByText(/^Hidden/)).toHaveCount(0);
-	await page
-		.getByRole('link')
-		.filter({ hasText: /photos?$/ })
-		.first()
-		.click();
+	await page.getByRole('main').locator('.people a').first().click();
 	await expect(page.locator('.tile').first()).toBeVisible();
+	// a guest has no tools for a person: no ⋯ at all
+	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Hide person' })).toHaveCount(0);
 });
 
@@ -97,7 +104,7 @@ test('change a portrait: pick another photo, zoom, save; the page shows the new 
 	const portrait = await openSomeoneNamed(page);
 	const before = await portrait.getAttribute('src');
 	const faces = page.waitForResponse((r) => /\/api\/people\/\d+\/faces/.test(r.url()));
-	await page.getByRole('button', { name: 'Change portrait', exact: true }).click();
+	await personTool(page, 'Change portrait');
 	const dialog = page.getByRole('dialog', { name: 'Change portrait' });
 	const offered = (await (await faces).json()) as Circle[];
 	expect(offered.length).toBeGreaterThan(1);
@@ -172,7 +179,7 @@ test('the portrait itself opens the dialog, and a drag moves the photo under the
 test('“Use automatic” goes back to the automatic portrait', async ({ page }) => {
 	const portrait = await openSomeoneNamed(page);
 	const automatic = await portrait.getAttribute('src');
-	await page.getByRole('button', { name: 'Change portrait', exact: true }).click();
+	await personTool(page, 'Change portrait');
 	const dialog = page.getByRole('dialog', { name: 'Change portrait' });
 	await expect(dialog.getByRole('button', { name: 'Use automatic' })).toBeDisabled();
 	await expect(dialog.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
@@ -181,7 +188,7 @@ test('“Use automatic” goes back to the automatic portrait', async ({ page })
 	await dialog.getByRole('button', { name: 'Save' }).click();
 	await expect(portrait).not.toHaveAttribute('src', automatic!);
 
-	await page.getByRole('button', { name: 'Change portrait', exact: true }).click();
+	await personTool(page, 'Change portrait');
 	const cleared = page.waitForRequest(
 		(r) => r.method() === 'DELETE' && r.url().endsWith('/portrait')
 	);

@@ -225,7 +225,8 @@
 		height: 1.25rem;
 		font-family: var(--font-serif);
 		font-size: var(--fs-12);
-		box-shadow: 0 0 0 1px var(--hairline);
+		/* a paper as white as the sheet still shows: a seam of fill around it, not a line */
+		box-shadow: 0 0 0 var(--fine) var(--fill);
 	}
 	.summary {
 		margin: var(--s-1) 0 0;
@@ -258,8 +259,8 @@
 		justify-self: start;
 		margin-top: var(--s-3);
 	}
-	/* Small multiples: every page at the same scale, labelled underneath. Pages are paper,
-	   so they sit on the screen as objects: a hairline edge, no shadow. */
+	/* Small multiples: every page at the same scale, labelled underneath. Pages are paper on
+	   the darkroom page: their own colour sets them apart, no edge, no shadow. */
 	.pages {
 		list-style: none;
 		margin: 0;
@@ -277,7 +278,6 @@
 		width: 100%;
 		height: auto;
 		background: var(--hairline);
-		box-shadow: 0 0 0 1px var(--hairline);
 	}
 	@media (max-width: 1023px) {
 		.layout {

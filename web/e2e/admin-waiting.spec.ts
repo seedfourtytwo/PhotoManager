@@ -2,8 +2,7 @@ import { expect, expectAccessible, resetMock, signIn, test } from './helpers.ts'
 
 /**
  * A job that failed and waits for its next attempt is counted by the server (`jobs.waiting`)
- * and must be visible: next to "queued" in the status line, and in Problems with the time
- * it is tried again. The answers are the real routes' shapes, filled in here.
+ * and must be visible: on the Problems tile, and in its list with the time it is tried again. The answers are the real routes' shapes, filled in here.
  */
 test('admin sees the jobs that wait for another try, and when', async ({ page }) => {
 	await resetMock();
@@ -29,8 +28,11 @@ test('admin sees the jobs that wait for another try, and when', async ({ page })
 	);
 	await signIn(page, '/admin');
 
-	await expect(page.getByText('1 waiting to be retried')).toBeVisible();
-	const problems = page.getByRole('region', { name: 'Problems' });
+	// Problems is a status tile that says it, and opens the list.
+	const tile = page.getByRole('button', { name: /^Problems/ });
+	await expect(tile).toContainText('1 waiting to be retried');
+	await tile.click();
+	const problems = page.getByRole('dialog', { name: 'Problems' });
 	const row = problems.getByRole('listitem').filter({ hasText: 'scan_source' });
 	await expect(row).toContainText('connection reset');
 	await expect(row).toContainText(/retrying at .*\d{2}:\d{2}/);

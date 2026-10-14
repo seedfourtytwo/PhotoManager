@@ -4,18 +4,34 @@ import { countSlow, expect, openAdmin, REAL_BACKEND, test } from './helpers.ts';
 
 test.beforeEach(({ page }) => openAdmin(page));
 
+/** A folder is a tile under Folders; it opens a sheet with where it is and its actions. */
+const folderTile = (page: Page, name: string) =>
+	page
+		.getByRole('region', { name: 'Folders' })
+		.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+async function openFolder(page: Page, name: string) {
+	await folderTile(page, name).click();
+	return page.getByRole('dialog', { name });
+}
+/** The + on the Folders line: a folder here, one from Proton, or a cloud folder. */
+async function addFrom(page: Page, kind: 'Add from Proton' | 'Add cloud folder') {
+	const folders = page.getByRole('region', { name: 'Folders' });
+	await folders.getByRole('button', { name: 'Add', exact: true }).click();
+	await folders.getByRole('button', { name: kind }).click();
+}
+
 test('cloud folders: add an rclone remote and pull it now', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'needs rclone with a configured remote');
-	await page.getByRole('button', { name: 'Add cloud folder' }).click();
+	await addFrom(page, 'Add cloud folder');
 	const dialog = page.getByRole('dialog', { name: 'Add a cloud folder' });
 	await dialog.getByLabel('Name').fill('Drive photos');
 	await dialog.getByRole('combobox', { name: 'Remote' }).selectOption('gdrive');
 	await dialog.getByLabel('Folder on the remote').fill('Photos/2024');
 	await dialog.getByRole('button', { name: 'Add and pull' }).click();
-	const row = page.getByRole('listitem').filter({ hasText: 'Drive photos' });
-	await expect(row.getByText('gdrive:Photos/2024')).toBeVisible();
+	const sheet = await openFolder(page, 'Drive photos');
+	await expect(sheet.getByText('gdrive:Photos/2024')).toBeVisible();
 	const pull = page.waitForRequest((r) => /\/api\/remote-sources\/\d+\/pull$/.test(r.url()));
-	await row.getByRole('button', { name: 'Pull now' }).click();
+	await sheet.getByRole('button', { name: 'Pull now' }).click();
 	await pull;
 });
 
@@ -23,15 +39,16 @@ test('Proton Drive: bring in the Photos section, or one folder picked by browsin
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'needs a signed-in Proton Drive tool');
-	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	await addFrom(page, 'Add from Proton');
 	const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
 	await expect(dialog.getByRole('radio', { name: /My Proton photos/ })).toBeChecked();
 	await expect(dialog.getByLabel('Name')).toHaveValue('Proton photos');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
-	const photos = page.getByRole('listitem').filter({ hasText: 'Proton photos' });
+	const photos = await openFolder(page, 'Proton photos');
 	await expect(photos.getByText('Proton Drive · Photos')).toBeVisible();
+	await photos.getByRole('button', { name: 'Close' }).click();
 
-	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	await addFrom(page, 'Add from Proton');
 	await dialog.getByRole('radio', { name: /One folder/ }).check();
 	const inside = dialog.getByRole('list', { name: 'Folders inside' });
 	await inside.getByRole('button', { name: 'Trips' }).click();
@@ -41,7 +58,7 @@ test('Proton Drive: bring in the Photos section, or one folder picked by browsin
 	await inside.getByRole('button', { name: 'Up' }).click();
 	await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
 	await dialog.getByRole('button', { name: 'Add and import' }).click();
-	const trips = page.getByRole('listitem').filter({ hasText: 'Trips' });
+	const trips = await openFolder(page, 'Trips');
 	await expect(trips.getByText('Proton Drive · My files / Trips')).toBeVisible();
 	const pull = page.waitForRequest((r) => /\/api\/remote-sources\/\d+\/pull$/.test(r.url()));
 	await trips.getByRole('button', { name: 'Check again' }).click();
@@ -62,7 +79,7 @@ test('Proton Drive: when the computer is not signed in, it says what to do', asy
 					}
 				})
 	);
-	await page.getByRole('button', { name: 'Add from Proton' }).click();
+	await addFrom(page, 'Add from Proton');
 	const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
 	await expect(dialog.getByRole('alert')).toContainText('proton-drive auth login');
 	await expect(dialog.getByRole('button', { name: 'Add and import' })).toBeDisabled();
@@ -75,7 +92,7 @@ test('Proton Drive: when the computer is not signed in, it says what to do', asy
 test.describe('adding a folder when the second step fails or the button is pressed twice', () => {
 	test.beforeEach(() => test.skip(REAL_BACKEND, 'failures and delays are staged on the mock'));
 	async function fillCloud(page: Page) {
-		await page.getByRole('button', { name: 'Add cloud folder' }).click();
+		await addFrom(page, 'Add cloud folder');
 		const dialog = page.getByRole('dialog', { name: 'Add a cloud folder' });
 		await dialog.getByLabel('Name').fill('Drive photos');
 		await dialog.getByRole('combobox', { name: 'Remote' }).selectOption('gdrive');
@@ -96,7 +113,7 @@ test.describe('adding a folder when the second step fails or the button is press
 		await expect(
 			page.getByRole('status').filter({ hasText: 'Rclone is busy; try again.' })
 		).toBeVisible();
-		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
+		await expect(folderTile(page, 'Drive photos')).toHaveCount(1);
 	});
 
 	test('a double click on “Add and pull” adds the cloud folder once', async ({ page }) => {
@@ -104,7 +121,7 @@ test.describe('adding a folder when the second step fails or the button is press
 		const dialog = await fillCloud(page);
 		await dialog.getByRole('button', { name: 'Add and pull' }).dblclick();
 		await expect(dialog).toBeHidden();
-		await expect(page.getByRole('listitem').filter({ hasText: 'Drive photos' })).toHaveCount(1);
+		await expect(folderTile(page, 'Drive photos')).toHaveCount(1);
 		expect(posts.count).toBe(1);
 	});
 });
@@ -125,7 +142,7 @@ test.describe('Proton Drive: one folder, on a slow or failing listing', () => {
 	}
 
 	async function openOneFolder(page: Page) {
-		await page.getByRole('button', { name: 'Add from Proton' }).click();
+		await addFrom(page, 'Add from Proton');
 		const dialog = page.getByRole('dialog', { name: 'Add from Proton Drive' });
 		await dialog.getByRole('radio', { name: /One folder/ }).check();
 		return dialog;
@@ -150,7 +167,7 @@ test.describe('Proton Drive: one folder, on a slow or failing listing', () => {
 		await expect(dialog.getByLabel('Name')).toHaveValue('Trips');
 		await add.click();
 		await expect(
-			page.getByRole('listitem').filter({ hasText: 'Proton Drive · My files / Trips' })
+			(await openFolder(page, 'Trips')).getByText('Proton Drive · My files / Trips')
 		).toBeVisible();
 	});
 

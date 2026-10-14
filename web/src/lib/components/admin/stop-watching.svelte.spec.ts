@@ -157,22 +157,34 @@ describe('Folders list', () => {
 		render(Sources, { busy: false, onscan: () => {}, refresh: 0 });
 		return calls;
 	}
-	const row = (label: string) => page.getByRole('listitem').filter({ hasText: label });
+	/** A folder is a tile; its actions are in the sheet it opens. */
+	const tile = (label: string) =>
+		page.getByRole('button', { name: new RegExp(`^${label.replace(/[()]/g, '\\$&')}`) });
+	async function sheetOf(label: string) {
+		await tile(label).click();
+		return page.getByRole('dialog', { name: label });
+	}
+	const close = (sheet: ReturnType<typeof page.getByRole>) =>
+		sheet.getByRole('button', { name: 'Close' }).click();
 
 	it('offers “Pause checking”, and a paused folder says its photos stay', async () => {
 		const calls = list([folder, paused]);
-		await expect.element(row('Scans').getByText('paused', { exact: true })).toBeInTheDocument();
+		await expect.element(tile('Scans')).toHaveTextContent(/· paused/);
+		const scans = await sheetOf('Scans');
 		await expect
 			.element(
-				row('Scans').getByText(
+				scans.getByText(
 					'Photos already in the library stay; new photos in this folder aren’t picked up until you resume.'
 				)
 			)
 			.toBeInTheDocument();
 		await expect
-			.element(row('Scans').getByRole('button', { name: 'Resume checking' }))
+			.element(scans.getByRole('button', { name: 'Resume checking' }))
 			.toBeInTheDocument();
-		await row('Old hard disk').getByRole('button', { name: 'Pause checking' }).click();
+		await close(scans);
+
+		const old = await sheetOf('Old hard disk');
+		await old.getByRole('button', { name: 'Pause checking' }).click();
 		await vi.waitFor(() =>
 			expect(calls.filter((c) => c.method === 'PATCH').map((c) => c.url)).toEqual([
 				'/api/sources/2'
@@ -183,27 +195,31 @@ describe('Folders list', () => {
 
 	it('offers “Stop watching” and “Pause checking” for folders, neither for an upload inbox', async () => {
 		list([folder, inbox]);
-		await expect
-			.element(row('Old hard disk').getByRole('button', { name: 'Stop watching' }))
-			.toBeInTheDocument();
-		await expect.element(row('Uploads (C)')).toBeInTheDocument();
+		const old = await sheetOf('Old hard disk');
 		for (const name of ['Stop watching', 'Pause checking'])
-			await expect
-				.element(row('Uploads (C)').getByRole('button', { name }))
-				.not.toBeInTheDocument();
+			await expect.element(old.getByRole('button', { name })).toBeInTheDocument();
+		await close(old);
+
+		const uploads = await sheetOf('Uploads (C)');
+		await expect.element(uploads.getByRole('button', { name: 'Who sees it' })).toBeInTheDocument();
+		for (const name of ['Stop watching', 'Pause checking'])
+			await expect.element(uploads.getByRole('button', { name })).not.toBeInTheDocument();
 	});
 
 	it('lists a folder no longer watched apart, with its photos, access and a final Remove', async () => {
 		list([folder, kept]);
 		const group = page.getByRole('region', { name: 'No longer watched' });
-		const item = group.getByRole('listitem').filter({ hasText: 'Old laptop' });
-		await expect.element(item.getByText('40 photos')).toBeInTheDocument();
-		await expect.element(item.getByRole('button', { name: 'Access' })).toBeInTheDocument();
-		await expect.element(item.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
-		for (const name of ['Check again', 'Pause checking', 'Resume checking', 'Stop watching'])
-			await expect.element(item.getByRole('button', { name })).not.toBeInTheDocument();
+		await expect
+			.element(group.getByRole('button', { name: /^Old laptop/ }))
+			.toHaveTextContent('40 photos');
 		await expect
 			.element(page.getByRole('region', { name: 'Folders' }).getByText('Old laptop'))
 			.not.toBeInTheDocument();
+
+		const sheet = await sheetOf('Old laptop');
+		await expect.element(sheet.getByRole('button', { name: 'Who sees it' })).toBeInTheDocument();
+		await expect.element(sheet.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+		for (const name of ['Check again', 'Pause checking', 'Resume checking', 'Stop watching'])
+			await expect.element(sheet.getByRole('button', { name })).not.toBeInTheDocument();
 	});
 });

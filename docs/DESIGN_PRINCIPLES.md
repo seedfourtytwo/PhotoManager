@@ -236,12 +236,28 @@ not a token):
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
   quiet line at the top of every page says whose look is being tried and offers Stop trying.
 - **Collections rows** show what is behind them, not a sentence about it: people as round
-  faces with a name, albums and places as 4:3 covers (a chosen frame, so it may crop), each
-  with its count. Named people come first, then the album changed last, then the places with
-  the most photos; a country that is one city and nothing else is shown once, as the city. A
-  row holds eight; its heading, with a small arrowhead, opens the whole of it. On a phone the
-  strip runs off the side and scrolls; on a laptop it wraps. A row with nothing in it says in
-  one quiet line what will be there.
+  faces with a name and no count, places as 4:3 covers and albums as a grid of 4:3 covers
+  (a chosen frame, so it may crop), each with a plain number (the word "photos" is for screen
+  readers). Named people come first, then the album changed last, then the places with the
+  most photos; a country that is one city and nothing else is shown once, as the city. A row
+  holds eight; its heading, with a chevron, opens the whole of it, and Albums has its + on
+  that line. On a phone a strip runs off the side and scrolls; on a laptop it wraps. A row with
+  nothing in it says in one quiet line what will be there. Under the rows, **Utilities** is a
+  tile group: To review, Hidden (the Library showing only hidden photos) and Trash, each with
+  its count.
+- **A person and an album** open like a chapter, the title in display size (`--fs-40`) under
+  the page head's Back: a person's centred round portrait (its own tool for who may change it)
+  and "27 photos, 2012 to 2026", their photos grouped by year; an album's cover (full width on
+  a phone, beside the title on a laptop) and "12 photos, July 2024", then Add photos (a sheet
+  that picks from the Library) and Share. Everything else (Rename, Change portrait, Merge
+  with…, Hide; Download, Print, Arrange, Delete album) waits behind the round ⋯ (`Menu`
+  `round`); a destructive row is in `--fail`.
+- **Trash and To review**: one sentence under the title. Trash: Select and ⋯ (Restore all,
+  Empty trash, confirmed) in the head, and each photo's days left as a small label on a photo
+  shade (`PhotoGrid` `note`). To review: grouped by reason as tiles, one decision per group
+  (Keep all, Move all to trash); a photo on its own opens from its tile.
+- **Search**: the field first, a pill with its magnifier; before anything is typed, faces,
+  places as chips and, once search by meaning is set up, things as chips.
 - **Sign-in**: who is looking is a row of round badges with each person's initial, the name
   under it. The PIN shows as four dots, never as a text box. A touch screen gets a number pad
   of round keys (1 to 9, then 0 with the word Delete to its right), set in the middle of the
@@ -260,8 +276,14 @@ not a token):
   pixel sizes and file naming wait under "More options"; picking a plain choice again wins.
 - **Empty states** (`.empty-state`): one title-face sentence saying what is (not) here, then a
   plain sentence saying what to do, with a link where there is one.
-- **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
-  are a title with their actions on the same baseline, separated by one hairline.
+- **Section headers** in Settings sit in the left margin (book margin heads).
+- **Admin** puts status first: three tiles, Backups (the red dot and one plain sentence),
+  Library (photos and free space, and the work running) and Problems (a count). Then Folders,
+  Search and faces and People as tile groups, their + (and Check all) on the label line. A
+  tile opens a sheet: its actions as icon cards over their words, its details below; paths,
+  commands and run tables live only there. Backups and Problems open from their tiles; a
+  backup place shows its state as a dot in `--ok` or `--fail` with a shape that reads without
+  colour.
 - **The photo view** (the loupe) gives the photo the whole screen. Its chrome floats over it as
   glass: round icon buttons at the top, Close (a chevron down) at the left and Zoom, Full screen
   (laptop) and Details at the right; one bar at the bottom with a two-line readout in the UI

@@ -1,22 +1,24 @@
 <script lang="ts">
 	import CollectionRows from '$lib/components/CollectionRows.svelte';
+	import CollectionUtilities from '$lib/components/CollectionUtilities.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
 	import { look } from '$lib/look';
 </script>
 
 <svelte:head><title>Collections · Photos</title></svelte:head>
 
+<PageHead title="Collections" />
 <div class="page">
-	<header>
-		<h1>Collections</h1>
-	</header>
 	<CollectionRows rows={look.shown.collectionsRows} />
+	<div class="utilities"><CollectionUtilities /></div>
 </div>
 
 <style>
 	.page {
-		padding: 0 var(--page-x) var(--s-7);
+		padding: var(--s-3) var(--page-x) var(--s-7);
 	}
-	header {
-		padding: var(--s-5) 0;
+	.utilities {
+		max-width: var(--measure);
+		margin-top: var(--s-5);
 	}
 </style>

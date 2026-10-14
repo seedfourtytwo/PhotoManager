@@ -11,6 +11,9 @@
 		text: string;
 		/** In an action bar: the button is this icon alone (an icon button), its word for the look. */
 		icon?: IconName;
+		/** With `icon`: a round icon button standing on the page (⋯), on a fill unless `filled` is false. */
+		round?: boolean;
+		filled?: boolean;
 		badge?: number;
 		badgeLabel?: string;
 		items: MenuItem[];
@@ -20,6 +23,8 @@
 		label,
 		text,
 		icon,
+		round = false,
+		filled = true,
 		badge = 0,
 		badgeLabel,
 		items,
@@ -59,7 +64,7 @@
 	<button
 		bind:this={button}
 		type="button"
-		class={icon ? 'icon-button' : 'trigger'}
+		class={icon ? `icon-button${round && filled ? ' filled' : ''}` : 'trigger'}
 		aria-label={label}
 		title={icon ? label : undefined}
 		aria-expanded={open}
@@ -95,6 +100,7 @@
 					{:else}
 						<button
 							type="button"
+							class:danger={item.danger}
 							aria-pressed={item.pressed}
 							onclick={() => {
 								close(true);
@@ -166,6 +172,9 @@
 		color: var(--ink);
 		text-align: left;
 		text-decoration: none;
+	}
+	.panel button.danger {
+		color: var(--fail);
 	}
 	.panel a[aria-current='page'] {
 		font-weight: 600;

@@ -163,10 +163,12 @@ test('search: clearing the search while one is running does not leave “Searchi
 	await box.fill('');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search$/);
-	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	// nothing typed: the suggestions are back
+	const places = page.getByRole('region', { name: 'Places' });
+	await expect(places).toBeVisible();
 	await page.waitForTimeout(1000); // the abandoned search answers; nothing may change
 	await expect(page.getByText('Searching…')).toHaveCount(0);
-	await expect(page.getByText('Find photos by what is in them')).toBeVisible();
+	await expect(places).toBeVisible();
 });
 
 test('search: “like this photo” never names the previous photo as its source', async ({ page }) => {
@@ -198,6 +200,7 @@ test('trash: “Empty trash” deletes what the page showed, not what arrived si
 	await expect(page.locator('.tile')).toHaveCount(1);
 	// Meanwhile another device moves a photo to the trash.
 	await page.request.delete('/api/assets', { data: { ids: [later] } });
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Empty trash' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Delete for good?' });
 	await expect(dialog).toContainText('1 library copy');
@@ -306,6 +309,7 @@ test('album: two quick moves reach the server in order, the last one last', asyn
 	const ids = async () =>
 		tiles.evaluateAll((all) => all.map((t) => Number(t.getAttribute('data-id'))));
 	const before = await ids();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Arrange' }).click();
 	await tiles.first().focus();
 	await page.keyboard.press('Alt+ArrowRight');
@@ -336,6 +340,7 @@ test.describe('a double click sends one request', () => {
 	test('Rename album saves once', async ({ page }) => {
 		const patches = await countSlow(page, '**/api/albums/1', 'PATCH');
 		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Rename' }).click();
 		const dialog = page.getByRole('dialog', { name: 'Rename album' });
 		await dialog.getByLabel('Title').fill('Renamed once');
@@ -347,6 +352,7 @@ test.describe('a double click sends one request', () => {
 	test('Delete album deletes once, without a “not found” afterwards', async ({ page }) => {
 		const deletes = await countSlow(page, '**/api/albums/1', 'DELETE');
 		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Delete album' }).click();
 		await page
 			.getByRole('dialog', { name: 'Delete album?' })
@@ -372,6 +378,7 @@ test.describe('a double click sends one request', () => {
 	test('Analyse photos queues once', async ({ page }) => {
 		const posts = await countSlow(page, '**/api/ml/backfill', 'POST');
 		await signIn(page, '/admin');
+		await page.getByRole('region', { name: 'Search and faces' }).getByRole('button').click();
 		await page.getByRole('button', { name: 'Analyse photos not done yet' }).dblclick();
 		await expect(page.getByRole('status').filter({ hasText: /Queued/ })).toBeVisible();
 		expect(posts.count).toBe(1);
