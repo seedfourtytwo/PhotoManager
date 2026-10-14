@@ -42,6 +42,8 @@
 		onnav?: (id: Id, key: NavKey) => void;
 		/** Accessible name of the grid. */
 		label?: string;
+		/** A few words on a tile ("3 days" in the trash), on a shade at its corner. */
+		note?: (item: AssetOut) => string | undefined;
 	};
 	let {
 		items,
@@ -56,7 +58,8 @@
 		active,
 		onfocusphoto,
 		onnav,
-		label = 'Photos'
+		label = 'Photos',
+		note
 	}: Props = $props();
 
 	let own = $state<Id | null>(null);
@@ -223,6 +226,7 @@
 							d="M8 13.6S2.2 10.1 2.2 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.8 1.2c0 4-5.8 7.5-5.8 7.5z"
 						/></svg
 					>{/if}
+				{#if note?.(item)}<span class="note">{note(item)}</span>{/if}
 				<span class="check" aria-hidden="true"></span>
 			</button>
 		{/if}
@@ -317,6 +321,19 @@
 		height: 14px;
 		fill: var(--on-photo);
 		filter: drop-shadow(0 0 1.5px var(--photo-shade-55));
+	}
+	.note {
+		position: absolute;
+		left: var(--s-1);
+		bottom: var(--s-1);
+		padding: 0 var(--s-2);
+		border-radius: var(--r-pill);
+		background: var(--photo-shade-55);
+		color: var(--on-photo);
+		font-size: var(--fs-12);
+		font-weight: 600;
+		line-height: var(--lh-ui);
+		white-space: nowrap;
 	}
 	@media (hover: none) {
 		.check {

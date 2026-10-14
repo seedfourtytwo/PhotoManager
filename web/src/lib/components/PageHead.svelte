@@ -37,7 +37,7 @@
 			<span class="grow"></span>
 		{/if}
 		{#if !hideTitle}
-			<div class="titles" class:grow={!back}>
+			<div class="titles" class:grow={!back} class:below={back}>
 				<h1 bind:this={heading}>{title}</h1>
 				{#if line}<p class="line" aria-live="polite">{line}</p>{/if}
 			</div>
@@ -62,6 +62,11 @@
 	.grow {
 		flex: 1;
 		min-width: 0;
+	}
+	/* Under a way back, the title takes its own line beneath back, actions and avatar. */
+	.titles.below {
+		order: 1;
+		flex-basis: 100%;
 	}
 	h1 {
 		overflow-wrap: anywhere;
