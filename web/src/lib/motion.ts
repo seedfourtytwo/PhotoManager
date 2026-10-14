@@ -33,3 +33,40 @@ export async function withTransition(
 		})
 		.finished.catch(() => undefined);
 }
+
+/** How a page change looks: drill in from the right, Back from the left, another place fades. */
+export type PageMove = 'forward' | 'back' | 'switch';
+
+/** The root, as far as a page move touches it. */
+type Root = { dataset: Record<string, string | undefined> };
+
+let moves = 0;
+
+/**
+ * Shows a page change (SvelteKit's `onNavigate`) as a transition of the page area: while it
+ * runs the root carries `data-page-move`, which names the page and the bars (utilities.css)
+ * and picks the animation. Resolves once the old page is captured, so the router may draw the
+ * new one; `done` is the router's own promise that it has. Nothing (undefined) where there is
+ * no transition to show.
+ */
+export function movePage(
+	move: PageMove,
+	done: Promise<unknown>,
+	env: Env = browser(),
+	root: Root = document.documentElement
+): Promise<void> | undefined {
+	const start = env.start;
+	if (!start || env.reduced) return undefined;
+	const mine = ++moves;
+	root.dataset.pageMove = move;
+	return new Promise((ready) => {
+		start(async () => {
+			ready();
+			await done.catch(() => undefined); // a failed change is still the end of the move
+		})
+			.finished.catch(() => undefined)
+			.finally(() => {
+				if (mine === moves) delete root.dataset.pageMove; // a later move owns it now
+			});
+	});
+}

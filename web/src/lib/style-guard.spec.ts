@@ -98,8 +98,7 @@ describe('style guard', () => {
 		'/src/routes/admin/+page.svelte', // (d)
 		'/src/routes/albums/[id]/print/+page.svelte', // (d)
 		'/src/routes/map/+page.svelte', // (d)
-		'/src/routes/review/+page.svelte', // (d)
-		'/src/routes/settings/+page.svelte' // (a)
+		'/src/routes/review/+page.svelte' // (d)
 	]);
 	const lines = Object.entries(sources).flatMap(([path, text]) =>
 		[

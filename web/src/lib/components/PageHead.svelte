@@ -7,14 +7,16 @@
 		title: string;
 		/** One quiet line under the title (a count, a date); live, so a change is heard. */
 		line?: string;
-		/** A way back to where this page was opened from. */
-		back?: { href: string; label: string };
+		/** A way back to where this page was opened from; `onclick` may go back in the history instead. */
+		back?: { href: string; label: string; onclick?: (event: MouseEvent) => void };
 		/** Icon buttons at the right of the title row. */
 		actions?: Snippet;
 		/** Leave the title to the page (a person's or album's own hero); the row keeps back and actions. */
 		hideTitle?: boolean;
+		/** The avatar at the right (phone); off on You, which is where it leads. */
+		avatar?: boolean;
 	};
-	let { title, line, back, actions, hideTitle = false }: Props = $props();
+	let { title, line, back, actions, hideTitle = false, avatar = true }: Props = $props();
 
 	// The large title scrolls away; a compact glass title takes its place (phone). Observed, not
 	// computed on every scroll event.
@@ -33,7 +35,9 @@
 <header class="page-head">
 	<div class="row">
 		{#if back}
-			<a class="back" href={back.href}><Icon name="back" />{back.label}</a>
+			<a class="back" href={back.href} data-move="back" onclick={back.onclick}
+				><Icon name="back" />{back.label}</a
+			>
 			<span class="grow"></span>
 		{/if}
 		{#if !hideTitle}
@@ -43,7 +47,7 @@
 			</div>
 		{/if}
 		{#if actions}<div class="actions">{@render actions()}</div>{/if}
-		<span class="me"><Avatar /></span>
+		{#if avatar}<span class="me"><Avatar /></span>{/if}
 	</div>
 </header>
 <div class="compact glass" class:on={gone} aria-hidden="true">{title}</div>
