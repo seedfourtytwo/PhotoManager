@@ -99,7 +99,7 @@ copies down.
 | 4b.4 | **Format**: Original · JPEG (quality slider) · PNG · WebP; HEIC → JPEG is the common case — *API done in M2* | Should | M3 |
 | 4b.5 | **Resize on export**: presets (Original, 4K long edge, 2048, 1080, "email" 1280) or custom long edge; never upscale — *API done in M2* | Should | M3 |
 | 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (`date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
-| 4b.7 | Phone: single photos use the share sheet (Web Share API) so they can go straight into the iPhone Photos app; multiple → ZIP to Files — *one photo: **Share** on the photo view's bar and "Save to Photos" in the download dialog, only where the browser has a share sheet (HTTPS, 11.1); the person picks where it goes, the app sends nothing itself; several photos at once: not built* | Should | M3 ✅ (one photo) |
+| 4b.7 | Phone: photos go to the device's own share sheet (Web Share API: AirDrop on an iPhone, Quick Share on Android) — *built: **Share** on the photo view's bar, in the selection pill for up to 10 photos (one sheet, all files), and "Save to Photos" in the download dialog; the person picks where they go, the app sends nothing itself; Share only appears when the app is opened over HTTPS (browsers hide it on plain http, e.g. a LAN or VPN IP address; 11.1) and on a device with a share sheet; more than 10 photos → ZIP download* | Should | M3 ✅ |
 | 4b.8 | Large exports run as a background job with progress and a "ready" link, resumable if the connection drops | Could | M4 |
 | 4b.9 | Standalone converter: drop files in, get them back converted/resized (without importing them) | Could | M4 |
 
