@@ -279,10 +279,15 @@
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		pointer-events: none;
 	}
-	@media (max-width: 639px) {
-		/* Under the page's compact glass title (PageHead), which is a touch target tall. */
+	/* Without the laptop's top bar, under the page's compact glass title (PageHead), which is a
+	   touch target tall. */
+	@media (max-width: 1023px) {
 		h2 {
 			top: calc(var(--top) + var(--target));
+		}
+	}
+	@media (max-width: 639px) {
+		h2 {
 			padding: var(--s-3) var(--s-2) var(--s-2);
 			font-size: var(--fs-16);
 		}
