@@ -39,6 +39,7 @@ export const ICONS = {
 	cloud: ['M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 9.5a4.2 4.2 0 0 1-.5 8.5z'],
 	disk: ['M4 6h16v12H4z', 'M4 12h16', 'M16.5 15h.01'],
 	folder: ['M3.5 6.5h6l2 2h9V19h-17z'],
+	fullscreen: ['M4 9V4h5', 'M15 4h5v5', 'M20 15v5h-5', 'M9 20H4v-5'],
 	grid: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
 	hidden: [
 		'M3 3l18 18',
@@ -93,7 +94,8 @@ export const ICONS = {
 	],
 	text: ['M3.5 18 8 6l4.5 12', 'M5.2 14h5.6', 'M14 18l3.3-8 3.2 8', 'M15.1 15.5h4.6'],
 	upload: ['M12 15V4', 'M7.5 8.5 12 4l4.5 4.5', 'M5 20h14'],
-	x: ['M6 6l12 12', 'M18 6 6 18']
+	x: ['M6 6l12 12', 'M18 6 6 18'],
+	zoom: ['M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0z', 'M20 20l-4.6-4.6', 'M11 8.5v5', 'M8.5 11h5']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

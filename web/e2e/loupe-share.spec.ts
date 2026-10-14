@@ -37,14 +37,14 @@ test.beforeEach(async () => {
 	await resetMock();
 });
 
-test('with a share sheet the bar holds Favourite, Share, Album, Edit and More; Download is under More', async ({
+test('with a share sheet the bar holds Favourite, Share, Add to album, Edit and More; Download is under More', async ({
 	page
 }) => {
 	await withShareSheet(page);
 	await signIn(page);
 	await page.locator('.tile').first().click();
 	const actions = barActions(page);
-	await expect(actions).toHaveText(['Favourite', 'Share', 'Album', 'Edit', 'More']);
+	await expect(actions).toHaveText(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
 	await expect(actions.locator('svg')).toHaveCount(5);
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toBeEnabled();
 	if (isPhone(page))
@@ -154,7 +154,7 @@ test('at 320 px the bar with Share fits, also with the largest text and while it
 			expect(box.x + box.width).toBeLessThanOrEqual(bar.x + bar.width);
 		}
 	};
-	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'Album', 'Edit', 'More']);
+	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
 	await fits();
 	await page.evaluate(() => document.documentElement.style.setProperty('--text-scale', '1.25'));
 	await expect(fits).toPass({ timeout: 3000 });
@@ -189,7 +189,13 @@ test('without a share sheet there is no Share: not on the bar, not under More', 
 }) => {
 	await signIn(page);
 	await page.locator('.tile').first().click();
-	await expect(barActions(page)).toHaveText(['Favourite', 'Download', 'Album', 'Edit', 'More']);
+	await expect(barActions(page)).toHaveText([
+		'Favourite',
+		'Download',
+		'Add to album',
+		'Edit',
+		'More'
+	]);
 	await loupe(page).getByRole('button', { name: 'More' }).click();
 	await expect(loupe(page).getByRole('button', { name: 'Fix date' })).toBeVisible();
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveCount(0);

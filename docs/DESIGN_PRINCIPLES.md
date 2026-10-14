@@ -186,13 +186,13 @@ not a token):
 - **Sliders**: a 4 px `--fill` track, a small ink thumb; larger thumb on touch.
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
   right, Cancel left of the primary. On a phone every dialog, a filter question and the loupe's
-  info become **bottom sheets**, as wide as the screen, with rounded top corners, a grab handle and
+  details become **bottom sheets**, as wide as the screen, with rounded top corners, a grab handle and
   safe-area padding; they rise on the sheet curve and follow the finger down from the handle or
   the title, closing when let go far or fast enough (`lib/sheet-drag.ts`). A dialog, the photo
   editor and a filter sheet each add a history step (`lib/history-step.ts`), so Back closes
   them; what was chosen in a filter sheet stays.
-  So does the photo's Info sheet on a phone (`lib/info-sheet.svelte.ts`): Back closes the
-  sheet, the next Back the photo; on a laptop Info is a panel beside the photo, with no step.
+  So does the photo's Details sheet on a phone (`lib/info-sheet.svelte.ts`): Back closes the
+  sheet, the next Back the photo; on a laptop Details is a panel beside the photo, with no step.
   The editor with changes that are not saved asks first, whichever way it is left (Back,
   Escape, Cancel): "Keep editing" or "Discard changes". With nothing changed it just closes.
 - **Menus** (`Menu`): a button that opens a small raised sheet of 44 px rows, links and actions
@@ -263,19 +263,23 @@ not a token):
 - **Section headers** in Settings sit in the left margin (book margin heads); Admin sections
   are a title with their actions on the same baseline, separated by one hairline.
 - **The photo view** (the loupe) gives the photo the whole screen. Its chrome floats over it as
-  glass: Close, Info and Zoom as pills at the top, one bar at the bottom with a two-line readout in
-  the data face (date · time · place / camera · size · file name) and at most five actions,
-  each an icon over its word: Favourite, Download, Album, Edit, More. On a device with a share
+  glass: round icon buttons at the top, Close (a chevron down) at the left and Zoom, Full screen
+  (laptop) and Details at the right; one bar at the bottom with a two-line readout in the UI
+  face, its pieces set apart by space, never by dots (the day in words, the time, the place /
+  the camera, aperture, shutter, ISO and focal length; a piece that does not fit is left out
+  whole, a long place or camera is cut), and at most five icon actions: Favourite, Download,
+  Add to album, Edit, More. A screen reader hears each line in words. On a device with a share
   sheet (a phone over HTTPS) Share takes Download's place and Download is under More; where
-  there is none, Share is not shown. The details are the
-  sidenote in the right margin on a laptop and a bottom sheet on a phone. Chrome fades when
-  idle. The photo follows the finger; every gesture (swipe sideways, pull down, swipe up,
-  double-tap) has a button that does the same. A double tap zooms in on the spot tapped and
-  the next one goes back; two fingers zoom from the photo's fit up to four times its size.
-  Zoomed in, the chrome is put away, one finger moves the photo as far as its edges, and it
-  is not swiped; another photo opens at its fit. The heart is the Favourite button, first in
-  the bar. It opens from its tile and closes back to it as
-  a view transition.
+  there is none, Share is not shown. The heart is the Favourite button, first in the bar: the
+  accent and filled when on, with a short pop when pressed. The details are label and value
+  tiles (Taken, Place, Camera, Settings, From with the photo's name and, for an admin, the
+  file's path, People, Albums): a panel beside the photo on a laptop and a bottom sheet on a
+  phone. Chrome fades when idle. The photo follows the finger; every gesture (swipe sideways,
+  pull down, swipe up, double-tap) has a button that does the same. A double tap zooms in on
+  the spot tapped and the next one goes back; two fingers zoom from the photo's fit up to four
+  times its size. Zoomed in, the chrome is put away, one finger moves the photo as far as its
+  edges, and it is not swiped; another photo opens at its fit. It opens from its tile and
+  closes back to it as a view transition.
 - **The time ruler** is the one signature: even 2 px ticks for the months (drawn, never a
   gradient), the years in the interface face, and the needle as a filled accent pill naming
   the month in view. Upright at the right edge on a laptop; lying above the dock on a phone,
@@ -293,8 +297,8 @@ not a token):
 | --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | Navigation      | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
 | Filters         | a row of chips under the title; a question opens under its chip    | the same chips; a question opens as a bottom sheet                                                        |
-| Loupe metadata  | right margin "sidenote"                                            | Info opens a bottom sheet                                                                                 |
-| Loupe actions   | Close and Info at the top, one glass bar at the bottom             | the same                                                                                                  |
+| Loupe metadata  | Details: a panel of label/value tiles beside the photo             | Details opens a bottom sheet of the same tiles                                                            |
+| Loupe actions   | round Close and Details at the top, one glass bar at the bottom    | the same                                                                                                  |
 | Time ruler      | upright at the right edge                                          | lying above the dock, fading when idle                                                                    |
 | Selection       | click / shift-click / drag-lasso                                   | long-press, then drag or tap                                                                              |
 | Grid row height | ~220 px                                                            | ~110 px, pinch to change                                                                                  |

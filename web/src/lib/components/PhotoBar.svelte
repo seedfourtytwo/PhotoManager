@@ -6,9 +6,9 @@
 	import type { MenuItem } from '$lib/menu';
 	import { readout, readoutSpoken } from '$lib/readout';
 	import { canShare, shareOptions } from '$lib/share';
-	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 	import type { PhotoDialog } from './PhotoDialogs.svelte';
+	import IconButton from './ui/IconButton.svelte';
 
 	type Props = {
 		asset: AssetOut;
@@ -38,16 +38,19 @@
 	let similarReady = $state(false);
 	/** The photo is being fetched for the share sheet, or the sheet is open. */
 	let sharing = $state(false);
+	/** The heart pops when it is pressed, not when a photo opens that is already a favourite. */
+	let pop = $state(false);
 	/** This device has a share sheet: Share takes Download's place on the bar. */
 	const shareable = canShare();
 
+	// A change to the open photo (its favourite) is not another photo.
+	const id = $derived(asset.id);
 	const canEdit = $derived(session.canEdit && detail?.level === 'edit');
 	const viewOnly = $derived(detail?.level === 'view');
 	// v1.2: marking a photo private needs edit on it (from a source, or as an admin).
 	const canPrivate = $derived(!trash && canEdit);
 	const lines = $derived(readout(asset, detail));
-	/** Line two in words, when it holds exposure settings ("f/2.8" is said "f 2.8"). */
-	const spoken = $derived(readoutSpoken(detail));
+	const spoken = $derived(readoutSpoken(asset, detail));
 	/** What does not fit among the bar's five actions. */
 	const moreItems = $derived<MenuItem[]>([
 		...(shareable && detail && !viewOnly
@@ -67,11 +70,17 @@
 			.catch(() => undefined);
 	});
 
-	// A file kept for a second tap belongs to the photo it was fetched for.
+	// A file kept for a second tap belongs to the photo it was fetched for; a pop, to its heart.
 	$effect(() => {
-		void asset.id;
+		void id;
+		pop = false;
 		return () => photoShare.forget();
 	});
+
+	function favourite() {
+		pop = true;
+		ontoggle('favourite');
+	}
 
 	async function share() {
 		if (!detail || sharing) return;
@@ -92,49 +101,56 @@
 </script>
 
 <div class="bar glass">
-	<p class="readout data">
-		<b>{lines[0]}</b>
-		{#if lines[1]}<span aria-hidden={spoken ? true : undefined}>{lines[1]}</span
-			>{/if}{#if spoken}<span class="visually-hidden">{spoken}</span>{/if}
-	</p>
+	<!-- Two lines of pieces set apart by space, not by dots. A screen reader hears each line in
+	     words, with a pause between pieces ("f/2.8" would be said "f slash 2.8"). -->
+	<div class="readout data">
+		{#each lines as line, n (n)}
+			<p class="line">
+				<span class="items" aria-hidden="true"
+					>{#each line as item, i (i)}<span class="item">{item}</span>{/each}</span
+				>{#if spoken[n]}<span class="visually-hidden">{spoken[n]}</span>{/if}
+			</p>
+		{/each}
+	</div>
 	<div class="acts">
 		{#if trash}
-			<button type="button" class="action" onclick={onrestore}
-				><Icon name="restore" />Restore</button
-			>
+			<IconButton icon="restore" label="Restore" onclick={onrestore} />
 		{:else}
-			<button
-				type="button"
-				class="action"
+			<IconButton
+				icon="favourite"
+				label="Favourite"
+				class={pop ? 'favourite pop' : 'favourite'}
 				aria-pressed={asset.favourite}
 				aria-busy={busy}
-				onclick={() => ontoggle('favourite')}><Icon name="favourite" />Favourite</button
-			>
+				onclick={favourite}
+				onanimationend={() => (pop = false)}
+			/>
 			{#if viewOnly}
-				<button type="button" class="action" disabled aria-describedby="loupe-why"
-					><Icon name="download" />Download</button
-				>
+				<IconButton icon="download" label="Download" disabled aria-describedby="loupe-why" />
 				<span class="why" id="loupe-why" title="Downloading needs access to the photo's folder"
 					>view only</span
 				>
 			{:else if shareable}
-				<button type="button" class="action" disabled={!detail} aria-busy={sharing} onclick={share}
-					><Icon name="share" />{sharing ? 'Wait…' : 'Share'}</button
-				>
+				<IconButton
+					icon="share"
+					label={sharing ? 'Wait…' : 'Share'}
+					disabled={!detail}
+					aria-busy={sharing}
+					onclick={share}
+				/>
 			{:else}
-				<button type="button" class="action" disabled={!detail} onclick={() => onopen('download')}
-					><Icon name="download" />Download</button
-				>
+				<IconButton
+					icon="download"
+					label="Download"
+					disabled={!detail}
+					onclick={() => onopen('download')}
+				/>
 			{/if}
 			{#if session.canEdit}
-				<button type="button" class="action" onclick={() => onopen('album')}
-					><Icon name="album" />Album</button
-				>
+				<IconButton icon="album" label="Add to album" onclick={() => onopen('album')} />
 			{/if}
 			{#if canEdit}
-				<button type="button" class="action" onclick={() => onopen('edit')}
-					><Icon name="edit" />Edit</button
-				>
+				<IconButton icon="edit" label="Edit" onclick={() => onopen('edit')} />
 			{/if}
 			{#if moreItems.length}
 				<Menu label="More" text="More" icon="more" items={moreItems} bind:open={more} />
@@ -155,33 +171,63 @@
 		width: min(calc(var(--margin) * 2), 100% - 2 * var(--s-2));
 		box-sizing: border-box;
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--s-2);
-		padding: var(--s-3) var(--s-4) var(--s-1);
+		padding: var(--s-3) var(--s-3) var(--s-1);
 		border-radius: var(--r-2);
 	}
 	.readout {
-		display: grid;
-		gap: var(--fine);
+		padding-inline: var(--s-2);
+		line-height: var(--lh-ui);
+	}
+	/* One line each, never a second: what does not fit is cut (a place, a camera) or left out
+	   whole (the last settings, which drop off the end into the clipped row below). */
+	.line {
+		height: 1lh;
 		margin: 0;
-		font-size: var(--fs-12);
 		color: var(--ink-2);
 	}
-	.readout b,
-	.readout span {
+	.items {
+		display: flex;
+		flex-wrap: wrap;
+		column-gap: var(--s-3);
+		height: 100%;
 		overflow: hidden;
-		text-overflow: ellipsis;
+	}
+	.item {
+		flex: none;
 		white-space: nowrap;
 	}
-	.readout b {
-		font-weight: 500;
+	/* The last piece of line one (a place) and the first of line two (a camera) give way; a
+	   camera with settings after it takes at most half the line, so they keep theirs. */
+	.line:first-child .item:nth-child(3),
+	.line:last-child .item:first-child {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.line:last-child .item:first-child:not(:last-child) {
+		max-width: 50%;
+	}
+	/* Line one: the day leads in full ink; time and place follow, quieter. */
+	.line:first-child {
+		font-size: var(--fs-16);
+	}
+	.line:first-child .items {
+		flex-wrap: nowrap;
+	}
+	.line:first-child .item:first-child {
 		color: var(--ink);
+		font-weight: 600;
+	}
+	.line:last-child {
+		font-size: var(--fs-14);
 	}
 	.acts {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding-top: var(--s-1);
-		border-top: 1px solid var(--hairline);
 		/* The bar sits at the bottom: its menu opens upwards. */
 		--menu-top: auto;
 		--menu-bottom: calc(100% + var(--s-2));
@@ -189,6 +235,15 @@
 	.why {
 		font-size: var(--fs-12);
 		color: var(--ink-2);
+	}
+	/* The heart pops when pressed: up and back, on the sheet's curve (transform only). */
+	.acts :global(.favourite.pop svg) {
+		animation: pop var(--motion-sheet) var(--ease-sheet);
+	}
+	@keyframes pop {
+		50% {
+			transform: scale(1.25);
+		}
 	}
 	@media (max-width: 1023px) {
 		.bar {
@@ -199,14 +254,9 @@
 			);
 		}
 	}
-	/* A phone: five words share the bar down to 320 px and at the largest text. The room goes
-	   between them, not into a hover wash no finger sees; each stays a whole target. */
 	@media (max-width: 639px) {
 		.bar {
 			padding-inline: var(--s-2);
-		}
-		.acts :global(.action) {
-			padding-inline: 0;
 		}
 	}
 </style>

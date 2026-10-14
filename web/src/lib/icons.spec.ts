@@ -20,6 +20,7 @@ describe('icons', () => {
 			'edit',
 			'favourite',
 			'folder',
+			'fullscreen',
 			'grid',
 			'hidden',
 			'home',
@@ -50,7 +51,8 @@ describe('icons', () => {
 			'text',
 			'trash',
 			'upload',
-			'x'
+			'x',
+			'zoom'
 		]);
 	});
 	it.each(Object.entries(ICONS))(

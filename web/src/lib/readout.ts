@@ -1,43 +1,31 @@
 /**
- * The two lines of the photo bar, set in the data face: when and where, then how the photo
- * was exposed and what it is called. A photo that carries no exposure settings (a scan, a
- * screenshot) says what took it and how large it is instead.
+ * The two lines of the photo bar, each a few items the bar sets apart by space (no dots):
+ * when and where, then what took the photo and how it was exposed. The photo's name, its file
+ * and its pixel size are in the details.
  */
-import type { AssetDetail, AssetOut } from './api/types';
+import type { AssetDetail, AssetOut, Face, Id, Person } from './api/types';
+import { formatLongDay } from './dates';
 import { exposureParts, exposureSpoken } from './exposure';
 
-const join = (parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' · ');
+const known = (parts: (string | null | undefined)[]) =>
+	parts.filter((part): part is string => !!part?.trim());
 
-/**
- * A photo with a trusted date is named after its minute (`2019-08-14 18.42`, `… · 2`;
- * backend domain/display_name.py), which line one already says: only another name is news.
- */
-function newsIn(detail: AssetDetail | null): string | null {
-	if (!detail?.name) return null;
-	const { name, taken_at: t } = detail;
-	const minute = `${t.slice(0, 10)} ${t.slice(11, 13)}.${t.slice(14, 16)}`;
-	return name === minute || name.startsWith(`${minute} · `) ? null : name;
-}
-
-export function readout(asset: AssetOut, detail: AssetDetail | null): [string, string] {
+export function readout(asset: AssetOut, detail: AssetDetail | null): [string[], string[]] {
 	const place = asset.place?.city ?? asset.place?.region ?? asset.place?.country;
-	const size = asset.width && asset.height ? `${asset.width} × ${asset.height}` : null;
-	const name = newsIn(detail);
-	const exposure = exposureParts(detail);
 	return [
-		join([asset.taken_at.slice(0, 10), asset.taken_at.slice(11, 16), place]),
-		exposure.length ? join([...exposure, name]) : join([detail?.camera_model, size, name])
+		known([formatLongDay(asset.taken_at), asset.taken_at.slice(11, 16), place]),
+		known([detail?.camera_model, ...exposureParts(detail)])
 	];
 }
 
 /**
- * Line two as a screen reader should say it ("f 2.8, 1/250 second, ISO 400, 35 millimetres,
- * Beach day"), or null when the line holds no exposure settings and reads well as written.
+ * The two lines as a screen reader should say them: a pause where the bar leaves space, and
+ * the settings in words ("14 August 2019, 18:42, Nice" and "iPhone 11, f 2.8, 1/250 second,
+ * ISO 400, 35 millimetres"; "f/2.8" would be said "f slash 2.8").
  */
-export function readoutSpoken(detail: AssetDetail | null): string | null {
-	const exposure = exposureSpoken(detail);
-	if (!exposure.length) return null;
-	return [...exposure, newsIn(detail)].filter(Boolean).join(', ');
+export function readoutSpoken(asset: AssetOut, detail: AssetDetail | null): [string, string] {
+	const [when] = readout(asset, detail);
+	return [when.join(', '), known([detail?.camera_model, ...exposureSpoken(detail)]).join(', ')];
 }
 
 export type Origin = { key: string; label: string; file: string | null };
@@ -53,4 +41,15 @@ export function cameFrom(detail: AssetDetail | null, isAdmin: boolean): Origin[]
 		label: origin.source_label,
 		file: isAdmin ? origin.relative_path : null
 	}));
+}
+
+/**
+ * Who is in the photo, for the details: each person once, named people first, in the order
+ * their faces were found. `listed` is People's list, so a face not grouped yet and a person
+ * hidden from People are left out.
+ */
+export function peopleIn(faces: readonly Face[], listed: ReadonlyMap<Id, Person>): Person[] {
+	const found = new Set(faces.map((face) => face.person_id));
+	const people = [...found].flatMap((id) => (id === null ? [] : (listed.get(id) ?? [])));
+	return [...people.filter((p) => p.name), ...people.filter((p) => !p.name)];
 }

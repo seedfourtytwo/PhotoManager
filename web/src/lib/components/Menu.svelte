@@ -9,7 +9,7 @@
 	type Props = {
 		label: string;
 		text: string;
-		/** In an action bar: the button is this icon over its word, not a round button. */
+		/** In an action bar: the button is this icon alone (an icon button), its word for the look. */
 		icon?: IconName;
 		badge?: number;
 		badgeLabel?: string;
@@ -59,15 +59,16 @@
 	<button
 		bind:this={button}
 		type="button"
-		class={icon ? 'action' : 'trigger'}
+		class={icon ? 'icon-button' : 'trigger'}
 		aria-label={label}
+		title={icon ? label : undefined}
 		aria-expanded={open}
 		aria-controls={open ? id : undefined}
 		aria-describedby={badge > 0 && badgeLabel ? `${id}-badge` : undefined}
 		onclick={() => (open = !open)}
 	>
 		{#if icon}<Icon name={icon} />{/if}
-		<span aria-hidden="true">{text}</span>
+		<span class:word={!!icon} aria-hidden="true">{text}</span>
 		{#if badge > 0}<span class="badge data" aria-hidden="true"
 				>{badge > BADGE_MAX ? `${BADGE_MAX}+` : badge}</span
 			>{/if}

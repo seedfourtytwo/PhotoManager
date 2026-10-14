@@ -34,7 +34,7 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 	await selectTiles(page, [0, 1]);
 	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
-	await expect(dialog.getByText(/2 selected photos\s+· about [\d.]+ [KMG]B/)).toBeVisible();
+	await expect(dialog.getByText(/2 selected photos, about [\d.]+ [KMG]B/)).toBeVisible();
 	await expectAccessible(page);
 
 	await dialog.getByRole('button', { name: 'More options' }).click();
@@ -123,7 +123,12 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	expect(recipe).toMatchObject({ rotate: 90, flip_horizontal: false, straighten: 0 });
 	expect(recipe.crop.w).toBeGreaterThan(0);
 	await expect(editor).toHaveCount(0);
-	if (!isPhone(page)) await expect(page.getByText(/· edited/)).toBeVisible();
+	if (!isPhone(page))
+		await expect(
+			loupe(page)
+				.getByRole('complementary', { name: 'Details' })
+				.getByText('edited', { exact: true })
+		).toBeVisible();
 
 	await page.getByRole('button', { name: 'Edit' }).click();
 	const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/edit'));

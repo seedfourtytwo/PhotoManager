@@ -2,7 +2,7 @@ import { page, userEvent } from 'vitest/browser';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { AssetDetail, AssetOut } from '$lib/api';
+import type { AssetDetail, AssetOut, Face, Person } from '$lib/api';
 import { session } from '$lib/app.svelte';
 import { makeAsset } from '$lib/testing/fixtures';
 import Loupe from './Loupe.svelte';
@@ -30,6 +30,23 @@ const detailOf = (asset: AssetOut, camera = `Camera ${asset.id}`): AssetDetail =
 	level: 'edit'
 });
 
+const sam: Person = {
+	id: 5,
+	name: 'Sam',
+	face_count: 1,
+	hidden: false,
+	asset_count: 1,
+	cover: null,
+	portrait: null
+};
+const samsFace: Face = {
+	id: 1,
+	asset_id: 2,
+	box: { x: 0, y: 0, w: 0.1, h: 0.1 },
+	score: 0.9,
+	person_id: 5
+};
+
 type Call = { method: string; path: string };
 /** Every request the viewer made; `hold(path)` keeps the next answer for it back until released. */
 function server() {
@@ -38,6 +55,8 @@ function server() {
 	const answer = (method: string, path: string): unknown => {
 		const asset = photos.find((a) => path.startsWith(`/api/assets/${a.id}`));
 		if (path === '/api/albums') return method === 'GET' ? [] : { id: 9, title: 'Nine' };
+		if (path === '/api/people') return [sam];
+		if (path.endsWith('/faces')) return path === '/api/assets/2/faces' ? [samsFace] : [];
 		if (asset && path.endsWith('/state')) return { ...asset, favourite: true };
 		if (asset) return detailOf(asset);
 		return {};
@@ -351,7 +370,7 @@ describe('Loupe: details and actions', () => {
 		await vi.waitFor(() => expect(readout()).toContain('Camera 1'));
 		// Adding to an album asks for the photo's details again; that answer is slow.
 		const release = api.hold('GET /api/assets/1');
-		await page.getByRole('button', { name: 'Album', exact: true }).click();
+		await page.getByRole('button', { name: 'Add to album', exact: true }).click();
 		await page.getByRole('textbox', { name: 'New album title' }).fill('Nine');
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await vi.waitFor(() => expect(api.count('GET', '/api/assets/1')).toBe(2));
@@ -360,5 +379,38 @@ describe('Loupe: details and actions', () => {
 		release(detailOf(photos[0], 'Late answer'));
 		await wait(50);
 		expect(readout()).toContain('Camera 2');
+	});
+});
+
+describe('Loupe: Close and Details', () => {
+	afterEach(() => page.viewport(414, 896));
+
+	it('are round icons with no words, named for a screen reader and as a tooltip', async () => {
+		server();
+		open();
+		for (const name of ['Close', 'Details', 'Zoom']) {
+			const button = page.getByRole('button', { name, exact: true });
+			await expect.element(button).toHaveAttribute('title', name);
+			await expect.element(button).toHaveClass(/icon-button/);
+			await expect.element(button).not.toHaveClass(/worded/);
+		}
+	});
+
+	it('on a laptop the details sit beside the photo as label and value tiles, with who is in it', async () => {
+		await page.viewport(1280, 800);
+		server();
+		const { view } = open();
+		const details = page.getByRole('complementary', { name: 'Details' });
+		await expect.element(details).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Details' }))
+			.toHaveAttribute('aria-pressed', 'true');
+		const labels = () =>
+			[...details.element().querySelectorAll('.tile-row .k')].map((k) => k.textContent);
+		await vi.waitFor(() => expect(labels()).toEqual(['Taken', 'Camera', 'From']));
+		await view.rerender({ index: 1 });
+		const sam = details.getByRole('link', { name: 'Sam' });
+		await expect.element(sam).toHaveAttribute('href', '/people/5');
+		expect(labels()).toEqual(['Taken', 'Camera', 'From', 'People']);
 	});
 });
