@@ -105,9 +105,10 @@ test('phone: the lens moves to the chosen place, and leaves when none is', async
 		});
 	const left = async (i: number) => (await places.getByRole('listitem').nth(i).boundingBox())!.x;
 	const step = (await left(1)) - (await left(0));
-	await expect.poll(lens).toEqual({ x: 0, shown: true });
+	// Home, Library, Collections: signing in at "/" asked for the Library, the second place.
+	await expect.poll(lens).toEqual({ x: Math.round(step), shown: true });
 	await nav(page).getByRole('link', { name: 'Collections', exact: true }).click();
-	await expect.poll(async () => Math.round((await lens()).x)).toBe(Math.round(step));
+	await expect.poll(async () => Math.round((await lens()).x)).toBe(Math.round(2 * step));
 	await nav(page).getByRole('link', { name: 'Search', exact: true }).click();
 	await expect.poll(async () => (await lens()).shown).toBe(false);
 });

@@ -24,6 +24,7 @@ test('review: a look-alike sits beside the photo it resembles; one decision per 
 	await expect(shots.getByRole('listitem')).toHaveCount(2);
 	await shots.getByRole('listitem').first().getByRole('button').click();
 	const one = page.getByRole('dialog', { name: 'A screenshot' });
+	await expect(one).toHaveCSS('opacity', '1'); // axe must not measure contrast mid-fade
 	await expectAccessible(page);
 	await one.getByRole('button', { name: 'Move to trash' }).click();
 	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
