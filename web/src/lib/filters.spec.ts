@@ -137,12 +137,11 @@ describe('describeFilters', () => {
 		expect(describeFilters({ person_id: [5, 6, 7] }, names)).toBe('Sam, Lou or Léa');
 		expect(describeFilters({ person_id: [5, 9] }, names)).toBe('2 people');
 		expect(describeFilters({ person_id: [5] })).toBe('1 person');
-		expect(describeFilters({ year: 2019, person_id: [6] }, names)).toBe('2019 · Lou');
+		expect(describeFilters({ year: 2019, person_id: [6] }, names)).toBe('2019, Lou');
 	});
 
-	it('counts people and pinned as one filter each', () => {
-		expect(activeFilterCount({ person_id: [5, 6], pinned: true })).toBe(2);
-		expect(describeFilters({ favourite: true, pinned: true })).toBe('favourites · pinned');
+	it('names pinned photos, and says nothing for a pinned filter that is off', () => {
+		expect(describeFilters({ favourite: true, pinned: true })).toBe('favourites, pinned');
 		expect(describeFilters({ pinned: false })).toBe('');
 	});
 

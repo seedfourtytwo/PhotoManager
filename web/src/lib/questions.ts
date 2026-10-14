@@ -11,11 +11,10 @@ export type Question = 'who' | 'when' | 'where' | 'camera' | 'more';
 
 /**
  * The filters each question sets. Clearing a question takes them all away, and a sheet counts
- * its choices without them ("counts are those of the other filters"). Who has none until the
- * server filters by person (lib/who.ts).
+ * its choices without them ("counts are those of the other filters").
  */
 export const QUESTION_KEYS: Record<Question, readonly (keyof AssetFilters)[]> = {
-	who: [],
+	who: ['person_id'],
 	when: ['year', 'month', 'from', 'to'],
 	where: ['place', 'has_location'],
 	camera: ['camera', 'source_id'],

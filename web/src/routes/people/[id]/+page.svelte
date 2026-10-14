@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { Person } from '$lib/api';
+	import type { AssetOut, Person } from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { errorMessage, formatCount } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
@@ -10,6 +10,7 @@
 	import type { MenuItem } from '$lib/menu';
 	import { personLine, yearsOf } from '$lib/person';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
+	import { spread } from '$lib/story';
 	import { groupByYear } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
@@ -21,6 +22,8 @@
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import StoryPlayer from '$lib/components/home/StoryPlayer.svelte';
 
 	const id = $derived(Number(page.params.id));
 	let person = $state<Person | null>(null);
@@ -33,6 +36,10 @@
 	let selection = $state<Selection>(EMPTY);
 	let timeline: Timeline | undefined = $state();
 	const loader = new TimelineLoader((_filters, cursor) => api.personAssets(id, cursor, 200));
+
+	/** Their story: the photos loaded so far, spread over the years they appear in. */
+	let playing = $state.raw<AssetOut[] | null>(null);
+	const play = $derived(loader.items.length ? () => (playing = spread(loader.items)) : undefined);
 
 	async function load() {
 		try {
@@ -160,8 +167,10 @@
 		{person}
 		{line}
 		onportrait={session.canEdit ? () => (dialog = 'portrait') : undefined}
+		onplay={play}
 	>
 		{#snippet actions()}
+			<a class="button in-library" href={`/?person_id=${id}`}><Icon name="library" />In Library</a>
 			{#if person && session.canEdit}
 				<KeepOnPhone
 					target={{ kind: 'person', person_id: person.id }}
@@ -263,7 +272,21 @@
 	/>
 {/if}
 
+{#if playing?.length && person}
+	<StoryPlayer
+		photos={playing}
+		title={person.name ?? 'Someone'}
+		dates={line}
+		poster={playing[0]}
+		onclose={() => (playing = null)}
+	/>
+{/if}
+
 <style>
+	.in-library {
+		gap: var(--s-2);
+		font-weight: 600;
+	}
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}

@@ -203,3 +203,27 @@ test('a guest sees the portrait and cannot change it', async ({ page }) => {
 	await expect(portrait).toHaveAttribute('src', /\/portrait\?v=/);
 	await expect(page.getByRole('button', { name: /Change portrait/ })).toHaveCount(0);
 });
+
+test('a person plays as a story, and opens in the Library with Who answered', async ({ page }) => {
+	await signIn(page, '/people');
+	const first = page
+		.getByRole('main')
+		.locator('.people a')
+		.filter({ hasNotText: /^Someone/ })
+		.first();
+	const name = (await first.getAttribute('aria-label')) ?? (await first.innerText());
+	await first.click();
+	await page.getByRole('button', { name: 'Play' }).click();
+	const story = page
+		.getByRole('dialog')
+		.filter({ has: page.getByRole('button', { name: 'Pause' }) });
+	await expect(story).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(story).toBeHidden();
+
+	await page.getByRole('link', { name: 'In Library' }).click();
+	await expect(page).toHaveURL(/\/\?person_id=\d+$/);
+	const who = page.getByRole('group', { name: 'Filters' }).getByRole('button').first();
+	await expect(who).toHaveText(name.split('\n')[0].trim());
+	await expect(page.getByRole('img', { name: /^Photo/ }).first()).toBeVisible();
+});

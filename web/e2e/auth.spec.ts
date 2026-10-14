@@ -95,7 +95,7 @@ test.describe('first run and sign-in', () => {
 		// Signing in with no page asked for opens the start page: Home (spec 2026-10-14 §4).
 		await expect(page).toHaveURL(/\/home$/);
 		await expect(
-			page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' })
+			page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home', exact: true })
 		).toHaveAttribute('aria-current', 'page');
 	});
 

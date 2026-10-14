@@ -208,7 +208,7 @@ test('home: photos selected in the Library are pinned from the pill’s More', a
 		.evaluateAll((tiles) => tiles.map((t) => Number((t as HTMLElement).dataset.id)));
 	await selectionAction(page, 'Pin to Home');
 	await expect(toast(page)).toHaveText('Pinned 2 photos to Home.');
-	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home', exact: true }).click();
 	const grid = page.getByRole('group', { name: 'Pinned photos' });
 	for (const id of ids) await expect(grid.locator(`[data-id="${id}"]`)).toHaveCount(1);
 });

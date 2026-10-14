@@ -8,6 +8,7 @@
 	import { EMPTY, applyClick } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { tileOf } from '$lib/tiles';
+	import { spread } from '$lib/story';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import AddPhotosDialog from '$lib/components/AddPhotosDialog.svelte';
 	import AlbumHero from '$lib/components/AlbumHero.svelte';
@@ -20,11 +21,15 @@
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import ShareDialog from '$lib/components/ShareDialog.svelte';
+	import StoryPlayer from '$lib/components/home/StoryPlayer.svelte';
+	import type { AssetOut } from '$lib/api';
 
 	const id = $derived(Number(page.params.id));
 	const view = new AlbumView(() => id);
 	const album = $derived(view.album);
 	const items = $derived(view.items);
+	/** The album as a story: its photos spread over its length. */
+	let playing = $state.raw<AssetOut[] | null>(null);
 	let arrange = $state(false);
 	let title = $state('');
 	let description = $state('');
@@ -100,6 +105,7 @@
 	<AlbumHero
 		{album}
 		line={albumLine(items)}
+		onplay={items.length ? () => (playing = spread(items)) : undefined}
 		onadd={canEdit ? () => (view.dialog = 'add') : undefined}
 		onshare={album.role === 'owner' ? () => (view.dialog = 'share') : undefined}
 	>
@@ -226,6 +232,16 @@
 			>
 		{/snippet}
 	</Dialog>
+{/if}
+
+{#if playing?.length && album}
+	<StoryPlayer
+		photos={playing}
+		title={album.title}
+		dates={albumLine(items)}
+		poster={playing[0]}
+		onclose={() => (playing = null)}
+	/>
 {/if}
 
 <style>

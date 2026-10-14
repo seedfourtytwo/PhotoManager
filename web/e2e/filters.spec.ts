@@ -25,8 +25,8 @@ async function ask(page: Page, name: string) {
 test('the chips ask Who, When, Where, Favourites, Camera, More in that order, the same on every screen', async ({
 	page
 }) => {
-	// Who joins first once the server filters by person (lib/who.ts).
 	await expect(chips(page).getByRole('button')).toHaveText([
+		'Who',
 		'When',
 		'Where',
 		'Favourites',
