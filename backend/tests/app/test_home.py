@@ -25,8 +25,11 @@ def test_home_puts_its_blocks_together_for_today(db: Database, repo: SqliteRepos
         return asset_id
 
     that_day = [photo(n, datetime(2023, 10, 14, 9 + n)) for n in range(1, 4)]
-    trip = [photo(n, datetime(2024, 7, 3, 10) + n * timedelta(hours=5)) for n in range(10, 20)]
-    new = [photo(n, datetime(2026, 10, 1), NOW - timedelta(days=n - 30)) for n in range(30, 33)]
+    # no place anywhere: all of it is home, and July 2024 is a month at home (20 photos)
+    july = [
+        photo(n, datetime(2024, 7, 1, 10) + (n - 10) * timedelta(days=1)) for n in range(10, 30)
+    ]
+    new = [photo(n, datetime(2026, 10, 1), NOW - timedelta(days=n - 40)) for n in range(40, 43)]
     repo.set_user_state(viewer.user_id, [that_day[1]], favourite=True)
     store = SqliteMlStore(db)
     vector = (1.0, 0.0, 0.0, 0.0)
@@ -45,10 +48,10 @@ def test_home_puts_its_blocks_together_for_today(db: Database, repo: SqliteRepos
     assert day is not None and (day.day, day.years_ago, day.exact) == (date(2023, 10, 14), 3, True)
     assert day.cover_id == that_day[1], "the favourite"
     assert page.people == [(sam, "Sam")], "named and listed people only"
-    assert [(m.title, m.count, m.cover_id) for m in page.memories] == [("July 2024", 10, trip[0])]
+    assert [(m.title, m.count, m.cover_id) for m in page.memories] == [("July 2024", 20, july[0])]
     assert page.arrivals.count == 3 and page.arrivals.newest == new
     assert page.days == NEW_DAYS
-    assert set(page.views) == {that_day[1], trip[0], *new}
+    assert set(page.views) == {that_day[1], july[0], *new}
     assert nameless not in [p for p, _ in page.people]
 
 

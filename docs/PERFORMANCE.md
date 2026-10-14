@@ -247,6 +247,7 @@ whole-library read timed in the same runs, as the yardstick. ms, admin / alice /
 | | 10k photos (median of 15) | 50k photos (median of 9) |
 |---|---|---|
 | `GET /api/home` (all of it) | **57 / 76 / 61 / 57** | 271 / 366 / 353 / 287 |
+| the same with trips away from home and months at home | 62 / 82 / 64 / 51 | 341 / 410 / 343 / 211 |
 | of which: every visible photo's time and place | 45 / 61 / 44 / 40 | 203 / 302 / 231 / 204 |
 | of which: the week's arrivals | 2.4 / 3.0 / 3.0 / 3.7 | 14 / 19 / 19 / 17 |
 | calendar (same runs, for scale) | 17 / 33 / 38 / 35 | 96 / 183 / 163 / 145 |
@@ -256,7 +257,10 @@ whole-library read timed in the same runs, as the yardstick. ms, admin / alice /
 Home reads every photo the viewer sees once (memories need all of their times); about half of
 that is SQL (the visibility rule per photo, as for the calendar), half building one small
 tuple per photo in Python. Only the eight trips shown are named and get a cover. At 10k it is
-well inside the 200 ms budget; at 50k it is about twice the calendar. The person filter is an
+well inside the 200 ms budget, which is set for 10k photos (ARCHITECTURE §5; the v1 target
+is under 10,000); at 50k it works in a third of a second, two to three times the calendar,
+so it is not cached. Working out home and the months at home costs a few ms at 10k (the
+second Home row, from a later and as loaded run). The person filter is an
 `EXISTS` on `face_by_person` per photo and stops at the page's `LIMIT`; pinned starts from the
 viewer's own marks, like favourites.
 

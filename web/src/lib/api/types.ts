@@ -280,7 +280,10 @@ export type OnThisDay = {
 	people: { id: Id; name: string }[];
 	filter: HomeFilter;
 };
-/** A trip: photos at most two days apart, ten at least ("Lisbon, July and August 2024"). */
+/**
+ * A trip away from home ("Lisbon, July and August 2024") or a month at home ("October 2024":
+ * `count` is every photo of that month, what `filter` lists).
+ */
 export type Memory = {
 	/** Its first and last day: the same while the trip stays the same. */
 	key: string;

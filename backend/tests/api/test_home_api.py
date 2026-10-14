@@ -16,8 +16,8 @@ NOW = datetime(2026, 10, 14, 12, tzinfo=UTC)
 
 @pytest.fixture
 def home(admin: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[int]]:
-    """A trip to Lisbon in July 2024, three photos of 14 October 2023 (one in a folder only
-    admins see), and two photos that arrived this week."""
+    """Home in Paris (12 photos in 2022), a trip to Lisbon in July 2024, three photos of
+    14 October 2023 (one in a folder only admins see), and two that arrived this week."""
     services = services_of(admin)
     monkeypatch.setattr(services, "clock", FakeClock(NOW))
     repo = services.repo
@@ -36,6 +36,8 @@ def home(admin: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[i
             made.append(asset_id)
         return made
 
+    at_home = photos(12, datetime(2022, 3, 1, 10), timedelta(days=2))
+    repo.set_places([(i, Place("France", "Ile-de-France", "Paris")) for i in at_home])
     trip = photos(10, datetime(2024, 7, 3, 10), timedelta(hours=6))
     repo.set_places([(i, Place("Portugal", "Lisboa", "Lisbon")) for i in trip])
     that_day = photos(2, datetime(2023, 10, 14, 10), timedelta(hours=1))
