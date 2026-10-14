@@ -29,6 +29,7 @@ describe('icons', () => {
 			'lock',
 			'moon',
 			'more',
+			'pause',
 			'person',
 			'phone',
 			'pin',
