@@ -98,10 +98,11 @@ copies down.
 | 4b.3 | **Bulk scopes**: whole day / month / year, an album, a person, or "everything matching the current filter"; shows count and size before starting — *API: ids, album or any filter, with estimate* | Must | M2 |
 | 4b.4 | **Format**: Original · JPEG (quality slider) · PNG · WebP; HEIC → JPEG is the common case — *API done in M2* | Should | M3 |
 | 4b.5 | **Resize on export**: presets (Original, 4K long edge, 2048, 1080, "email" 1280) or custom long edge; never upscale — *API done in M2* | Should | M3 |
-| 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (`date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
+| 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (photo name 4b.10, `date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
 | 4b.7 | Phone: photos go to the device's own share sheet (Web Share API: AirDrop on an iPhone, Quick Share on Android) — *built: **Share** on the photo view's bar, in the selection pill for up to 10 photos (one sheet, all files), and "Save to Photos" in the download dialog; the person picks where they go, the app sends nothing itself; Share only appears when the app is opened over HTTPS (browsers hide it on plain http, e.g. a LAN or VPN IP address; 11.1) and on a device with a share sheet; more than 10 photos → ZIP download* | Should | M3 ✅ |
 | 4b.8 | Large exports run as a background job with progress and a "ready" link, resumable if the connection drops | Could | M4 |
 | 4b.9 | Standalone converter: drop files in, get them back converted/resized (without importing them) | Could | M4 |
+| 4b.10 | **Photo names**: a photo is called after the minute it was taken (`2015-06-12 14.32`; `· 2`, `· 3` for others the viewer sees in that minute, by time then id), or, when its date is only the file's modification time, its file name tidied (extension and copy marks such as `(Copy)`, ` - Copy`, ` copy 2`, `(1)` dropped), or `Photo <id>` when no word is left (Facebook's `10174880_…_n.jpg`). Display only: nothing is stored and no file is renamed. The photo bar shows the name when it is not just the date; the details show it, and an admin also reads each source's original file and path. Single downloads, `/original`, shares and ZIPs (default naming) carry it with the real extension; "Original file names" stays a ZIP option | Should | M3 ✅ |
 
 ## 4c. Basic editor (non-destructive)
 

@@ -24,7 +24,7 @@ describe('download model', () => {
 			max_edge: null,
 			strip_location: false,
 			strip_all_metadata: false,
-			naming: 'original',
+			naming: 'name',
 			folders: 'flat'
 		});
 		const byFilter = buildDownloadRequest({ filters: { year: 2019 } }, DEFAULT_OPTIONS);

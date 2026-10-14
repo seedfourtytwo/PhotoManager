@@ -188,7 +188,7 @@ so a 2 GB year export needs no archive on disk. Skipped photos are counted in `X
 photo that fails while the ZIP streams is left out and listed in a final `manifest.txt`.
 Size estimates start from each photo's real bytes (calibrated factors, PERFORMANCE.md).
 Every download is streamed in the request; a background `export_job` with progress for very
-large exports is not built (it is in the planned tables of §3). Naming and folder layout are
+large exports is not built (it is in the planned tables of §3). Naming (the photo's display name, `domain/display_name.py`, from `app/photo_names.py`: two queries for any number of photos) and folder layout are
 pure domain functions (unit-tested).
 
 ### Edit recipe
