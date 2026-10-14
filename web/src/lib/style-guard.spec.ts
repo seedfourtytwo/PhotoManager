@@ -82,12 +82,12 @@ describe('style guard', () => {
 	// The redesign's area branches (docs/superpowers/specs/2026-10-14-ui-redesign-2-design.md
 	// §11) take their files off this list; it must be empty when the redesign is done.
 	const LINES_PENDING = new Set([
-		'/src/lib/components/Devices.svelte', // (a) You, after the phone-sync PR
 		'/src/lib/components/PhotoBar.svelte', // (c) photo view
 		'/src/lib/components/PhotoInfo.svelte', // (c)
 		'/src/lib/components/Editor.svelte', // (c)
 		'/src/lib/components/PhotoGrid.svelte', // (b) library
 		'/src/lib/components/Timeline.svelte', // (b)
+		'/src/lib/components/KeepOnPhone.svelte', // (b), arrived with the phone-sync PR
 		'/src/lib/components/PeopleEditor.svelte', // (d) collections
 		'/src/lib/components/PortraitDialog.svelte', // (d)
 		'/src/lib/components/admin/Backups.svelte', // (d) admin

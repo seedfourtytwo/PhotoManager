@@ -1,18 +1,28 @@
+import type { Page } from '@playwright/test';
 import { expect, expectAccessible, resetMock, signIn, test } from './helpers.ts';
 
-test('keep an album on a phone, leave out screenshots, and see it in Settings', async ({
-	page
-}) => {
+/** The phone's sheet on You, and in it what the phone keeps. */
+async function openPhone(page: Page) {
+	await page
+		.getByRole('region', { name: 'Phones that send photos here' })
+		.getByRole('button', { name: /^Léa’s iPhone/ })
+		.click();
+	return page
+		.getByRole('dialog', { name: 'Léa’s iPhone' })
+		.getByRole('group', { name: 'What Léa’s iPhone keeps' });
+}
+
+test('keep an album on a phone, leave out screenshots, and see it on You', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/settings');
-	const devices = page.getByRole('region', { name: 'Phones and devices' });
-	await devices.getByRole('button', { name: 'Add a device' }).click();
-	const add = page.getByRole('dialog', { name: 'Add a device' });
+	const phones = page.getByRole('region', { name: 'Phones that send photos here' });
+	await phones.getByRole('button', { name: 'Add a phone' }).click();
+	const add = page.getByRole('dialog', { name: 'Add a phone' });
 	await add.getByLabel('Name').fill('Léa’s iPhone');
 	await add.getByRole('button', { name: 'Create' }).click();
 	await expect(add.getByLabel('Device token')).toHaveValue(/^pa_dev_/);
 	await add.getByRole('button', { name: 'Done' }).click();
-	const keeps = page.getByRole('group', { name: 'What Léa’s iPhone keeps' });
+	let keeps = await openPhone(page);
 	await expect(keeps).toContainText('Keeps nothing yet');
 	await expect(keeps).toContainText('never synced');
 
@@ -29,12 +39,12 @@ test('keep an album on a phone, leave out screenshots, and see it in Settings', 
 	await expect(dialog).toBeHidden(); // its history step is undone before leaving
 
 	await page.goto('/settings');
-	await expect(
-		keeps.getByRole('listitem').filter({ hasText: 'Summers at the house' })
-	).toBeVisible();
-	await keeps.getByRole('checkbox', { name: 'Leave out screenshots' }).check();
+	keeps = await openPhone(page);
+	await expect(keeps.getByRole('region', { name: 'Keeps' })).toContainText('Summers at the house');
+	await expectAccessible(page);
+	await keeps.getByRole('switch', { name: 'Leave out screenshots' }).check();
 	await expect(keeps.getByRole('heading', { name: 'Leaves off' })).toBeVisible();
-	await expect(keeps.getByRole('listitem').filter({ hasText: 'Screenshots' })).toBeVisible();
+	await expect(keeps.getByRole('region', { name: 'Leaves off' })).toContainText('Screenshots');
 	await keeps.getByRole('button', { name: 'Remove Summers at the house' }).click();
 	await expect(keeps.getByRole('heading', { name: 'Keeps' })).toHaveCount(0);
 	await expect(keeps).toContainText('0 photos');

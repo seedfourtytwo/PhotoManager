@@ -51,11 +51,17 @@ export async function openAdmin(page: Page) {
 	await signIn(page, '/admin');
 }
 
-/** Opens the account menu (the button with the person's initial); returns the main nav. */
-export async function openAccountMenu(page: Page): Promise<Locator> {
-	const nav = page.getByRole('navigation', { name: 'Main' });
-	await nav.getByRole('button', { name: /^Account/ }).click();
-	return nav;
+/** The avatar, named "You" (and, for an admin, what needs them): it opens You. */
+export const avatar = (page: Page) => page.getByRole('link', { name: /^You\b/ });
+
+/** Follow a link the way a click in the app does (no reload). */
+export async function follow(page: Page, href: string) {
+	await page.evaluate((to) => {
+		const link = Object.assign(document.createElement('a'), { href: to });
+		document.body.append(link);
+		link.click();
+		link.remove();
+	}, href);
 }
 
 /**

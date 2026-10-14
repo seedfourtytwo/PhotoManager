@@ -8,7 +8,6 @@ import {
 	expect,
 	isPhone,
 	loupeAction,
-	openAccountMenu,
 	resetMock,
 	selectionAction,
 	selectTiles,
@@ -222,15 +221,16 @@ test('every screen', async ({ page }, info) => {
 
 	await page.goto('/settings');
 	await shot(page, '16-settings', p);
-	await page.getByRole('button', { name: 'Add a device' }).click();
+	await page.getByRole('button', { name: 'Add a phone' }).click();
 	await page.getByLabel('Name').fill('Léa’s iPhone');
 	await page.getByRole('button', { name: 'Create' }).click();
 	await expect(page.getByLabel('Device token')).toHaveValue(/^pa_dev_/);
 	await shot(page, '16b-device-token', p);
 
 	await page.getByRole('button', { name: 'Done' }).click();
-	await openAccountMenu(page);
-	await shot(page, '21-account-menu', p);
+	await page.getByRole('button', { name: /^Léa’s iPhone/ }).click();
+	await expect(page.getByRole('dialog', { name: 'Léa’s iPhone' })).toBeVisible();
+	await shot(page, '21-phone-sheet', p);
 	await page.keyboard.press('Escape');
 
 	await resetMock('seed', { models: true });

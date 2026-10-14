@@ -52,7 +52,7 @@ for (const { width, scale } of SIZES) {
 		await resize(page, width, scale);
 		await expect.poll(() => sideways(page, width)).toBeLessThanOrEqual(0);
 		const nav = page.getByRole('navigation', { name: 'Main' });
-		await onScreen(nav.locator('ul a, a.search, .account button'), width);
+		await onScreen(nav.locator('ul a, a.search'), width);
 	});
 
 	test(`${size}: the photo bar holds its five actions apart, each a whole target`, async ({

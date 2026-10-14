@@ -135,7 +135,7 @@
 		</div>
 	{/if}
 
-	{#if session.canEdit}<div class="apart"><Devices /></div>{/if}
+	{#if session.canEdit}<Devices />{/if}
 
 	<TileGroup label="Account">
 		<TileRow icon="lock" title="Change PIN" onclick={() => (changing = true)} />
@@ -198,6 +198,7 @@
 	/* The three modes side by side, each its icon over its word, across the page. */
 	.mode :global(.segmented) {
 		display: flex;
+		box-sizing: border-box;
 		width: 100%;
 	}
 	.mode :global(.segmented button) {

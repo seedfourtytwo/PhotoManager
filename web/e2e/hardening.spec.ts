@@ -5,6 +5,7 @@ import {
 	countSlow,
 	delayRoute,
 	expect,
+	follow,
 	isPhone,
 	loupe,
 	NOTHING_HAPPENS_MS,
@@ -139,16 +140,6 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	await page.waitForTimeout(TWO_POLLS_MS);
 	expect(asked.length).toBe(settled);
 });
-
-/** Follow a link the way a click in the app does (no reload). */
-async function follow(page: Page, href: string) {
-	await page.evaluate((to) => {
-		const link = Object.assign(document.createElement('a'), { href: to });
-		document.body.append(link);
-		link.click();
-		link.remove();
-	}, href);
-}
 
 test('search: clearing the search while one is running does not leave “Searching…”', async ({
 	page
