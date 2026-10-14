@@ -56,7 +56,9 @@ admin (see Visibility in §7); `0026` keeps what the last global face-clustering
 (`user.look`); `0029` lets a person's portrait be a chosen circle on one of their photos
 (`person.portrait_cx/cy/size`, empty = automatic; the round picture is cut from the original
 on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`); `0030` keeps how a
-photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`); `0031` keeps what
+each device keeps on it (`sync_rule`) and what it has fetched (`sync_sent`), for "Keep on my
+phone". `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -94,6 +96,11 @@ import_run(...), import_item(...), job(id, kind, payload_json, status, attempts,
 inbox(user_id PK → user ON DELETE CASCADE, source_id UNIQUE)              -- 0014, FK 0017
 device(id, user_id → user ON DELETE CASCADE, name, platform, token_hash UNIQUE sha256,
        created_at, last_used_at, revoked_at, last_sync_at, sync_cursor)  -- 0014, FK 0017
+                                       -- sync_cursor is unused (see "Keep on my phone")
+sync_rule(id, device_id → device CASCADE, kind[album|person|filter], album_id → album CASCADE,
+          person_id → person CASCADE, filter_json, mode[include|exclude], created_at)  -- 0031
+          -- one rule per (device, thing): UNIQUE (device_id, kind, COALESCE(album, person, filter))
+sync_sent(device_id → device CASCADE, asset_id → asset CASCADE, sent_at)        -- 0031
 ai_log(id, capability, model, attempt, ok, duration_ms, error, request_json, response_json)
 backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, schedule,
               quiet_window, retention_json, enabled, created_at)                     -- 0016
@@ -255,10 +262,29 @@ with `POST /api/upload` as ordinary multipart. The body is parsed as it streams
 off at `PA_UPLOAD_MAX_MB`, then moved into the inbox, and one import is queued. An upload is
 not resumable (no tus): a broken request is sent again, and files that already arrived are
 kept. The caller is a browser session or a per-device token (`/api/devices`), which is what
-Apple Shortcuts uses. Not built: the server → phone change cursor (the `device.sync_cursor`
-column exists, no route uses it). If a phone app is ever built (parked), it is the web UI in
+Apple Shortcuts uses. If a phone app is ever built (parked), it is the web UI in
 a Capacitor shell; only `DeviceBridge` (photo library, background upload, save to Photos)
 would have a native implementation.
+
+### Keep on my phone (server → phone)
+One way: the server says what a device should hold, the device fetches it; nothing comes
+back, so a photo deleted on the phone stays in the library. Rules are **per device** (a
+person's phone and tablet keep different things; revoking a device ends its list with its
+token). Each rule names an album, a person or a filter (the `/api/assets` query as canonical
+JSON; search facets in `q`) and keeps it (include) or leaves it off (exclude).
+`app/device_sync.DeviceSync` computes the list on every request, never stores it: each
+rule's photos come from `api/library_scopes.LibraryScopes` (the album, person and search code
+the screens use, all under the visibility rule), `domain/device_sync.kept_ids` takes the union
+of the includes minus the excludes, and `views_by_ids` keeps only photos the owner may
+**download** and has not hidden (live ones only: trash and held photos are out). A device
+fetches originals only from its own list. What it fetched is kept in `sync_sent`, so
+`?new=true` offers the rest; paging is by asset id (`after`), so a photo joining or leaving the
+list moves nothing else. A cursor (`device.sync_cursor`) was not used: it cannot tell that an
+old photo joined a kept album. Cost: the list is recomputed for each manifest page and each
+original; fine for a family library, the first place to cache if it ever is not.
+The device routes take only a device token (`deps.device_only`); the rules are edited only
+from a signed-in browser. The free iPhone client is an Apple Shortcut
+(`docs/guides/keep-on-my-phone.md`).
 
 ### Search
 Query → parser splits facets (`date:2023`, `person:Lea`, `place:France`) from free text →
@@ -417,7 +443,8 @@ Measured numbers (before/after the QA fixes): [`PERFORMANCE.md`](PERFORMANCE.md)
   request without it is the sign that half the time is over. Every `/api` route except health, setup and login
   needs a session; source, scan, import, job, access-list and user routes are admin-only.
   Upload routes take the session **or** a device token through one fail-closed dependency
-  (`api/deps.py`). Changing a PIN ends the user's other sessions; an admin reset ends all
+  (`api/deps.py`); the two "Keep on my phone" device routes (`/api/sync/…`) take the device
+  token only, read-only, and serve only photos on that device's list. Changing a PIN ends the user's other sessions; an admin reset ends all
   of them and revokes the user's device tokens. First-run setup and the last-admin rule are
   atomic (one `BEGIN IMMEDIATE` transaction each).
 - Errors: one `DomainError` hierarchy (`domain/errors.py`) and one handler in `api/main.py`

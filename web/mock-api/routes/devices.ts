@@ -45,6 +45,7 @@ export function deviceRoutes(h: Helpers): Route[] {
 					platform: platform as 'ios',
 					created_at: nowIso(),
 					last_used_at: null,
+					last_sync_at: null,
 					revoked: false
 				};
 				h.state().devices.push(device);

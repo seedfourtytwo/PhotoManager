@@ -7,8 +7,6 @@ inside that; anything outside is a 404. Without model files every route still an
 falls back to the core text search and says why.
 """
 
-from collections.abc import Collection
-from dataclasses import replace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -23,15 +21,15 @@ from photo_assistant.api.deps import (
     member_user,
     require_view,
 )
-from photo_assistant.api.filters import FilterDep, checked
+from photo_assistant.api.filters import FilterDep
+from photo_assistant.api.library_scopes import facet_candidates, matching_words
 from photo_assistant.api.routes.assets import IMMUTABLE
 from photo_assistant.api.schemas import AssetOut, Id
 from photo_assistant.api.services import Services
 from photo_assistant.app.portraits import portrait_version
-from photo_assistant.app.search import NotIndexedError, SearchUnavailableError, parse_query
+from photo_assistant.app.search import NotIndexedError, SearchUnavailableError
 from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.faces import Circle
-from photo_assistant.domain.search_query import ParsedQuery, with_facets
 from photo_assistant.ports.ml import PersonSummary, Portrait, StoredFace
 
 router = APIRouter(prefix="/api", tags=["ml"], dependencies=LOGGED_IN)
@@ -208,26 +206,6 @@ def _clip_ready(services: Services) -> bool:
     return services.ml.clip.status().ready
 
 
-def _person_ids_named(services: Services, name: str, visible: Collection[int]) -> set[int]:
-    wanted = name.casefold()
-    people = services.ml.people.list_all(visible, hidden=None)  # hidden is not forgotten
-    return {p.id for p in people if p.name is not None and p.name.casefold() == wanted}
-
-
-def _narrow_by_people_and_tags(
-    services: Services, parsed: ParsedQuery, candidates: list[int]
-) -> list[int]:
-    keep = set(candidates)
-    for name in parsed.values("person"):
-        found: set[int] = set()
-        for person_id in _person_ids_named(services, name, keep):
-            found |= set(services.ml.people.assets(person_id, keep))
-        keep &= found
-    for tag in parsed.values("tag"):
-        keep &= set(services.ml.store.asset_ids_with_tag(tag, keep))
-    return [i for i in candidates if i in keep]  # keep the timeline order
-
-
 def _scored(
     services: Services, viewer: Viewer, ids: list[int], scores: dict[int, float] | None = None
 ) -> list[ScoredAssetOut]:
@@ -249,10 +227,7 @@ def search(
 ) -> SearchOut:
     """``q`` as on the timeline, plus facets (``date:2023 person:Lea tag:beach place:… camera:…``).
     Free text is ranked by CLIP when the model is installed, else matched as words."""
-    parsed = parse_query(f.q or "")
-    narrowed = checked(with_facets(replace(f, q=None), parsed))
-    candidates = services.repo.visible_asset_ids(viewer, narrowed)
-    candidates = _narrow_by_people_and_tags(services, parsed, candidates)
+    parsed, narrowed, candidates = facet_candidates(services.repo, services.ml, viewer, f)
     facets = [FacetOut(name=k, value=v) for k, v in parsed.facets]
     text = parsed.text
 
@@ -271,7 +246,7 @@ def search(
             return out(_scored(services, viewer, list(scores), scores), "semantic")
     else:
         detail = MODELS_MISSING
-    matching = set(services.repo.visible_asset_ids(viewer, checked(replace(narrowed, q=text))))
+    matching = matching_words(services.repo, viewer, narrowed, text)
     ids = [i for i in candidates if i in matching][:limit]
     return out(_scored(services, viewer, ids), "text", detail)
 

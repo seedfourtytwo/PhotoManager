@@ -31,12 +31,16 @@ describe('Devices: Revoke', () => {
 		platform: 'ios',
 		created_at: '2026-01-01T10:00:00',
 		last_used_at: null,
+		last_sync_at: null,
 		revoked: false
 	};
+	const nothingKept = { device: phone, rules: [], count: 0, bytes: 0, sent: 0 };
 
 	it('asks first, because the token cannot be shown again', async () => {
 		const calls = stubFetch((call) =>
-			call.method === 'DELETE' ? { status: 204 } : { json: [phone] }
+			call.method === 'DELETE'
+				? { status: 204 }
+				: { json: call.url.endsWith('/sync') ? nothingKept : [phone] }
 		);
 		render(Devices);
 		const deletes = () => calls.filter((c) => c.method === 'DELETE');
@@ -54,6 +58,53 @@ describe('Devices: Revoke', () => {
 			expect(deletes()).toEqual([{ method: 'DELETE', url: '/api/devices/4' }])
 		);
 		await expect.element(confirm).not.toBeInTheDocument();
+	});
+});
+
+describe('Devices: what a phone keeps', () => {
+	const phone = {
+		id: 4,
+		name: 'Léa’s iPhone',
+		platform: 'ios',
+		created_at: '2026-01-01T10:00:00',
+		last_used_at: null,
+		last_sync_at: '2026-10-14T03:00:00',
+		revoked: false
+	};
+	const summer = {
+		id: 1,
+		kind: 'album',
+		mode: 'include',
+		album_id: 7,
+		person_id: null,
+		filters: null,
+		label: 'Summer',
+		count: 40,
+		gone: false
+	};
+
+	it('lists what it keeps, its size and last sync, and leaves out screenshots', async () => {
+		const calls = stubFetch((call) =>
+			call.url.endsWith('/sync/rules')
+				? { json: { ...summer, id: 2, kind: 'filter', mode: 'exclude' } }
+				: {
+						json: call.url.endsWith('/sync')
+							? { device: phone, rules: [summer], count: 38, bytes: 76_000_000, sent: 12 }
+							: [phone]
+					}
+		);
+		render(Devices);
+		const keeps = page.getByRole('group', { name: 'What Léa’s iPhone keeps' });
+		await expect.element(keeps.getByText('Summer')).toBeInTheDocument();
+		await expect
+			.element(keeps.getByText(/38 photos · 76.0 MB · 12 sent · last synced/))
+			.toBeInTheDocument();
+		await keeps.getByRole('checkbox', { name: 'Leave out screenshots' }).click();
+		await vi.waitFor(() =>
+			expect(calls.filter((c) => c.method === 'POST')).toEqual([
+				{ method: 'POST', url: '/api/devices/4/sync/rules' }
+			])
+		);
 	});
 });
 
