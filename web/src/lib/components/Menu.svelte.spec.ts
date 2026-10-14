@@ -109,12 +109,13 @@ it('closes when keyboard focus leaves the menu', async () => {
 	outside.remove();
 });
 
-it('shows an icon over its word when given one', async () => {
+it('given an icon it is an icon button: the icon, its name as a tooltip, its word for the look', async () => {
 	render(Menu, { label: 'More', text: 'More', icon: 'more', items: items() });
 	const button = page.getByRole('button', { name: 'More' });
-	await expect.element(button).toHaveTextContent('More');
+	await expect.element(button).toHaveAttribute('title', 'More');
 	expect(button.element().querySelector('svg')).not.toBeNull();
-	expect(button.element().classList.contains('action')).toBe(true);
+	expect(button.element().classList.contains('icon-button')).toBe(true);
+	expect(button.element().querySelector('.word')?.textContent).toBe('More');
 });
 
 it('a pressed row says so', async () => {
