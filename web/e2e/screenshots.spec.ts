@@ -92,9 +92,9 @@ test('every screen', async ({ page }, info) => {
 	await page.locator('.tile').nth(3).click();
 	await shot(page, '04-loupe', p);
 	if (isPhone(page)) {
-		await page.getByRole('button', { name: 'Info' }).click();
+		await page.getByRole('button', { name: 'Details' }).click();
 		await shot(page, '04b-loupe-info', p);
-		await page.getByRole('button', { name: 'Info' }).click();
+		await page.getByRole('button', { name: 'Details' }).click();
 	}
 	await page.getByRole('button', { name: 'Zoom' }).click();
 	await shot(page, '04d-loupe-zoom', p);

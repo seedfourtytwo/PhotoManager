@@ -72,7 +72,7 @@ for (const [name, insets, size] of [
 		await signIn(page);
 		await page.locator('.tile').first().click();
 		const viewer = loupe(page);
-		for (const label of ['Close', 'Info', 'Zoom', 'Favourite', 'More'])
+		for (const label of ['Close', 'Details', 'Zoom', 'Favourite', 'More'])
 			await expectClear(page, viewer.getByRole('button', { name: label }), insets);
 		// The photo itself has the whole screen: it runs under the notch and the bars.
 		const stage = (await viewer.locator('.stage').boundingBox())!;

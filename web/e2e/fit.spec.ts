@@ -62,7 +62,7 @@ for (const { width, scale } of SIZES) {
 		await signIn(page);
 		await page.locator('.tile').first().click();
 		const bar = loupe(page).locator('.bar');
-		const actions = bar.locator('.acts .action');
+		const actions = bar.locator('.acts .icon-button');
 		await expect(actions).toHaveCount(5);
 		await resize(page, width, scale);
 		await expect(async () => {
@@ -110,7 +110,7 @@ test('320 px at the largest text: the photo’s sheets and their controls stay o
 	await resize(page, width, 1.25);
 	for (const [action, name] of [
 		['Download', /^Download/],
-		['Album', /album/i],
+		['Add to album', /album/i],
 		['Fix date', /date/i]
 	] as const) {
 		await loupeAction(page, action);

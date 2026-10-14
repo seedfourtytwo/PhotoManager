@@ -1,6 +1,6 @@
 /**
  * "Opening a sheet or a photo adds a history step, so Back on the phone closes it" (redesign
- * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts, its Info
+ * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts, its Details
  * sheet's in back-info.spec.ts; these are the sheets and dialogs.
  */
 import {
@@ -101,7 +101,7 @@ test('over an open photo, Back closes the dialog, then the photo', async ({ page
 	await page.locator('.tile').first().click();
 	const viewer = loupe(page);
 	await expect(viewer).toBeVisible();
-	await loupeAction(page, 'Album');
+	await loupeAction(page, 'Add to album');
 	const dialog = page.getByRole('dialog', { name: 'Add to album' });
 	await expect(dialog).toBeVisible();
 	await page.goBack();

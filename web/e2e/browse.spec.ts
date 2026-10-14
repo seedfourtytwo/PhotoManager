@@ -23,7 +23,7 @@ test('library groups photos by month with true-aspect tiles', async ({ page }) =
 	await expectAccessible(page);
 });
 
-test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page }) => {
+test('loupe: open, step with keys or swipe, the details, close', async ({ page }) => {
 	const first = page.locator('.tile').first();
 	const firstAlt = await first.locator('img').getAttribute('alt');
 	await first.click();
@@ -44,14 +44,14 @@ test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page
 		await expect(photo).not.toHaveAttribute('alt', firstAlt!);
 		await page.keyboard.press('ArrowLeft');
 		await expect(photo).toHaveAttribute('alt', firstAlt!);
-		// Info is open by default on desktop; I toggles it.
+		// Details are open by default on desktop; I toggles them.
 		await page.keyboard.press('i');
 		await expect(viewer.getByRole('complementary')).toHaveCount(0);
 		await page.keyboard.press('i');
 	}
-	const info = viewer.getByRole('complementary', { name: 'About this photo' });
+	const info = viewer.getByRole('complementary', { name: 'Details' });
 	await expect(info).toContainText(/date (from camera|guessed from file|from file name)/);
-	await expect(info.getByText('Came from')).toBeVisible();
+	await expect(info.getByText('From', { exact: true })).toBeVisible();
 	await expectAccessible(page);
 
 	if (isPhone(page)) await viewer.getByRole('button', { name: 'Close' }).click();
@@ -62,6 +62,6 @@ test('loupe: open, step with keys or swipe, info sidenote, close', async ({ page
 test('guessed dates say so in the loupe', async ({ page }) => {
 	await page.goto('/?guessed_date=true');
 	await page.locator('.tile').first().click();
-	if (isPhone(page)) await page.getByRole('button', { name: 'Info' }).click();
+	if (isPhone(page)) await page.getByRole('button', { name: 'Details' }).click();
 	await expect(page.getByText('date guessed from file')).toBeVisible();
 });
