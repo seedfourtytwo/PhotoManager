@@ -101,6 +101,8 @@ def test_trips_come_oldest_first_whatever_order_the_photos_come_in() -> None:
 def test_photos_without_a_place_go_with_the_nearest_photo_that_has_one() -> None:
     lisbon = away(5) + shots(JULY + 5 * HOUR, 5, first_id=50)
     assert [len(t) for t in trips(BASE + lisbon)] == [10]
+    between = away(9, every=2 * HOUR) + shots(JULY + HOUR, 1, first_id=50)  # Lisbon either side
+    assert [len(t) for t in trips(BASE + between)] == [10]
 
 
 def test_a_photo_without_a_place_counts_as_home_when_its_neighbour_is_unclear() -> None:

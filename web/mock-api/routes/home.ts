@@ -1,7 +1,7 @@
 /**
- * Home (issue 54): on this day, memories and what is new, as the server works them out
- * (backend domain/memories.py, domain/on_this_day.py, app/home.py). "Today" is the mock
- * clock's UTC date.
+ * Home (issue 54): on this day, memories (trips away from home, months at home) and what is
+ * new, as the server works them out (backend domain/memories.py, domain/on_this_day.py,
+ * app/home.py). "Today" is the mock clock's UTC date.
  */
 import type { HomeData, HomeFilter, Memory, OnThisDay } from '../../src/lib/api/types.ts';
 import { setFor } from '../access.ts';
@@ -11,7 +11,9 @@ import type { MockAsset, MockUser } from '../types.ts';
 
 const DAY = 86_400_000;
 const MAX_GAP = 2 * DAY;
+const MAX_TRIP = 21 * DAY;
 const MIN_PHOTOS = 10;
+const MIN_AT_HOME = 20;
 const MAX_MEMORIES = 8;
 const NEWEST_FIRST = 2;
 const AROUND = 3;
@@ -62,19 +64,53 @@ function periodWords(first: string, last: string): string {
 	return `${MONTHS[m1 - 1]} ${y1}${joiner}${MONTHS[m2 - 1]} ${y2}`;
 }
 
-/** Runs of photos at most two days apart, ten at least, oldest first. */
-function trips(byTime: MockAsset[]): MockAsset[][] {
-	const found: MockAsset[][] = [];
+/**
+ * Where each photo (in time order) was taken when away from home (the city with the most
+ * photos); null at home. A photo without a place goes with the nearest photo that has one,
+ * within two days; when two places are as near, or none is, it counts as home.
+ */
+function awayPlaces(byTime: MockAsset[]): (string | null)[] {
+	const home = dominantPlace(byTime);
+	const own = byTime.map(placeOf);
+	const nearest = (i: number): string | null => {
+		let best: { gap: number; places: Set<string> } | null = null;
+		for (const step of [-1, 1]) {
+			let j = i + step;
+			while (j >= 0 && j < byTime.length && !own[j]) j += step;
+			if (j < 0 || j >= byTime.length) continue;
+			const gap = Math.abs(time(byTime[j]) - time(byTime[i]));
+			if (gap > MAX_GAP) continue;
+			if (!best || gap < best.gap) best = { gap, places: new Set([own[j]!]) };
+			else if (gap === best.gap) best.places.add(own[j]!);
+		}
+		return best && best.places.size === 1 ? [...best.places][0] : null;
+	};
+	return byTime.map((_, i) => {
+		const place = own[i] ?? nearest(i);
+		return place === home ? null : place;
+	});
+}
+
+/** Runs away from home in one city, at most two days apart and 21 days long, ten at least. */
+function trips(byTime: MockAsset[], places: (string | null)[]): [string, MockAsset[]][] {
+	const found: [string, MockAsset[]][] = [];
 	let run: MockAsset[] = [];
-	for (const a of byTime) {
-		if (run.length && time(a) - time(run.at(-1)!) > MAX_GAP) {
-			found.push(run);
+	let runPlace = '';
+	byTime.forEach((a, i) => {
+		const place = places[i];
+		const gap = run.length ? time(a) - time(run.at(-1)!) : 0;
+		const length = run.length ? time(a) - time(run[0]) : 0;
+		if (run.length && (place !== runPlace || gap > MAX_GAP || length > MAX_TRIP)) {
+			found.push([runPlace, run]);
 			run = [];
 		}
-		run.push(a);
-	}
-	found.push(run);
-	return found.filter((t) => t.length >= MIN_PHOTOS);
+		if (place !== null) {
+			runPlace = place;
+			run.push(a);
+		}
+	});
+	found.push([runPlace, run]);
+	return found.filter(([, t]) => t.length >= MIN_PHOTOS);
 }
 
 /** `size` of `items`, a different page each day; when all fit, their order turns instead. */
@@ -99,11 +135,10 @@ export function homeRoutes(h: Helpers): Route[] {
 		photos.find((a) => setFor(h.state().favourites, user.id).has(a.id)) ?? photos[0];
 
 	function memories(user: MockUser, byTime: MockAsset[], today: number): Memory[] {
-		const all = trips(byTime)
-			.reverse()
-			.map((trip) => {
+		const places = awayPlaces(byTime);
+		const all = [
+			...trips(byTime, places).map(([place, trip]): Memory => {
 				const [from, to] = [dayOf(trip[0]), dayOf(trip.at(-1)!)];
-				const place = dominantPlace(trip);
 				const period = periodWords(from, to);
 				return {
 					key: `${from}_${to}`,
@@ -114,9 +149,39 @@ export function homeRoutes(h: Helpers): Route[] {
 					cover: h.toOut(user, cover(user, trip)),
 					filter: filterOf(from, to)
 				};
-			});
+			}),
+			...monthsAtHome(user, byTime, places)
+		].sort((a, b) => b.to.localeCompare(a.to) || b.from.localeCompare(a.from));
 		const rest = all.slice(NEWEST_FIRST);
 		return [...all.slice(0, NEWEST_FIRST), ...turn(rest, today, MAX_MEMORIES - NEWEST_FIRST)];
+	}
+
+	/** Each calendar month with twenty photos at home: all of that month, a cover from home. */
+	function monthsAtHome(user: MockUser, byTime: MockAsset[], places: (string | null)[]): Memory[] {
+		const months = new Map<string, { all: number; home: MockAsset[] }>();
+		byTime.forEach((a, i) => {
+			const month = a.taken_at.slice(0, 7);
+			const entry = months.get(month) ?? { all: 0, home: [] };
+			entry.all++;
+			if (places[i] === null) entry.home.push(a);
+			months.set(month, entry);
+		});
+		return [...months]
+			.filter(([, m]) => m.home.length >= MIN_AT_HOME)
+			.map(([month, m]) => {
+				const [y, mo] = month.split('-').map(Number);
+				const from = `${month}-01`;
+				const to = isoDay(Date.UTC(y, mo, 0));
+				return {
+					key: `${from}_${to}`,
+					title: periodWords(from, from),
+					from,
+					to,
+					count: m.all,
+					cover: h.toOut(user, cover(user, m.home)),
+					filter: filterOf(from, to)
+				};
+			});
 	}
 
 	function onThisDay(user: MockUser, byTime: MockAsset[], today: number): OnThisDay | null {

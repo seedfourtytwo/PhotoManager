@@ -323,9 +323,11 @@ KNN within candidates → results ranked, paginated with a cursor.
 date (no `file_mtime` guesses: a copied folder would make a "trip" of its copy day) as
 (id, taken_at, place name, favourite), in time order. Pure rules turn that into the blocks:
 `domain/on_this_day.py` (today's date in the earlier year with the most photos, else three
-days either side) and `domain/memories.py` (trips split where photos are more than two
-days apart, at least ten, titled from the main place and the months; the two newest, then a
-page of the others that turns each day). `arrivals` gives the photos imported in the last
+days either side) and `domain/memories.py` (home is the city with the most photos; trips
+away from it split on a gap of more than two days or a change of city, 21 days at most, ten
+photos at least; a calendar month with twenty photos at home is a memory too, so a family
+that takes photos every day does not get one endless trip; the two newest, then a page of
+the others that turns each day). `arrivals` gives the photos imported in the last
 seven days. One `views_by_ids` fetches the covers and newest arrivals as `AssetOut`, and
 the people on "on this day" come from `People.list_all` over its photos. "Today" is the
 server's local date of the clock passed in, so tests fix it. Each block carries the

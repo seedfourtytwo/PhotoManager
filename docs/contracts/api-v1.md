@@ -307,14 +307,21 @@ the day it was taken; each `filter` carries `guessed_date: false` for that reaso
   that year; `cover` is your first favourite among them, else the first by time; `place` the
   place most of them have (city, else region, else country); `people` the named, listed
   people on them, most photos first. `null` when no earlier year has any.
-- **memories**: trips: photos in time order split wherever more than two days pass between
-  two of them (exactly two days stays one trip); a trip needs at least 10 photos. `title` is
-  the main place (city; a tie goes to the place seen first) and the months in English:
-  `"Lisbon, July 2024"`, `"Lisbon, July and August 2024"`, `"July to September 2024"`,
-  `"December 2023 and January 2024"`, `"July 2024"` without a place. `from`/`to`: its first
-  and last day; `key` = `"<from>_<to>"`, stable while the trip is. The two newest come
-  first; the others take turns, six a day, so the list changes each day and stays the same
-  all day. `cover` as for on_this_day.
+- **memories** come in two kinds. *Home* is the city with the most of your photos (a tie: the
+  one seen first). A photo without a place goes with the nearest photo (in time) that has one,
+  within two days; when two places are as near, or none is, it counts as home.
+  - *Trips*: photos away from home, split where more than two days pass between two of them
+    (exactly two days stays one trip) or the city changes, 21 days long at most, at least 10
+    photos. `title` is the city and the months in English: `"Lisbon, July 2024"`,
+    `"Lisbon, July and August 2024"`, `"December 2023 and January 2024"`. `from`/`to`: its
+    first and last day.
+  - *Months at home*: a calendar month with at least 20 photos at home, titled
+    `"October 2024"`; `from`/`to` are the month's first and last day and `count` is every
+    photo of that month (what `filter` lists, a trip included), the `cover` one taken at home.
+
+  `key` = `"<from>_<to>"`, stable while the memory is. Newest `to` first: the two newest
+  come first; the others take turns, six a day, so the list changes each day and stays the
+  same all day. `cover` as for on_this_day.
 - **new**: photos imported (not taken) in the last `days` days, newest arrival first;
   `items` the newest 12; `sources` the folders they came from (each photo counts once, for
   the folder that brought it, when you may see that folder), most first.
