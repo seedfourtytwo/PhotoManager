@@ -1,4 +1,4 @@
-"""What a photo is called where people see it and when it is downloaded (FEATURES 4b.7)."""
+"""What a photo is called where people see it and when it is downloaded (FEATURES 4b.10)."""
 
 from datetime import datetime
 

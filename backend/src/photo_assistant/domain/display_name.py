@@ -1,4 +1,4 @@
-"""What a photo is called where people see it, and the name a download carries (FEATURES 4b.7).
+"""What a photo is called where people see it, and the name a download carries (FEATURES 4b.10).
 
 Library files are named by their content hash and source files are never renamed, so a name
 is made, never stored: the minute the photo was taken (``2015-06-12 14.32``), numbered

@@ -1,4 +1,4 @@
-"""A photo's display name (FEATURES 4b.7): in its details, and as the name of what downloads."""
+"""A photo's display name (FEATURES 4b.10): in its details, and as the name of what downloads."""
 
 import io
 import zipfile

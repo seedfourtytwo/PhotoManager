@@ -201,7 +201,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/facets` | same filters | `{years:[{year,count}], sources:[{id,label,count}], cameras:[{name,count}], places:[{name,count}], guessed_dates:int, total:int}` |
 | GET | `/api/calendar` | same filters | `[{day:"YYYY-MM-DD", count}]` |
 | GET | `/api/map` | same filters | `[{id, lat, lon}]` |
-| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{byte_size, mime_type, camera_make, camera_model, latitude, longitude, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}` |
+| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{name, byte_size, mime_type, camera_make, camera_model, latitude, longitude, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}` |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
 | PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
@@ -229,7 +229,7 @@ DownloadRequest = {
   ids?: [id], album_id?: id, filters?: {…same as /api/assets query…},   # exactly one scope
   format: "original"|"jpeg"|"png"|"webp", quality: 1..100 (default 90),
   max_edge: int|null, strip_location: bool, strip_all_metadata: bool,
-  naming: "original"|"date", folders: "flat"|"year"|"month"
+  naming: "name"|"original"|"date" (default "name"), folders: "flat"|"year"|"month"
 }
 ```
 Needs `download` on every included asset (others are silently left out and counted in the
@@ -238,6 +238,8 @@ the ZIP is being produced (missing library file, render error) is left out and t
 goes on; the archive then ends with a `manifest.txt` entry listing each left-out file and why
 (`X-Skipped` is sent before streaming starts, so it only counts access) (v1.2). `original` + no resize streams the untouched file; any other option
 renders via libvips with the edit recipe applied.
+
+**Photo names (v1.6).** `AssetDetail.name` is the photo's display name (FEATURES 4b.10, `domain/display_name.py`): computed per viewer, never stored. `/api/assets/{id}/original`, `/api/assets/{id}/download` and ZIP entries with `naming: "name"` are named `<name><extension>`, the extension the original's own (or the output format's).
 
 **ZIP name (v1.3).** `Content-Disposition: attachment; filename="<ASCII>"; filename*=UTF-8''<name>`
 (RFC 6266/5987). `<name>` is: `album_id` → `<album title>.zip`; `filters` →
