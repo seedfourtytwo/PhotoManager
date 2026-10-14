@@ -170,6 +170,20 @@ test('shell: nothing on the page hides under the bar', async ({ page }) => {
 	await expect.poll(async () => (await tops()).includes(Math.round(bar.height))).toBe(true);
 });
 
+test('phone: the compact title shows once the large title has scrolled away, not before', async ({
+	page
+}) => {
+	test.skip(!isPhone(page), 'a laptop has its top bar instead');
+	await signIn(page);
+	await expect(page.locator('.tile img').first()).toBeVisible();
+	const compact = page.locator('.compact');
+	await expect(compact).toHaveCSS('opacity', '0');
+	await page.evaluate(() => window.scrollBy(0, 400));
+	await expect(compact).toHaveCSS('opacity', '1');
+	await page.evaluate(() => window.scrollTo(0, 0));
+	await expect(compact).toHaveCSS('opacity', '0');
+});
+
 test('shell: touch targets in the dock are at least 44 px both ways', async ({ page }) => {
 	test.skip(!isPhone(page), 'the 44 px promise is for touch');
 	await signIn(page);
