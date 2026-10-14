@@ -1,9 +1,14 @@
 import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'svelte';
 import { render } from 'vitest-browser-svelte';
 import { notice, session, viewport } from '$lib/app.svelte';
 import { MAX_SHARE_PHOTOS } from '$lib/share';
+import type { AssetOut, Id } from '$lib/api';
 import { makeAsset } from '$lib/testing/fixtures';
+// The pill fits its actions to the room it has: its sizes are tokens, and a word under an
+// icon is hidden by the shared rules, so both are loaded.
+import '$lib/tokens.css';
 import SelectionActions from './SelectionActions.svelte';
 
 type Shared = { files?: File[] };
@@ -49,14 +54,15 @@ const photoFile = (id: number) => {
 	});
 };
 
-function select(count: number) {
+function select(count: number, more: Partial<ComponentProps<typeof SelectionActions>> = {}) {
 	const selected = Array.from({ length: count }, (_, i) => makeAsset(i + 1));
 	render(SelectionActions, {
 		selected,
 		onclear: vi.fn(),
 		onpatch: vi.fn(),
 		onremove: vi.fn(),
-		onreload: vi.fn()
+		onreload: vi.fn(),
+		...more
 	});
 }
 
@@ -117,15 +123,21 @@ describe('the selection pill on a device with a share sheet', () => {
 		expect(past).not.toContain('Share');
 	});
 
-	it('on a phone Share takes Download’s place on the pill, and Download is under More', async () => {
-		shareSheet();
-		server();
-		viewport.width = 390;
-		select(MAX_SHARE_PHOTOS);
-		await vi.waitFor(() => expect(onPill()).toEqual(['Add to album', 'Share', 'Fix date', 'More']));
-		await button('More').click();
-		await expect.element(button('Download')).toBeInTheDocument();
-	});
+	for (const [device, width] of [
+		['a phone', 390],
+		['a laptop', 1440]
+	] as const)
+		it(`on ${device} Share takes Download’s place on the pill, and Download is under More`, async () => {
+			shareSheet();
+			server();
+			viewport.width = width;
+			select(MAX_SHARE_PHOTOS);
+			await vi.waitFor(() =>
+				expect(onPill()).toEqual(['Add to album', 'Share', 'Move to trash', 'More'])
+			);
+			await button('More').click();
+			await expect.element(button('Download')).toBeInTheDocument();
+		});
 
 	it('a slow fetch says how many photos are coming; the pill is busy until the sheet is done', async () => {
 		const share = shareSheet();
@@ -193,12 +205,76 @@ describe('the selection pill on a device without a share sheet', () => {
 		expect(all).not.toContain('Share');
 	});
 
-	it('on a phone: Add to album, Download, Fix date and More, as before', async () => {
+	it('on a phone: Add to album, Download, Move to trash, then More with Fix date', async () => {
 		server();
 		viewport.width = 390;
 		select(2);
 		await vi.waitFor(() =>
-			expect(onPill()).toEqual(['Add to album', 'Download', 'Fix date', 'More'])
+			expect(onPill()).toEqual(['Add to album', 'Download', 'Move to trash', 'More'])
 		);
+		await button('More').click();
+		await expect.element(button('Fix date')).toBeInTheDocument();
+	});
+});
+
+describe('choosing photos with none chosen yet (Select)', () => {
+	it('the pill is there; its actions wait for a photo, Select all does not', async () => {
+		server();
+		const run = vi.fn();
+		select(0, { selecting: true, selectAll: { label: 'Select all', run } });
+		await expect.element(page.getByRole('status')).toHaveTextContent('0 selected');
+		await expect.element(button('Add to album')).toBeDisabled();
+		await expect.element(button('Move to trash')).toBeDisabled();
+		await button('More').click();
+		const under = [...document.querySelectorAll('#selection-more button')];
+		expect(under[0].textContent).toBe('Select all');
+		await button('Select all').click();
+		expect(run).toHaveBeenCalledOnce();
+	});
+
+	it('without Select, no photo chosen means no pill', async () => {
+		server();
+		select(0);
+		await expect.element(page.getByRole('toolbar')).not.toBeInTheDocument();
+	});
+});
+
+describe('Favourite from the pill', () => {
+	it('a refused Favourite puts every photo back as it was, favourites included', async () => {
+		session.user = { id: 1, username: 'c', display_name: 'C', role: 'admin', disabled: false };
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(JSON.stringify({ detail: 'The library is read-only right now.' }), {
+					status: 503,
+					headers: { 'content-type': 'application/json' }
+				})
+		);
+		const selected = [
+			makeAsset(1, undefined, 4, 3, { favourite: true }),
+			makeAsset(2),
+			makeAsset(3)
+		];
+		const favourite = new Map(selected.map((a) => [a.id, a.favourite]));
+		const onpatch = vi.fn((ids: Set<Id>, patch: Partial<AssetOut>) => {
+			for (const id of ids) if (patch.favourite !== undefined) favourite.set(id, patch.favourite);
+		});
+		render(SelectionActions, {
+			selected,
+			onclear: () => {},
+			onpatch,
+			onremove: () => {},
+			onreload: () => {}
+		});
+		await page.getByRole('button', { name: 'More' }).click();
+		await page.getByRole('button', { name: 'Favourite', exact: true }).click();
+		await vi.waitFor(() => expect(onpatch.mock.calls.length).toBeGreaterThan(1));
+		expect([...favourite]).toEqual([
+			[1, true],
+			[2, false],
+			[3, false]
+		]);
+		vi.unstubAllGlobals();
+		session.user = null;
 	});
 });

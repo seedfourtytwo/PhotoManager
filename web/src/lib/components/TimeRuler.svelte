@@ -18,8 +18,8 @@
 
 	/** The length one written year needs along the ruler, in px. */
 	const LABEL_ROOM = 40;
-	/** Month ticks are drawn when each month has at least this many px. */
-	const TICK_ROOM = 4;
+	/** Month ticks (2 px each) are drawn when each month has at least this many px. */
+	const TICK_ROOM = 6;
 	/**
 	 * A press that moved less than this is a tap. Smaller than the photo's slop (lib/gesture.ts,
 	 * 10 px), and not shared with it: there a moved finger must go on for 50 px to mean anything,
@@ -38,6 +38,13 @@
 	const length = $derived(orientation === 'vertical' ? height : width);
 	const monthsLong = $derived(span(months));
 	const marks = $derived(yearMarks(months, Math.floor(length / LABEL_ROOM)));
+	const ticked = $derived(monthsLong > 0 && length / monthsLong >= TICK_ROOM);
+	/** One short stroke per calendar month, on a grid one unit per month (stretched to the ruler). */
+	const ticks = $derived(
+		Array.from({ length: monthsLong + 1 }, (_, i) =>
+			orientation === 'vertical' ? `M0 ${i}H1` : `M${i} 0V1`
+		).join('')
+	);
 
 	// While dragging only the needle follows the pointer; the jump (which may have to load
 	// many pages) happens once, where the drag ends. The month that was asked for keeps the
@@ -145,9 +152,7 @@
 {#if months.length > 1}
 	<div
 		class={['ruler', orientation, { glass: orientation === 'horizontal' }]}
-		class:ticks={monthsLong > 0 && length / monthsLong >= TICK_ROOM}
 		class:idle={fades && rest.idle}
-		style:--months={monthsLong}
 		bind:this={track}
 		bind:clientWidth={width}
 		bind:clientHeight={height}
@@ -166,6 +171,16 @@
 		onpointercancel={endDrag}
 		{onkeydown}
 	>
+		{#if ticked}
+			<!-- Drawn, not painted with a gradient: the strokes keep their 2 px whatever the stretch. -->
+			<svg
+				class="ticks"
+				viewBox={orientation === 'vertical' ? `0 0 1 ${monthsLong}` : `0 0 ${monthsLong} 1`}
+				preserveAspectRatio="none"
+				aria-hidden="true"
+				focusable="false"><path d={ticks} vector-effect="non-scaling-stroke" /></svg
+			>
+		{/if}
 		{#each marks as mark (mark.year)}
 			<!-- Upright, a year is written at its December; lying, at its January (where it starts
 			     when read from the left), and only if it has the room before the ruler ends. -->
@@ -186,27 +201,31 @@
 {/if}
 
 <style>
-	/* The time ruler: even ticks for the months, the years written in the data face, and one
-	   accent needle on the month in view. `--at` runs from the newest end (0) to the oldest (1). */
+	/* The time ruler: even ticks for the months, the years written in the interface face, and
+	   one filled accent pill naming the month in view. `--at` runs from the newest end (0) to
+	   the oldest (1). */
 	.ruler {
 		position: relative;
 		touch-action: none;
 		user-select: none;
 		font-size: var(--fs-12);
+		font-weight: 600;
 		color: var(--ink-2);
 		pointer-events: auto;
-		--month: calc(100% / var(--months));
-		--tick: repeating-linear-gradient(
-			var(--towards),
-			var(--ink-3) 0 1px,
-			transparent 1px var(--month)
-		);
 	}
-	.ticks::before,
+	.ticks {
+		position: absolute;
+		overflow: visible;
+		pointer-events: none;
+		fill: none;
+		stroke: var(--ink-3);
+		stroke-width: var(--fine);
+	}
 	.year::after {
 		content: '';
 		position: absolute;
 		pointer-events: none;
+		background: var(--ink-2);
 	}
 	.year {
 		position: absolute;
@@ -215,20 +234,18 @@
 	.year:not(.written) {
 		font-size: 0; /* no room to write it: the mark stays, the figures go */
 	}
-	.year::after {
-		background: var(--ink-2);
-	}
 	.needle {
 		position: absolute;
-		background: var(--accent);
 		pointer-events: none;
 	}
+	/* The needle: a filled accent pill with the month in view. */
 	.tag {
 		position: absolute;
-		padding: var(--fine) var(--s-1);
-		border-radius: calc(var(--r-1) / 2);
+		padding: var(--s-1) var(--s-2);
+		border-radius: var(--r-pill);
 		background: var(--accent);
 		color: var(--on-accent);
+		font-weight: 700;
 		line-height: 1;
 		white-space: nowrap;
 	}
@@ -238,14 +255,12 @@
 		height: calc(100% - 2 * var(--s-6));
 		margin: var(--s-6) 0;
 		cursor: ns-resize;
-		--towards: to bottom;
 	}
-	.vertical.ticks::before {
+	.vertical .ticks {
 		top: 0;
-		bottom: 0;
 		right: 0;
 		width: var(--s-1);
-		background: var(--tick);
+		height: 100%;
 	}
 	.vertical .year {
 		top: calc(var(--at) * 100%);
@@ -257,23 +272,24 @@
 		top: 50%;
 		right: 0;
 		width: var(--s-3);
-		height: 1px;
+		height: var(--fine);
+		margin-top: calc(var(--fine) / -2);
 	}
 	.vertical .needle {
 		top: calc(var(--at) * 100%);
 		left: 0;
 		right: 0;
-		height: var(--fine);
-		margin-top: calc(var(--fine) / -2);
 	}
-	/* Month over year: on one line the tag would reach out of the column, over the page. */
+	/* Month over year: on one line the pill would reach out of the column, over the page. */
 	.vertical .tag {
-		top: 50%;
-		right: var(--s-3);
+		top: 0;
+		right: var(--s-2);
 		transform: translateY(-50%);
 		width: min-content;
+		padding: var(--s-1) var(--s-2);
+		border-radius: var(--r-1);
 		white-space: normal;
-		text-align: right;
+		text-align: center;
 		line-height: var(--lh-tight);
 	}
 
@@ -286,14 +302,12 @@
 		/* A swipe up or down that starts on the ruler scrolls the page; sideways is the ruler's. */
 		touch-action: pan-y;
 		transition: opacity var(--motion) var(--ease);
-		--towards: to left;
 	}
-	.horizontal.ticks::before {
+	.horizontal .ticks {
 		left: 0;
-		right: 0;
 		bottom: 0;
+		width: 100%;
 		height: var(--s-1);
-		background: var(--tick);
 	}
 	.horizontal .year {
 		top: 0;
@@ -304,25 +318,23 @@
 	.horizontal .year::after {
 		left: 0;
 		bottom: 0;
-		width: 1px;
+		width: var(--fine);
 		height: var(--s-3);
 	}
 	.horizontal .needle {
 		top: 0;
 		bottom: 0;
 		left: calc((1 - var(--at)) * 100%);
-		width: var(--fine);
-		margin-left: calc(var(--fine) / -2);
 	}
-	/* Under the row the years are written in, so it covers none of them. */
+	/* Under the row the years are written in, so it covers none of them; its edge on the month. */
 	.horizontal .tag {
-		bottom: var(--s-2);
-		right: var(--s-1);
+		bottom: var(--s-1);
+		right: 0;
 	}
-	/* Near the old end the tag would leave the ruler: it changes sides. */
+	/* Near the old end the pill would leave the ruler: it changes sides. */
 	.horizontal .far .tag {
 		right: auto;
-		left: var(--s-1);
+		left: 0;
 	}
 	.idle:not(:focus-visible) {
 		opacity: 0;

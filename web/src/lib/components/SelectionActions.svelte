@@ -8,8 +8,7 @@
 		notice,
 		photoShare,
 		session,
-		shareAgain,
-		viewport
+		shareAgain
 	} from '$lib/app.svelte';
 	import { photos } from '$lib/format';
 	import { canShareSome } from '$lib/share';
@@ -27,9 +26,23 @@
 		onremove: (ids: Set<Id>) => void;
 		/** Something changed that needs a reload (dates, undo). */
 		onreload: () => void;
+		/** Under More, after the pill's own. */
 		extra?: Action[];
+		/** Choosing photos has begun with none chosen yet (Select): the pill is there already. */
+		selecting?: boolean;
+		/** First under More: select every photo the view has. */
+		selectAll?: { label: string; run: () => void };
 	};
-	let { selected, onclear, onpatch, onremove, onreload, extra = [] }: Props = $props();
+	let {
+		selected,
+		onclear,
+		onpatch,
+		onremove,
+		onreload,
+		extra = [],
+		selecting = false,
+		selectAll
+	}: Props = $props();
 
 	let dialog = $state<'album' | 'download' | 'date' | null>(null);
 	/** One bulk action at a time: a double click must not trash or toggle twice. */
@@ -147,9 +160,8 @@
 	});
 	const shareable = $derived(canShareSome(selected.length));
 
-	// On the pill: the four the spec names (§4.5), and Share where the device has a sheet (on a
-	// phone in Download's place, as on the photo view's bar). Everything else, and what a page
-	// adds, is under More.
+	// On the pill (spec §5): Add to album, Share where the device has a sheet or else Download,
+	// Move to trash. Everything else, and what a page adds, is under More.
 	const actions = $derived<Action[]>([
 		{
 			label: 'Add to album',
@@ -158,14 +170,10 @@
 			hidden: !session.canEdit
 		},
 		{ label: 'Share', icon: 'share', run: share, hidden: !shareable },
-		{
-			label: 'Download',
-			icon: 'download',
-			run: () => (dialog = 'download'),
-			more: shareable && viewport.phone
-		},
-		{ label: 'Fix date', icon: 'date', run: () => (dialog = 'date'), hidden: !session.canEdit },
+		{ label: 'Download', icon: 'download', run: () => (dialog = 'download'), more: shareable },
 		{ label: 'Move to trash', icon: 'trash', run: trash, hidden: !session.canEdit },
+		...(selectAll ? [{ ...selectAll, more: true, anytime: true }] : []),
+		{ label: 'Fix date', run: () => (dialog = 'date'), hidden: !session.canEdit, more: true },
 		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite, more: true },
 		{ label: allHidden ? 'Unhide' : 'Hide', run: setHidden, more: true },
 		{
@@ -178,7 +186,7 @@
 	]);
 </script>
 
-{#if selected.length}
+{#if selected.length || selecting}
 	<SelectionBar count={selected.length} {actions} {busy} {onclear} />
 {/if}
 

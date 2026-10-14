@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { CalendarDay } from '$lib/api';
-	import { api, ui, viewport } from '$lib/app.svelte';
+	import { api, library } from '$lib/app.svelte';
 	import { errorMessage } from '$lib/format';
-	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { filtersFromParams, filtersToQuery } from '$lib/filters';
 	import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
-	import ViewHeader from '$lib/components/ViewHeader.svelte';
+	import LibraryHead from '$lib/components/LibraryHead.svelte';
 
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	const query = $derived(filtersToQuery(filters));
@@ -16,6 +16,7 @@
 
 	$effect(() => {
 		const f = filters;
+		void library.version;
 		let stale = false;
 		api
 			.calendar(f)
@@ -41,12 +42,9 @@
 
 <svelte:head><title>Calendar · Photos</title></svelte:head>
 
+<LibraryHead view="calendar" {query} {total} />
+
 <div class="page">
-	<ViewHeader view="calendar" {query} {total} described={describeFilters(filters)}>
-		{#if !viewport.desktop}
-			<button type="button" onclick={() => (ui.sheet = true)}>Filter</button>
-		{/if}
-	</ViewHeader>
 	{#if error}
 		<p class="quiet">{error}</p>
 	{:else if days && days.length === 0}
@@ -67,13 +65,5 @@
 	}
 	.page > p {
 		padding: var(--s-4) 0;
-	}
-	@media (max-width: 639px) {
-		.page {
-			padding: 0 var(--gutter) var(--s-6);
-		}
-		.page > :global(:not(header)) {
-			padding-inline: var(--s-2);
-		}
 	}
 </style>

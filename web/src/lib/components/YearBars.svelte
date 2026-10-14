@@ -13,7 +13,8 @@
 	const maxYear = $derived(Math.max(1, ...years.map((y) => y.count)));
 </script>
 
-<ul class="bars">
+<!-- Years as a small bar chart: zero-based, labelled directly, one ink; the chosen year in full ink. -->
+<ul class="bars" aria-label="Years">
 	{#each years as y (y.year)}
 		<li>
 			<button
@@ -22,56 +23,64 @@
 				onclick={() => onpick(selected === y.year ? undefined : y.year)}
 			>
 				<span class="year">{y.year}</span>
-				<span class="bar" style:width={`${(y.count / maxYear) * 100}%`}></span>
-				<span class="n">{formatCount(y.count)}</span>
+				<span class="track" aria-hidden="true"
+					><span class="bar" style:transform={`scaleX(${y.count / maxYear})`}></span></span
+				>
+				<span class="n data">{formatCount(y.count)}</span>
 			</button>
 		</li>
 	{/each}
 </ul>
 
 <style>
-	.n {
-		margin-left: auto;
-		color: var(--ink-2);
-		font-size: var(--fs-12);
-	}
 	.bars {
+		display: grid;
+		gap: var(--fine);
 		list-style: none;
 		margin: 0;
 		padding: 0;
 	}
-	/* Years as a small bar chart: zero-based, direct labels, one ink. */
 	.bars button {
 		display: grid;
-		grid-template-columns: 2.5rem 1fr 2.25rem;
+		grid-template-columns: 3.25rem 1fr 3rem;
 		align-items: center;
+		gap: var(--s-3);
 		width: calc(100% + 2 * var(--s-2));
+		min-height: 2.25rem;
 		margin: 0 calc(-1 * var(--s-2));
-		gap: var(--s-2);
 		padding: 0 var(--s-2);
-		min-height: 1.5rem;
-		color: var(--ink-2);
+		border-radius: var(--r-1);
+		text-align: left;
 	}
-	@media (hover: hover) {
-		.bars button:hover {
-			color: var(--ink);
+	@media (pointer: coarse) {
+		.bars button {
+			min-height: var(--target);
 		}
 	}
-	.bars button[aria-pressed='true'] {
-		color: var(--ink);
+	.year {
 		font-weight: 600;
+		color: var(--ink-2);
 	}
-	.bars .bar {
-		height: 3px;
-		background: currentColor;
-		opacity: 0.55;
-		justify-self: start;
+	.track {
+		height: var(--s-2);
+	}
+	.bar {
+		display: block;
+		height: 100%;
+		border-radius: var(--r-pill);
+		background: var(--ink-3);
+		transform-origin: left;
+	}
+	.n {
+		text-align: right;
+		font-size: var(--fs-14);
+		color: var(--ink-2);
+	}
+	.bars button[aria-pressed='true'] :is(.year, .n) {
+		color: var(--ink);
+		font-weight: 750;
 	}
 	.bars button[aria-pressed='true'] .bar {
-		opacity: 1;
-	}
-	.bars .n {
-		text-align: right;
-		font-weight: 400;
+		background: var(--ink);
 	}
 </style>
