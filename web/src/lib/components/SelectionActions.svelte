@@ -1,7 +1,17 @@
 <script lang="ts">
 	import type { AssetOut, Id } from '$lib/api';
-	import { api, library, notice, session } from '$lib/app.svelte';
+	import {
+		api,
+		formFromDetails,
+		gettingPhotos,
+		library,
+		notice,
+		photoShare,
+		session,
+		shareAgain
+	} from '$lib/app.svelte';
 	import { photos } from '$lib/format';
+	import { canShareSome } from '$lib/share';
 	import AddToAlbumDialog from './AddToAlbumDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
 	import FixDateDialog from './FixDateDialog.svelte';
@@ -16,9 +26,23 @@
 		onremove: (ids: Set<Id>) => void;
 		/** Something changed that needs a reload (dates, undo). */
 		onreload: () => void;
+		/** Under More, after the pill's own. */
 		extra?: Action[];
+		/** Choosing photos has begun with none chosen yet (Select): the pill is there already. */
+		selecting?: boolean;
+		/** First under More: select every photo the view has. */
+		selectAll?: { label: string; run: () => void };
 	};
-	let { selected, onclear, onpatch, onremove, onreload, extra = [] }: Props = $props();
+	let {
+		selected,
+		onclear,
+		onpatch,
+		onremove,
+		onreload,
+		extra = [],
+		selecting = false,
+		selectAll
+	}: Props = $props();
 
 	let dialog = $state<'album' | 'download' | 'date' | null>(null);
 	/** One bulk action at a time: a double click must not trash or toggle twice. */
@@ -27,6 +51,7 @@
 	const allFavourite = $derived(selected.length > 0 && selected.every((a) => a.favourite));
 	const allHidden = $derived(selected.length > 0 && selected.every((a) => a.hidden));
 	const allPrivate = $derived(selected.length > 0 && selected.every((a) => a.private));
+	const allPinned = $derived(selected.length > 0 && selected.every((a) => a.pinned));
 
 	async function once(run: () => Promise<void>) {
 		if (busy) return;
@@ -54,6 +79,18 @@
 				throw e;
 			}
 			notice.show(favourite ? 'Marked as favourites.' : 'Removed from favourites.');
+		});
+
+	/** On the account's Home (issue 54); nothing in the grid shows it, so it is not optimistic. */
+	const setPinned = () =>
+		once(async () => {
+			const pinned = !allPinned;
+			const these = [...ids];
+			await api.setStates({ ids: these, pinned });
+			onpatch(new Set(these), { pinned });
+			notice.show(
+				`${pinned ? 'Pinned' : 'Unpinned'} ${photos(these.length)} ${pinned ? 'to' : 'from'} Home.`
+			);
 		});
 
 	const setHidden = () =>
@@ -118,8 +155,26 @@
 			});
 		});
 
-	// On the pill: the four the spec names (§4.5). Everything else, and what a page adds, is
-	// under More.
+	/** The device's share sheet, for a few photos: one call with every file (`$lib/share`). */
+	const share = () =>
+		once(async () => {
+			const these = [...ids];
+			const saying = gettingPhotos(these.length);
+			const outcome = await photoShare.share(these, formFromDetails, {
+				onslow: () => notice.show(saying, { ms: 60_000 })
+			});
+			if (outcome === 'ready') notice.show(shareAgain(these.length));
+			else if (notice.text === saying) notice.show('');
+		});
+	// Files kept for a second tap belong to the selection they were fetched for.
+	$effect(() => {
+		void ids.join();
+		return () => photoShare.forget();
+	});
+	const shareable = $derived(canShareSome(selected.length));
+
+	// On the pill (spec §5): Add to album, Share where the device has a sheet or else Download,
+	// Move to trash. Everything else, and what a page adds, is under More.
 	const actions = $derived<Action[]>([
 		{
 			label: 'Add to album',
@@ -127,10 +182,13 @@
 			run: () => (dialog = 'album'),
 			hidden: !session.canEdit
 		},
-		{ label: 'Download', icon: 'download', run: () => (dialog = 'download') },
-		{ label: 'Fix date', icon: 'date', run: () => (dialog = 'date'), hidden: !session.canEdit },
+		{ label: 'Share', icon: 'share', run: share, hidden: !shareable },
+		{ label: 'Download', icon: 'download', run: () => (dialog = 'download'), more: shareable },
 		{ label: 'Move to trash', icon: 'trash', run: trash, hidden: !session.canEdit },
+		...(selectAll ? [{ ...selectAll, more: true, anytime: true }] : []),
+		{ label: 'Fix date', run: () => (dialog = 'date'), hidden: !session.canEdit, more: true },
 		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite, more: true },
+		{ label: allPinned ? 'Unpin from Home' : 'Pin to Home', run: setPinned, more: true },
 		{ label: allHidden ? 'Unhide' : 'Hide', run: setHidden, more: true },
 		{
 			label: allPrivate ? 'Not private' : 'Make private',
@@ -142,7 +200,7 @@
 	]);
 </script>
 
-{#if selected.length}
+{#if selected.length || selecting}
 	<SelectionBar count={selected.length} {actions} {busy} {onclear} />
 {/if}
 

@@ -6,6 +6,7 @@
 	import { api, notice, session } from '$lib/app.svelte';
 	import type { UploadResult } from '$lib/api';
 	import { summarizeUpload, uploadFiles } from '$lib/upload';
+	import IconButton from './ui/IconButton.svelte';
 
 	type Props = {
 		onuploaded?: () => void;
@@ -50,7 +51,7 @@
 		const taken = result.files.filter((f) => f.outcome !== 'rejected');
 		const named = refused.slice(0, NAMED).map((f) => `${f.name}: ${f.reason ?? 'refused'}`);
 		const tail = `${refused.length} refused (${named.join(', ')}, and ${refused.length - NAMED} more)`;
-		return taken.length ? `${summarizeUpload({ ...result, files: taken })} · ${tail}` : tail;
+		return taken.length ? `${summarizeUpload({ ...result, files: taken })}, ${tail}` : tail;
 	}
 
 	async function send(files: File[]) {
@@ -111,12 +112,12 @@
 		aria-label="Photos to upload"
 		onchange={() => send([...(input?.files ?? [])])}
 	/>
-	<button
-		type="button"
+	<!-- Its name says how far an upload has got; the toast says what is happening. -->
+	<IconButton
+		icon="upload"
+		label={progress === null ? 'Upload' : `Uploading ${Math.round(progress * 100)} %`}
 		disabled={progress !== null}
 		aria-busy={progress !== null}
 		onclick={() => input?.click()}
-	>
-		{progress === null ? 'Upload' : `Uploading ${Math.round(progress * 100)} %`}
-	</button>
+	/>
 {/if}

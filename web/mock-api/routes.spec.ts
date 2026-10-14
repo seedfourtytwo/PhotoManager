@@ -3,7 +3,7 @@
  * and the M2-integration rules, exercised through the typed client against the mock.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { DownloadRequest } from '../src/lib/api/index.ts';
+import type { AssetFilters, DownloadRequest } from '../src/lib/api/index.ts';
 import { startMock, type Harness } from './harness.ts';
 
 let h: Harness;
@@ -58,6 +58,28 @@ describe('integration rules', () => {
 		expect(run.message).toMatch(/folder not found/);
 	});
 
+	it('names a photo after its minute (numbered within it) or its tidied file, downloads too', async () => {
+		const api = await h.signedIn();
+		const [a, b, c] = h.mock.state.assets.filter((x) => x.trashed_at === null && !x.held);
+		Object.assign(a, { taken_at: '2015-06-12T14:32:40', date_source: 'exif' });
+		Object.assign(b, { taken_at: '2015-06-12T14:32:05', date_source: 'exif' });
+		c.date_source = 'file_mtime';
+		c.sources[0].relative_path = '2015/Beach day (Copy).jpg';
+		expect((await api.asset(b.id)).name).toBe('2015-06-12 14.32');
+		expect((await api.asset(a.id)).name).toBe('2015-06-12 14.32 · 2');
+		expect((await api.asset(c.id)).name).toBe('Beach day');
+		const single = await api.raw(`/api/assets/${a.id}/download?format=original`);
+		expect(single.headers.get('content-disposition')).toContain(
+			`filename*=UTF-8''${encodeURIComponent('2015-06-12 14.32 · 2.svg')}`
+		);
+		const zip = await api.raw('/api/downloads', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ ...zipRequest({ ids: [c.id] }), naming: 'name' })
+		});
+		expect(Buffer.from(await zip.arrayBuffer()).includes('Beach day.svg')).toBe(true);
+	});
+
 	it('names the ZIP after the album or the scope', async () => {
 		const api = await h.signedIn();
 		const form = (request: DownloadRequest) =>
@@ -85,6 +107,59 @@ describe('integration rules', () => {
 		const response = await api.raw('/api/nothing-here');
 		expect(response.status).toBe(404);
 		expect(await response.json()).toEqual({ detail: expect.any(String) });
+	});
+});
+
+describe('the person filter and pinned photos', () => {
+	it('narrows the library to photos with any of the given people on them', async () => {
+		const api = await h.signedIn();
+		const [a, b] = await api.people();
+		const ids = async (filters: AssetFilters) =>
+			new Set((await api.assets(filters, null, 500)).items.map((x) => x.id));
+		const theirs = async (id: number) =>
+			(await api.personAssets(id, null, 500)).items.map((x) => x.id);
+		expect(await ids({ person_id: [a.id] })).toEqual(new Set(await theirs(a.id)));
+		const either = new Set([...(await theirs(a.id)), ...(await theirs(b.id))]);
+		expect(await ids({ person_id: [a.id, b.id] })).toEqual(either);
+		expect((await api.facets({ person_id: [a.id] })).total).toBe(a.asset_count);
+		expect(await ids({ person_id: [999] })).toEqual(new Set());
+	});
+
+	it('pins photos for one account only, through the state routes', async () => {
+		const api = await h.signedIn();
+		const partner = await h.signedIn('partner', '2345');
+		const before = (await api.assets({ pinned: true }, null, 500)).items.map((x) => x.id);
+		const [x, y] = (await api.assets({ pinned: false }, null, 2)).items;
+		expect((await api.setState(x.id, { pinned: true })).pinned).toBe(true);
+		expect(await api.setStates({ ids: [y.id], pinned: true })).toEqual({ updated: 1 });
+		const pinned = (await api.assets({ pinned: true }, null, 500)).items;
+		expect(pinned.map((p) => p.id).sort()).toEqual([...before, x.id, y.id].sort());
+		expect(pinned.every((p) => p.pinned)).toBe(true);
+		expect((await partner.assets({ pinned: true }, null, 500)).items).toEqual([]);
+		expect((await api.setState(x.id, { pinned: false })).pinned).toBe(false);
+	});
+
+	it('leaves photos with a guessed date out when asked to', async () => {
+		const api = await h.signedIn();
+		const real = (await api.assets({ guessed_date: false }, null, 500)).items;
+		expect(real.length).toBeGreaterThan(0);
+		expect(real.some((a) => a.date_source === 'file_mtime')).toBe(false);
+	});
+
+	it('names a ZIP of people or pinned photos after them', async () => {
+		const api = await h.signedIn();
+		const name = async (filters: AssetFilters) =>
+			(
+				await api.raw('/api/downloads', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(zipRequest({ filters }))
+				})
+			).headers.get('content-disposition');
+		expect(await name({ person_id: [1] })).toContain('photos-1-person.zip');
+		expect(await name({ source_id: [1], person_id: [1, 2], pinned: true })).toContain(
+			'photos-1-source-2-people-pinned.zip'
+		);
 	});
 });
 
@@ -382,6 +457,56 @@ describe('backups, devices and remote sources', () => {
 		expect(JSON.stringify(listed)).not.toContain(created.token);
 		await api.revokeDevice(created.device.id);
 		expect((await api.devices()).find((d) => d.id === created.device.id)?.revoked).toBe(true);
+	});
+
+	it('keeps albums, people and filters on a device, minus what it leaves off', async () => {
+		const api = await h.signedIn();
+		const { device } = await api.createDevice({ name: 'iPhone', platform: 'ios' });
+		const [a, b] = (await api.assets({}, null, 2)).items;
+		const album = await api.createAlbum({ title: 'Summer', asset_ids: [a.id, b.id] });
+		const kept = await api.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect(kept).toMatchObject({ kind: 'album', label: 'Summer', count: 2, gone: false });
+		const again = await api.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'exclude'
+		});
+		expect(again.id).toBe(kept.id);
+		await api.keepOnDevice(device.id, { kind: 'album', album_id: album.id, mode: 'include' });
+		await api.trashAssets([b.id]);
+		const sync = await api.deviceSync(device.id);
+		expect(sync.rules.map((r) => [r.kind, r.mode, r.count])).toEqual([['album', 'include', 1]]);
+		expect(sync.count).toBe(1);
+		expect(sync.bytes).toBe((await api.asset(a.id)).byte_size);
+		expect(sync.device.last_sync_at).toBeNull();
+		await api.dropFromDevice(device.id, kept.id);
+		expect((await api.deviceSync(device.id)).rules).toEqual([]);
+		expect(await api.resendToDevice(device.id)).toEqual({ forgotten: 0 });
+		await expect(
+			api.keepOnDevice(device.id, { kind: 'album', album_id: 999, mode: 'include' })
+		).rejects.toMatchObject({ status: 404 });
+		await api.revokeDevice(device.id);
+		await expect(api.deviceSync(device.id)).rejects.toMatchObject({ status: 404 });
+	});
+
+	it('counts the photos of a kept album its owner may only view', async () => {
+		h.mock.state.access.set(2, { everyone: 'view', users: [] });
+		const partner = await h.signedIn('partner', '2345');
+		const { device } = await partner.createDevice({ name: 'Phone', platform: 'ios' });
+		const free = h.mock.state.assets.find((a) => a.sources[0].source_id === 1)!;
+		const viewOnly = h.mock.state.assets.find((a) => a.sources[0].source_id === 2)!;
+		const album = await partner.createAlbum({ title: 'Mixed', asset_ids: [free.id, viewOnly.id] });
+		const rule = await partner.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect([rule.count, rule.view_only]).toEqual([2, 1]);
+		expect((await partner.deviceSync(device.id)).count).toBe(1);
 	});
 
 	it('lists rclone remotes, adds a remote source and pulls it', async () => {

@@ -39,6 +39,7 @@ _QUALITY_CURVE = ((1, 0.1), (50, 0.35), (75, 0.55), (90, 1.0), (95, 1.5), (100, 
 
 
 class Naming(StrEnum):
+    NAME = "name"  # the photo's display name (display_name.py)
     ORIGINAL = "original"
     DATE = "date"
 
@@ -60,7 +61,7 @@ class ExportOptions:
     max_edge: int | None = None
     strip_location: bool = False
     strip_all_metadata: bool = False
-    naming: Naming = Naming.ORIGINAL
+    naming: Naming = Naming.NAME
     folders: Folders = Folders.FLAT
 
     def __post_init__(self) -> None:
@@ -82,13 +83,21 @@ def _safe(text: str) -> str:
 
 
 def export_stem(
-    original_name: str, taken_at: datetime, naming: Naming, city: str | None = None
+    shown: str,
+    original_name: str | None,
+    taken_at: datetime,
+    naming: Naming,
+    city: str | None = None,
 ) -> str:
+    """``shown``: the display name; ``original_name``: None when the viewer may not read it."""
     if naming is Naming.DATE:
         stem = taken_at.strftime("%Y-%m-%d_%H%M%S")
         return f"{stem}_{_safe(city).replace(' ', '-')}" if city else stem
-    stem = PurePosixPath(_safe(original_name)).stem
-    return stem if stem and not stem.startswith(".") else "photo"
+    if naming is Naming.ORIGINAL and original_name:
+        stem = PurePosixPath(_safe(original_name)).stem
+        if stem and not stem.startswith("."):
+            return stem
+    return _safe(shown)
 
 
 def export_extension(fmt: str, original_name: str) -> str:

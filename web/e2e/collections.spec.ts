@@ -38,7 +38,8 @@ test('collections: people show as faces, the named ones first, and a face opens 
 	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await signIn(page, '/collections');
 	const faces = row(page, 'People').locator('.rail a');
-	await expect(faces.first()).toHaveAccessibleName(/^Sam \d+ photos$/);
+	// a face says who, not how many
+	await expect(faces.first()).toHaveAccessibleName('Sam');
 	const names = await faces.locator('.name').allTextContents();
 	expect(names.indexOf('Someone')).toBeGreaterThan(names.indexOf('Grandma'));
 
@@ -53,7 +54,7 @@ test('collections: a library without faces says what the People row will hold', 
 	test.skip(!REAL_BACKEND, 'the mock always has people');
 	await signIn(page, '/collections');
 	await expect(row(page, 'People')).toContainText('No people yet.');
-	await expect(row(page, 'Albums').locator('.rail a').first()).toBeVisible();
+	await expect(row(page, 'Albums').locator('.grid a').first()).toBeVisible();
 });
 
 test('collections: a place opens the library filtered by that place', async ({ page }) => {
@@ -68,12 +69,62 @@ test('collections: a place opens the library filtered by that place', async ({ p
 	await expect(page.locator('.tile').first()).toBeVisible();
 });
 
+test('collections: a name too long for one line takes a second and is read whole', async ({
+	page
+}) => {
+	await signIn(page, '/collections');
+	const name = row(page, 'Albums').locator('.name', { hasText: 'Summers at the house' });
+	await expect(name).toBeVisible();
+	// In lines of text: a descender may reach a pixel past its line, a cut line is a whole one.
+	const cut = await name.evaluate((el) => {
+		const line = parseFloat(getComputedStyle(el).lineHeight);
+		return {
+			across: el.scrollWidth - el.clientWidth,
+			linesHidden: Math.round((el.scrollHeight - el.clientHeight) / line),
+			lines: Math.round(el.clientHeight / line)
+		};
+	});
+	expect(cut.across).toBeLessThanOrEqual(0);
+	expect(cut.linesHidden).toBe(0);
+	expect(cut.lines).toBeLessThanOrEqual(2);
+});
+
 test('collections: nothing on the page is wider than the screen', async ({ page }) => {
 	await signIn(page, '/collections');
 	await expect(row(page, 'Places').locator('.rail a').first()).toBeVisible();
-	await expect(row(page, 'Albums').locator('.rail a').first()).toBeVisible();
+	await expect(row(page, 'Albums').locator('.grid a').first()).toBeVisible();
 	const overflow = await page.evaluate(
 		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 	);
 	expect(overflow).toBe(0);
+});
+
+test('collections: Utilities count what waits, and each opens its place', async ({ page }) => {
+	await resetMock('seed', { review: true }); // four photos wait for review
+	await signIn(page, '/collections');
+	const utilities = page.getByRole('region', { name: 'Utilities' });
+	const tile = (name: string) => utilities.getByRole('link', { name: new RegExp(`^${name}`) });
+	await expect(tile('To review')).toHaveAccessibleName('To review 4');
+	await expect(tile('Trash')).toHaveAccessibleName('Trash 0');
+	await expectAccessible(page);
+
+	await tile('Hidden').click();
+	await expect.poll(() => new URL(page.url()).searchParams.get('hidden')).toBe('true');
+	await page.goBack();
+	await tile('To review').click();
+	await expect(page).toHaveURL(/\/review$/);
+	await expect(page.getByRole('heading', { name: 'To review', level: 1 })).toBeVisible();
+	await page.goBack();
+	await tile('Trash').click();
+	await expect(page).toHaveURL(/\/trash$/);
+});
+
+test('collections: + on the Albums line starts a new album', async ({ page }) => {
+	await signIn(page, '/collections');
+	await row(page, 'Albums').getByRole('button', { name: 'New album' }).click();
+	const dialog = page.getByRole('dialog', { name: 'New album' });
+	await dialog.getByLabel('Title').fill('Picnic');
+	await dialog.getByRole('button', { name: 'Create' }).click();
+	await expect(page).toHaveURL(/\/albums\/\d+$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Picnic' })).toBeVisible();
 });

@@ -43,6 +43,14 @@ describe('PhotoGrid', () => {
 		expect(parseFloat(el.style.width) / parseFloat(el.style.height)).toBeCloseTo(0.75, 3);
 	});
 
+	it('writes a note on a tile that has one, and the tile is read with it', async () => {
+		setup({ note: (item) => (item.id === 2 ? '3 days' : undefined) });
+		const tile = page.getByRole('button', { name: /Paris/ });
+		await expect.element(tile).toHaveAccessibleName(/Paris.*3 days$/);
+		await expect.element(tile.getByText('3 days')).toBeVisible();
+		expect(document.querySelectorAll('.tile .note')).toHaveLength(1);
+	});
+
 	it('shows a panorama and a tall strip whole, never stretched to the tile', async () => {
 		const extremes = [
 			makeAsset(1, '2019-07-04T18:30:00', 6000, 400, { thumb: { url: pixel } }),

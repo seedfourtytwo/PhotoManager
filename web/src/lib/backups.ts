@@ -1,5 +1,6 @@
 /** How a backup place and its Proton copy are doing, in the words the admin page uses. */
-import type { BackupTarget } from '$lib/api';
+import type { BackupHealth, BackupTarget } from '$lib/api';
+import { plural } from './format';
 
 export type PlaceState = 'ok' | 'not connected' | 'needs attention';
 export type CopyState = 'none' | 'failed' | 'waiting' | 'up to date' | 'first' | 'not made';
@@ -26,4 +27,16 @@ export function protonCopyState(t: BackupTarget): CopyState {
 export function copyPlaceState(t: BackupTarget): PlaceState {
 	if (t.mirror_error || t.mirror_overdue) return 'needs attention';
 	return protonCopyState(t) === 'up to date' ? 'ok' : 'not connected';
+}
+
+/**
+ * The one plain sentence on the Admin page's Backups tile: the first problem in its own words,
+ * else where the library is safe; '' until the health is known.
+ */
+export function backupSentence(health: BackupHealth | null): string {
+	if (!health) return '';
+	if (health.problems.length) return health.problems[0].message;
+	if (health.places_total === 0) return 'No backups yet: the library exists only on this computer';
+	if (health.protected) return `Protected in ${plural(health.places_ok, 'place')}`;
+	return `Only ${health.places_ok} of ${plural(health.places_total, 'place')} up to date`;
 }

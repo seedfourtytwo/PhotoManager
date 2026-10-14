@@ -1,6 +1,6 @@
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 
-/** Human-readable size, used before downloads ("1,204 photos · 3.2 GB"). Base 1000, like file managers. */
+/** Human-readable size, used before downloads ("1,204 photos, 3.2 GB"). Base 1000, like file managers. */
 export function formatBytes(bytes: number): string {
 	if (!Number.isFinite(bytes) || bytes < 0) throw new RangeError(`invalid byte count: ${bytes}`);
 	let value = bytes;

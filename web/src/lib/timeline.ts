@@ -10,20 +10,36 @@ export function monthLabel(key: string): string {
 	return MONTH.format(Date.UTC(year, month - 1, 1));
 }
 
-/** Group assets (already newest first) into calendar months, keeping order. */
-export function groupByMonth(assets: AssetOut[]): MonthGroup[] {
+/** Runs of assets (already newest first) that share a key, keeping order. */
+function groupRuns(
+	assets: AssetOut[],
+	keyOf: (asset: AssetOut) => string,
+	labelOf: (key: string) => string
+): MonthGroup[] {
 	const groups: MonthGroup[] = [];
 	for (const asset of assets) {
-		const key = asset.taken_at.slice(0, 7); // YYYY-MM of the local wall-clock time
+		const key = keyOf(asset);
 		let group = groups.at(-1);
 		if (!group || group.key !== key) {
-			group = { key, label: monthLabel(key), items: [] };
+			group = { key, label: labelOf(key), items: [] };
 			groups.push(group);
 		}
 		group.items.push(asset);
 	}
 	return groups;
 }
+
+/** Group assets (already newest first) into calendar months (YYYY-MM of the local wall-clock time). */
+export const groupByMonth = (assets: AssetOut[]) =>
+	groupRuns(assets, (a) => a.taken_at.slice(0, 7), monthLabel);
+
+/** Group assets (already newest first) into years: a person's chapters. */
+export const groupByYear = (assets: AssetOut[]) =>
+	groupRuns(
+		assets,
+		(a) => a.taken_at.slice(0, 4),
+		(key) => key
+	);
 
 /** The narrowest and the widest tile: a strip or a panorama at its own shape would be a sliver. */
 const MIN_ASPECT = 0.4;

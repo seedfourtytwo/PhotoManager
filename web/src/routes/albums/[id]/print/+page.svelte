@@ -99,7 +99,7 @@
 	}
 </script>
 
-<svelte:head><title>Print {album?.title ?? 'album'} · Photos</title></svelte:head>
+<svelte:head><title>Print {album?.title ?? 'album'}, Photos</title></svelte:head>
 
 <div class="page">
 	<p class="small crumb"><a href={`/albums/${id}`}>{album?.title ?? 'Album'}</a></p>
@@ -134,7 +134,7 @@
 				>
 
 				<p class="quiet small summary">
-					{#if plan}{plan.page_count} pages · {trimLabel} · {photos(album?.items.length ?? 0)}{/if}
+					{#if plan}{plan.page_count} pages, {trimLabel}, {photos(album?.items.length ?? 0)}{/if}
 				</p>
 
 				<section aria-labelledby="p-res" class="issues">
@@ -148,7 +148,7 @@
 							<li>
 								{#if asset?.thumb}<img src={asset.thumb.url} alt="" />{/if}
 								<span>
-									{describe(asset)} · {Math.round(issue.ppi)} ppi ·
+									{describe(asset)}, {Math.round(issue.ppi)} ppi,
 									{issue.level === 'block' ? 'too small to print sharply' : 'may look soft'}
 								</span>
 							</li>
@@ -225,7 +225,8 @@
 		height: 1.25rem;
 		font-family: var(--font-serif);
 		font-size: var(--fs-12);
-		box-shadow: 0 0 0 1px var(--hairline);
+		/* a paper as white as the sheet still shows: a seam of fill around it, not a line */
+		box-shadow: 0 0 0 var(--fine) var(--fill);
 	}
 	.summary {
 		margin: var(--s-1) 0 0;
@@ -258,8 +259,8 @@
 		justify-self: start;
 		margin-top: var(--s-3);
 	}
-	/* Small multiples: every page at the same scale, labelled underneath. Pages are paper,
-	   so they sit on the screen as objects: a hairline edge, no shadow. */
+	/* Small multiples: every page at the same scale, labelled underneath. Pages are paper on
+	   the darkroom page: their own colour sets them apart, no edge, no shadow. */
 	.pages {
 		list-style: none;
 		margin: 0;
@@ -277,7 +278,6 @@
 		width: 100%;
 		height: auto;
 		background: var(--hairline);
-		box-shadow: 0 0 0 1px var(--hairline);
 	}
 	@media (max-width: 1023px) {
 		.layout {

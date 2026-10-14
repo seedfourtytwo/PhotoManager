@@ -79,7 +79,6 @@
 	h1 {
 		font-size: var(--fs-40);
 		font-weight: 350;
-		letter-spacing: -0.015em;
 	}
 	.lede {
 		margin: var(--s-3) 0 0;

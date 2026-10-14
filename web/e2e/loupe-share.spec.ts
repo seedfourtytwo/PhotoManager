@@ -16,26 +16,8 @@ import {
 	toast,
 	viewOnlyPhoto
 } from './helpers.ts';
+import { attachmentName, shared, withShareSheet } from './share-sheet.ts';
 
-type SharedFile = { name: string; type: string; size: number };
-
-/** A share sheet that notes the files it is handed, and opens (or is closed by the person) at once. */
-const withShareSheet = (page: Page, sheet: 'opens' | 'closed' = 'opens') =>
-	page.addInitScript((closed) => {
-		const seen = window as unknown as { shared: SharedFile[][] };
-		seen.shared = [];
-		Object.defineProperty(navigator, 'canShare', {
-			value: (data?: ShareData) => !!data?.files?.length
-		});
-		Object.defineProperty(navigator, 'share', {
-			value: async (data: ShareData) => {
-				seen.shared.push((data.files ?? []).map(({ name, type, size }) => ({ name, type, size })));
-				if (closed) throw new DOMException('Share canceled', 'AbortError');
-			}
-		});
-	}, sheet === 'closed');
-const shared = (page: Page) =>
-	page.evaluate(() => (window as unknown as { shared: SharedFile[][] }).shared);
 const barActions = (page: Page) =>
 	loupe(page).locator('.bar').locator('.acts > button, .acts > .menu > button');
 const DOWNLOAD = /\/api\/assets\/\d+\/download\?/;
@@ -55,14 +37,14 @@ test.beforeEach(async () => {
 	await resetMock();
 });
 
-test('with a share sheet the bar holds Favourite, Share, Album, Edit and More; Download is under More', async ({
+test('with a share sheet the bar holds Favourite, Share, Add to album, Edit and More; Download is under More', async ({
 	page
 }) => {
 	await withShareSheet(page);
 	await signIn(page);
 	await page.locator('.tile').first().click();
 	const actions = barActions(page);
-	await expect(actions).toHaveText(['Favourite', 'Share', 'Album', 'Edit', 'More']);
+	await expect(actions).toHaveText(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
 	await expect(actions.locator('svg')).toHaveCount(5);
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toBeEnabled();
 	if (isPhone(page))
@@ -90,9 +72,9 @@ test('Share hands the sheet one file: the photo’s download, under its name', a
 	expect(response.url()).toMatch(new RegExp(`/api/assets/${id}/download\\?format=original&`));
 	await expect.poll(() => shared(page)).toHaveLength(1);
 	const [files] = await shared(page);
-	const header = response.headers()['content-disposition'];
-	const starred = /filename\*=UTF-8''([^;]+)/.exec(header)?.[1];
-	const name = starred ? decodeURIComponent(starred) : /filename="([^"]+)"/.exec(header)![1];
+	const name = attachmentName(response.headers()['content-disposition']);
+	const detail = await (await page.request.get(`/api/assets/${id}`)).json();
+	expect(name.startsWith(`${detail.name}.`), `${name} is named after the photo`).toBe(true);
 	expect(files).toEqual([
 		{ name, type: response.headers()['content-type'].split(';')[0], size: expect.any(Number) }
 	]);
@@ -172,7 +154,7 @@ test('at 320 px the bar with Share fits, also with the largest text and while it
 			expect(box.x + box.width).toBeLessThanOrEqual(bar.x + bar.width);
 		}
 	};
-	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'Album', 'Edit', 'More']);
+	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
 	await fits();
 	await page.evaluate(() => document.documentElement.style.setProperty('--text-scale', '1.25'));
 	await expect(fits).toPass({ timeout: 3000 });
@@ -193,7 +175,11 @@ test('a guest shares what a guest may download; a view-only photo has no Share',
 	await expect(loupe(page).getByRole('button', { name: 'Download' })).toBeDisabled();
 	await expect(loupe(page).getByText('view only', { exact: true })).toBeVisible();
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveCount(0);
-	await expect(loupe(page).getByRole('button', { name: 'More' })).toHaveCount(0);
+	// More holds only Pin to Home, a mark of the guest's own (issue 54): no Share there either.
+	await loupe(page).getByRole('button', { name: 'More' }).click();
+	await expect(loupe(page).getByRole('button', { name: 'Pin to Home' })).toBeVisible();
+	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveCount(0);
+	await page.keyboard.press('Escape');
 	// The phone's photos (source 1) may be downloaded by everyone.
 	const list = await (await page.request.get('/api/assets?source_id=1&limit=1')).json();
 	await page.goto(`/?photo=${list.items[0].id}`);
@@ -207,7 +193,13 @@ test('without a share sheet there is no Share: not on the bar, not under More', 
 }) => {
 	await signIn(page);
 	await page.locator('.tile').first().click();
-	await expect(barActions(page)).toHaveText(['Favourite', 'Download', 'Album', 'Edit', 'More']);
+	await expect(barActions(page)).toHaveText([
+		'Favourite',
+		'Download',
+		'Add to album',
+		'Edit',
+		'More'
+	]);
 	await loupe(page).getByRole('button', { name: 'More' }).click();
 	await expect(loupe(page).getByRole('button', { name: 'Fix date' })).toBeVisible();
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toHaveCount(0);

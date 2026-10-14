@@ -31,8 +31,10 @@ from photo_assistant.api.schemas import (
 )
 from photo_assistant.api.services import Services
 from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
+from photo_assistant.app.photo_names import photo_names
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.date_fix import new_capture_times
+from photo_assistant.domain.export_naming import ExportOptions
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api/assets", tags=["assets"], dependencies=LOGGED_IN)
@@ -70,14 +72,27 @@ def facets(services: ServicesDep, viewer: ViewerDep, f: FilterDep) -> FacetsOut:
     )
 
 
+def _set_marks(
+    services: Services,
+    viewer: Viewer,
+    ids: list[int],
+    body: StatePatch | BulkState,
+) -> None:
+    """My own marks on photos I may see: favourite, pinned, hidden."""
+    if body.favourite is not None or body.hidden is not None:
+        services.repo.set_user_state(
+            viewer.user_id, ids, favourite=body.favourite, hidden=body.hidden
+        )
+    if body.pinned is not None:
+        services.repo.set_pinned(viewer.user_id, ids, body.pinned, services.clock.now())
+
+
 @router.post("/state")
 def bulk_state(services: ServicesDep, viewer: ViewerDep, body: BulkState) -> Updated:
-    """Favourite / hide many at once; photos you can't see are ignored."""
+    """Favourite / pin / hide many at once; photos you can't see are ignored."""
     visible = [v.id for v in services.repo.views_by_ids(viewer, body.ids)]
-    updated = services.repo.set_user_state(
-        viewer.user_id, visible, favourite=body.favourite, hidden=body.hidden
-    )
-    return Updated(updated=updated)
+    _set_marks(services, viewer, visible, body)
+    return Updated(updated=len(visible))
 
 
 def detail_of(services: Services, viewer: Viewer, view: AssetView) -> AssetDetail:
@@ -89,6 +104,7 @@ def detail_of(services: Services, viewer: Viewer, view: AssetView) -> AssetDetai
     albums = [AlbumRef(id=i, title=t) for i, t in services.repo.albums_of(viewer, a.id)]
     return AssetDetail(
         **asset_out(view).model_dump(),
+        name=photo_names(services.repo, viewer, [view])[a.id].shown,
         byte_size=a.byte_size,
         mime_type=a.mime_type,
         camera_make=a.camera_make,
@@ -137,10 +153,7 @@ def patch_state(
         services.repo.set_private(asset_id, body.private, viewer.user_id)
     else:
         require_view(services, viewer, asset_id)
-    if body.favourite is not None or body.hidden is not None:
-        services.repo.set_user_state(
-            viewer.user_id, [asset_id], favourite=body.favourite, hidden=body.hidden
-        )
+    _set_marks(services, viewer, [asset_id], body)
     return asset_out(require_view(services, viewer, asset_id))
 
 
@@ -188,9 +201,11 @@ def preview(
 
 @router.get("/{asset_id}/original")
 def original(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
-    a = require_view(services, viewer, asset_id, Level.DOWNLOAD).asset
-    path = services.store.absolute(a.library_path)
+    view = require_view(services, viewer, asset_id, Level.DOWNLOAD)
+    path = services.store.absolute(view.asset.library_path)
     if not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "original missing from the library")
-    name = services.repo.first_origin_name(viewer, asset_id) or path.name
-    return FileResponse(path, media_type=a.mime_type or "application/octet-stream", filename=name)
+    names = photo_names(services.repo, viewer, [view])
+    (entry,) = services.downloads.plan([view], names, ExportOptions())  # untouched, as named
+    media_type = view.asset.mime_type or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=entry.name)

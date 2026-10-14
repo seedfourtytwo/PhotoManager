@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatWhen } from './format';
-import { queueText, retryText } from './jobs';
+import { problemsLine, queueText, retryText } from './jobs';
 
 const jobs = (queued: number, running: number, waiting: number) => ({
 	queued,
@@ -42,5 +42,16 @@ describe('retryText', () => {
 
 	it('is empty for a job that is not waiting', () => {
 		expect(retryText(null, now)).toBe('');
+	});
+});
+
+describe('problemsLine: the Problems tile in words', () => {
+	it('says nothing has failed', () => {
+		expect(problemsLine(0, 0)).toBe('Nothing has failed');
+	});
+	it('counts what failed and what waits for another try', () => {
+		expect(problemsLine(1, 0)).toBe('1 failed');
+		expect(problemsLine(3, 2)).toBe('3 failed, 2 waiting to be retried');
+		expect(problemsLine(0, 1)).toBe('1 waiting to be retried');
 	});
 });

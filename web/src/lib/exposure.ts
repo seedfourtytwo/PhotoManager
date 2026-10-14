@@ -1,5 +1,5 @@
 /**
- * How a photo was exposed, as the photo view writes it ("f/2.8 · 1/250 s · ISO 400 · 35 mm")
+ * How a photo was exposed, as the photo view writes it ("f/2.8  1/250 s  ISO 400  35 mm")
  * and as a screen reader says it. Each value stands on its own: what the photo does not
  * carry is left out.
  */

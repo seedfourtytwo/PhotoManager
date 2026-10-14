@@ -18,6 +18,7 @@ export const makeAsset = (
 	thumb: { url: `/api/assets/${id}/thumb` },
 	preview_ready: true,
 	favourite: false,
+	pinned: false,
 	hidden: false,
 	private: false,
 	place: null,

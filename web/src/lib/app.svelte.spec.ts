@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
 import { ApiError, type BackupHealth, type User } from '$lib/api';
 import { api, backupWatch, library, session } from './app.svelte';
+import { arrival } from './start-page.svelte';
+import { signInPath } from './state/session.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => undefined) }));
 
@@ -96,6 +98,42 @@ describe('session.signedIn', () => {
 	it.each(cases)('after sign-in, next=%s goes to %s', (next, target) => {
 		session.signedIn(user(1, 'c'), next);
 		expect(vi.mocked(goto)).toHaveBeenCalledWith(target, { replaceState: true });
+	});
+
+	describe('and the start page', () => {
+		afterEach(() => arrival.forget());
+
+		it('a page that was asked for is where the session arrives: the start page does not move it', () => {
+			session.signedIn(user(1, 'c'), '/');
+			expect(arrival.done).toBe(true);
+		});
+		it('with nothing asked for, the start page decides where the app opens', () => {
+			session.signedIn(user(1, 'c'), null);
+			expect(arrival.done).toBe(false);
+		});
+		it('signing out forgets the arrival: the next account starts on its own start page', async () => {
+			serve({ '/api/auth/logout': { status: 204 } });
+			arrival.mark();
+			await session.signOut();
+			expect(arrival.done).toBe(false);
+		});
+	});
+});
+
+describe('signInPath: where a lost session sends someone', () => {
+	it.each([
+		['/albums/3?photo=5', '/login?next=%2Falbums%2F3%3Fphoto%3D5'],
+		['/?year=2019', '/login?next=%2F%3Fyear%3D2019'],
+		['/home', '/login?next=%2Fhome']
+	])('%s comes back afterwards: %s', (here, path) => {
+		expect(signInPath(here, false)).toBe(path);
+		expect(signInPath(here, true)).toBe(path);
+	});
+	it('a bare / as the tab’s first page asks for nothing: the start page decides', () => {
+		expect(signInPath('/', false)).toBe('/login');
+	});
+	it('a bare / later in the tab is the Library someone was looking at', () => {
+		expect(signInPath('/', true)).toBe('/login?next=%2F');
 	});
 });
 

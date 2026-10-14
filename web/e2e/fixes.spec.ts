@@ -1,4 +1,5 @@
 /** Small fixes from the E2E review that have no journey of their own. */
+import type { Page } from '@playwright/test';
 import {
 	countSlow,
 	expect,
@@ -17,19 +18,33 @@ test.beforeEach(async ({ page }) => {
 	await signIn(page);
 });
 
-test('counts follow a hide: the header and the filter panel', async ({ page }) => {
-	const meta = page.locator('header .meta');
-	await expect(meta).toContainText(/[\d,]+ photos/);
-	const before = Number((await meta.textContent())!.match(/([\d,]+) photos/)![1].replace(',', ''));
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const panel = page.getByRole('complementary', { name: 'Filters' });
-	await expect(panel.locator('.total')).toContainText(`${before}`);
-	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
+/** The Library's count, under its title. */
+const line = (page: Page) => page.locator('.page-head .line');
+
+test('counts follow a hide: the header and a filter sheet', async ({ page }) => {
+	await expect(line(page)).toHaveText(/^[\d,]+ photos$/);
+	const before = Number((await line(page).textContent())!.match(/([\d,]+)/)![1].replace(',', ''));
+	// The years in the When sheet add up to every photo.
+	const yearsTotal = async () => {
+		await page
+			.getByRole('group', { name: 'Filters' })
+			.getByRole('button', { name: 'When', exact: true })
+			.click();
+		const when = page.getByRole('dialog', { name: 'When' });
+		const counts = when.getByRole('list', { name: 'Years' }).locator('.n');
+		await expect(counts.first()).toBeVisible();
+		const sum = (await counts.allTextContents()).reduce(
+			(n, text) => n + Number(text.replace(',', '')),
+			0
+		);
+		await when.getByRole('button', { name: 'Done' }).click();
+		return sum;
+	};
+	expect(await yearsTotal()).toBe(before);
 	await selectTiles(page, [0]);
 	await selectionAction(page, 'Hide');
-	await expect(meta).toContainText(`${before - 1} photos`);
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	await expect(panel.locator('.total')).toContainText(`${before - 1}`);
+	await expect(line(page)).toHaveText(`${before - 1} photos`);
+	await expect.poll(yearsTotal).toBe(before - 1);
 });
 
 test('a double click on Move to trash trashes once', async ({ page }) => {
@@ -45,15 +60,13 @@ test('a double click on Move to trash trashes once', async ({ page }) => {
 	await expect(toast(page)).not.toContainText(/not found/i);
 });
 
-test('the two Hide buttons have different names', async ({ page }) => {
-	test.skip(isPhone(page), 'the filter panel is a sheet on phones');
+test('one button is named Hide: the pill’s', async ({ page }) => {
 	await selectTiles(page, [0]);
 	await page
 		.getByRole('toolbar', { name: 'Selected photos' })
 		.getByRole('button', { name: 'More' })
 		.click();
 	await expect(page.getByRole('button', { name: 'Hide', exact: true })).toHaveCount(1);
-	await expect(page.getByRole('button', { name: 'Hide filters' })).toHaveCount(1);
 });
 
 test('sliders are wide enough to use', async ({ page }) => {
@@ -83,21 +96,19 @@ test('one photo is "1 photo": the header for a day that holds one', async ({ pag
 	const single = days.find((d) => d.count === 1);
 	expect(single, 'the library has a day with one photo').toBeTruthy();
 	await page.goto(`/?from=${single!.day}&to=${single!.day}`);
-	const meta = page.locator('header .meta');
-	await expect(meta).toContainText('1 photo');
-	await expect(meta).not.toContainText('1 photos');
+	await expect(line(page)).toHaveText('1 photo');
 	await expect(page.locator('.tile')).toHaveCount(1);
 });
 
-test('one source is "1 source" in the words for the filters', async ({ page }) => {
+test('a chosen source is named on its chip, not counted', async ({ page }) => {
 	await page.goto('/?source_id=1');
-	const meta = page.locator('header .meta');
-	await expect(meta).toContainText('1 source');
-	await expect(meta).not.toContainText('source(s)');
+	await expect(
+		page.getByRole('group', { name: 'Filters' }).getByRole('button', { name: 'Phone', exact: true })
+	).toBeVisible();
 });
 
 test('while a new filter is counted the header shows no old total', async ({ page }) => {
-	const meta = page.locator('header .meta');
+	const meta = line(page);
 	await expect(meta).toContainText(/[\d,]+ photos/);
 	const all = (await meta.textContent())!.match(/([\d,]+) photos/)![1];
 	// A slow network: the count for the new filter is on its way for a while.
@@ -107,12 +118,13 @@ test('while a new filter is counted the header shows no old total', async ({ pag
 		await held;
 		await route.continue();
 	});
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const panel = page.getByRole('complementary', { name: 'Filters' });
-	await panel.getByRole('button', { name: /^2019/ }).click();
-	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
-	await expect(meta).toContainText('2019');
-	await expect(meta).toContainText('Counting…');
+	const chips = page.getByRole('group', { name: 'Filters' });
+	await chips.getByRole('button', { name: 'When', exact: true }).click();
+	const when = page.getByRole('dialog', { name: 'When' });
+	await when.getByRole('button', { name: /^2019/ }).click();
+	await when.getByRole('button', { name: 'Done' }).click();
+	await expect(chips.getByRole('button', { name: '2019', exact: true })).toBeVisible();
+	await expect(meta).toHaveText('Counting…');
 	await expect(meta).not.toContainText(`${all} photos`);
 	release();
 	await expect(meta).toContainText(/[\d,]+ photos?/);

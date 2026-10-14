@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from photo_assistant.api.main import create_app
+from photo_assistant.domain.faces import BoundingBox, Face
 from tests.api.conftest import (
     BASE,
     PIN,
@@ -175,6 +176,62 @@ def test_favourites_and_hidden_are_per_user(lib: Lib) -> None:
     assert set(listed(c, hidden="true")) == {ids["winter"], ids["quimper"]}
     assert ids["winter"] in listed(lea)
     assert c.get(f"/api/assets/{ids['winter']}").json()["hidden"] is True
+
+
+def test_pinned_photos_are_per_user_and_set_like_favourites(lib: Lib) -> None:
+    c, ids = lib.admin, lib.ids
+    lea = add_user(c, "lea")
+    r = c.patch(f"/api/assets/{ids['paris1']}/state", json={"pinned": True})
+    assert r.json()["pinned"] is True and r.json()["favourite"] is False
+    bulk = c.post(
+        "/api/assets/state", json={"ids": [ids["winter"], ids["quimper"], 999], "pinned": True}
+    )
+    assert bulk.json() == {"updated": 2}
+    assert listed(c, pinned="true") == [ids["winter"], ids["quimper"], ids["paris1"]]
+    assert listed(lea, pinned="true") == [], "pinned photos are mine alone"
+    assert ids["winter"] in listed(c), "pinning takes nothing off the timeline"
+    unpinned = c.patch(f"/api/assets/{ids['paris1']}/state", json={"pinned": False}).json()
+    assert unpinned["pinned"] is False
+    assert c.get(f"/api/assets/{ids['winter']}").json()["pinned"] is True
+    assert set(listed(c, pinned="false")) == {ids["paris1"], ids["paris2"], ids["nodate"]}
+
+
+def _faces(lib: Lib) -> dict[str, int]:
+    """One person on paris1, another on quimper and winter."""
+    store = services_of(lib.admin).ml.store
+
+    def face(name: str) -> int:
+        found = Face(BoundingBox(0.1, 0.1, 0.3, 0.3), 0.9, (), (1.0, 0.0, 0.0, 0.0))
+        (face_id,) = store.replace_faces(lib.ids[name], "f", [found])
+        return face_id
+
+    sam = store.create_person(face("paris1"))
+    lou = store.create_person(face("quimper"))
+    store.assign_face(face("winter"), lou)
+    return {"sam": sam, "lou": lou}
+
+
+def test_person_id_narrows_every_filtered_route(lib: Lib) -> None:
+    c, ids = lib.admin, lib.ids
+    who = _faces(lib)
+    assert listed(c, person_id=who["sam"]) == [ids["paris1"]]
+    assert listed(c, person_id=[who["sam"], who["lou"]]) == [
+        ids["winter"],
+        ids["quimper"],
+        ids["paris1"],
+    ]
+    lou = {"person_id": who["lou"]}
+    assert c.get("/api/assets/facets", params=lou).json()["total"] == 2
+    days = c.get("/api/calendar", params=lou).json()
+    assert [d["day"] for d in days] == ["2019-08-01", "2021-01-15"]
+    assert [p["id"] for p in c.get("/api/map", params=lou).json()] == [ids["quimper"]]
+    scope = {"filters": {"person_id": [who["lou"]]}}
+    assert c.post("/api/downloads/estimate", json=scope).json()["count"] == 2
+    zipped = c.post("/api/downloads", json=scope)
+    assert "photos-1-person.zip" in zipped.headers["content-disposition"]
+    assert c.get("/api/assets", params={"person_id": 0}).status_code == 400
+    no_one = {"filters": {"person_id": [0]}}
+    assert c.post("/api/downloads/estimate", json=no_one).status_code == 422
 
 
 def test_fix_dates_set_and_shift_keep_history(lib: Lib) -> None:

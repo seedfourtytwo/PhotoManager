@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AssetDetail } from './api/types';
-import { cameFrom, readout, readoutSpoken } from './readout';
+import type { AssetDetail, Face, Person } from './api/types';
+import { cameFrom, peopleIn, readout, readoutSpoken } from './readout';
 import { makeAsset } from './testing/fixtures';
 
 const asset = makeAsset(1, '2019-08-14T18:42:07', 4032, 3024, {
@@ -8,6 +8,7 @@ const asset = makeAsset(1, '2019-08-14T18:42:07', 4032, 3024, {
 });
 const detail = (extra: Partial<AssetDetail> = {}): AssetDetail => ({
 	...asset,
+	name: 'Nice at dusk',
 	byte_size: 1,
 	mime_type: 'image/heic',
 	camera_make: 'Apple',
@@ -25,29 +26,20 @@ const detail = (extra: Partial<AssetDetail> = {}): AssetDetail => ({
 	...extra
 });
 
-describe('readout', () => {
-	it('line one is date · time · place, the place as its most local name', () => {
-		expect(readout(asset, null)[0]).toBe('2019-08-14 · 18:42 · Nice');
+describe('readout line one: when and where', () => {
+	it('is the day in words, the time, and the place as its most local name', () => {
+		expect(readout(asset, null)[0]).toEqual(['14 August 2019', '18:42', 'Nice']);
 		const region = { ...asset, place: { country: 'France', region: 'Provence', city: null } };
-		expect(readout(region, null)[0]).toBe('2019-08-14 · 18:42 · Provence');
+		expect(readout(region, null)[0]).toEqual(['14 August 2019', '18:42', 'Provence']);
 	});
 
-	it('line one leaves the place out when there is none', () => {
-		expect(readout({ ...asset, place: null }, null)[0]).toBe('2019-08-14 · 18:42');
+	it('names the day so that day and month cannot be mixed up', () => {
+		const early = makeAsset(2, '2026-09-07T07:05:00', 4, 3);
+		expect(readout(early, null)[0]).toEqual(['7 September 2026', '07:05']);
 	});
 
-	it('line two is camera · size · file name, the name without its folders', () => {
-		expect(readout(asset, detail())[1]).toBe('iPhone 11 · 4032 × 3024 · IMG_4471.HEIC');
-		expect(readout(asset, detail({ camera_model: null }))[1]).toBe('4032 × 3024 · IMG_4471.HEIC');
-		expect(readout(asset, detail({ origins: [] }))[1]).toBe('iPhone 11 · 4032 × 3024');
-	});
-
-	it('line two is the size alone before the details arrive', () => {
-		expect(readout(asset, null)[1]).toBe('4032 × 3024');
-	});
-
-	it('an unknown size is left out', () => {
-		expect(readout({ ...asset, width: null, height: null }, null)[1]).toBe('');
+	it('leaves the place out when there is none', () => {
+		expect(readout({ ...asset, place: null }, null)[0]).toEqual(['14 August 2019', '18:42']);
 	});
 });
 
@@ -61,63 +53,69 @@ const someOrAll = Array.from({ length: (1 << KEYS.length) - 1 }, (_, i) =>
 const only = (kept: readonly (typeof KEYS)[number][]) =>
 	Object.fromEntries(kept.map((key) => [key, SHOT[key]]));
 
-describe('readout of a photo that carries exposure settings', () => {
-	it('line two is aperture · shutter · ISO · focal length · file name', () => {
-		expect(readout(asset, detail(SHOT))[1]).toBe(
-			'f/2.8 · 1/250 s · ISO 400 · 35 mm · IMG_4471.HEIC'
-		);
+describe('readout line two: how it was taken', () => {
+	it('is the camera, then aperture, shutter, ISO and focal length', () => {
+		expect(readout(asset, detail(SHOT))[1]).toEqual([
+			'iPhone 11',
+			'f/2.8',
+			'1/250 s',
+			'ISO 400',
+			'35 mm'
+		]);
 	});
 
-	it('with only some of the values, line two holds those and the file name', () => {
+	it('with only some of the values, holds those, in the camera’s order', () => {
 		for (const kept of someOrAll) {
-			const line = readout(asset, detail(only(kept)))[1];
-			expect(line).toBe([...kept.map((key) => TEXT[key]), 'IMG_4471.HEIC'].join(' · '));
+			const line = readout(asset, detail({ ...only(kept), camera_model: null }))[1];
+			expect(line).toEqual(kept.map((key) => TEXT[key]));
 		}
 	});
 
-	it('no combination leaves a separator dangling, with or without a file name', () => {
+	it('with no settings, is the camera alone', () => {
+		expect(readout(asset, detail())[1]).toEqual(['iPhone 11']);
+	});
+
+	it('never holds the name, the file name or the pixel size: they are in the details', () => {
+		const line = readout(asset, detail({ ...SHOT, name: 'Nice at dusk' }))[1];
+		expect(line.join(' ')).not.toMatch(/Nice at dusk|IMG_4471|4032/);
+	});
+
+	it('is empty before the details arrive, and for a photo with no camera and no settings', () => {
+		expect(readout(asset, null)[1]).toEqual([]);
+		expect(readout(asset, detail({ camera_model: null }))[1]).toEqual([]);
+	});
+
+	it('no item is ever blank', () => {
 		for (const kept of [[], ...someOrAll])
-			for (const origins of [detail().origins, []])
-				for (const camera_model of ['iPhone 11', null]) {
-					const line = readout(asset, detail({ ...only(kept), origins, camera_model }))[1];
-					expect(line).not.toMatch(/^ ?·|· ?$/);
-					expect(line.split(' · ').every((part) => part.trim() !== '')).toBe(true);
-				}
-	});
-
-	it('without a file name line two ends on the last value', () => {
-		expect(readout(asset, detail({ ...SHOT, origins: [] }))[1]).toBe(
-			'f/2.8 · 1/250 s · ISO 400 · 35 mm'
-		);
-	});
-
-	it('camera and pixel size give way to the settings: they are in the details', () => {
-		const line = readout(asset, detail({ ...only(['iso']) }))[1];
-		expect(line).toBe('ISO 400 · IMG_4471.HEIC');
-	});
-
-	it('with none of the values line two stays camera · size · file name', () => {
-		expect(readout(asset, detail())[1]).toBe('iPhone 11 · 4032 × 3024 · IMG_4471.HEIC');
+			for (const camera_model of ['iPhone 11', null, '']) {
+				const lines = readout(asset, detail({ ...only(kept), camera_model }));
+				expect(lines.flat().every((item) => item.trim() !== '')).toBe(true);
+			}
 	});
 });
 
-describe('readoutSpoken (line two for a screen reader)', () => {
-	it('says the settings in words, then the file name', () => {
-		expect(readoutSpoken(detail(SHOT))).toBe(
-			'f 2.8, 1/250 second, ISO 400, 35 millimetres, IMG_4471.HEIC'
-		);
+describe('readoutSpoken (the two lines for a screen reader, with a pause between pieces)', () => {
+	const spoken = (extra: Partial<AssetDetail> | null) =>
+		readoutSpoken(asset, extra && detail(extra));
+
+	it('line one says the day, the time and the place', () => {
+		expect(spoken(null)[0]).toBe('14 August 2019, 18:42, Nice');
+	});
+
+	it('line two says the camera, then the settings in words', () => {
+		expect(spoken(SHOT)[1]).toBe('iPhone 11, f 2.8, 1/250 second, ISO 400, 35 millimetres');
 	});
 
 	it('says only the values the photo has', () => {
-		expect(readoutSpoken(detail(only(['iso', 'focal_length'])))).toBe(
-			'ISO 400, 35 millimetres, IMG_4471.HEIC'
+		expect(spoken({ ...only(['iso', 'focal_length']), camera_model: null })[1]).toBe(
+			'ISO 400, 35 millimetres'
 		);
-		expect(readoutSpoken(detail({ ...only(['f_number']), origins: [] }))).toBe('f 2.8');
+		expect(spoken(only(['f_number']))[1]).toBe('iPhone 11, f 2.8');
 	});
 
-	it('is null when there is nothing to reword: no settings, or no details yet', () => {
-		expect(readoutSpoken(detail())).toBeNull();
-		expect(readoutSpoken(null)).toBeNull();
+	it('with no settings line two is the camera; before the details, nothing', () => {
+		expect(spoken({})[1]).toBe('iPhone 11');
+		expect(spoken(null)[1]).toBe('');
 	});
 });
 
@@ -129,14 +127,14 @@ describe('cameFrom (where a photo came from, in the details)', () => {
 		]
 	});
 
-	it('a member reads the folder it came from and the file name, never the path', () => {
+	it('a member reads the folder it came from, not the original file name', () => {
 		expect(cameFrom(two, false).map((o) => [o.label, o.file])).toEqual([
-			['Phone', 'IMG_4471.HEIC'],
-			['Old hard disk', 'IMG_4471.HEIC']
+			['Phone', null],
+			['Old hard disk', null]
 		]);
 	});
 
-	it('an admin reads the whole path, to find the file', () => {
+	it('an admin reads the original file with its whole path, to find it', () => {
 		expect(cameFrom(two, true).map((o) => o.file)).toEqual([
 			'2019/08/IMG_4471.HEIC',
 			'IMG_4471.HEIC'
@@ -157,5 +155,44 @@ describe('cameFrom (where a photo came from, in the details)', () => {
 	it('is empty before the details arrive, and for a photo with no origin', () => {
 		expect(cameFrom(null, false)).toEqual([]);
 		expect(cameFrom(detail({ origins: [] }), true)).toEqual([]);
+	});
+});
+
+describe('peopleIn (who is in the photo, for the details)', () => {
+	const person = (id: number, name: string | null): Person => ({
+		id,
+		name,
+		face_count: 1,
+		hidden: false,
+		asset_count: 1,
+		cover: null,
+		portrait: null
+	});
+	const face = (id: number, person_id: number | null): Face => ({
+		id,
+		asset_id: 1,
+		box: { x: 0, y: 0, w: 0.1, h: 0.1 },
+		score: 0.9,
+		person_id
+	});
+	const listed = new Map([1, 2, 3].map((id) => [id, person(id, id === 3 ? null : `P${id}`)]));
+
+	it('is each person once, in the order their faces were found', () => {
+		const faces = [face(1, 2), face(2, 1), face(3, 2)];
+		expect(peopleIn(faces, listed).map((p) => p.id)).toEqual([2, 1]);
+	});
+
+	it('names come first; someone not yet named follows', () => {
+		const faces = [face(1, 3), face(2, 1)];
+		expect(peopleIn(faces, listed).map((p) => p.id)).toEqual([1, 3]);
+	});
+
+	it('leaves out a face not grouped yet, and a person not listed (hidden from People)', () => {
+		const faces = [face(1, null), face(2, 9), face(3, 1)];
+		expect(peopleIn(faces, listed).map((p) => p.id)).toEqual([1]);
+	});
+
+	it('is empty for a photo with no faces', () => {
+		expect(peopleIn([], listed)).toEqual([]);
 	});
 });

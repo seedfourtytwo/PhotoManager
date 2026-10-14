@@ -1,6 +1,7 @@
 /** What each row of the Collections page shows: who, what and where, in which order. */
 import type { AlbumSummary, Facets, Person, Place } from './api/types';
 import { filtersToQuery } from './filters';
+import type { IconName } from './icons';
 
 /** How many things a row shows; the row's own page has the rest. */
 export const STRIP_LIMIT = 8;
@@ -50,3 +51,16 @@ export function withoutEchoes<T extends SeenPlace>(places: readonly T[]): T[] {
 			)
 	);
 }
+
+/** The tiles at the end of Collections: what waits for a decision, and what was put aside. */
+export type Utility = {
+	key: 'review' | 'hidden' | 'trash';
+	title: string;
+	icon: IconName;
+	href: string;
+};
+export const UTILITIES: readonly Utility[] = [
+	{ key: 'review', title: 'To review', icon: 'inbox', href: '/review' },
+	{ key: 'hidden', title: 'Hidden', icon: 'hidden', href: `/${filtersToQuery({ hidden: true })}` },
+	{ key: 'trash', title: 'Trash', icon: 'trash', href: '/trash' }
+];

@@ -82,12 +82,14 @@ describe('Collections rows', () => {
 		stubApi({ people: PEOPLE, albums: ALBUMS, facets: FACETS });
 		render(CollectionRows, { rows: ['albums', 'people', 'places'] });
 
+		// a face says who, not how many
 		await expect
-			.element(page.getByRole('link', { name: 'Sam 27 photos' }))
+			.element(page.getByRole('link', { name: 'Sam', exact: true }))
 			.toHaveAttribute('href', '/people/2');
 		await expect
-			.element(page.getByRole('link', { name: 'Someone 30 photos' }))
+			.element(page.getByRole('link', { name: 'Someone', exact: true }))
 			.toHaveAttribute('href', '/people/1');
+		expect(row('People').element().textContent).not.toMatch(/\d/);
 		await expect
 			.element(page.getByRole('link', { name: 'Brittany 12 photos' }))
 			.toHaveAttribute('href', '/albums/7');
@@ -99,7 +101,7 @@ describe('Collections rows', () => {
 		expect(headings.map((h) => h.textContent?.trim())).toEqual(['Albums', 'People', 'Places']);
 		// named people before the unnamed, the place with the most photos first
 		const names = (name: string) =>
-			[...row(name).element().querySelectorAll('.rail a .name')].map((el) => el.textContent);
+			[...row(name).element().querySelectorAll('a .name')].map((el) => el.textContent);
 		expect(names('People')).toEqual(['Sam', 'Someone']);
 		expect(names('Places')).toEqual(['France', 'Carnac']);
 	});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { BackupTarget } from '$lib/api';
-import { copyPlaceState, placeState, protonCopyState } from './backups';
+import type { BackupHealth, BackupTarget } from '$lib/api';
+import { backupSentence, copyPlaceState, placeState, protonCopyState } from './backups';
 
 const target = (over: Partial<BackupTarget> = {}): BackupTarget =>
 	({
@@ -79,6 +79,42 @@ describe('copyPlaceState', () => {
 		expect(copyPlaceState(target({ last_mirror_at: null }))).toBe('not connected');
 		expect(copyPlaceState(target({ last_mirror_at: null, last_success_at: null }))).toBe(
 			'not connected'
+		);
+	});
+});
+
+describe('backupSentence: the one plain sentence on the Backups tile', () => {
+	const health = (over: Partial<BackupHealth> = {}): BackupHealth => ({
+		protected: true,
+		places_ok: 2,
+		places_total: 2,
+		problems: [],
+		...over
+	});
+	it('says nothing until the health is known', () => {
+		expect(backupSentence(null)).toBe('');
+	});
+	it('says the first problem in its own words', () => {
+		const problems = [
+			{ severity: 'alert' as const, message: 'Home server: the last backup failed', target_id: 1 },
+			{ severity: 'warning' as const, message: 'USB disk: not connected', target_id: 2 }
+		];
+		expect(backupSentence(health({ protected: false, places_ok: 0, problems }))).toBe(
+			'Home server: the last backup failed'
+		);
+	});
+	it('says where the library is safe', () => {
+		expect(backupSentence(health())).toBe('Protected in 2 places');
+		expect(backupSentence(health({ places_ok: 1, places_total: 1 }))).toBe('Protected in 1 place');
+	});
+	it('says how many places are behind, without a problem to name', () => {
+		expect(backupSentence(health({ protected: false, places_ok: 1 }))).toBe(
+			'Only 1 of 2 places up to date'
+		);
+	});
+	it('says there is no backup at all', () => {
+		expect(backupSentence(health({ protected: false, places_ok: 0, places_total: 0 }))).toBe(
+			'No backups yet: the library exists only on this computer'
 		);
 	});
 });

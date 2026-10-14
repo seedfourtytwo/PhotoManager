@@ -17,9 +17,8 @@ test.beforeEach(async ({ page }) => {
 	await expect(page.locator('.tile').first()).toBeVisible();
 });
 
-const details = (page: Page) =>
-	loupe(page).getByRole('complementary', { name: 'About this photo' });
-const infoButton = (page: Page) => loupe(page).getByRole('button', { name: 'Info' });
+const details = (page: Page) => loupe(page).getByRole('complementary', { name: 'Details' });
+const infoButton = (page: Page) => loupe(page).getByRole('button', { name: 'Details' });
 const shown = (page: Page) => loupe(page).locator('img.photo');
 /** The id of the photo the address names. */
 const inAddress = (page: Page) => new URL(page.url()).searchParams.get('photo');
@@ -35,12 +34,12 @@ async function next(page: Page): Promise<string> {
 /** The address is written a moment after a step (lib/loupe.svelte.ts, STEP_MS). */
 const addressCaughtUp = (page: Page) => page.waitForTimeout(450);
 
-test.describe('phone: the Info sheet has its own step', () => {
+test.describe('phone: the Details sheet has its own step', () => {
 	test.beforeEach(({ page }) => {
 		test.skip(!isPhone(page), 'the details are a sheet on a phone only');
 	});
 
-	test('Back closes the Info sheet and leaves the photo; the next Back closes the photo', async ({
+	test('Back closes the Details sheet and leaves the photo; the next Back closes the photo', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
@@ -58,7 +57,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		await expect(page).toHaveURL(/\/collections$/);
 	});
 
-	test('stepping with Info open piles up nothing: Back closes Info on the photo you are on', async ({
+	test('stepping with Details open piles up nothing: Back closes Details on the photo you are on', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
@@ -104,7 +103,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		await expect(shown(page), 'the address names that photo').toHaveAttribute('alt', third);
 	});
 
-	test('Info opened and closed by its button five times leaves no step: one Back closes the photo', async ({
+	test('Details opened and closed by its button five times leaves no step: one Back closes the photo', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
@@ -121,7 +120,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		await expect(page).toHaveURL(/\/collections$/);
 	});
 
-	test('pressed faster than the history follows, Info ends as last asked and leaves no step', async ({
+	test('pressed faster than the history follows, Details ends as last asked and leaves no step', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
@@ -138,7 +137,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		await expect(page).toHaveURL(/\/collections$/);
 	});
 
-	test('Close with Info open closes the photo and takes both steps out', async ({ page }) => {
+	test('Close with Details open closes the photo and takes both steps out', async ({ page }) => {
 		await page.locator('.tile').first().click();
 		await infoButton(page).click();
 		await expect(details(page)).toBeVisible();
@@ -150,7 +149,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		await expect(page).toHaveURL(/\/collections$/);
 	});
 
-	test('a photo opened by its link: Back closes Info on the photo stepped to, Close stays on the page', async ({
+	test('a photo opened by its link: Back closes Details on the photo stepped to, Close stays on the page', async ({
 		page
 	}) => {
 		const id = await page.locator('.tile').first().getAttribute('data-id');
@@ -170,7 +169,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		await expect(page.locator('.tile').first()).toBeVisible();
 	});
 
-	test('a reload with Info open shows the photo that was on screen, and Back stays on it', async ({
+	test('a reload with Details open shows the photo that was on screen, and Back stays on it', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
@@ -195,7 +194,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 	});
 });
 
-test('laptop: Info is a panel beside the photo and takes no step', async ({ page }) => {
+test('laptop: Details is a panel beside the photo and takes no step', async ({ page }) => {
 	test.skip(isPhone(page), 'a side panel on a laptop only');
 	await page.locator('.tile').first().click();
 	await expect(details(page), 'open from the start').toBeVisible();

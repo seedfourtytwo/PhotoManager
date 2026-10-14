@@ -53,15 +53,15 @@ for (const [name, insets, size] of [
 		await signIn(page);
 		const nav = page.getByRole('navigation', { name: 'Main' });
 		for (const link of await nav.getByRole('link').all()) await expectClear(page, link, insets);
-		await expectClear(page, nav.getByRole('button', { name: 'Account' }), insets);
 		await expectClear(page, page.getByRole('heading', { level: 1 }), insets);
-		// A month heading sticks under the clock, not behind it.
+		// A month heading sticks under the clock, not behind it, and under the page's compact
+		// title, which is a touch target (44 px) tall.
 		const sticks = await page
 			.getByRole('main')
 			.getByRole('heading', { level: 2 })
 			.first()
 			.evaluate((h) => parseFloat(getComputedStyle(h).top));
-		expect(sticks).toBe(insets.top);
+		expect(sticks).toBe(insets.top + 44);
 	});
 
 	test(`edges, ${name}: the photo view's pills and bar clear the notch and the home bar`, async ({
@@ -72,7 +72,7 @@ for (const [name, insets, size] of [
 		await signIn(page);
 		await page.locator('.tile').first().click();
 		const viewer = loupe(page);
-		for (const label of ['Close', 'Info', 'Zoom', 'Favourite', 'More'])
+		for (const label of ['Close', 'Details', 'Zoom', 'Favourite', 'More'])
 			await expectClear(page, viewer.getByRole('button', { name: label }), insets);
 		// The photo itself has the whole screen: it runs under the notch and the bars.
 		const stage = (await viewer.locator('.stage').boundingBox())!;

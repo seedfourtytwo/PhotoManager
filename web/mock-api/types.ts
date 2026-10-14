@@ -6,6 +6,7 @@ import type {
 	AlbumMember,
 	BackupRun,
 	Device,
+	SyncRuleIn,
 	DateSource,
 	ImportItem,
 	ImportRun,
@@ -128,6 +129,8 @@ export type MockBackup = {
 	runs: (BackupRun & { ends_at: number })[];
 };
 type MockDevice = Device & { user_id: number; token: string };
+/** A "Keep on my phone" rule of one device (v1.7). */
+export type MockSyncRule = SyncRuleIn & { id: number; device_id: number };
 
 export type MockState = {
 	users: MockUser[];
@@ -136,6 +139,8 @@ export type MockState = {
 	access: Map<number, Access>;
 	assets: MockAsset[];
 	favourites: Map<number, Set<number>>;
+	/** Photos each account pinned to its Home (issue 54). */
+	pinned: Map<number, Set<number>>;
 	hidden: Map<number, Set<number>>;
 	albums: MockAlbum[];
 	reports: MockReport[];
@@ -147,6 +152,9 @@ export type MockState = {
 	faces: MockFace[];
 	backups: MockBackup[];
 	devices: MockDevice[];
+	syncRules: MockSyncRule[];
+	/** Device id → the photos it has fetched through the sync. */
+	syncSent: Map<number, Set<number>>;
 	remotes: string[];
 	/** rclone sources: source id → remote and path. */
 	remoteSources: Map<number, { remote: string; path: string }>;

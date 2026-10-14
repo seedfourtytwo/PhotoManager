@@ -45,7 +45,7 @@
 	);
 </script>
 
-<Dialog title={`Last import · ${label}`} {onclose} wide cancelLabel="Close">
+<Dialog title={`Last import, ${label}`} {onclose} wide cancelLabel="Close">
 	{#if report}
 		<dl class="summary">
 			<div>
@@ -122,14 +122,13 @@
 		width: 100%;
 		font-size: var(--fs-12);
 	}
+	/* Rows apart by space, not by lines. */
 	td {
-		padding: var(--s-1) var(--s-3) var(--s-1) 0;
+		padding: var(--s-1) var(--s-3) var(--s-2) 0;
 		vertical-align: top;
-		border-bottom: 1px solid var(--hairline);
 	}
 	.path {
 		font-family: var(--font-data);
-		font-stretch: 80%;
 		overflow-wrap: anywhere;
 	}
 </style>
