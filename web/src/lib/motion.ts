@@ -38,31 +38,42 @@ export async function withTransition(
 export type PageMove = 'forward' | 'back' | 'switch';
 
 /** The root, as far as a page move touches it. */
-type Root = { dataset: Record<string, string | undefined> };
+type Root = {
+	dataset: Record<string, string | undefined>;
+	style: { setProperty: (name: string, value: string) => void };
+};
+
+/** Where the top of the page area (<main>) is on the screen now. */
+const mainTop = () => document.getElementById('main')?.getBoundingClientRect().top ?? 0;
 
 let moves = 0;
 
 /**
  * Shows a page change (SvelteKit's `onNavigate`) as a transition of the page area: while it
- * runs the root carries `data-page-move`, which names the page and the bars (utilities.css)
- * and picks the animation. Resolves once the old page is captured, so the router may draw the
- * new one; `done` is the router's own promise that it has. Nothing (undefined) where there is
- * no transition to show.
+ * runs the root carries `data-page-move`, which names the page area and the bars
+ * (utilities.css) and picks the animation. The page area is as long as its page and scrolls
+ * with the document, so its old picture would land where the new page starts: `--page-shift`
+ * puts it back where it was on the screen. Resolves once the old page is captured, so the
+ * router may draw the new one; `done` is the router's own promise that it has. Nothing
+ * (undefined) where there is no transition to show.
  */
 export function movePage(
 	move: PageMove,
 	done: Promise<unknown>,
 	env: Env = browser(),
-	root: Root = document.documentElement
+	root: Root = document.documentElement,
+	areaTop: () => number = mainTop
 ): Promise<void> | undefined {
 	const start = env.start;
 	if (!start || env.reduced) return undefined;
 	const mine = ++moves;
 	root.dataset.pageMove = move;
+	const was = areaTop();
 	return new Promise((ready) => {
 		start(async () => {
 			ready();
 			await done.catch(() => undefined); // a failed change is still the end of the move
+			root.style.setProperty('--page-shift', `${was - areaTop()}px`);
 		})
 			.finished.catch(() => undefined)
 			.finally(() => {

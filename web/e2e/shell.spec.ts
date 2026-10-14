@@ -101,11 +101,11 @@ test('phone: the lens moves to the chosen place, and leaves when none is', async
 			const style = getComputedStyle(ul, '::before');
 			return { x: new DOMMatrix(style.transform).m41, shown: style.opacity === '1' };
 		});
-	const second = await places.getByRole('listitem').nth(1).evaluate((li) => li.offsetLeft);
-	const first = await places.getByRole('listitem').nth(0).evaluate((li) => li.offsetLeft);
+	const left = async (i: number) => (await places.getByRole('listitem').nth(i).boundingBox())!.x;
+	const step = (await left(1)) - (await left(0));
 	await expect.poll(lens).toEqual({ x: 0, shown: true });
 	await nav(page).getByRole('link', { name: 'Collections', exact: true }).click();
-	await expect.poll(async () => Math.round((await lens()).x)).toBe(Math.round(second - first));
+	await expect.poll(async () => Math.round((await lens()).x)).toBe(Math.round(step));
 	await nav(page).getByRole('link', { name: 'Search', exact: true }).click();
 	await expect.poll(async () => (await lens()).shown).toBe(false);
 });
@@ -183,7 +183,9 @@ test('shell: on a tablet or a landscape phone the dock is a capsule, not a bar',
 	await page.setViewportSize({ width: 900, height: 600 });
 	await signIn(page);
 	const pill = (await nav(page).getByRole('list').boundingBox())!;
-	const search = (await nav(page).getByRole('link', { name: 'Search', exact: true }).boundingBox())!;
+	const search = (await nav(page)
+		.getByRole('link', { name: 'Search', exact: true })
+		.boundingBox())!;
 	expect(pill.width).toBeLessThanOrEqual(26 * 16); // 26rem
 	// The two pieces sit together in the middle of the screen.
 	const right = search.x + search.width;
@@ -214,7 +216,11 @@ test('page changes: places fade, a page opened slides in, Back slides back', asy
 	expect(switched).toBe('switch');
 	await expect(page).toHaveURL(/\/collections$/);
 	const drilled = await movesDuring(page, () =>
-		page.getByRole('main').getByRole('link', { name: /^People/ }).first().click()
+		page
+			.getByRole('main')
+			.getByRole('link', { name: /^People/ })
+			.first()
+			.click()
 	);
 	expect(drilled).toBe('forward');
 	await expect(page).toHaveURL(/\/people$/);

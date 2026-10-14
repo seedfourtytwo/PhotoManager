@@ -350,12 +350,13 @@ test.describe('a double click sends one request', () => {
 	test('Change PIN changes it once, without “the current PIN is wrong”', async ({ page }) => {
 		const posts = await countSlow(page, '**/api/auth/pin', 'POST');
 		await signIn(page, '/settings');
-		await page.getByLabel('Current PIN').fill(ADMIN.pin);
-		await page.getByLabel('New PIN').fill('8642');
-		await page.getByRole('button', { name: 'Change PIN' }).dblclick();
+		await page.getByRole('button', { name: 'Change PIN' }).click();
+		const sheet = page.getByRole('dialog', { name: 'Change PIN' });
+		await sheet.getByLabel('Current PIN').fill(ADMIN.pin);
+		await sheet.getByLabel('New PIN').fill('8642');
+		await sheet.getByRole('button', { name: 'Change PIN' }).dblclick();
 		await expect(page.getByRole('status').filter({ hasText: 'PIN changed' })).toBeVisible();
 		expect(posts.count).toBe(1);
-		// the backup warning is an alert on every page: look for one about the PIN
 		await expect(page.getByRole('alert').filter({ hasText: /PIN/ })).toHaveCount(0);
 	});
 

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, expectAccessible, resetMock, signIn, test } from './helpers.ts';
+import { expect, expectAccessible, follow, resetMock, signIn, test } from './helpers.ts';
 
 /** The phone's sheet on You, and in it what the phone keeps. */
 async function openPhone(page: Page) {
@@ -7,9 +7,9 @@ async function openPhone(page: Page) {
 		.getByRole('region', { name: 'Phones that send photos here' })
 		.getByRole('button', { name: /^Léa’s iPhone/ })
 		.click();
-	return page
-		.getByRole('dialog', { name: 'Léa’s iPhone' })
-		.getByRole('group', { name: 'What Léa’s iPhone keeps' });
+	const sheet = page.getByRole('dialog', { name: 'Léa’s iPhone' });
+	await expect(sheet).toHaveCSS('opacity', '1'); // risen: axe must not read a fading sheet
+	return sheet.getByRole('group', { name: 'What Léa’s iPhone keeps' });
 }
 
 test('keep an album on a phone, leave out screenshots, and see it on You', async ({ page }) => {
@@ -38,7 +38,8 @@ test('keep an album on a phone, leave out screenshots, and see it on You', async
 	await dialog.getByRole('button', { name: 'Done' }).click();
 	await expect(dialog).toBeHidden(); // its history step is undone before leaving
 
-	await page.goto('/settings');
+	// In the app, as a person goes: a reload could be cut short by the step's way out.
+	await follow(page, '/settings');
 	keeps = await openPhone(page);
 	await expect(keeps.getByRole('region', { name: 'Keeps' })).toContainText('Summers at the house');
 	await expectAccessible(page);

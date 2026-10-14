@@ -140,8 +140,8 @@
 					line="It can no longer send or fetch photos"
 					danger
 					onclick={() => {
+						revoking = device; // first: `device` follows `open`
 						open = null;
-						revoking = device;
 					}}
 				>
 					{#snippet trailing()}{/snippet}
@@ -153,9 +153,9 @@
 	<Dialog title="Add a phone" onclose={close} cancelLabel={token ? 'Done' : 'Cancel'} wide>
 		{#if !token}
 			<p class="quiet small intro">
-				A phone with its own token sends its new photos here (for example with Apple Shortcuts
-				while charging) and fetches what you keep on it. It can only upload into your own uploads
-				and download what you keep on it; it cannot see anything else or delete anything.
+				A phone with its own token sends its new photos here (for example with Apple Shortcuts while
+				charging) and fetches what you keep on it. It can only upload into your own uploads and
+				download what you keep on it; it cannot see anything else or delete anything.
 			</p>
 			<label class="field">Name <input bind:value={name} placeholder="Léa’s iPhone" /></label>
 			<label class="field"

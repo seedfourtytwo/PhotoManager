@@ -236,7 +236,7 @@ backend reaches SMB/SFTP/cloud targets. There is no scheduler library: the perio
 `backup_due` job every `PA_BACKUP_POLL_SECONDS` (60 s); that job, on the worker's long lane,
 runs every target whose schedule says it is due and that is outside its quiet window, then
 `restic forget --prune` with the target's retention policy. Results go to a `backup_run` table
-that feeds the status page and the overdue banner.
+that feeds the status page and the admin's avatar dot.
 
 Guided setup (issue 3): `BackupPlaces` (mounted disks, rclone remotes, facts about one place)
 feeds the pure rule `plan_backup` (fits? writable? same disk? another backup there?); `KeyVault`
@@ -263,8 +263,9 @@ with the disk connected and check it succeeded.
 
 `protection()` (pure) turns the target statuses into `places_ok / places_total` plus problems; a
 place is an enabled target or its Proton copy, "protected" is two or more ok. `GET
-/api/backups/health` serves it to admins and the root layout shows `BackupBanner` from it on
-every page. `backup run-due` exits 1 when a run failed or a skipped place is overdue, not for a
+/api/backups/health` serves it to admins; the root layout asks again on each page change, and
+the first problem becomes the red dot on the admin's avatar and its sentence under "Needs you" on
+You (`attentionOf` in `web/src/lib/nav.ts`). Members never see it. `backup run-due` exits 1 when a run failed or a skipped place is overdue, not for a
 fresh skip.
 
 ### Phone inbox

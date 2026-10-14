@@ -206,6 +206,9 @@ export async function centre(target: Locator) {
 /** Select photos the way each device does it: click the check circle, or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');
+	// The presses below skip Playwright's own wait for a target that takes them, and a page
+	// that is still sliding in takes no tap (as on an iPhone): wait for the move to end.
+	await expect(page.locator('html')).not.toHaveAttribute('data-page-move');
 	for (const [n, i] of indexes.entries()) {
 		const tile = tiles.nth(i);
 		if (!isPhone(page)) await tile.locator('.check').click({ force: true });

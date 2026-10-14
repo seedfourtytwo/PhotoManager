@@ -6,14 +6,7 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import { isPin, PIN_LENGTH, type Role } from '$lib/api';
-	import {
-		api,
-		backupWatch,
-		chooseMode,
-		isPublicRoute,
-		notice,
-		session
-	} from '$lib/app.svelte';
+	import { api, backupWatch, chooseMode, isPublicRoute, notice, session } from '$lib/app.svelte';
 	import Devices from '$lib/components/Devices.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import PageHead from '$lib/components/PageHead.svelte';
@@ -151,7 +144,12 @@
 	<Dialog title="Change PIN" onclose={closePin}>
 		<form id="pin-form" onsubmit={changePin}>
 			<label class="field"
-				>Current PIN <input {...PIN_FIELD} bind:value={current} autocomplete="off" required /></label
+				>Current PIN <input
+					{...PIN_FIELD}
+					bind:value={current}
+					autocomplete="off"
+					required
+				/></label
 			>
 			<label class="field"
 				>New PIN <input {...PIN_FIELD} bind:value={next} autocomplete="off" required /></label

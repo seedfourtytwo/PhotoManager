@@ -40,7 +40,7 @@ test('You: the person, their role, and the chosen mode', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/settings');
 	await expect(page.getByRole('heading', { name: ADMIN.name, level: 1 })).toBeVisible();
-	await expect(page.getByRole('main').getByText('Admin', { exact: true })).toBeVisible();
+	await expect(page.locator('main .me .role')).toHaveText('Admin');
 	await expect(modes(page).filter({ hasText: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(page).toHaveTitle('You · Photos');
 	await expectAccessible(page);
@@ -76,6 +76,7 @@ test('phones: add one, its token shown once with Copy; open it, then revoke it',
 	await row.click();
 	const sheet = page.getByRole('dialog', { name: 'Léa’s iPhone' });
 	await expect(sheet.getByRole('group', { name: 'What Léa’s iPhone keeps' })).toBeVisible();
+	await expect(sheet).toHaveCSS('opacity', '1'); // risen: axe must not read a fading sheet
 	await expectAccessible(page);
 	await sheet.getByRole('button', { name: /^Revoke/ }).click();
 	// It asks first: a revoked token cannot be shown or used again.
