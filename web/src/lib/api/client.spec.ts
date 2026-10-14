@@ -37,6 +37,7 @@ const asset = (id: number): AssetOut => ({
 	thumb: null,
 	preview_ready: false,
 	favourite: false,
+	pinned: false,
 	hidden: false,
 	private: false,
 	place: null,
@@ -174,6 +175,39 @@ describe('createApi', () => {
 			'/api/calendar',
 			'/api/map?has_location=true'
 		]);
+	});
+
+	it('narrows by people and pinned photos, repeating person_id', async () => {
+		const { calls, fetcher } = fakeServer([json({ items: [], next_cursor: null }), json({})]);
+		const api = createApi({ fetch: fetcher });
+		await api.assets({ person_id: [3, 4], pinned: true });
+		await api.facets({ person_id: [3] });
+		expect(calls.map((c) => c.url)).toEqual([
+			'/api/assets?person_id=3&person_id=4&pinned=true&limit=200',
+			'/api/assets/facets?person_id=3'
+		]);
+	});
+
+	it('pins through the state routes', async () => {
+		const { calls, fetcher } = fakeServer([json(asset(9)), json({ updated: 2 })]);
+		const api = createApi({ fetch: fetcher });
+		await api.setState(9, { pinned: true });
+		await api.setStates({ ids: [9, 10], pinned: false });
+		expect(calls).toMatchObject([
+			{ url: '/api/assets/9/state', method: 'PATCH', body: { pinned: true } },
+			{ url: '/api/assets/state', method: 'POST', body: { ids: [9, 10], pinned: false } }
+		]);
+	});
+
+	it('reads Home', async () => {
+		const home = {
+			on_this_day: null,
+			memories: [],
+			new: { count: 0, days: 7, sources: [], items: [] }
+		};
+		const { calls, fetcher } = fakeServer([json(home)]);
+		expect(await createApi({ fetch: fetcher }).home()).toEqual(home);
+		expect(calls[0]).toMatchObject({ url: '/api/home', method: 'GET' });
 	});
 
 	it('sends bodies on DELETE (trash, album items)', async () => {

@@ -139,6 +139,8 @@ export type MockState = {
 	access: Map<number, Access>;
 	assets: MockAsset[];
 	favourites: Map<number, Set<number>>;
+	/** Photos each account pinned to its Home (issue 54). */
+	pinned: Map<number, Set<number>>;
 	hidden: Map<number, Set<number>>;
 	albums: MockAlbum[];
 	reports: MockReport[];

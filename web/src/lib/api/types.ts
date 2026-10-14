@@ -159,6 +159,8 @@ export type AssetOut = {
 	thumb: { url: string } | null;
 	preview_ready: boolean;
 	favourite: boolean;
+	/** On the account's Home (issue 54); like a favourite, the account's own. */
+	pinned: boolean;
 	hidden: boolean;
 	private: boolean;
 	place: Place | null;
@@ -198,10 +200,13 @@ export type AssetFilters = {
 	year?: number;
 	month?: number;
 	source_id?: Id[];
+	/** Photos with ANY of these people on them. */
+	person_id?: Id[];
 	camera?: string;
 	place?: string;
 	q?: string;
 	favourite?: boolean;
+	pinned?: boolean;
 	hidden?: boolean;
 	guessed_date?: boolean;
 	has_location?: boolean;
@@ -219,8 +224,17 @@ export type Facets = {
 export type CalendarDay = { day: string; count: number };
 export type MapPoint = { id: Id; lat: number; lon: number };
 
-export type StatePatch = Partial<{ favourite: boolean; hidden: boolean; private: boolean }>;
-export type BulkState = { ids: Id[] } & Partial<{ favourite: boolean; hidden: boolean }>;
+export type StatePatch = Partial<{
+	favourite: boolean;
+	pinned: boolean;
+	hidden: boolean;
+	private: boolean;
+}>;
+export type BulkState = { ids: Id[] } & Partial<{
+	favourite: boolean;
+	pinned: boolean;
+	hidden: boolean;
+}>;
 export type DateChange = { ids: Id[] } & (
 	{ set: string; shift_minutes?: never } | { shift_minutes: number; set?: never }
 );
@@ -242,6 +256,51 @@ export const IDENTITY_RECIPE: Recipe = {
 	crop: null,
 	straighten: 0
 };
+
+// --- Home (issue 54) --------------------------------------------------------------------------
+
+/**
+ * The /api/assets filters that list exactly the photos a Home block counts. Dates guessed from
+ * a file's mtime are left out of Home, hence `guessed_date: false`.
+ */
+export type HomeFilter = { from: string; to: string; guessed_date: false };
+/** Today's date in an earlier year: the year with the most photos on it. */
+export type OnThisDay = {
+	/** Today's date in that year (YYYY-MM-DD). */
+	day: string;
+	years_ago: number;
+	/** False: nothing was taken on the day itself, so three days either side count. */
+	exact: boolean;
+	count: number;
+	/** A favourite of yours if there is one, else the first photo. */
+	cover: AssetOut;
+	/** The place most of them were taken at (a city, else a region or country). */
+	place: string | null;
+	/** The named people on them, most photos first (hidden people left out). */
+	people: { id: Id; name: string }[];
+	filter: HomeFilter;
+};
+/** A trip: photos at most two days apart, ten at least ("Lisbon, July and August 2024"). */
+export type Memory = {
+	/** Its first and last day: the same while the trip stays the same. */
+	key: string;
+	title: string;
+	from: string;
+	to: string;
+	count: number;
+	cover: AssetOut;
+	filter: HomeFilter;
+};
+/** Photos imported in the last `days` days; `sources`: the folders they came from. */
+export type NewArrivals = {
+	count: number;
+	days: number;
+	sources: { id: Id; label: string; count: number }[];
+	/** The newest arrivals (at most 12), newest first. */
+	items: AssetOut[];
+};
+/** GET /api/home: the two newest memories come first, the others change every day. */
+export type HomeData = { on_this_day: OnThisDay | null; memories: Memory[]; new: NewArrivals };
 
 // --- downloads -----------------------------------------------------------------------------
 

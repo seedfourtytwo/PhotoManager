@@ -201,10 +201,12 @@ New sources default to `{everyone: "download", users: []}`.
 | `from`, `to` | inclusive day range `YYYY-MM-DD` |
 | `year`, `month` | shortcuts (month needs year) |
 | `source_id` | repeatable; only sources you can see count (a hidden source's id selects nothing, v1.2) |
+| `person_id` | repeatable: photos with **any** of these people on them (v1.9); an unknown id selects nothing, one outside 1…2⁶³−1 is `400` |
 | `camera` | exact `camera_model` |
 | `place` | matches country, region or city (case-insensitive) |
 | `q` | free text over file names (in sources you can see, v1.2), place names, camera, album titles (of albums you can see) |
 | `favourite` | `true` = only my favourites |
+| `pinned` | `true` = only the photos I pinned to my Home, `false` = the others (v1.9) |
 | `hidden` | `true` = only my hidden; default hides them |
 | `guessed_date` | `true` = only photos whose date came from the file (`file_mtime`) |
 | `has_location` | `true`/`false` |
@@ -213,7 +215,7 @@ New sources default to `{everyone: "download", users: []}`.
 `AssetOut` (list item):
 ```
 {id, taken_at, tz_offset_minutes, date_source, width, height, kind,
- thumb: {url} | null, preview_ready, favourite, hidden, private,
+ thumb: {url} | null, preview_ready, favourite, pinned, hidden, private,
  place: {country, region, city} | null, edited: bool, variant_of: id|null,
  group_id: id|null}          # bursts / near-duplicates share a group
 ```
@@ -227,8 +229,8 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{name, byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
-| PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
-| POST | `/api/assets/state` | `{ids, favourite?, hidden?}` | `{updated}` |
+| PATCH | `/api/assets/{id}/state` | `{favourite?, pinned?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above). `pinned` (v1.9) is per account like `favourite`: `true` pins (a photo pinned again keeps its first time), `false` unpins |
+| POST | `/api/assets/state` | `{ids, favourite?, pinned?, hidden?}` | `{updated}` |
 | POST | `/api/assets/dates` | `{ids, set?: "YYYY-MM-DDTHH:MM:SS", shift_minutes?: int}` (exactly one) | `{updated}`; needs `edit`; sets `date_source="manual"`, keeps the previous value. `422` if a photo would end up more than a day after the server's local now (v1.2) |
 | GET | `/api/assets/{id}/edit` | – | `Recipe` |
 | PUT | `/api/assets/{id}/edit` | `Recipe` | `Recipe`; needs `edit` |
@@ -269,12 +271,53 @@ renders via libvips with the edit recipe applied.
 `photos-<words>.zip` (`photos-all.zip` with no filter); `ids` → `photos-<n>.zip` (`n` = distinct ids
 asked for). Filter words, in this order, lowercase, joined by `-`: day range (`2019-07-04`,
 `2019-07-01-to-2019-08-31`, `from-…`, `to-…`), `year[-month]` (`2019`, `2019-07`),
-`<n>-source(s)`, camera, place, `q` (each slugged: runs of non-letters/digits → `-`),
-`favourites`, `hidden`, `guessed-dates`, `with-location`/`without-location`. E.g.
+`<n>-source(s)`, `1-person`/`<n>-people` (v1.9), camera, place, `q` (each slugged: runs of
+non-letters/digits → `-`), `favourites`, `pinned` (v1.9), `hidden`, `guessed-dates`,
+`with-location`/`without-location`. E.g.
 `{year: 2019, place: "France"}` → `photos-2019-france.zip`. Names are sanitised (no `/ \ : * ? " < > |`
 or control characters → `_`; blank titles → `album.zip`) and at most 100 characters. The ASCII
 `filename` drops accents and turns other non-ASCII characters into `_`. Single-photo downloads
 use the same header shape.
+
+## Home (v1.9, issue 54)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/home` | – | `Home` for the signed-in account (below) |
+
+```
+Home = {
+  on_this_day: null | {day: "YYYY-MM-DD", years_ago, exact: bool, count, cover: AssetOut,
+                       place: str|null, people: [{id, name}], filter: HomeFilter},
+  memories: [{key, title, from: "YYYY-MM-DD", to: "YYYY-MM-DD", count, cover: AssetOut,
+              filter: HomeFilter}],                                   # at most 8
+  new: {count, days: 7, sources: [{id, label, count}], items: AssetOut[]}  # items: ≤ 12
+}
+HomeFilter = {from, to, guessed_date: false}   # /api/assets filters listing exactly `count`
+```
+Everything is what the timeline shows you: photos you may see, not in the trash, not held
+for review, not hidden by you. Photos whose date was guessed from the file
+(`date_source: "file_mtime"`) never make a memory or an "on this day": a copy's date is not
+the day it was taken; each `filter` carries `guessed_date: false` for that reason.
+
+- **on_this_day**: the photos taken on today's month and day (the server's local date) in an
+  earlier year; of those years the one with the most photos, a tie going to the most recent.
+  When no earlier year has a photo on the day, three days either side count instead and
+  `exact` is `false`. 29 February is 28 February in other years. `day` is today's date in
+  that year; `cover` is your first favourite among them, else the first by time; `place` the
+  place most of them have (city, else region, else country); `people` the named, listed
+  people on them, most photos first. `null` when no earlier year has any.
+- **memories**: trips: photos in time order split wherever more than two days pass between
+  two of them (exactly two days stays one trip); a trip needs at least 10 photos. `title` is
+  the main place (city; a tie goes to the place seen first) and the months in English:
+  `"Lisbon, July 2024"`, `"Lisbon, July and August 2024"`, `"July to September 2024"`,
+  `"December 2023 and January 2024"`, `"July 2024"` without a place. `from`/`to`: its first
+  and last day; `key` = `"<from>_<to>"`, stable while the trip is. The two newest come
+  first; the others take turns, six a day, so the list changes each day and stays the same
+  all day. `cover` as for on_this_day.
+- **new**: photos imported (not taken) in the last `days` days, newest arrival first;
+  `items` the newest 12; `sources` the folders they came from (each photo counts once, for
+  the folder that brought it, when you may see that folder), most first.
 
 ## Albums
 
@@ -559,3 +602,16 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Sources | New: `GET /api/sources/{id}/removal` and `DELETE /api/sources/{id}` (see "Sources" above). | Admin → Folders has "Stop watching" with a confirm sheet (`api.sourceRemoval`, `api.removeSource`); the enabled switch reads "Pause checking" / "Resume checking". |
+
+---
+
+# v1.9 changes (person filter, pinned photos, Home)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Assets | New filter `person_id` (repeatable: photos with any of those people) on `/api/assets`, `/facets`, `/calendar`, `/map`, `/api/search` and download `filters`. | `AssetFilters.person_id`; `filtersFromParams`/`filtersToParams` read and write it; `describeFilters(filters, names)` names the people when given an id → name map, else counts them ("2 people"). |
+| Assets | `AssetOut.pinned` (per account); `pinned` in `PATCH /api/assets/{id}/state` and `POST /api/assets/state`; filter `pinned=true\|false`. Migration `0032` (`user_asset.pinned_at`). | `AssetOut.pinned`, `StatePatch`/`BulkState` `pinned`, `AssetFilters.pinned`; Home's Pinned block lists `api.assets({pinned: true})`. |
+| Downloads | ZIP words `1-person`/`<n>-people` and `pinned`. | None. |
+| Home | New: `GET /api/home` (see "Home" above). | `api.home()` → `HomeData` (`OnThisDay`, `Memory`, `NewArrivals`, `HomeFilter`); a block's `filter` goes straight into `api.assets()` to list its photos. |

@@ -3,6 +3,7 @@
  * fake library (library.ts), two albums, one failed job and one backup that cannot be reached.
  */
 import type { Access } from '../src/lib/api/types.ts';
+import { isoAt } from './http.ts';
 import { makeAssets, makePeople } from './library.ts';
 import type { MockAlbum, MockReport, MockSource, MockState, MockUser } from './types.ts';
 
@@ -69,8 +70,23 @@ function makeSources(): MockSource[] {
 	];
 }
 
-export function makeState(options: { users: 'none' | 'seed'; count?: number; seed?: number }) {
+/** The newest photos that arrived over the week before the mock's clock (Home's "new"). */
+const ARRIVALS = 30;
+const ARRIVAL_EVERY = 5 * 3_600_000;
+
+/** `now`: the mock's clock, for what arrived lately; without it every photo came long ago. */
+export function makeState(options: {
+	users: 'none' | 'seed';
+	count?: number;
+	seed?: number;
+	now?: number;
+}) {
 	const assets = makeAssets(options.count ?? 300, options.seed ?? 42);
+	const clock = options.now;
+	if (clock !== undefined)
+		assets.slice(-ARRIVALS).forEach((a, i, latest) => {
+			a.imported_at = isoAt(clock - (latest.length - i) * ARRIVAL_EVERY);
+		});
 	const users: MockUser[] =
 		options.users === 'seed'
 			? SEED_USERS.map((u, i) => ({ ...u, ...noWrongPins(), id: i + 1 }))
@@ -161,6 +177,7 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 		access,
 		assets,
 		favourites: new Map([[1, new Set(assets.filter((_, i) => i % 23 === 0).map((a) => a.id))]]),
+		pinned: new Map([[1, new Set(assets.filter((_, i) => i % 50 === 7).map((a) => a.id))]]),
 		hidden: new Map([[1, new Set([assets[5].id])]]),
 		albums,
 		reports,
