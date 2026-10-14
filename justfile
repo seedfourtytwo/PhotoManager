@@ -49,6 +49,11 @@ models *args:
 ml-backfill:
     cd backend && uv run python -m photo_assistant ml-backfill
 
+# After upgrading an older library: queue reading aperture, shutter, ISO and focal length from
+# the library copies (read-only). Safe to stop and to run again; the server's worker does it.
+exposure-backfill:
+    cd backend && uv run python -m photo_assistant exposure-backfill
+
 # Everything CI runs, in the same order. Must pass before every push.
 check: lint types test
 

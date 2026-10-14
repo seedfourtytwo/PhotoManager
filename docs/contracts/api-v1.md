@@ -201,7 +201,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/facets` | same filters | `{years:[{year,count}], sources:[{id,label,count}], cameras:[{name,count}], places:[{name,count}], guessed_dates:int, total:int}` |
 | GET | `/api/calendar` | same filters | `[{day:"YYYY-MM-DD", count}]` |
 | GET | `/api/map` | same filters | `[{id, lat, lon}]` |
-| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{byte_size, mime_type, camera_make, camera_model, latitude, longitude, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}` |
+| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
 | PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
@@ -467,3 +467,13 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Look | New: `GET/PUT /api/me/look` and `GET/PUT /api/admin/accounts/{id}/look` (see "Look" above). | The mode switch in Settings saves on the account (`api.setMyMode`); Admin → People has a "Look" form per account (`api.accountLook`, `api.setAccountLook`). The browser's old `pa.theme` setting is removed after the first `GET /api/me/look` that answers; it is sent as the mode first only when that answer is still the defaults (the API does not say whether a look was ever stored, so a sheet equal to the defaults counts as none). |
+
+---
+
+# v1.6 changes (exposure settings in the photo view)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Assets | `AssetDetail` (`GET /api/assets/{id}`) carries `f_number`, `exposure_time` (seconds), `iso` and `focal_length` (millimetres); each is `null` when the photo does not carry it. The timeline's `AssetOut` rows are unchanged. | The photo bar's second line reads aperture · shutter · ISO · focal length · file name (`$lib/readout`, `$lib/exposure`), with only the values that are there; a photo with none keeps camera · pixel size · file name. The details list them under the camera. A photo imported before this has `null` everywhere until the admin runs `just exposure-backfill`. |

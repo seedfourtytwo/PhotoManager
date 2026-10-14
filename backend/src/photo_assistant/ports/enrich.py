@@ -1,10 +1,12 @@
-"""Ports for background enrichment: offline reverse geocoding, perceptual hashing."""
+"""Ports for background enrichment: offline reverse geocoding, perceptual hashing, and the
+exposure settings of photos imported before they were kept."""
 
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.exposure import Exposure
 from photo_assistant.domain.grouping import Shot
 from photo_assistant.domain.places import Place
 
@@ -45,3 +47,13 @@ class EnrichmentStore(Protocol):
     def set_groups(self, groups: dict[int, int | None]) -> int:
         """Store group ids; returns how many changed."""
         ...
+
+
+class ExposureStore(Protocol):
+    def assets_without_exposure(self, after_id: int, limit: int) -> list[tuple[int, str]]:
+        """(asset id, library path relative to the data root) of photos with none of the four
+        exposure values, trashed ones included (they may be restored), by id."""
+        ...
+
+    def set_exposures(self, exposures: Sequence[tuple[int, Exposure]]) -> None: ...
+    def enqueue(self, kind: str, payload: dict[str, object]) -> int: ...

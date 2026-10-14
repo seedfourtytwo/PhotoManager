@@ -444,6 +444,7 @@ class ImportSource:
             library_path=str(
                 original_relpath(c.content_hash, taken.value.year, taken.value.month, name.suffix)
             ),
+            exposure=meta.exposure,
         )
 
     def _resolve_deferred(

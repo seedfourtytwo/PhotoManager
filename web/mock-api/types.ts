@@ -39,6 +39,10 @@ export type MockAsset = {
 	place: MockPlace | null;
 	camera_make: string | null;
 	camera_model: string | null;
+	f_number: number | null;
+	exposure_time: number | null;
+	iso: number | null;
+	focal_length: number | null;
 	byte_size: number;
 	mime_type: string;
 	imported_at: string;
