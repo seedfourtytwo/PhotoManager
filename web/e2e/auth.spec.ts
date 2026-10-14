@@ -92,8 +92,11 @@ test.describe('first run and sign-in', () => {
 		await expect(page.locator('.dots i.on')).toHaveCount(0);
 
 		for (const digit of ADMIN.pin) await key(digit).tap();
-		await expect(page).toHaveURL(/\/$/);
-		await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
+		// Signing in with no page asked for opens the start page: Home (spec 2026-10-14 §4).
+		await expect(page).toHaveURL(/\/home$/);
+		await expect(
+			page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' })
+		).toHaveAttribute('aria-current', 'page');
 	});
 
 	test('on a laptop there is no number pad: the PIN is typed and shows as dots', async ({
@@ -108,7 +111,7 @@ test.describe('first run and sign-in', () => {
 		await page.keyboard.type(ADMIN.pin.slice(0, 3));
 		await expect(page.locator('.dots i.on')).toHaveCount(3);
 		await page.keyboard.type(ADMIN.pin.slice(3));
-		await expect(page).toHaveURL(/\/$/);
+		await expect(page).toHaveURL(/\/home$/);
 	});
 
 	test('sign out, and change PIN in its sheet on You', async ({ page }) => {

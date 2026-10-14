@@ -64,19 +64,20 @@ const jpegFile = () =>
 		}
 	});
 
-function open(detail: AssetDetail | null = detailOf(), trash = false) {
+function open(detail: AssetDetail | null = detailOf(), trash = false, shown = asset) {
 	const onopen = vi.fn();
+	const ontoggle = vi.fn();
 	render(PhotoBar, {
-		asset,
+		asset: shown,
 		detail,
 		trash,
 		busy: false,
 		more: false,
-		ontoggle: vi.fn(),
+		ontoggle,
 		onopen,
 		onrestore: vi.fn()
 	});
-	return { onopen };
+	return { onopen, ontoggle };
 }
 
 /** The bar's actions by name: each is its icon alone, named for a screen reader. */
@@ -204,7 +205,8 @@ describe('PhotoBar on a device with a share sheet', () => {
 		server();
 		session.user = user('guest');
 		open(detailOf('view'));
-		expect(actions()).toEqual(['Favourite', 'Download']);
+		// More holds Pin to Home: a mark of one's own, like Favourite (issue 54)
+		expect(actions()).toEqual(['Favourite', 'Download', 'More']);
 		await expect.element(button('Download')).toBeDisabled();
 		await expect.element(page.getByText('view only')).toBeInTheDocument();
 	});
@@ -299,5 +301,31 @@ describe('PhotoBar on a device without a share sheet', () => {
 		await button('More').click();
 		await button('Download').click();
 		expect(onopen).toHaveBeenCalledWith('download');
+	});
+});
+
+describe('Pin to Home (issue 54)', () => {
+	it('is under More once the details are in, for anyone who sees the photo', async () => {
+		server();
+		session.user = user('guest');
+		const { ontoggle } = open(detailOf('view'));
+		await button('More').click();
+		await button('Pin to Home').click();
+		expect(ontoggle).toHaveBeenCalledWith('pinned');
+	});
+
+	it('a pinned photo offers Unpin from Home instead', async () => {
+		server();
+		const { ontoggle } = open(detailOf(), false, { ...asset, pinned: true });
+		await button('More').click();
+		await expect.element(button('Pin to Home')).not.toBeInTheDocument();
+		await button('Unpin from Home').click();
+		expect(ontoggle).toHaveBeenCalledWith('pinned');
+	});
+
+	it('is not offered in the trash', async () => {
+		server();
+		open(detailOf(), true);
+		expect(document.body.textContent).not.toContain('Pin to Home');
 	});
 });

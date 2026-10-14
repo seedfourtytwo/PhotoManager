@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '$lib/tokens.css';
 	import { onMount, untrack } from 'svelte';
-	import { afterNavigate, onNavigate } from '$app/navigation';
+	import { afterNavigate, goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
@@ -15,9 +15,11 @@
 		session
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
+	import { cachedOwner } from '$lib/look/cache';
 	import { dropBadPhotoParam } from '$lib/loupe.svelte';
 	import { movePage } from '$lib/motion';
 	import { pageMove } from '$lib/nav';
+	import { arrival, landing, mayLand } from '$lib/start-page.svelte';
 
 	let { children } = $props();
 
@@ -55,11 +57,31 @@
 
 	// Each account has its own look: fetch it for whoever is signed in now. (Leaving takes the
 	// look away again, a trial included: session.lost and session.signOut.) Untracked: only
-	// who is signed in starts a fetch, not the look it changes.
+	// who is signed in starts a fetch, not the look it changes. `lookOf`: whose look is on
+	// screen, cached from before or just fetched (or failed to be: then the cache's stands).
 	const signedInAs = $derived(session.user?.id);
+	let lookOf = $state<number | null>(null);
 	$effect(() => {
-		if (signedInAs !== undefined) untrack(() => void loadLook());
+		const who = signedInAs;
+		if (who === undefined) return;
+		untrack(() => {
+			if (cachedOwner() === who) lookOf = who;
+			void loadLook().then(() => (lookOf = who));
+		});
 	});
+
+	// The first page a tab shows after signing in may move to the account's start page
+	// (lib/start-page.svelte.ts). A bare `/` waits for that, so Library never flashes on the way.
+	let moving = $state(false);
+	$effect(() => {
+		if (arrival.done || bare || !session.user || lookOf !== session.user.id) return;
+		arrival.mark();
+		const to = landing(page.url, look.saved);
+		if (!to) return;
+		moving = true;
+		void goto(to, { replaceState: true }).finally(() => (moving = false));
+	});
+	const holding = $derived(moving || (!arrival.done && mayLand(page.url)));
 
 	function cameBack() {
 		if (document.visibilityState !== 'visible') return;
@@ -129,7 +151,7 @@
 		<Nav />
 		<main id="main" tabindex="-1">
 			<LookTrial />
-			{@render children()}
+			{#if !holding}{@render children()}{/if}
 		</main>
 	</div>
 {:else if session.error}

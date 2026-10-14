@@ -1,5 +1,5 @@
 /** Upload (v1.1): into the caller's private inbox source. */
-import { HttpError, idParam, me, nowIso, ok, type Route } from '../http.ts';
+import { HttpError, idParam, isoAt, me, nowIso, ok, type Route } from '../http.ts';
 import type { Helpers } from '../helpers.ts';
 import { makeAsset, rng } from '../library.ts';
 import type { MockUser } from '../types.ts';
@@ -73,6 +73,7 @@ export function uploadRoutes(h: Helpers): Route[] {
 						rng(content.length)
 					);
 					asset.sources = [{ source_id: inbox.id, relative_path: `${month}/${name}` }];
+					asset.imported_at = isoAt(h.now());
 					h.state().assets.push(asset);
 					return { name, outcome: 'stored', stored_as: `${month}/${name}`,
 						content_hash: null, asset_id: null, reason: null }; // prettier-ignore

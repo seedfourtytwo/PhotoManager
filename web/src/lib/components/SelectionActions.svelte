@@ -51,6 +51,7 @@
 	const allFavourite = $derived(selected.length > 0 && selected.every((a) => a.favourite));
 	const allHidden = $derived(selected.length > 0 && selected.every((a) => a.hidden));
 	const allPrivate = $derived(selected.length > 0 && selected.every((a) => a.private));
+	const allPinned = $derived(selected.length > 0 && selected.every((a) => a.pinned));
 
 	async function once(run: () => Promise<void>) {
 		if (busy) return;
@@ -78,6 +79,18 @@
 				throw e;
 			}
 			notice.show(favourite ? 'Marked as favourites.' : 'Removed from favourites.');
+		});
+
+	/** On the account's Home (issue 54); nothing in the grid shows it, so it is not optimistic. */
+	const setPinned = () =>
+		once(async () => {
+			const pinned = !allPinned;
+			const these = [...ids];
+			await api.setStates({ ids: these, pinned });
+			onpatch(new Set(these), { pinned });
+			notice.show(
+				`${pinned ? 'Pinned' : 'Unpinned'} ${photos(these.length)} ${pinned ? 'to' : 'from'} Home.`
+			);
 		});
 
 	const setHidden = () =>
@@ -175,6 +188,7 @@
 		...(selectAll ? [{ ...selectAll, more: true, anytime: true }] : []),
 		{ label: 'Fix date', run: () => (dialog = 'date'), hidden: !session.canEdit, more: true },
 		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite, more: true },
+		{ label: allPinned ? 'Unpin from Home' : 'Pin to Home', run: setPinned, more: true },
 		{ label: allHidden ? 'Unhide' : 'Hide', run: setHidden, more: true },
 		{
 			label: allPrivate ? 'Not private' : 'Make private',

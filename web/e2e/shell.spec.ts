@@ -17,9 +17,11 @@ test.beforeEach(async () => {
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Main' });
 
-test('shell: the places and Search in the bar; the rest is on You', async ({ page }) => {
+test('shell: Home, Library, Collections and Search in the bar; the rest is on You', async ({
+	page
+}) => {
 	await signIn(page);
-	for (const name of ['Library', 'Collections', 'Search'])
+	for (const name of ['Home', 'Library', 'Collections', 'Search'])
 		await expect(nav(page).getByRole('link', { name, exact: true })).toBeVisible();
 	for (const name of ['Map', 'People', 'Albums', 'Trash', 'Settings', 'Admin'])
 		await expect(nav(page).getByRole('link', { name, exact: true })).toBeHidden();

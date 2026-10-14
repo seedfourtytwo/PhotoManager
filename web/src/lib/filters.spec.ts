@@ -21,6 +21,18 @@ describe('filtersToParams', () => {
 		);
 	});
 
+	it('repeats person_id after the sources and puts pinned after favourite', () => {
+		const params = filtersToParams({
+			pinned: true,
+			person_id: [5, 6],
+			source_id: [1],
+			favourite: true
+		});
+		expect(params.toString()).toBe(
+			'source_id=1&person_id=5&person_id=6&favourite=true&pinned=true'
+		);
+	});
+
 	it('leaves out empty strings, empty lists and false-y “only” switches', () => {
 		expect(filtersToQuery({ q: '', source_id: [], hidden: undefined })).toBe('');
 	});
@@ -39,10 +51,12 @@ describe('filtersFromParams', () => {
 			year: 2019,
 			month: 7,
 			source_id: [2],
+			person_id: [5, 6],
 			camera: 'iPhone 12',
 			place: 'Lisbon',
 			q: 'beach',
 			favourite: true,
+			pinned: true,
 			hidden: true,
 			guessed_date: true,
 			has_location: true
@@ -52,7 +66,7 @@ describe('filtersFromParams', () => {
 
 	it('ignores junk and unrelated params so a bad URL still opens the library', () => {
 		const params = new URLSearchParams(
-			'year=abc&month=13&from=2019-13-45&source_id=x&favourite=maybe&photo=12'
+			'year=abc&month=13&from=2019-13-45&source_id=x&person_id=0&person_id=y&favourite=maybe&photo=12'
 		);
 		expect(filtersFromParams(params)).toEqual({});
 	});
@@ -110,6 +124,26 @@ describe('describeFilters', () => {
 	it('counts sources in words', () => {
 		expect(describeFilters({ source_id: [3] })).toBe('1 source');
 		expect(describeFilters({ source_id: [3, 4] })).toBe('2 sources');
+	});
+
+	it('names the people when it knows every name, else counts them', () => {
+		const names = new Map([
+			[5, 'Sam'],
+			[6, 'Lou'],
+			[7, 'Léa']
+		]);
+		expect(describeFilters({ person_id: [5] }, names)).toBe('Sam');
+		expect(describeFilters({ person_id: [5, 6] }, names)).toBe('Sam or Lou');
+		expect(describeFilters({ person_id: [5, 6, 7] }, names)).toBe('Sam, Lou or Léa');
+		expect(describeFilters({ person_id: [5, 9] }, names)).toBe('2 people');
+		expect(describeFilters({ person_id: [5] })).toBe('1 person');
+		expect(describeFilters({ year: 2019, person_id: [6] }, names)).toBe('2019 · Lou');
+	});
+
+	it('counts people and pinned as one filter each', () => {
+		expect(activeFilterCount({ person_id: [5, 6], pinned: true })).toBe(2);
+		expect(describeFilters({ favourite: true, pinned: true })).toBe('favourites · pinned');
+		expect(describeFilters({ pinned: false })).toBe('');
 	});
 
 	it('names day ranges compactly', () => {

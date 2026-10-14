@@ -124,7 +124,7 @@
 	}
 
 	/** Optimistic, idempotent toggles: the second click of a double click is ignored. */
-	async function toggle(key: 'favourite' | 'private') {
+	async function toggle(key: 'favourite' | 'private' | 'pinned') {
 		const target = asset;
 		const running = target && `${target.id}:${key}`;
 		if (!running || busy.has(running)) return;
@@ -133,6 +133,8 @@
 		onchanged({ ...target, [key]: value });
 		try {
 			onchanged(await api.setState(target.id, { [key]: value }));
+			// Nothing on the photo shows it: Home is elsewhere.
+			if (key === 'pinned') notice.show(value ? 'Pinned to Home.' : 'Unpinned from Home.');
 		} catch (e) {
 			onchanged({ ...target, [key]: !value });
 			notice.error(e);

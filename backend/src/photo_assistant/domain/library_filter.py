@@ -19,10 +19,12 @@ class AssetFilter:
     year: int | None = None
     month: int | None = None  # needs year
     source_ids: tuple[int, ...] = ()
+    person_ids: tuple[int, ...] = ()  # photos with ANY of these people on them
     camera: str | None = None  # exact camera model
     place: str | None = None  # country, region or city, any case
     q: str | None = None  # free text
     favourite: bool | None = None
+    pinned: bool | None = None  # my pinned photos (issue 54)
     hidden: bool | None = None  # None: my hidden photos are left out
     guessed_date: bool | None = None  # True: only dates taken from the file's mtime
     has_location: bool | None = None
@@ -42,6 +44,8 @@ def filter_problem(f: AssetFilter) -> str | None:
         return "search text is too long"
     if any(not 1 <= s <= MAX_ID for s in f.source_ids):
         return "no such source"
+    if any(not 1 <= p <= MAX_ID for p in f.person_ids):
+        return "no such person"
     return None
 
 

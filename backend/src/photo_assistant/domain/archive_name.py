@@ -56,9 +56,16 @@ def _sources(f: AssetFilter) -> str | None:
     return None if n == 0 else f"{n}-source{'s' if n != 1 else ''}"
 
 
+def _people(f: AssetFilter) -> str | None:
+    """By how many: a name would need a lookup, and a person may have none."""
+    n = len(f.person_ids)
+    return None if n == 0 else "1-person" if n == 1 else f"{n}-people"
+
+
 def _flags(f: AssetFilter) -> list[str]:
     words = [
         "favourites" if f.favourite else "",
+        "pinned" if f.pinned else "",
         "hidden" if f.hidden else "",
         "guessed-dates" if f.guessed_date else "",
     ]
@@ -69,7 +76,7 @@ def _flags(f: AssetFilter) -> list[str]:
 
 def filter_words(f: AssetFilter) -> list[str]:
     """Short lowercase words for the filters, in the order the filter panel lists them."""
-    words = [_days(f), _year(f), _sources(f)]
+    words = [_days(f), _year(f), _sources(f), _people(f)]
     words += [_slug(t) for t in (f.camera, f.place, f.q) if t]
     words += _flags(f)
     return [w for w in words if w]

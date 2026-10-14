@@ -11,7 +11,7 @@ import { makeState } from './data.ts';
 const port = Number(process.env.MOCK_PORT ?? 8421);
 const users = process.env.MOCK_USERS === 'none' ? 'none' : 'seed';
 const count = Number(process.env.MOCK_COUNT ?? 300);
-const api = createMockApi(makeState({ users, count }));
+const api = createMockApi(makeState({ users, count, now: Date.now() }));
 
 createServer((req, res) => void api.handle(req, res)).listen(port, '127.0.0.1', () => {
 	console.log(`mock API on http://127.0.0.1:${port} (${count} photos, users: ${users})`);

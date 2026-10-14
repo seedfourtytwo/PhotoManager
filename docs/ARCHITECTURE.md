@@ -58,7 +58,7 @@ admin (see Visibility in §7); `0026` keeps what the last global face-clustering
 on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`); `0030` keeps how a
 photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`); `0031` keeps what
 each device keeps on it (`sync_rule`) and what the phone said it saved (`sync_sent`), for "Keep on my
-phone". `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+phone"; `0032` lets an account pin photos to its Home (`user_asset.pinned_at`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -82,7 +82,8 @@ asset(id, content_hash UNIQUE, kind, mime_type, byte_size, width, height,
                            -- solely through the marker's own sources or albums
       place_id, phash, group_id, edit_version, trashed_at, trashed_by)
 asset_source(asset_id, source_id, relative_path, seen_at, byte_size, mtime_ns, ctime_ns)
-user_asset(user_id, asset_id, favourite, hidden)                      -- per-user state
+user_asset(user_id, asset_id, favourite, hidden,                      -- per-user state
+           pinned_at)       -- 0032: NULL = not pinned; else when (UTC), kept on a re-pin
 place(id, country, region, city)                                      -- offline geocoding
 album(id, owner_id, title, description, cover_asset_id, created_at, updated_at)
 album_member(album_id, user_id, role[viewer|editor])                  -- owner is album.owner_id
@@ -122,8 +123,8 @@ theme(id, name, tokens_json);  layout(id, name, slots_json)     -- data, not cod
 ```
 
 The SQLite adapter is one `SqliteRepository` composed of per-area mixins
-(`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_albums`, `sqlite_edits`,
-`sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
+(`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_home`, `sqlite_albums`,
+`sqlite_edits`, `sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
 on the process's ONE `Database` (`adapters/sqlite_database.py`, B16/B26): a single writer
 connection behind a single lock for every write and transaction (transactions nest by joining
 the outer one), and a read-only WAL connection per thread for reads, so reads never wait for a
@@ -316,6 +317,26 @@ from a signed-in browser. The free iPhone client is an Apple Shortcut
 Query → parser splits facets (`date:2023`, `person:Lea`, `place:France`) from free text →
 SQL filters narrow candidates → free text is embedded by the CLIP text encoder → sqlite-vec
 KNN within candidates → results ranked, paginated with a cursor.
+
+### Home (issue 54)
+`GET /api/home` (`app/home.py`) reads the visible library once: `moments` (in
+`adapters/sqlite_home.py`) answers every photo the viewer sees on the timeline with a real
+date (no `file_mtime` guesses: a copied folder would make a "trip" of its copy day) as
+(id, taken_at, place name, favourite), in time order. Pure rules turn that into the blocks:
+`domain/on_this_day.py` (today's date in the earlier year with the most photos, else three
+days either side) and `domain/memories.py` (home is the city with the most photos; trips
+away from it split on a gap of more than two days or a change of city, 21 days at most, ten
+photos at least; a calendar month with twenty photos at home is a memory too, so a family
+that takes photos every day does not get one endless trip; the two newest, then a page of
+the others that turns each day). `arrivals` gives the photos imported in the last
+seven days. One `views_by_ids` fetches the covers and newest arrivals as `AssetOut`, and
+the people on "on this day" come from `People.list_all` over its photos. "Today" is the
+server's local date of the clock passed in, so tests fix it. Each block carries the
+`/api/assets` filters (`from`, `to`, `guessed_date=false`) that list exactly its photos.
+The person filter (`person_id`) is one more condition of the shared filter SQL: an
+`EXISTS` over `face` (index `face_by_person`) after the visibility rule, so it never
+widens what a viewer sees; `pinned` starts from the viewer's own `user_asset` rows like
+favourites. Timings: `PERFORMANCE.md`.
 
 ### Album → print
 `Album` (pages → slots → assets + crops) + `Theme` + `Layout`s → `PrintRenderer`

@@ -2,12 +2,13 @@
  * Asset filters <-> URL query. The page URL and the API use the same parameter names, so a
  * library view is shareable and bookmarkable, and the query can be forwarded to the API as-is.
  */
-import type { AssetFilters } from './api/types';
+import type { AssetFilters, Id } from './api/types';
 // With its extension: the mock API runs this file in plain Node.
 import { plural } from './format.ts';
 
 type Key = keyof AssetFilters;
-const BOOLEAN_KEYS = ['favourite', 'hidden', 'guessed_date', 'has_location'] as const;
+const BOOLEAN_KEYS = ['favourite', 'pinned', 'hidden', 'guessed_date', 'has_location'] as const;
+const ID_LIST_KEYS = ['source_id', 'person_id'] as const;
 const TEXT_KEYS = ['camera', 'place', 'q'] as const;
 const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -25,10 +26,12 @@ const ORDER: Key[] = [
 	'year',
 	'month',
 	'source_id',
+	'person_id',
 	'camera',
 	'place',
 	'q',
 	'favourite',
+	'pinned',
 	'hidden',
 	'guessed_date',
 	'has_location'
@@ -87,11 +90,13 @@ export function filtersFromParams(params: URLSearchParams): AssetFilters {
 		const month = int(params.get('month'), 1, 12);
 		if (month !== undefined) filters.month = month;
 	}
-	const sources = params
-		.getAll('source_id')
-		.map((v) => int(v, 1, Number.MAX_SAFE_INTEGER))
-		.filter((v): v is number => v !== undefined);
-	if (sources.length) filters.source_id = sources;
+	for (const key of ID_LIST_KEYS) {
+		const ids = params
+			.getAll(key)
+			.map((v) => int(v, 1, Number.MAX_SAFE_INTEGER))
+			.filter((v): v is number => v !== undefined);
+		if (ids.length) filters[key] = ids;
+	}
 	for (const key of TEXT_KEYS) {
 		const value = params.get(key)?.trim();
 		if (value) filters[key] = value;
@@ -126,17 +131,27 @@ export function formatDay(day: string): string {
 	return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
-function describeParts(f: AssetFilters): string[] {
+/** "Sam", "Sam or Lou", "Sam, Lou or Léa"; by number when a name is not known. */
+function describePeople(ids: Id[], names?: ReadonlyMap<Id, string>): string {
+	const known = ids.map((id) => names?.get(id)).filter((name): name is string => !!name);
+	if (known.length < ids.length) return plural(ids.length, 'person', 'people');
+	const last = known.pop()!;
+	return known.length ? `${known.join(', ')} or ${last}` : last;
+}
+
+function describeParts(f: AssetFilters, names?: ReadonlyMap<Id, string>): string[] {
 	const parts: string[] = [];
 	if (f.from && f.from === f.to) parts.push(formatDay(f.from));
 	else if (f.from || f.to)
 		parts.push(`${f.from ? formatDay(f.from) : '…'} – ${f.to ? formatDay(f.to) : '…'}`);
 	if (f.year !== undefined) parts.push(f.month ? `${MONTHS[f.month - 1]} ${f.year}` : `${f.year}`);
 	if (f.source_id?.length) parts.push(plural(f.source_id.length, 'source'));
+	if (f.person_id?.length) parts.push(describePeople(f.person_id, names));
 	if (f.camera) parts.push(f.camera);
 	if (f.place) parts.push(f.place);
 	if (f.q) parts.push(`“${f.q}”`);
 	if (f.favourite) parts.push('favourites');
+	if (f.pinned) parts.push('pinned');
 	if (f.hidden) parts.push('hidden');
 	if (f.guessed_date) parts.push('guessed dates');
 	if (f.has_location === true) parts.push('with location');
@@ -144,7 +159,10 @@ function describeParts(f: AssetFilters): string[] {
 	return parts;
 }
 
-/** Filters in words, e.g. "2019, Paris, favourites". */
-export function describeFilters(filters: AssetFilters): string {
-	return describeParts(filters).join(', ');
+/**
+ * Filters in words, e.g. "2019, Sam, Paris, favourites". `names`: people's names by id (from
+ * /api/people); without them, or for a person without one, people are counted.
+ */
+export function describeFilters(filters: AssetFilters, names?: ReadonlyMap<Id, string>): string {
+	return describeParts(filters, names).join(', ');
 }

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { look } from '$lib/look';
-	import { PLACES } from '$lib/nav';
+	import { placesFor } from '$lib/nav';
 	import Avatar from './Avatar.svelte';
 	import Icon from './Icon.svelte';
 
 	const path = $derived(page.url.pathname);
-	const current = $derived(PLACES.findIndex((place) => place.match(path)));
+	const places = $derived(placesFor(look.shown.showToday));
+	const current = $derived(places.findIndex((place) => place.match(path)));
 </script>
 
 <!-- Laptop: one glass bar on top, the avatar at its right. Phone: a floating dock with the
@@ -17,9 +18,9 @@
 		class:wordless={!look.shown.dockLabels}
 		class:elsewhere={current < 0}
 		style:--i={Math.max(current, 0)}
-		style:--n={PLACES.length}
+		style:--n={places.length}
 	>
-		{#each PLACES as place, i (place.href)}
+		{#each places as place, i (place.href)}
 			<li>
 				<a href={place.href} data-move="switch" aria-current={i === current ? 'page' : undefined}>
 					<Icon name={place.icon} />

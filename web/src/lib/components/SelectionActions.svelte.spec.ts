@@ -54,16 +54,24 @@ const photoFile = (id: number) => {
 	});
 };
 
-function select(count: number, more: Partial<ComponentProps<typeof SelectionActions>> = {}) {
-	const selected = Array.from({ length: count }, (_, i) => makeAsset(i + 1));
+function select(
+	count: number,
+	more: Partial<ComponentProps<typeof SelectionActions>> = {},
+	extra: Partial<AssetOut> = {}
+) {
+	const selected = Array.from({ length: count }, (_, i) =>
+		makeAsset(i + 1, undefined, 4, 3, extra)
+	);
+	const onpatch = vi.fn();
 	render(SelectionActions, {
 		selected,
 		onclear: vi.fn(),
-		onpatch: vi.fn(),
+		onpatch,
 		onremove: vi.fn(),
 		onreload: vi.fn(),
 		...more
 	});
+	return { onpatch };
 }
 
 const button = (name: string) => page.getByRole('button', { name, exact: true });
@@ -276,5 +284,36 @@ describe('Favourite from the pill', () => {
 		]);
 		vi.unstubAllGlobals();
 		session.user = null;
+	});
+});
+
+describe('Pin to Home on the selection pill (issue 54)', () => {
+	/** The bulk state route: every body it was sent. */
+	function states() {
+		const sent: unknown[] = [];
+		vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+			if (String(input) === '/api/assets/state') sent.push(JSON.parse(String(init?.body)));
+			return Response.json({ updated: 2 });
+		});
+		return sent;
+	}
+
+	it('is under More and pins every selected photo for this account', async () => {
+		const sent = states();
+		const { onpatch } = select(2);
+		await button('More').click();
+		await button('Pin to Home').click();
+		await vi.waitFor(() => expect(notice.text).toBe('Pinned 2 photos to Home.'));
+		expect(sent).toEqual([{ ids: [1, 2], pinned: true }]);
+		expect(onpatch).toHaveBeenCalledWith(new Set([1, 2]), { pinned: true });
+	});
+
+	it('when every selected photo is pinned it unpins them', async () => {
+		const sent = states();
+		select(2, {}, { pinned: true });
+		await button('More').click();
+		await button('Unpin from Home').click();
+		await vi.waitFor(() => expect(notice.text).toBe('Unpinned 2 photos from Home.'));
+		expect(sent).toEqual([{ ids: [1, 2], pinned: false }]);
 	});
 });
