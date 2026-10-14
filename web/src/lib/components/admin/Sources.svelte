@@ -228,7 +228,12 @@
 				<ActionCard
 					icon="report"
 					label="Report"
-					onclick={() => then((source) => (reportFor = { run, label: source.label }))}
+					onclick={() =>
+						then((source) => {
+							// read now: once the sheet is closed, its own `run` is gone with it
+							const last = lastRun(source.id);
+							if (last) reportFor = { run: last, label: source.label };
+						})}
 				/>
 			{/if}
 			{#if open.kind !== 'inbox' && !kept}
