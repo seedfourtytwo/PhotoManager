@@ -14,6 +14,7 @@ from datetime import datetime
 
 from photo_assistant.adapters.sqlite_database import Database
 from photo_assistant.domain.capture_time import DateSource
+from photo_assistant.domain.exposure import Exposure
 from photo_assistant.domain.media_types import MediaKind
 from photo_assistant.domain.model import Asset, Source
 from photo_assistant.domain.recheck import Recheck
@@ -51,6 +52,7 @@ def asset_from_row(row: sqlite3.Row) -> Asset:
         preview_path=row["preview_path"],
         variant_of=row["variant_of"],
         thumb_size=(row["thumb_w"], row["thumb_h"]) if row["thumb_w"] else None,
+        exposure=Exposure(row["f_number"], row["exposure_time"], row["iso"], row["focal_length"]),
     )
 
 

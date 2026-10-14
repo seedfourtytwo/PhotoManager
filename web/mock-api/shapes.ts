@@ -38,6 +38,10 @@ export function shapeHelpers(h: World & AccessHelpers) {
 			camera_model: a.camera_model,
 			latitude: a.place?.lat ?? null,
 			longitude: a.place?.lon ?? null,
+			f_number: a.f_number,
+			exposure_time: a.exposure_time,
+			iso: a.iso,
+			focal_length: a.focal_length,
 			imported_at: a.imported_at,
 			origins: a.sources.map((s) => ({
 				source_id: s.source_id,

@@ -1,8 +1,10 @@
 /**
- * The two lines of the photo bar, set in the data face: when and where, then what took the
- * photo and what it is called. Exposure settings are not in the API, so they are not here.
+ * The two lines of the photo bar, set in the data face: when and where, then how the photo
+ * was exposed and what it is called. A photo that carries no exposure settings (a scan, a
+ * screenshot) says what took it and how large it is instead.
  */
 import type { AssetDetail, AssetOut } from './api/types';
+import { exposureParts, exposureSpoken } from './exposure';
 
 const join = (parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' · ');
 
@@ -10,19 +12,32 @@ const join = (parts: (string | null | undefined)[]) => parts.filter(Boolean).joi
  * A photo with a trusted date is named after its minute (`2019-08-14 18.42`, `… · 2`;
  * backend domain/display_name.py), which line one already says: only another name is news.
  */
-function newsIn(name: string | undefined, takenAt: string): string | null {
-	if (!name) return null;
-	const minute = `${takenAt.slice(0, 10)} ${takenAt.slice(11, 13)}.${takenAt.slice(14, 16)}`;
+function newsIn(detail: AssetDetail | null): string | null {
+	if (!detail?.name) return null;
+	const { name, taken_at: t } = detail;
+	const minute = `${t.slice(0, 10)} ${t.slice(11, 13)}.${t.slice(14, 16)}`;
 	return name === minute || name.startsWith(`${minute} · `) ? null : name;
 }
 
 export function readout(asset: AssetOut, detail: AssetDetail | null): [string, string] {
 	const place = asset.place?.city ?? asset.place?.region ?? asset.place?.country;
 	const size = asset.width && asset.height ? `${asset.width} × ${asset.height}` : null;
+	const name = newsIn(detail);
+	const exposure = exposureParts(detail);
 	return [
 		join([asset.taken_at.slice(0, 10), asset.taken_at.slice(11, 16), place]),
-		join([detail?.camera_model, size, newsIn(detail?.name, asset.taken_at)])
+		exposure.length ? join([...exposure, name]) : join([detail?.camera_model, size, name])
 	];
+}
+
+/**
+ * Line two as a screen reader should say it ("f 2.8, 1/250 second, ISO 400, 35 millimetres,
+ * Beach day"), or null when the line holds no exposure settings and reads well as written.
+ */
+export function readoutSpoken(detail: AssetDetail | null): string | null {
+	const exposure = exposureSpoken(detail);
+	if (!exposure.length) return null;
+	return [...exposure, newsIn(detail)].filter(Boolean).join(', ');
 }
 
 export type Origin = { key: string; label: string; file: string | null };

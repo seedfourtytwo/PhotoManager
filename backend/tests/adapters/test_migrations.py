@@ -80,7 +80,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 29
+    assert _latest() == 30
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -512,4 +512,31 @@ def test_people_from_before_0029_keep_the_automatic_portrait(tmp_path: Path) -> 
     upgraded.execute(
         "UPDATE person SET portrait_cx = 0.5, portrait_cy = 0.4, portrait_size = 0.3 WHERE id = 1"
     )
+    assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
+
+
+def test_photos_from_before_0030_come_through_with_no_exposure(tmp_path: Path) -> None:
+    """0030: aperture, shutter time, ISO and focal length are four nullable values on the
+    photo row; a photo imported before has none until the backfill reads its library copy."""
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 30)
+    for number, sql in _migrations():
+        if 3 < number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    before = conn.execute("SELECT * FROM asset ORDER BY id").fetchall()
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert upgraded.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    new_columns = ("f_number", "exposure_time", "iso", "focal_length")
+    rows = upgraded.execute("SELECT * FROM asset ORDER BY id").fetchall()
+    assert [tuple(r)[: len(before[0])] for r in rows] == before, "nothing else changed"
+    assert [r.keys()[len(before[0]) :] for r in rows] == [list(new_columns)] * 2
+    assert all(r[column] is None for r in rows for column in new_columns)
+    repo = SqliteRepository(Database(upgraded, db))
+    assert [i for i, _ in repo.assets_without_exposure(0, 10)] == [1, 2]
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1

@@ -44,7 +44,7 @@ separate, explicit "purge from library copy" that never touches the source.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
-| 2.1 | EXIF/XMP/QuickTime metadata via ExifTool: capture time (with timezone repair), camera, lens, GPS, orientation | Must | M1 ✅ |
+| 2.1 | EXIF/XMP/QuickTime metadata via ExifTool: capture time (with timezone repair), camera, lens, GPS, orientation, exposure settings (aperture, shutter time, ISO, focal length; shown in the photo view) | Must | M1 ✅ |
 | 2.2 | Date fallback chain: EXIF → XMP → filename pattern (`IMG_20190704_…`) → file mtime; each photo records *which* source won | Must | M1 ✅ |
 | 2.3 | Thumbnails (fit 640 px, made during import from the source file, which also proves the file decodes) and previews (fit 2048 px, background job), orientation-corrected WebP via libvips | Must | M1 ✅ |
 | 2.4 | Offline reverse geocoding (country / region / city) — no network call | Should | M2 ✅ (API) |

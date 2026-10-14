@@ -266,6 +266,10 @@ class AssetDetail(AssetOut):
     camera_model: str | None
     latitude: float | None
     longitude: float | None
+    f_number: float | None  # aperture: 2.8 for f/2.8
+    exposure_time: float | None  # shutter time in seconds: 0.004 for 1/250
+    iso: int | None
+    focal_length: float | None  # millimetres, the lens's own (not the 35 mm equivalent)
     imported_at: datetime
     origins: list[Origin]
     albums: list[AlbumRef]
