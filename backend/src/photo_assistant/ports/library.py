@@ -71,6 +71,15 @@ class Facets:
 
 
 @dataclass(frozen=True, slots=True)
+class Arrivals:
+    """Photos imported lately (Home, issue 54)."""
+
+    count: int
+    newest: list[int]  # ids, the newest arrival first, as many as were asked for
+    sources: list[Count]  # key = source id, label = source label: the folders they came from
+
+
+@dataclass(frozen=True, slots=True)
 class AlbumInfo:
     id: int
     owner_id: int
