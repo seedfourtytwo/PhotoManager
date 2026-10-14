@@ -278,7 +278,7 @@ test.describe('photo view', () => {
 		await signIn(page);
 	});
 
-	test('the bar reads the photo’s date, time and file name in the data face', async ({ page }) => {
+	test('the bar reads the photo’s date, time and name in the data face', async ({ page }) => {
 		// A photo that carries no exposure settings; one that does is in exposure.spec.ts.
 		await withDetail(page, () => ({
 			f_number: null,
@@ -289,7 +289,9 @@ test.describe('photo view', () => {
 		await page.locator('.tile').first().click();
 		const readout = loupe(page).locator('.readout');
 		await expect(readout).toContainText(/\d{4}-\d{2}-\d{2} · \d{2}:\d{2}/);
-		await expect(readout).toContainText(/\d+ × \d+ · \S+\.\w{3,4}$/);
+		// the name only when it says more than the date and time (FEATURES 4b.10), never an extension
+		await expect(readout).toContainText(/\d+ × \d+(?: · [^·]+)?$/);
+		await expect(readout).not.toContainText(/\.\w{3,4}$/);
 		await expect(readout).toHaveCSS('font-family', /Martian Mono/);
 	});
 
