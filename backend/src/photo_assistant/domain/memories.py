@@ -7,9 +7,11 @@ every day, so it reads differently each morning while staying the same all day.
 """
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from operator import attrgetter
+from typing import NamedTuple
 
 MAX_GAP = timedelta(days=2)  # a trip goes on while photos are at most this far apart
 MIN_PHOTOS = 10  # fewer than this is a day out, not a memory
@@ -32,9 +34,9 @@ MONTHS = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class Moment:
-    """One photo as Home sees it."""
+class Moment(NamedTuple):
+    """One photo as Home sees it. A named tuple, not a dataclass: Home builds one for every
+    photo of the library on each visit, and a tuple is made in half the time."""
 
     asset_id: int
     taken_at: datetime  # local wall-clock
@@ -52,15 +54,18 @@ class Memory:
     cover_id: int
 
 
-def _by_time(moments: Sequence[Moment]) -> list[Moment]:
-    return sorted(moments, key=lambda m: (m.taken_at, m.asset_id))
+_BY_TIME = attrgetter("taken_at", "asset_id")
+
+
+def by_time(moments: Iterable[Moment]) -> list[Moment]:
+    return sorted(moments, key=_BY_TIME)
 
 
 def trips(moments: Sequence[Moment]) -> list[list[Moment]]:
     """Every trip in the library, oldest first, each in time order."""
     found: list[list[Moment]] = []
     run: list[Moment] = []
-    for moment in _by_time(moments):
+    for moment in by_time(moments):
         if run and moment.taken_at - run[-1].taken_at > MAX_GAP:
             found.append(run)
             run = []
@@ -71,7 +76,7 @@ def trips(moments: Sequence[Moment]) -> list[list[Moment]]:
 
 def dominant_place(moments: Sequence[Moment]) -> str | None:
     """The place most of the photos with one were taken at; a tie goes to the first seen."""
-    places = Counter(m.place for m in _by_time(moments) if m.place)
+    places = Counter(m.place for m in by_time(moments) if m.place)
     # most_common keeps first-seen order among equal counts
     return places.most_common(1)[0][0] if places else None
 
@@ -90,7 +95,7 @@ def period_words(first: date, last: date) -> str:
 
 
 def trip_title(trip: Sequence[Moment]) -> str:
-    ordered = _by_time(trip)
+    ordered = by_time(trip)
     period = period_words(ordered[0].taken_at.date(), ordered[-1].taken_at.date())
     place = dominant_place(ordered)
     return f"{place}, {period}" if place else period
@@ -98,12 +103,12 @@ def trip_title(trip: Sequence[Moment]) -> str:
 
 def cover_of(moments: Sequence[Moment]) -> int:
     """The first favourite, else the first photo (by time)."""
-    ordered = _by_time(moments)
+    ordered = by_time(moments)
     return next((m for m in ordered if m.favourite), ordered[0]).asset_id
 
 
 def memory_of(trip: Sequence[Moment]) -> Memory:
-    ordered = _by_time(trip)
+    ordered = by_time(trip)
     first, last = ordered[0].taken_at.date(), ordered[-1].taken_at.date()
     return Memory(
         key=f"{first.isoformat()}_{last.isoformat()}",
@@ -115,7 +120,7 @@ def memory_of(trip: Sequence[Moment]) -> Memory:
     )
 
 
-def _turn(items: list[Memory], today: date, size: int) -> list[Memory]:
+def _turn[T](items: Sequence[T], today: date, size: int) -> list[T]:
     """``size`` of ``items``, a different page each day. When they all fit, their order turns
     instead, so Home still changes from one day to the next."""
     n = len(items)
@@ -127,7 +132,8 @@ def _turn(items: list[Memory], today: date, size: int) -> list[Memory]:
 
 
 def memories(moments: Sequence[Moment], today: date) -> list[Memory]:
-    """What Home lists: the two newest trips, then the others' page for ``today``."""
-    newest_first = [memory_of(t) for t in reversed(trips(moments))]
+    """What Home lists: the two newest trips, then the others' page for ``today``. Only the
+    trips shown are named (a library holds hundreds)."""
+    newest_first = trips(moments)[::-1]
     head, rest = newest_first[:NEWEST_FIRST], newest_first[NEWEST_FIRST:]
-    return head + _turn(rest, today, MAX_MEMORIES - NEWEST_FIRST)
+    return [memory_of(t) for t in head + _turn(rest, today, MAX_MEMORIES - NEWEST_FIRST)]

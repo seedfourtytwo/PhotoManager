@@ -44,9 +44,7 @@ class HomePage:
     views: dict[int, AssetView]  # every photo the page shows: covers and newest arrivals
 
 
-def home_page(
-    store: HomeStore, people: PeopleOnPhotos, viewer: Viewer, now: datetime
-) -> HomePage:
+def home_page(store: HomeStore, people: PeopleOnPhotos, viewer: Viewer, now: datetime) -> HomePage:
     today = now.astimezone().date()
     moments = store.moments(viewer)
     day = on_this_day(moments, today)

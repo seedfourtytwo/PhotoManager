@@ -4,7 +4,7 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep
 from photo_assistant.api.schemas import AssetOut, SourceCount
@@ -16,10 +16,8 @@ router = APIRouter(prefix="/api", tags=["home"], dependencies=LOGGED_IN)
 class HomeFilter(BaseModel):
     """The ``/api/assets`` filters that list exactly the photos a block counts."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    from_day: date = Field(alias="from")
-    to_day: date = Field(alias="to")
+    from_day: date = Field(serialization_alias="from")
+    to_day: date = Field(serialization_alias="to")
     guessed_date: Literal[False] = False  # Home leaves out dates guessed from a file's mtime
 
 
@@ -40,12 +38,10 @@ class OnThisDayOut(BaseModel):
 
 
 class MemoryOut(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
     key: str
     title: str
-    from_day: date = Field(alias="from")
-    to_day: date = Field(alias="to")
+    from_day: date = Field(serialization_alias="from")
+    to_day: date = Field(serialization_alias="to")
     count: int
     cover: AssetOut
     filter: HomeFilter

@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from photo_assistant.domain.memories import Moment, cover_of, dominant_place
+from photo_assistant.domain.memories import Moment, by_time, cover_of, dominant_place
 
 AROUND = timedelta(days=3)  # either side of the date, when nothing was taken on the day
 DAY = timedelta(days=1)
@@ -69,6 +69,6 @@ def _best(
         days = (first + n * DAY for n in range((last - first).days + 1))
         found = [m for d in days for m in by_day.get(d, ())]
         if found and (picked is None or len(found) > picked.count):
-            ordered = tuple(sorted(found, key=lambda m: (m.taken_at, m.asset_id)))
+            ordered = tuple(by_time(found))
             picked = OnThisDay(day, today.year - year, exact, first, last, ordered)
     return picked

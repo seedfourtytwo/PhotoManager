@@ -36,15 +36,8 @@ class HomeMixin(SqliteBase):
                 FROM asset a {_JOINS} {where} AND {visible} ORDER BY a.taken_at, a.id""",
             params | fparams,
         )
-        return [
-            Moment(
-                int(r["id"]),
-                datetime.fromisoformat(r["taken_at"]),
-                r["place"],
-                bool(r["favourite"]),
-            )
-            for r in rows
-        ]
+        parse = datetime.fromisoformat
+        return [Moment(i, parse(taken), place, bool(fav)) for i, taken, fav, place in rows]
 
     def arrivals(self, viewer: Viewer, since: datetime, limit: int) -> Arrivals:
         """Photos imported since ``since`` that this viewer sees on the timeline, the newest
