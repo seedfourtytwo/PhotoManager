@@ -1,103 +1,197 @@
-import {
-	expect,
-	expectAccessible,
-	isPhone,
-	NOTHING_HAPPENS_MS,
-	resetMock,
-	signIn,
-	test
-} from './helpers.ts';
+/**
+ * The filters as a row of chips under the Library's title (redesign 2, §5): each asks one
+ * question in a sheet (a bottom sheet on a phone, a popover under its chip on a laptop), and a
+ * set chip shows its answer with an × that clears it. The address keeps every filter.
+ */
 import type { Page } from '@playwright/test';
+import { expect, expectAccessible, isPhone, resetMock, signIn, test } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
 	await signIn(page);
 });
 
-async function openFilters(page: Page) {
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const panel = page.getByRole('complementary', { name: 'Filters' });
-	await expect(panel).toBeVisible();
-	return panel;
+const chips = (page: Page) => page.getByRole('group', { name: 'Filters' });
+const chip = (page: Page, name: string | RegExp) =>
+	chips(page).getByRole('button', { name, exact: typeof name === 'string' });
+const sheet = (page: Page, name: string) => page.getByRole('dialog', { name });
+
+async function ask(page: Page, name: string) {
+	await chip(page, name).click();
+	await expect(sheet(page, name)).toBeVisible();
+	return sheet(page, name);
 }
 
-test('filter by year puts it in the URL and narrows the grid', async ({ page }) => {
-	const panel = await openFilters(page);
-	await panel.getByRole('button', { name: /^2019/ }).click();
-	await expect(page).toHaveURL(/\?year=2019$/);
-	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
-	const headings = page.locator('section h2');
-	await expect(headings.first()).toContainText('2019');
-	for (const text of await headings.allTextContents()) expect(text).toContain('2019');
+test('the chips ask Who, When, Where, Favourites, Camera, More in that order, the same on every screen', async ({
+	page
+}) => {
+	// Who joins first once the server filters by person (lib/who.ts).
+	await expect(chips(page).getByRole('button')).toHaveText([
+		'When',
+		'Where',
+		'Favourites',
+		'Camera',
+		'More'
+	]);
+	await expect(page.getByRole('complementary', { name: 'Filters' })).toHaveCount(0);
 	await expectAccessible(page);
 });
 
+test('filter by year puts it in the URL, narrows the grid and names the chip', async ({ page }) => {
+	const when = await ask(page, 'When');
+	await when.getByRole('button', { name: /^2019/ }).click();
+	await expect(page).toHaveURL(/\?year=2019$/);
+	await expectAccessible(page);
+	await when.getByRole('button', { name: 'Done' }).click();
+	await expect(chip(page, '2019')).toBeVisible();
+	const headings = page.locator('section h2');
+	await expect(headings.first()).toContainText('2019');
+	for (const text of await headings.allTextContents()) expect(text).toContain('2019');
+	// Its × takes the year away, and only the year.
+	await chips(page).getByRole('button', { name: 'Clear When' }).click();
+	await expect(page).toHaveURL(/\/$/);
+	await expect(chip(page, 'When')).toBeVisible();
+});
+
+test('after a year, its months: one chosen names the chip, an empty one cannot be chosen', async ({
+	page
+}) => {
+	const when = await ask(page, 'When');
+	await when.getByRole('button', { name: /^2019/ }).click();
+	const months = when.getByRole('group', { name: 'Months in 2019' });
+	await expect(months.getByRole('button')).toHaveCount(12);
+	await expect(months.getByRole('button', { name: /^February 2019: 0$/ })).toBeDisabled();
+	await months.getByRole('button', { name: /^January 2019/ }).click();
+	await expect(page).toHaveURL(/\?year=2019&month=1$/);
+	// Every year is still counted (under the other filters), so another can be chosen.
+	await expect(when.getByRole('button', { name: /^2021/ })).toBeVisible();
+	await when.getByRole('button', { name: 'Done' }).click();
+	await expect(chip(page, 'January 2019')).toBeVisible();
+});
+
 test('filter by place, then reload the bookmarked URL', async ({ page }) => {
-	const panel = await openFilters(page);
-	await panel.getByLabel('Place').selectOption('Lisbon');
-	await expect(page).toHaveURL(/place=Lisbon/);
+	const where = await ask(page, 'Where');
+	await where.getByRole('searchbox', { name: 'Find a place' }).fill('lis');
+	await expect(where.getByRole('group', { name: 'Places' }).getByRole('button')).toHaveText([
+		/^\s*Lisbon\s*\d+\s*$/,
+		/^\s*No place recorded/
+	]);
+	await where.getByRole('button', { name: /^Lisbon/ }).click();
+	await expect(page).toHaveURL(/\?place=Lisbon$/);
+	await expect(where.getByRole('button', { name: /^Lisbon/ })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
 	await page.reload();
-	await expect(page.getByText(/·\s+Lisbon/)).toBeVisible();
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	await expect(
-		page.getByRole('complementary', { name: 'Filters' }).getByLabel('Place')
-	).toHaveValue('Lisbon');
+	await expect(chip(page, 'Lisbon')).toBeVisible();
+	// The chip, named by its answer, asks the question again. "No place recorded" answers the
+	// same question: it takes the place's room.
+	await chip(page, 'Lisbon').click();
+	await sheet(page, 'Where')
+		.getByRole('button', { name: /^No place recorded/ })
+		.click();
+	await expect(page).toHaveURL(/\?has_location=false$/);
+	await sheet(page, 'Where').getByRole('button', { name: 'Done' }).click();
+	await expect(chip(page, 'No place recorded')).toBeVisible();
 });
 
-test('the filter panel searches the library by free text', async ({ page }) => {
-	const panel = await openFilters(page);
-	const search = panel.getByRole('searchbox', { name: 'Search' });
-	await search.fill('carnac');
-	await expect(page).toHaveURL(/q=carnac/);
+test('camera: several sources at once, and the chip names them', async ({ page }) => {
+	const camera = await ask(page, 'Camera');
+	const from = camera.getByRole('group', { name: 'Came from' });
+	await from.getByRole('button', { name: /^Phone/ }).click();
+	await from.getByRole('button', { name: /^Old hard disk/ }).click();
+	await expect(page).toHaveURL(/\?source_id=1&source_id=2$/);
+	await camera.getByRole('button', { name: 'Done' }).click();
+	await expect(chip(page, 'Phone, Old hard disk')).toBeVisible();
 });
 
-test('search keeps the space between words when you pause while typing', async ({ page }) => {
-	const panel = await openFilters(page);
-	const search = panel.getByRole('searchbox', { name: 'Search' });
-	await search.pressSequentially('new ');
-	await expect(page).toHaveURL(/q=new$/); // the pause: the first word is already searched
-	await search.pressSequentially('york');
-	await expect(search).toHaveValue('new york');
-	await expect(page).toHaveURL(/q=new(\+|%20)york$/);
-	// Anything else that changes the URL still shows in the field.
-	await panel.getByRole('button', { name: 'Clear' }).click();
-	await expect(page).not.toHaveURL(/q=/);
-	await expect(search).toHaveValue('');
+test('Favourites toggles in place; More switches; Clear all from two answers', async ({ page }) => {
+	await chip(page, 'Favourites').click();
+	await expect(page).toHaveURL(/\?favourite=true$/);
+	await expect(chip(page, 'Favourites')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(chips(page).getByRole('button', { name: 'Clear all' })).toHaveCount(0);
+	const more = await ask(page, 'More');
+	await more.getByRole('switch', { name: /Only guessed dates/ }).check();
+	await expect(page).toHaveURL(/favourite=true&guessed_date=true$/);
+	await more.getByRole('button', { name: 'Done' }).click();
+	await expect(chip(page, 'Guessed dates')).toBeVisible();
+	await chips(page).getByRole('button', { name: 'Clear all' }).click();
+	await expect(page).toHaveURL(/\/$/);
+	await expect(chips(page).getByRole('button', { name: 'Clear all' })).toHaveCount(0);
 });
 
-test('a search typed just before leaving the page does not follow you there', async ({ page }) => {
-	const panel = await openFilters(page);
-	await panel.getByRole('searchbox', { name: 'Search' }).pressSequentially('carnac');
-	if (isPhone(page)) await panel.getByRole('button', { name: 'Done' }).click();
-	await page.getByRole('link', { name: 'Collections', exact: true }).click();
-	await expect(page).toHaveURL(/\/collections$/);
-	await page.waitForTimeout(NOTHING_HAPPENS_MS);
-	await expect(page).toHaveURL(/\/collections$/);
+test('words to search for, from a link, show as a chip that lets them go', async ({ page }) => {
+	await page.goto('/?q=carnac');
+	const words = chip(page, '“carnac”');
+	await expect(words).toHaveAttribute('aria-pressed', 'true');
+	await words.click();
+	await expect(page).toHaveURL(/\/$/);
+	await expect(words).toHaveCount(0);
 });
 
 test('a "To" before the "From" is the same range the other way round, everywhere', async ({
 	page
 }) => {
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const panel = page.getByRole('complementary', { name: 'Filters' });
-	await panel.getByLabel('From').fill('01/08/2019');
-	await panel.getByLabel('From').press('Enter');
+	const when = await ask(page, 'When');
+	await when.getByLabel('From').fill('01/08/2019');
+	await when.getByLabel('From').press('Enter');
 	await expect(page).toHaveURL(/from=2019-08-01/);
-	await panel.getByLabel('To', { exact: true }).fill('01/07/2019');
-	await panel.getByLabel('To', { exact: true }).press('Enter');
+	await when.getByLabel('To', { exact: true }).fill('01/07/2019');
+	await when.getByLabel('To', { exact: true }).press('Enter');
 	await expect(page).toHaveURL(/from=2019-07-01&to=2019-08-01/);
-	await expect(panel.getByLabel('From')).toHaveValue('01/07/2019');
-	await expect(panel.getByLabel('To', { exact: true })).toHaveValue('01/08/2019');
-	await expect(page.locator('header .meta')).toContainText('1 Jul 2019 – 1 Aug 2019');
+	await expect(when.getByLabel('From')).toHaveValue('01/07/2019');
+	await expect(when.getByLabel('To', { exact: true })).toHaveValue('01/08/2019');
+	await when.getByRole('button', { name: 'Done' }).click();
+	await expect(chip(page, '1 Jul – 1 Aug 2019')).toBeVisible();
 	// A link written the wrong way round opens the same view.
 	await page.goto('/?from=2019-08-01&to=2019-07-01');
-	await expect(page.locator('header .meta')).toContainText('1 Jul 2019 – 1 Aug 2019');
+	await expect(chip(page, '1 Jul – 1 Aug 2019')).toBeVisible();
 });
 
-test('calendar: click a day to open the filtered library', async ({ page }) => {
+test('a sheet hangs under its chip on a laptop and rises from the bottom on a phone', async ({
+	page
+}) => {
+	const where = await ask(page, 'Where');
+	const from = (await chip(page, 'Where').boundingBox())!;
+	const { width, height } = page.viewportSize()!;
+	// Measured once it has finished rising.
+	await expect(async () => {
+		const box = (await where.boundingBox())!;
+		if (isPhone(page)) {
+			expect(Math.round(box.width)).toBe(width);
+			expect(Math.round(box.y + box.height)).toBe(height);
+		} else {
+			expect(box.y).toBeGreaterThan(from.y + from.height);
+			expect(Math.abs(box.x - from.x)).toBeLessThan(2);
+		}
+	}).toPass({ timeout: 3000 });
+});
+
+test('a sheet is modal: focus moves in and stays, Escape closes it and gives it back', async ({
+	page
+}) => {
+	const opener = chip(page, 'When');
+	const when = await ask(page, 'When');
+	const inside = () => when.evaluate((el) => el.contains(document.activeElement));
+	await expect.poll(inside).toBe(true);
+	for (let i = 0; i < 30; i++) {
+		await page.keyboard.press('Tab');
+		// Between the last and the first control Tab passes through the browser's own bar
+		// (the body here), as in any modal dialog; it never lands on the page behind.
+		const onBody = await page.evaluate(() => document.activeElement === document.body);
+		expect(onBody || (await inside())).toBe(true);
+	}
+	await page.keyboard.press('Escape');
+	await expect(when).toBeHidden();
+	await expect(opener).toBeFocused();
+});
+
+test('calendar: the same chips; click a day to open the filtered library', async ({ page }) => {
 	test.slow(); // axe walks every day of every year
 	await page.goto('/calendar');
 	await expect(page.getByRole('group', { name: /Photos per day in 2026/ })).toBeVisible();
+	await expect(chip(page, 'When')).toBeVisible();
 	await expectAccessible(page);
 	const day = page.locator('svg a').first();
 	await day.click();
@@ -120,7 +214,7 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	const [, n] = (await open.textContent())!.match(/Open all (\d+) from/)!;
 	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
-	await expect(page.locator('header .meta')).toContainText(`${n} photos`);
+	await expect(page.locator('.page-head .line')).toHaveText(`${n} photos`);
 });
 
 test('map: the heading counts the dot that is chosen now, after the map has zoomed in', async ({
@@ -142,45 +236,4 @@ test('map: the heading counts the dot that is chosen now, after the map has zoom
 	const shown = parseInt((await chosen.getAttribute('aria-label'))!, 10);
 	await expect(heading).toHaveText(String(shown));
 	await expect(page.locator('section.chosen .tile')).toHaveCount(shown);
-});
-
-test('hiding the filters, a real click on "Filters" brings them back', async ({ page }) => {
-	test.skip(isPhone(page), 'the filter panel is a sheet on phones');
-	const panel = page.getByRole('complementary', { name: 'Filters' });
-	await expect(panel).toBeVisible();
-	await page.getByRole('button', { name: 'Hide filters' }).click();
-	await expect(panel).toBeHidden();
-	// No `force`: the button must not sit under the top bar.
-	await page.getByRole('button', { name: /^Filters/ }).click();
-	await expect(panel).toBeVisible();
-});
-
-test('phone: the filter sheet is modal: focus moves in and stays, Escape closes it', async ({
-	page
-}) => {
-	test.skip(!isPhone(page), 'the sheet is the phone layout');
-	const opener = page.getByRole('button', { name: 'Filter', exact: true });
-	await opener.click();
-	const panel = page.getByRole('complementary', { name: 'Filters' });
-	await expect(panel).toBeVisible();
-	const focusInside = () =>
-		page.evaluate(() => {
-			const at = document.activeElement;
-			return !!at?.closest('#filters') || at?.getAttribute('aria-label') === 'Close filters';
-		});
-	await expect.poll(focusInside).toBe(true);
-	// The page behind is out of reach for the keyboard and for screen readers.
-	await expect(page.locator('main#main')).toHaveAttribute('inert', '');
-	await expect(page.locator('nav[aria-label="Main"]')).toHaveAttribute('inert', '');
-	for (let i = 0; i < 40; i++) {
-		await page.keyboard.press('Tab');
-		// Between the last and the first control Tab passes through the browser's own bar
-		// (the body here), as in any modal dialog; it never lands on the page behind.
-		const onBody = await page.evaluate(() => document.activeElement === document.body);
-		expect(onBody || (await focusInside())).toBe(true);
-	}
-	await page.keyboard.press('Escape');
-	await expect(panel).toBeHidden();
-	await expect(page.locator('main#main')).not.toHaveAttribute('inert', '');
-	await expect(opener).toBeFocused();
 });

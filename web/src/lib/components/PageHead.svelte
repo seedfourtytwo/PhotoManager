@@ -42,8 +42,12 @@
 				{#if line}<p class="line" aria-live="polite">{line}</p>{/if}
 			</div>
 		{/if}
-		{#if actions}<div class="actions">{@render actions()}</div>{/if}
-		<span class="me"><Avatar /></span>
+		<!-- The actions and the avatar keep together: where the row is too narrow they go under
+		     the title as one, to the right. -->
+		<div class="end">
+			{#if actions}<div class="actions">{@render actions()}</div>{/if}
+			<span class="me"><Avatar /></span>
+		</div>
 	</div>
 </header>
 <div class="compact glass" class:on={gone} aria-hidden="true">{title}</div>
@@ -70,6 +74,12 @@
 		margin: 0;
 		color: var(--ink-2);
 		font-size: var(--fs-14);
+	}
+	.end {
+		display: flex;
+		align-items: center;
+		gap: var(--s-2);
+		margin-left: auto;
 	}
 	.actions {
 		display: flex;

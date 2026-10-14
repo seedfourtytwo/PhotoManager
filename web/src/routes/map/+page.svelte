@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
-	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
+	import { api, notice, settings, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { photos } from '$lib/format';
 	import { eachPage } from '$lib/paging';
@@ -17,6 +17,7 @@
 	} from '$lib/geo';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import { LAND_PATH } from '$lib/world';
+	import FilterChips from '$lib/components/FilterChips.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 
@@ -180,13 +181,13 @@
 				)}{/if}
 		</p>
 		<span class="tools">
-			{#if !viewport.desktop}<button type="button" onclick={() => (ui.sheet = true)}>Filter</button
-				>{/if}
 			<button type="button" onclick={() => zoom(0.5)} aria-label="Zoom in">Zoom in</button>
 			<button type="button" onclick={() => zoom(2)} aria-label="Zoom out">Zoom out</button>
 			<button type="button" onclick={() => (view = { x: 0, y: 0, w: 360 })}>World</button>
 		</span>
 	</header>
+	<!-- The Library's filter chips; they run to the page's edges, as they do there. -->
+	<div class="chips-room"><FilterChips /></div>
 
 	<div class="map" bind:clientWidth={width}>
 		<svg
@@ -336,6 +337,9 @@
 		.tools button:hover {
 			color: var(--ink);
 		}
+	}
+	.chips-room {
+		margin: 0 calc(-1 * var(--page-x));
 	}
 	.map {
 		border: 1px solid var(--hairline);

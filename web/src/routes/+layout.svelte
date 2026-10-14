@@ -5,18 +5,15 @@
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
-	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import BackupBanner from '$lib/components/BackupBanner.svelte';
 	import LookTrial from '$lib/components/LookTrial.svelte';
 	import {
 		backupWatch,
 		forgetOldDensity,
-		isFilterable,
 		isPublicRoute,
 		loadLook,
 		notice,
-		session,
-		settings
+		session
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
 	import { dropBadPhotoParam } from '$lib/loupe.svelte';
@@ -24,7 +21,6 @@
 	let { children } = $props();
 
 	const bare = $derived(isPublicRoute(page.url.pathname));
-	const filterable = $derived(isFilterable(page.url.pathname));
 
 	afterNavigate(({ to }) => {
 		if (to) dropBadPhotoParam(to.url);
@@ -108,14 +104,13 @@
 {#if bare}
 	<main id="main" class="bare">{@render children()}</main>
 {:else if session.user}
-	<div class="app" class:filters={filterable && settings.filtersOpen}>
+	<div class="app">
 		<Nav />
 		<main id="main" tabindex="-1">
 			<LookTrial />
 			<BackupBanner health={session.isAdmin ? backupWatch.health : null} />
 			{@render children()}
 		</main>
-		{#if filterable}<FilterPanel />{/if}
 	</div>
 {:else if session.error}
 	<main id="main" class="bare">
@@ -156,9 +151,6 @@
 		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: auto 1fr;
 		min-height: 100dvh;
-	}
-	.app.filters {
-		grid-template-columns: minmax(0, 1fr) var(--margin);
 	}
 	main {
 		min-width: 0;
@@ -232,8 +224,7 @@
 		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
 	@media (max-width: 1023px) {
-		.app,
-		.app.filters {
+		.app {
 			grid-template-columns: minmax(0, 1fr);
 			grid-template-rows: 1fr;
 		}

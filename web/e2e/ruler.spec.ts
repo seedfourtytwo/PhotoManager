@@ -128,10 +128,6 @@ test.describe('time ruler', () => {
 		// Scrolled there: every page loads on the way, then the page is at its end.
 		await expect(async () => {
 			await last();
-			await expect(page.getByRole('button', { name: 'Select all', exact: true })).toBeVisible({
-				timeout: 500
-			});
-			await last();
 			await expect(ruler(page)).toHaveAttribute('aria-valuenow', '0', { timeout: 500 });
 		}).toPass({ timeout: 15_000 });
 		await expect(ruler(page)).toHaveAttribute('aria-valuetext', /2012$/);

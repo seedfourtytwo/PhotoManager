@@ -1,13 +1,15 @@
 <script lang="ts">
 	/**
-	 * "Keep on phone" for an album, a person, a search or the library's filters: for each of
-	 * the person's devices, keep it there, leave it off, or neither (FEATURES 10.6).
+	 * "Keep on my phone" for an album, a person, a search or the library's filters: for each of
+	 * the person's devices, keep it there, leave it off, or neither (FEATURES 10.6). An icon
+	 * button in the page's head, pressed while one of the devices keeps it.
 	 */
 	import type { DeviceSync, SyncTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { errorMessage, formatBytes, photos } from '$lib/format';
 	import { choiceFor, ruleFor, viewOnlyNote, type Choice } from '$lib/keep';
 	import Dialog from './Dialog.svelte';
+	import IconButton from './ui/IconButton.svelte';
 
 	type Props = {
 		target: SyncTarget;
@@ -26,13 +28,30 @@
 	let error = $state('');
 	let busy = $state<number | null>(null);
 
+	const kept = $derived(lists?.some((l) => choiceFor(l.rules, target) === 'include') ?? false);
+
+	async function load(): Promise<DeviceSync[]> {
+		const devices = (await api.devices()).filter((d) => !d.revoked);
+		return Promise.all(devices.map((d) => api.deviceSync(d.id)));
+	}
+
+	// Whether it is kept already, for the button: asked again for every new target.
+	const key = $derived(JSON.stringify(target));
+	$effect(() => {
+		void key;
+		let stale = false;
+		load()
+			.then((all) => !stale && (lists = all))
+			// The button then shows as not pressed; opening it asks again and says what failed.
+			.catch(() => undefined);
+		return () => (stale = true);
+	});
+
 	async function show() {
 		open = true;
-		lists = null;
 		error = '';
 		try {
-			const devices = (await api.devices()).filter((d) => !d.revoked);
-			lists = await Promise.all(devices.map((d) => api.deviceSync(d.id)));
+			lists = await load();
 		} catch (e) {
 			error = errorMessage(e, 'Could not load your devices.');
 		}
@@ -55,10 +74,10 @@
 	}
 </script>
 
-<button type="button" onclick={show}>Keep on phone</button>
+<IconButton icon="phone" label="Keep on my phone" aria-pressed={kept} onclick={show} />
 
 {#if open}
-	<Dialog title="Keep on phone" onclose={() => (open = false)} cancelLabel="Done">
+	<Dialog title="Keep on my phone" onclose={() => (open = false)} cancelLabel="Done">
 		<p class="small intro">
 			Choose what each of your phones keeps of {what}. A phone fetches it the next time its Shortcut
 			runs. Deleting a photo on the phone does not delete it here.
@@ -109,7 +128,6 @@
 		border: 0;
 		margin: 0;
 		padding: var(--s-2) 0;
-		border-top: 1px solid var(--hairline);
 	}
 	legend {
 		padding: var(--s-2) 0 var(--s-1);

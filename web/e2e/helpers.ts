@@ -235,6 +235,19 @@ export async function viewOnlyPhoto(page: Page): Promise<number> {
 	throw new Error('no view-only photo for this user');
 }
 
+/**
+ * Select every photo the Library has loaded: Select in the head, then the pill's More, where
+ * it says "Select all" (or "Select loaded (n)" while more are to load).
+ */
+export async function selectEverything(page: Page, name: string | RegExp = /^Select (all|loaded)/) {
+	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
+	if (!(await bar.isVisible()))
+		await page.getByRole('button', { name: 'Select', exact: true }).click();
+	const more = bar.getByRole('button', { name: 'More' });
+	if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+	await bar.getByRole('button', { name, exact: typeof name === 'string' }).click();
+}
+
 /** Run an action of the selection pill; on a phone the later ones are under "More". */
 export async function selectionAction(page: Page, name: string) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });

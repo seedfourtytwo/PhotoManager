@@ -34,10 +34,9 @@
 	   percent) for the shade that keeps it readable on any picture. */
 	--on-photo: #fff;
 	--on-photo-90: rgb(255 255 255 / 0.9); /* the crop frame */
-	--photo-shade-18: rgb(0 0 0 / 0.18); /* inside the empty selection circle */
-	--photo-shade-20: rgb(0 0 0 / 0.2); /* the hairline round that circle */
-	--photo-shade-25: rgb(0 0 0 / 0.25); /* the hairline inside the selection frame */
-	--photo-shade-55: rgb(0 0 0 / 0.55); /* behind the favourite mark; what a crop cuts away */
+	--photo-shade-55: rgb(
+		0 0 0 / 0.55
+	); /* inside the empty selection circle; behind the favourite mark; what a crop cuts away */
 }
 
 /* Safelight, light. */

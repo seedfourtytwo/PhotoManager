@@ -24,13 +24,23 @@
 	type Props = {
 		loader: TimelineLoader;
 		selection: Selection;
+		/** Choosing has begun (Select) with nothing chosen yet: a tap chooses, it does not open. */
+		choosing?: boolean;
 		onopen: (id: Id) => void;
 		ontoggle: (id: Id, range: boolean) => void;
 		onselect: (next: Selection) => void;
 		/** The month at the top of the screen, for the time ruler. */
 		onmonth?: (key: string) => void;
 	};
-	let { loader, selection, onopen, ontoggle, onselect, onmonth }: Props = $props();
+	let {
+		loader,
+		selection,
+		choosing = false,
+		onopen,
+		ontoggle,
+		onselect,
+		onmonth
+	}: Props = $props();
 
 	const gap = $derived(settings.gap); // from the account's look
 	/**
@@ -44,8 +54,7 @@
 	// Earlier months keep their layout when a page arrives (lib/month-layouts.ts).
 	const layoutsFor = monthLayouts();
 	const layouts = $derived(layoutsFor(groups, width, rowHeight, gap));
-	const selecting = $derived(selection.ids.size > 0);
-	const count = new Intl.NumberFormat('en-GB');
+	const selecting = $derived(choosing || selection.ids.size > 0);
 
 	// --- windowing: only tiles within ±1.5 screens are in the DOM (lib/windowing.ts) --------
 	// Grid offsets are measured once per layout change (one read pass); scrolling only reads
@@ -205,9 +214,7 @@
 >
 	{#each groups as group, g (group.key)}
 		<section data-key={group.key} aria-labelledby={`m-${group.key}`}>
-			<h2 id={`m-${group.key}`}>
-				{group.label} <span class="quiet">{count.format(group.items.length)}</span>
-			</h2>
+			<h2 id={`m-${group.key}`}>{group.label}</h2>
 			<PhotoGrid
 				items={group.items}
 				layout={layouts[g]}
@@ -251,7 +258,7 @@
 	section {
 		margin-bottom: var(--s-2);
 	}
-	/* Month headings: a chapter title in the theme's title face, sticky, the count beside it. */
+	/* Month headings: a chapter title in the theme's title face, sticky. */
 	h2 {
 		position: sticky;
 		top: var(--top);
@@ -259,12 +266,8 @@
 		margin: 0;
 		padding: var(--s-4) 0 var(--s-2);
 		font-size: var(--fs-20);
+		font-weight: 700;
 		background: var(--bg);
-	}
-	h2 span {
-		font-family: var(--font-ui);
-		font-size: var(--fs-12);
-		margin-left: var(--s-2);
 	}
 	.status {
 		padding: var(--s-4) 0;
@@ -272,9 +275,16 @@
 	.lasso {
 		position: fixed;
 		z-index: var(--z-lasso);
-		border: 1px solid var(--accent);
+		border: var(--fine) solid var(--accent);
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		pointer-events: none;
+	}
+	/* Without the laptop's top bar, under the page's compact glass title (PageHead), which is a
+	   touch target tall. */
+	@media (max-width: 1023px) {
+		h2 {
+			top: calc(var(--top) + var(--target));
+		}
 	}
 	@media (max-width: 639px) {
 		h2 {

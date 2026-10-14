@@ -11,4 +11,4 @@ export { notice, type NoticeAction } from './state/notice.svelte';
 export { isPublicRoute, session } from './state/session.svelte';
 export { formFromDetails, gettingPhotos, photoShare, shareAgain } from './state/share';
 export { forgetOldDensity, settings } from './state/settings.svelte';
-export { isFilterable, ui, viewport } from './state/ui.svelte';
+export { viewport } from './state/ui.svelte';

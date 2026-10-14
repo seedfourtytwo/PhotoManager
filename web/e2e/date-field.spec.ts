@@ -87,6 +87,15 @@ test('fix date: text that is not a date is pasted as it is, refused in words, an
 	await expect(dialog.getByRole('button', { name: 'Change date' })).toBeEnabled();
 });
 
+/** The When chip's sheet, where "Between two dates" has its two date fields. */
+async function askWhen(page: Page) {
+	await page
+		.getByRole('group', { name: 'Filters' })
+		.getByRole('button', { name: 'When', exact: true })
+		.click();
+	return page.getByRole('dialog', { name: 'When' });
+}
+
 test('phone: the date field is 16 px and a finger tall, in Fix date and in the filters', async ({
 	page
 }) => {
@@ -96,11 +105,11 @@ test('phone: the date field is 16 px and a finger tall, in Fix date and in the f
 			font: parseFloat(getComputedStyle(el).fontSize),
 			height: el.getBoundingClientRect().height
 		}));
-	await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const from = page.getByRole('complementary', { name: 'Filters' }).getByLabel('From');
+	const when = await askWhen(page);
+	const from = when.getByLabel('From');
 	expect((await size(from)).font).toBeGreaterThanOrEqual(16);
 	expect((await size(from)).height).toBeGreaterThanOrEqual(44);
-	await page.getByRole('button', { name: 'Done' }).click();
+	await when.getByRole('button', { name: 'Done' }).click();
 	const { field } = await openSetExactly(page);
 	expect((await size(field)).font).toBeGreaterThanOrEqual(16);
 	expect((await size(field)).height).toBeGreaterThanOrEqual(44);
@@ -109,8 +118,7 @@ test('phone: the date field is 16 px and a finger tall, in Fix date and in the f
 test('filters: a pasted date in any format filters by that day, shown day first', async ({
 	page
 }) => {
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const panel = page.getByRole('complementary', { name: 'Filters' });
+	const panel = await askWhen(page);
 	await paste(page, panel.getByLabel('From'), 'IMG_20190704_183005.jpg');
 	await expect(panel.getByLabel('From')).toHaveValue('04/07/2019');
 	await expect(page).toHaveURL(/from=2019-07-04/);

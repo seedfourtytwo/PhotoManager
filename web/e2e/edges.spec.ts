@@ -55,13 +55,14 @@ for (const [name, insets, size] of [
 		for (const link of await nav.getByRole('link').all()) await expectClear(page, link, insets);
 		await expectClear(page, nav.getByRole('button', { name: 'Account' }), insets);
 		await expectClear(page, page.getByRole('heading', { level: 1 }), insets);
-		// A month heading sticks under the clock, not behind it.
+		// A month heading sticks under the clock, not behind it, and under the page's compact
+		// title, which is a touch target (44 px) tall.
 		const sticks = await page
 			.getByRole('main')
 			.getByRole('heading', { level: 2 })
 			.first()
 			.evaluate((h) => parseFloat(getComputedStyle(h).top));
-		expect(sticks).toBe(insets.top);
+		expect(sticks).toBe(insets.top + 44);
 	});
 
 	test(`edges, ${name}: the photo view's pills and bar clear the notch and the home bar`, async ({

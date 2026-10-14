@@ -64,7 +64,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
 | 3.1 | Timeline (newest first), grouped by day/month/year, fast scroll with the time ruler | Must | M2 |
-| 3.2 | Facet filters: date range (From / To take a pasted date like Fix date and show it day first), place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, source, guessed date, location; people/tags in M3* | Must | M2 |
+| 3.2 | Facet filters: date range (From / To take a pasted date like Fix date and show it day first), place, camera, people, tags, favourite, media kind, source — *API: date, place, camera, favourite, source, guessed date, location; people/tags in M3. Web: a row of chips (When, Where, Favourites, Camera, More; Who once the person filter is on main), one question per sheet* | Must | M2 |
 | 3.3 | Favourites (per user) and hide (per user) | Must | M2 ✅ (API) |
 | 3.4 | Keyword search over places, tags, names, captions — *API: file names, places, camera, album titles; tags/names/captions in M3* | Must | M2 |
 | 3.5 | Natural-language search ("kids in the snow at grandma's") via embeddings | Should | M3 ✅ (API) |

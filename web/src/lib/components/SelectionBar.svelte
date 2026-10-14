@@ -1,13 +1,17 @@
 <script lang="ts" module>
 	import type { IconName } from '$lib/icons';
 
-	/** `more`: behind "More" on every device. `icon`: drawn with the word on the bar. */
+	/**
+	 * `more`: behind "More" on every device. `icon`: the action is drawn as its icon alone,
+	 * named by its label. `anytime`: it works with nothing selected yet (Select all).
+	 */
 	export type Action = {
 		label: string;
 		run: () => void;
 		hidden?: boolean;
 		icon?: IconName;
 		more?: boolean;
+		anytime?: boolean;
 	};
 </script>
 
@@ -16,6 +20,7 @@
 	import { viewport } from '$lib/app.svelte';
 	import { refocus } from '$lib/modal';
 	import Icon from './Icon.svelte';
+	import IconButton from './ui/IconButton.svelte';
 
 	type Props = { count: number; actions: Action[]; onclear: () => void; busy?: boolean };
 	let { count, actions, onclear, busy = false }: Props = $props();
@@ -49,45 +54,45 @@
 	let fits = $state(Infinity);
 	const inline = $derived(onBar.slice(0, Math.min(most, fits)));
 	const overflow = $derived(shown.filter((a) => !inline.includes(a)));
-	/** On a phone an action is its icon over its word; with more room, beside it. */
-	const look = $derived(viewport.phone ? 'action' : 'beside');
+	const idle = (action: Action) => busy || (count === 0 && !action.anytime);
 
 	// Nothing leaves the glass: while the last thing on the pill ends beyond it, one more
 	// action goes under More. Measured again whenever the room or what is written changes.
 	let bar: HTMLElement | undefined = $state();
 	let tally: HTMLElement | undefined = $state();
-	let clear: HTMLElement | undefined = $state();
+	let tools: HTMLElement | undefined = $state();
 	let measured = $state(0);
-	const room = $derived([viewport.width, count, most, look, measured].join());
+	const room = $derived([viewport.width, count, most, measured].join());
 	$effect(() => {
 		void room;
 		fits = Infinity;
 	});
 	$effect(() => {
 		void room;
-		if (!bar || !clear || inline.length === 0) return;
+		const last = tools?.lastElementChild;
+		if (!bar || !last || inline.length === 0) return;
 		const style = getComputedStyle(bar);
 		const end =
 			bar.getBoundingClientRect().right -
 			parseFloat(style.paddingRight) -
 			parseFloat(style.borderRightWidth);
-		if (clear.getBoundingClientRect().right > end + FIT_SLACK) fits = inline.length - 1;
+		if (last.getBoundingClientRect().right > end + FIT_SLACK) fits = inline.length - 1;
 	});
-	// The two ends of the pill change size when the look's text size does, and when the faces
-	// arrive after the first paint; how many actions sit between them does not move either.
+	// The count changes size when the look's text size does, and when the face arrives after
+	// the first paint; how many actions sit beside it does not move it.
 	$effect(() => {
-		if (!tally || !clear) return;
-		const ends = [tally, clear];
-		let widths = '';
-		// After this frame, and only for a new size: measuring moves the actions between them.
+		if (!tally) return;
+		const counted = tally;
+		let width = 0;
+		// After this frame, and only for a new size: measuring moves the actions beside it.
 		const watch = new ResizeObserver(() => {
-			const now = ends.map((end) => Math.round(end.offsetWidth)).join();
-			if (now === widths) return;
-			widths = now;
+			const now = Math.round(counted.offsetWidth);
+			if (now === width) return;
+			width = now;
 			frame = requestAnimationFrame(() => measured++);
 		});
 		let frame = 0;
-		for (const end of ends) watch.observe(end);
+		watch.observe(counted);
 		return () => {
 			cancelAnimationFrame(frame);
 			watch.disconnect();
@@ -115,36 +120,48 @@
 	data-selection-pill
 	bind:this={bar}
 >
-	<span class="count data" role="status" bind:this={tally}>{count} selected</span>
-	<span class="actions">
+	<IconButton icon="x" label="Clear selection" class="clear" onclick={onclear} />
+	<!-- The number carries the accent: it names the selection the frames on the photos show. -->
+	<span class="count" role="status" bind:this={tally}
+		><span class="n data">{count}</span> selected</span
+	>
+	<span class="actions" bind:this={tools}>
 		{#each inline as action (action.label)}
-			<button type="button" class={look} disabled={busy} onclick={() => run(action)}
-				>{#if action.icon}<Icon name={action.icon} />{/if}{action.label}</button
-			>
+			{#if action.icon}
+				<IconButton
+					icon={action.icon}
+					label={action.label}
+					disabled={idle(action)}
+					onclick={() => run(action)}
+				/>
+			{:else}
+				<button type="button" class="said" disabled={idle(action)} onclick={() => run(action)}
+					>{action.label}</button
+				>
+			{/if}
 		{/each}
 		{#if overflow.length}
+			<!-- IconButton's markup, with the element kept: the focus comes back to it. -->
 			<button
 				type="button"
-				class={look}
+				class="icon-button"
+				aria-label="More"
+				title="More"
 				aria-expanded={more}
 				aria-controls={more ? 'selection-more' : undefined}
 				bind:this={moreButton}
-				onclick={() => (more = !more)}><Icon name="more" />More</button
+				onclick={() => (more = !more)}
+				><Icon name="more" /><span class="word" aria-hidden="true">More</span></button
 			>
 		{/if}
 	</span>
-	<button
-		type="button"
-		class="clear"
-		bind:this={clear}
-		onclick={onclear}
-		aria-label="Clear selection">Clear</button
-	>
 	{#if more && overflow.length}
 		<ul class="more" id="selection-more">
 			{#each overflow as action (action.label)}
 				<li>
-					<button type="button" disabled={busy} onclick={() => run(action)}>{action.label}</button>
+					<button type="button" disabled={idle(action)} onclick={() => run(action)}
+						>{action.label}</button
+					>
 				</li>
 			{/each}
 		</ul>
@@ -165,32 +182,27 @@
 		box-sizing: border-box;
 		min-height: var(--pill);
 		max-width: calc(100vw - 2 * var(--s-2));
-		padding: var(--s-1) var(--s-2) var(--s-1) var(--s-4);
+		padding: var(--s-1);
 		border-radius: var(--r-pill);
+		box-shadow: var(--lift);
 		white-space: nowrap;
 	}
-	/* The count carries the accent: it names the selection the frames on the photos show. */
 	.count {
+		padding: 0 var(--s-3) 0 var(--s-1);
+		font-weight: 750;
+	}
+	.count .n {
 		color: var(--accent);
-		font-size: var(--fs-12);
-		font-weight: 500;
-		padding-right: var(--s-2);
 	}
 	.actions {
 		display: flex;
+		align-items: center;
 		gap: var(--fine);
 	}
-	.beside {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--s-2);
+	.said {
 		padding: var(--s-2) var(--s-3);
 		border-radius: var(--r-pill);
-		font-weight: 500;
-	}
-	.clear {
-		color: var(--ink-2);
-		border-radius: var(--r-pill);
+		font-weight: 600;
 	}
 	.more {
 		position: absolute;
@@ -201,6 +213,7 @@
 		padding: var(--s-1);
 		background: var(--raised);
 		border-radius: var(--r-2);
+		box-shadow: var(--lift);
 		min-width: calc(var(--margin) * 0.75);
 	}
 	.more button {
@@ -219,10 +232,9 @@
 	@media (max-width: 639px) {
 		.bar {
 			gap: 0;
-			padding-left: var(--s-3);
 		}
 		.count {
-			padding-right: var(--s-1);
+			padding: 0 var(--s-2) 0 0;
 		}
 		.actions {
 			gap: 0;

@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { AssetFilters, Id } from '$lib/api';
-	import { api, library, notice, session, settings, ui, viewport } from '$lib/app.svelte';
-	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { api, library, notice, session, viewport } from '$lib/app.svelte';
+	import { filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { monthTotals } from '$lib/calendar';
+	import { photos } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
 	import {
@@ -17,18 +18,21 @@
 		type Selection
 	} from '$lib/selection';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
+	import LibraryHead from '$lib/components/LibraryHead.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
 	import TimeRuler from '$lib/components/TimeRuler.svelte';
 	import UploadButton from '$lib/components/UploadButton.svelte';
-	import ViewHeader from '$lib/components/ViewHeader.svelte';
+	import IconButton from '$lib/components/ui/IconButton.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	const query = $derived(filtersToQuery(filters));
 	let selection = $state<Selection>(EMPTY);
+	/** Select was pressed: a tap chooses a photo, and the pill is there before one is chosen. */
+	let choosing = $state(false);
 	let months = $state.raw<{ key: string; count: number }[]>([]);
 	let total = $state<number | null>(null);
 	let currentMonth = $state<string | null>(null);
@@ -40,7 +44,7 @@
 	$effect(() => {
 		if (query === lastQuery) return;
 		lastQuery = query;
-		selection = EMPTY;
+		stopChoosing();
 		// The count of the filters before is not this view's: none is shown until it is known.
 		total = null;
 		void loader.reset(filters);
@@ -72,10 +76,6 @@
 		library.changed();
 	}
 
-	$effect(() => {
-		if (loader.items.length || loader.done) ui.gridReady = true;
-	});
-
 	const order = $derived(loader.items.map((a) => a.id));
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
 	// Only loaded photos are ever selected: what a reload (an upload, Undo) no longer brings
@@ -84,7 +84,6 @@
 		const kept = keepLoaded(selection, order);
 		if (kept !== selection) selection = kept;
 	});
-	const described = $derived(describeFilters(filters));
 
 	// --- the loupe follows ?photo=<id> -------------------------------------------------------
 	const loupe = new TimelineLoupe(loader, () => timeline);
@@ -96,6 +95,11 @@
 		const kept = limitSelection(next);
 		if (kept !== next) notice.show(TOO_MANY_SELECTED, { ms: 7000 });
 		selection = kept;
+	}
+
+	function stopChoosing() {
+		selection = EMPTY;
+		choosing = false;
 	}
 
 	function toggle(id: Id, range: boolean) {
@@ -115,28 +119,31 @@
 <svelte:window {onkeydown} />
 <svelte:head><title>Library · Photos</title></svelte:head>
 
-<div class="page">
-	<ViewHeader view="grid" {query} {total} {described}>
-		{#if !viewport.desktop}
-			<button type="button" onclick={() => (ui.sheet = true)}>Filter</button>
-		{/if}
-		{#if described && total}
-			<button type="button" onclick={() => (downloadAll = true)}>Download all</button>
-			{#if session.canEdit}
+<!-- Kept clear of the time ruler's column on a laptop. -->
+<div class="head">
+	<LibraryHead view="grid" {query} {total}>
+		{#snippet tools()}
+			{#if order.length}
+				<IconButton
+					icon="select"
+					label="Select"
+					class="select"
+					aria-pressed={choosing || selection.ids.size > 0}
+					onclick={() => (choosing || selection.ids.size ? stopChoosing() : (choosing = true))}
+				/>
+			{/if}
+			{#if query && total && session.canEdit}
 				<KeepOnPhone target={{ kind: 'filter', filters }} what="these photos" />
 			{/if}
-		{/if}
-		{#if order.length}
-			<button type="button" onclick={() => select(selectAll(order))}
-				>{selectAllLabel(order.length, loader.done)}</button
-			>
-		{/if}
-		<UploadButton onuploaded={reloadAll} />
-	</ViewHeader>
+			<UploadButton onuploaded={reloadAll} />
+		{/snippet}
+	</LibraryHead>
+</div>
 
+<div class="page">
 	{#if !loader.loading && !loader.error && loader.items.length === 0}
 		<div class="empty-state">
-			{#if described}
+			{#if query}
 				<p>No photos match these filters.</p>
 				<p>Loosen a filter, or <a href="/">show everything</a>.</p>
 			{:else}
@@ -153,6 +160,7 @@
 		bind:this={timeline}
 		{loader}
 		{selection}
+		{choosing}
 		onopen={openPhoto}
 		ontoggle={toggle}
 		onselect={select}
@@ -161,7 +169,21 @@
 
 	<SelectionActions
 		{selected}
-		onclear={() => (selection = EMPTY)}
+		selecting={choosing}
+		selectAll={{
+			label: selectAllLabel(order.length, loader.done),
+			run: () => select(selectAll(order))
+		}}
+		extra={[
+			{
+				// Everything the filters show, loaded or not (the selection is only what is loaded).
+				label: `Download all ${total === null ? '' : photos(total)}`,
+				run: () => (downloadAll = true),
+				hidden: !query || !total,
+				anytime: true
+			}
+		]}
+		onclear={stopChoosing}
 		onpatch={(ids, patch) => loader.updateMany(ids, patch)}
 		onremove={(ids) => {
 			loader.remove(ids);
@@ -171,9 +193,9 @@
 	/>
 </div>
 
-<!-- On a phone the selection pill takes the ruler's place while photos are selected. -->
-{#if viewport.desktop || selection.ids.size === 0}
-	<div class="ruler" class:shift={settings.filtersOpen}>
+<!-- On a phone the selection pill takes the ruler's place while photos are being chosen. -->
+{#if viewport.desktop || (selection.ids.size === 0 && !choosing)}
+	<div class="ruler">
 		<TimeRuler
 			{months}
 			current={currentMonth}
@@ -205,6 +227,13 @@
 {/if}
 
 <style>
+	.head {
+		padding-right: calc(var(--s-8) - var(--page-x));
+	}
+	/* Pressed, Select takes the accent of a selection; its tick stays drawn, not filled. */
+	.head :global(.select[aria-pressed='true'] svg) {
+		fill: none;
+	}
 	.page {
 		padding: 0 var(--s-8) 0 var(--page-x);
 	}
@@ -217,16 +246,15 @@
 		height: calc(100vh - var(--top));
 		z-index: var(--z-ruler);
 	}
-	.ruler.shift {
-		right: var(--margin);
-	}
 	/* Smaller screens: lying above the dock. Only the ruler itself takes the pointer. */
 	@media (max-width: 1023px) {
+		.head {
+			padding: 0;
+		}
 		.page {
 			padding: 0 var(--page-x);
 		}
-		.ruler,
-		.ruler.shift {
+		.ruler {
 			top: auto;
 			left: var(--s-3);
 			right: var(--s-3);

@@ -17,8 +17,8 @@ test('keep an album on a phone, leave out screenshots, and see it in Settings', 
 	await expect(keeps).toContainText('never synced');
 
 	await page.goto('/albums/1');
-	await page.getByRole('button', { name: 'Keep on phone' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Keep on phone' });
+	await page.getByRole('button', { name: 'Keep on my phone' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Keep on my phone' });
 	const phone = dialog.getByRole('group', { name: 'Léa’s iPhone' });
 	await expect(phone.getByRole('radio', { name: 'Not chosen' })).toBeChecked();
 	await phone.getByRole('radio', { name: 'Keep on it' }).check();
@@ -27,6 +27,11 @@ test('keep an album on a phone, leave out screenshots, and see it in Settings', 
 	await expectAccessible(page);
 	await dialog.getByRole('button', { name: 'Done' }).click();
 	await expect(dialog).toBeHidden(); // its history step is undone before leaving
+	// The head's phone button now shows that a phone keeps this album.
+	await expect(page.getByRole('button', { name: 'Keep on my phone' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
 
 	await page.goto('/settings');
 	await expect(

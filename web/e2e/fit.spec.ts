@@ -124,14 +124,21 @@ test('320 px at the largest text: the photo’s sheets and their controls stay o
 });
 
 for (const width of [1440, 1024]) {
-	test(`laptop ${width} px: the filter column shows the hint of each field whole`, async ({
+	test(`laptop ${width} px: the filter sheets show the hint of each field whole`, async ({
 		page
 	}) => {
-		test.skip(isPhone(page), 'the side column is the laptop’s');
+		test.skip(isPhone(page), 'one project sets the widths itself');
 		await page.setViewportSize({ width, height: 768 });
 		await signIn(page);
-		const panel = page.getByRole('complementary', { name: 'Filters' });
-		await expect(panel).toBeVisible();
+		const ask = async (name: string) => {
+			await page
+				.getByRole('group', { name: 'Filters' })
+				.getByRole('button', { name, exact: true })
+				.click();
+			const sheet = page.getByRole('dialog', { name });
+			await expect(sheet).toBeVisible();
+			return sheet;
+		};
 
 		// A hint is not a value, so the field does not measure it: it is measured here. The
 		// whole field is its room: an empty search field keeps none for its clear button
@@ -146,11 +153,10 @@ for (const width of [1440, 1024]) {
 					input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
 				return room - pen.measureText(input.placeholder).width;
 			});
-		for (const field of [
-			panel.getByRole('searchbox'),
-			panel.getByLabel('From'),
-			panel.getByLabel('To')
-		])
+		const when = await ask('When');
+		for (const field of [when.getByLabel('From'), when.getByLabel('To', { exact: true })])
 			expect(await spare(field)).toBeGreaterThanOrEqual(0);
+		await when.getByRole('button', { name: 'Done' }).click();
+		expect(await spare((await ask('Where')).getByRole('searchbox'))).toBeGreaterThanOrEqual(0);
 	});
 }
