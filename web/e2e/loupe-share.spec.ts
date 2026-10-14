@@ -82,6 +82,7 @@ test('Share hands the sheet one file: the photo’s download, under its name', a
 	await withShareSheet(page);
 	await signIn(page);
 	await page.locator('.tile').first().click();
+	await expect(page).toHaveURL(/photo=\d+/);
 	const id = new URL(page.url()).searchParams.get('photo');
 	const fetched = page.waitForResponse(DOWNLOAD);
 	await loupe(page).getByRole('button', { name: 'Share' }).click();

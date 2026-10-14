@@ -62,6 +62,7 @@ test.describe('phone: the Info sheet has its own step', () => {
 		page
 	}) => {
 		await page.locator('.tile').first().click();
+		await expect(page).toHaveURL(/photo=\d+/);
 		const first = inAddress(page);
 		await infoButton(page).click();
 		await expect(details(page)).toBeVisible();
