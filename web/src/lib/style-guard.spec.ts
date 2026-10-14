@@ -15,12 +15,15 @@ const sources = import.meta.glob(['/src/**/*.svelte', '/src/**/*.css'], {
 }) as Record<string, string>;
 
 describe('style guard', () => {
-	it.each(['--font-text', 'Instrument Sans'])('no source file mentions %s', (name) => {
-		const offenders = Object.entries(sources)
-			.filter(([, text]) => text.includes(name))
-			.map(([path]) => path);
-		expect(offenders).toEqual([]);
-	});
+	it.each(['--font-text', 'Instrument Sans', 'Hanken Grotesk', 'Martian Mono'])(
+		'no source file mentions %s',
+		(name) => {
+			const offenders = Object.entries(sources)
+				.filter(([, text]) => text.includes(name))
+				.map(([path]) => path);
+			expect(offenders).toEqual([]);
+		}
+	);
 
 	// The look's "gap between photos" dial moves --gutter from 0 to 8 px: a needle or a gap
 	// inside a control that borrowed it would vanish or swell with it. Those use --fine.
@@ -50,11 +53,7 @@ describe('style guard', () => {
 
 	it('every font family ships its licence', () => {
 		const licences = readdirSync('static/fonts').filter((name) => name.endsWith('-OFL.txt'));
-		expect(licences.sort()).toEqual([
-			'HankenGrotesk-OFL.txt',
-			'MartianMono-OFL.txt',
-			'Newsreader-OFL.txt'
-		]);
+		expect(licences.sort()).toEqual(['AtkinsonHyperlegibleNext-OFL.txt', 'Newsreader-OFL.txt']);
 	});
 
 	it('every source file is non-empty (a blanked stylesheet would pass the other guards)', () => {
@@ -65,16 +64,56 @@ describe('style guard', () => {
 		expect(empty).toEqual([]);
 	});
 
-	it('mono text is always set at 80 % width', () => {
+	// C, 2026-10-14: no tracked text and no capitals; weight and size make the hierarchy.
+	it('no text is letter-spaced or set in capitals', () => {
 		const offenders = Object.entries(sources).flatMap(([path, text]) =>
-			[...text.matchAll(/\{([^{}]*)\}/g)]
-				.filter(
-					([, body]) =>
-						/font-family:\s*var\(--font-(mono|data)\)/.test(body) && !/font-stretch:/.test(body)
+			[
+				...text.matchAll(
+					/letter-spacing:\s*([^;}]+)|text-transform:\s*uppercase|font-variant(-caps)?:[^;}]*(small|all)-caps/g
 				)
-				.map(() => path)
+			]
+				.filter((m) => !m[1] || !/^(0|normal)\s*$/.test(m[1].trim()))
+				.map((m) => `${path}: ${m[0]}`)
 		);
 		expect(offenders).toEqual([]);
+	});
+
+	// Groups separate by space or by a seam of --fine (DESIGN_PRINCIPLES §2): no hairlines.
+	// The redesign's area branches (docs/superpowers/specs/2026-10-14-ui-redesign-2-design.md
+	// §11) take their files off this list; it must be empty when the redesign is done.
+	const LINES_PENDING = new Set([
+		'/src/lib/components/Devices.svelte', // (a) You, after the phone-sync PR
+		'/src/lib/components/PhotoBar.svelte', // (c) photo view
+		'/src/lib/components/PhotoInfo.svelte', // (c)
+		'/src/lib/components/Editor.svelte', // (c)
+		'/src/lib/components/PhotoGrid.svelte', // (b) library
+		'/src/lib/components/Timeline.svelte', // (b)
+		'/src/lib/components/PeopleEditor.svelte', // (d) collections
+		'/src/lib/components/PortraitDialog.svelte', // (d)
+		'/src/lib/components/admin/Backups.svelte', // (d) admin
+		'/src/lib/components/admin/FolderList.svelte', // (d)
+		'/src/lib/components/admin/ReportDialog.svelte', // (d)
+		'/src/lib/components/admin/Sources.svelte', // (d), after the folder-pause PR
+		'/src/lib/components/admin/Users.svelte', // (d)
+		'/src/routes/admin/+page.svelte', // (d)
+		'/src/routes/albums/[id]/print/+page.svelte', // (d)
+		'/src/routes/map/+page.svelte', // (d)
+		'/src/routes/review/+page.svelte', // (d)
+		'/src/routes/settings/+page.svelte' // (a)
+	]);
+	const lines = Object.entries(sources).flatMap(([path, text]) =>
+		[
+			...text.matchAll(
+				/(border(-(top|bottom|left|right|block|inline)(-(start|end))?)?|outline|box-shadow):[^;}]*\b1px\b[^;}]*/g
+			)
+		].map((m) => ({ path, rule: m[0] }))
+	);
+	it('no stylesheet draws a 1 px line', () => {
+		expect(lines.filter(({ path }) => !LINES_PENDING.has(path))).toEqual([]);
+	});
+	it('a file leaves the pending list once its lines are gone', () => {
+		const still = new Set(lines.map(({ path }) => path));
+		expect([...LINES_PENDING].filter((path) => !still.has(path))).toEqual([]);
 	});
 
 	it('the browser chrome colours equal the Safelight dark page colour', () => {

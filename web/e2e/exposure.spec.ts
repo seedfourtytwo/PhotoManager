@@ -41,7 +41,7 @@ test('the bar reads aperture, shutter, ISO and focal length, then the file name'
 	const readout = await open(page, SHOT);
 	const line = readout.locator('span[aria-hidden="true"]');
 	await expect(line).toHaveText(`${WRITTEN} · IMG_0001.JPG`);
-	await expect(line).toHaveCSS('font-family', /Martian Mono/);
+	await expect(line).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
 	await expect(line).toHaveCSS('font-variant-numeric', /tabular-nums/);
 	await expectAccessible(page);
 });
@@ -117,7 +117,7 @@ test('the details list the settings in the data face, and say them in words', as
 	const about = loupe(page).getByRole('complementary', { name: 'About this photo' });
 	const settings = about.locator('.exposure');
 	await expect(settings.locator('[aria-hidden="true"]')).toHaveText(WRITTEN);
-	await expect(settings).toHaveCSS('font-family', /Martian Mono/);
+	await expect(settings).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
 	await expect(settings.locator('.visually-hidden')).toHaveText(
 		'f 2.8, 1/250 second, ISO 400, 35 millimetres'
 	);

@@ -202,8 +202,8 @@
 		gap: var(--s-3);
 		background: var(--raised);
 		color: var(--ink);
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-2);
+		box-shadow: var(--lift);
 		padding: var(--s-2) var(--s-4);
 		font-size: var(--fs-14);
 		max-width: min(40rem, calc(100vw - 2 * var(--s-4)));

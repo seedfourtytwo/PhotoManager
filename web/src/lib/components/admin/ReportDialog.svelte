@@ -129,7 +129,6 @@
 	}
 	.path {
 		font-family: var(--font-data);
-		font-stretch: 80%;
 		overflow-wrap: anywhere;
 	}
 </style>

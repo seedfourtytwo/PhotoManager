@@ -62,7 +62,7 @@ test.describe('time ruler', () => {
 		await expect(page.locator('section h2').first()).toContainText(month);
 		const tag = ruler(page).locator('.tag');
 		await expect(tag).toHaveText(`${month.slice(0, 3)} ${month.slice(-4)}`);
-		await expect(tag).toHaveCSS('font-family', /Martian Mono/);
+		await expect(tag).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
 		// A tap on a written year goes there.
 		await ruler(page).getByText('2019', { exact: true }).click();
 		await expect(page.locator('section h2', { hasText: '2019' }).first()).toBeInViewport();

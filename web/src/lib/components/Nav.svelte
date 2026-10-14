@@ -67,7 +67,6 @@
 		background: var(--fill);
 		-webkit-backdrop-filter: var(--backdrop);
 		backdrop-filter: var(--backdrop);
-		border-bottom: 1px solid var(--hairline);
 		/* Frosted glass where the browser can blur and the person has not asked for less;
 		   a solid bar otherwise (the same rule as .glass in utilities.css). */
 		--fill: var(--raised);
@@ -93,7 +92,6 @@
 		font-weight: var(--title-weight);
 		font-style: var(--voice-style);
 		font-size: var(--fs-20);
-		letter-spacing: -0.02em;
 		color: var(--ink);
 	}
 	.places {
@@ -172,7 +170,6 @@
 			background: var(--fill);
 			-webkit-backdrop-filter: var(--backdrop);
 			backdrop-filter: var(--backdrop);
-			border: 1px solid var(--hairline);
 		}
 		.places {
 			flex: 1;

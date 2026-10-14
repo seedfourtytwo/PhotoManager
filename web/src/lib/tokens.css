@@ -13,17 +13,20 @@
 @import './utilities.css';
 
 :root {
-	/* Colour lives in themes.css; these two are derived from it. */
+	/* Colour lives in themes.css; these three are derived from it. */
 	--accent: oklch(var(--acc-l) var(--acc-c) var(--acc-h));
 	--glass: color-mix(in oklab, var(--raised) 74%, transparent);
+	--lens: color-mix(in oklab, var(--ink) 14%, transparent); /* the chosen tab or segment */
 
-	/* Type — one sans for everything you read or operate, one mono for data. */
+	/* Type — one family for everything you read or operate, data included (tabular figures). */
 	--font-ui:
-		'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+		sans-serif;
 	--font-serif: 'Newsreader', 'Iowan Old Style', 'Charter', Georgia, serif;
-	--font-data: 'Martian Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--font-data: var(--font-ui);
+	--font-code: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; /* a command an admin types */
 	--font-title: var(--font-ui);
-	--title-weight: 720;
+	--title-weight: 750;
 	--voice-style: normal; /* descriptions and opening lines: upright in the sans, italic in the Album serif */
 	/* Scale (rem = 16 px): 12 · 14 · 16 · 20 · 28 · 40. */
 	--fs-12: 0.75rem; /* metadata, counts, captions under thumbnails */
@@ -85,8 +88,10 @@
 
 	/* Motion — short, and it follows the finger; off under prefers-reduced-motion. */
 	--motion: 200ms;
-	--motion-sheet: 240ms;
+	--motion-sheet: 380ms; /* sheets and page changes */
+	--press: 120ms; /* a control giving under the finger */
 	--ease: cubic-bezier(0.2, 0, 0, 1);
+	--ease-sheet: cubic-bezier(0.32, 0.72, 0, 1); /* the curve of an iPhone sheet */
 }
 
 /* The Album theme keeps its typeset character: serif titles, small corners. */

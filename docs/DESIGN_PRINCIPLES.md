@@ -8,12 +8,14 @@ more would hurt understanding.
 
 1. **Maximise photo ink.** Photos use as much of the screen as possible; no cards, drop shadows,
    rounded frames or gradients around them. Gutters are 2–4 px.
-2. **Never crop without consent.** Grids are *justified* (true aspect ratios). Crops only exist
+2. **Never crop without consent.** Grids are _justified_ (true aspect ratios). Crops only exist
    inside album frames, chosen by the user. A panorama or a tall strip (wider than 4:1,
    narrower than 0.4:1) gets a tile of that limit and sits whole inside it, never stretched.
-3. **Erase non-data ink.** No borders where whitespace works; one hairline (1 px, low-contrast)
-   is the strongest divider on a page. Navigation and action bars use a small drawn icon
-   **with** its word; an icon never stands alone where a word fits.
+3. **Erase non-data ink.** No borders and no 1 px lines: groups separate by space, rows inside
+   a group by a 2 px seam (`--fine`). No gradients, no letter-spacing, no capitals. A dot, a
+   label or a sentence that has no job goes. An action everyone knows (select, share, close,
+   more…) is its icon alone, named for screen readers and as a tooltip; words stay in the main
+   navigation, in menus and wherever the action is not obvious.
 4. **Data density with calm.** Show a lot, quietly: many thumbnails, small type for metadata,
    one accent colour used only for selection and focus.
 5. **Small multiples over dashboards.** Comparisons (years, places, people) are shown as
@@ -24,18 +26,19 @@ more would hurt understanding.
    (margin notes, like Tufte's sidenotes), not in tooltips only.
 8. **Layering and separation by value, not colour.** Secondary information is lighter grey,
    not a different colour.
-9. **Motion follows the hand.** Transitions ≤ 240 ms. Sheets and the photo view move with the
-   finger; everything else moves only to show where something went. Respect
+9. **Motion follows the hand, and never stutters.** Presses and fades ≤ 240 ms; sheets and page
+   changes up to 380 ms on the sheet curve. Sheets and the photo view move with the finger;
+   everything else moves only to show where something went. Only `transform` and `opacity`
+   animate (the compositor draws them): never size, layout or blur. Respect
    `prefers-reduced-motion`.
 10. **Same thing, same place.** Laptop and phone share the information architecture; only the
     layout adapts.
 
 ## 2. Character, tokens and components
 
-**Character: a darkroom, with camera data on the readouts.** Photos sit on a near-black page
-(dark, the default) or a cool paper page (light). Everything you read or operate speaks in one
-sans; dates, counts and camera settings speak in a monospace, like the figures in a viewfinder.
-One accent — **safelight amber** — marks selection and focus and nothing else. Bars that sit
+**Character: a darkroom.** Photos sit on a near-black page (dark, the default) or a cool paper
+page (light). Everything you read or operate, dates, counts and camera settings included, speaks
+in one face drawn for readers with low vision; weight and size make the hierarchy. One accent — **safelight amber** — marks selection and focus and nothing else. Bars that sit
 over photos are translucent glass. This is the **Safelight** theme; the earlier serif look
 lives on as the **Album** theme (serif titles, small corners, indigo ink). A theme changes
 colours, corners and the title face, never layout.
@@ -49,9 +52,8 @@ rules on this page hold for every look: any accent hue passes contrast because l
 chroma stay the theme's, and "reset look" always works. The tables below give a theme's own
 values, which is what a dial left alone uses.
 
-The `.data` class (mono for counts and dates) exists and is used on the account menu's
-counts and badge; other counts and dates outside the photo view take it as their screens are
-reworked. The `--ok` / `--fail` colours exist; the System page's status dots are not built
+The `.data` class marks counts and dates (same face, figures lined up) so they can be found and
+restyled in one place. The `--ok` / `--fail` colours exist; the System page's status dots are not built
 yet (issue #10), so the checklist items about them apply once they are.
 
 The sources of truth are `web/src/lib/themes.css` (colour), `fonts.css` (typefaces) and
@@ -61,22 +63,25 @@ the tokens are beside them, one file per subject and all imported by `tokens.css
 
 ### Colour
 
-| Token | Dark (default) | Light | Use |
-|---|---|---|---|
-| `--bg` | #0D0F12 | #F2F3F5 | the page; photos sit on it |
-| `--raised` | #171A1F | #FFFFFF | dialogs, sheets, menus, toasts, bars |
-| `--ink` | #F1F2F4 | #14161A | text, primary button fill, chart ink |
-| `--ink-2` | #A3A9B3 | #565D68 | secondary text, quiet controls |
-| `--ink-3` | #6B717C | #8A909A | disabled text and decoration only |
-| `--hairline` | #262A31 | #DCDFE4 | the strongest divider; tile placeholder |
-| `--tint` | ink at 7 % | ink at 6 % | hover wash; field fill |
-| `--accent` | oklch(0.82 0.14 72) | oklch(0.50 0.15 72) | selection and focus only |
-| `--on-accent` | #17110A | #FFFFFF | text and the check mark on the accent |
-| `--glass` | raised at 74 % + blur | same | floating bars over photos |
-| `--ok` / `--fail` | #7BD3A0 / #FF7A6B | #1F7A4A / #B3261E | status dots on the System page only |
-| `--scrim` | near-black 66 % | cool grey 38 % | behind dialogs and sheets |
-| `--on-photo` / `--on-photo-90` | #FFFFFF / white at 90 % | same | marks drawn on a photo: the selection circle, the favourite mark, the crop handles / the crop frame |
-| `--photo-shade-18` / `-20` / `-25` / `-55` | black at 18 · 20 · 25 · 55 % | same | the shade that keeps those marks readable on any photo: inside the empty selection circle · the hairline round it · the hairline inside the selection frame · behind the favourite mark and over what a crop cuts away |
+| Token                                      | Dark (default)               | Light               | Use                                                                                                                                                                                                                    |
+| ------------------------------------------ | ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--bg`                                     | #0D0F12                      | #F2F3F5             | the page; photos sit on it                                                                                                                                                                                             |
+| `--raised`                                 | #171A1F                      | #FFFFFF             | dialogs, sheets, menus, toasts, bars                                                                                                                                                                                   |
+| `--ink`                                    | #F1F2F4                      | #14161A             | text, primary button fill, chart ink                                                                                                                                                                                   |
+| `--ink-2`                                  | #A3A9B3                      | #565D68             | secondary text, quiet controls                                                                                                                                                                                         |
+| `--ink-3`                                  | #6B717C                      | #8A909A             | disabled text and decoration only                                                                                                                                                                                      |
+| `--hairline`                               | #262A31                      | #DCDFE4             | the placeholder of a photo tile still loading; never a line                                                                                                                                                            |
+| `--fill`                                   | #23272D                      | #E4E6EA             | chips, fields, segmented controls, and the rows of a sheet                                                                                                                                                             |
+| `--lens`                                   | ink at 14 %                  | same                | the chosen tab or segment                                                                                                                                                                                              |
+| `--lift`                                   | a soft black shadow          | a soft grey shadow  | what floats: menus, toasts, dialogs                                                                                                                                                                                    |
+| `--tint`                                   | ink at 7 %                   | ink at 6 %          | hover wash; field fill                                                                                                                                                                                                 |
+| `--accent`                                 | oklch(0.82 0.14 72)          | oklch(0.50 0.15 72) | selection and focus only                                                                                                                                                                                               |
+| `--on-accent`                              | #17110A                      | #FFFFFF             | text and the check mark on the accent                                                                                                                                                                                  |
+| `--glass`                                  | raised at 74 % + blur        | same                | floating bars over photos                                                                                                                                                                                              |
+| `--ok` / `--fail`                          | #7BD3A0 / #FF7A6B            | #1F7A4A / #B3261E   | status dots on the System page only                                                                                                                                                                                    |
+| `--scrim`                                  | near-black 66 %              | cool grey 38 %      | behind dialogs and sheets                                                                                                                                                                                              |
+| `--on-photo` / `--on-photo-90`             | #FFFFFF / white at 90 %      | same                | marks drawn on a photo: the selection circle, the favourite mark, the crop handles / the crop frame                                                                                                                    |
+| `--photo-shade-18` / `-20` / `-25` / `-55` | black at 18 · 20 · 25 · 55 % | same                | the shade that keeps those marks readable on any photo: inside the empty selection circle · the hairline round it · the hairline inside the selection frame · behind the favourite mark and over what a crop cuts away |
 
 `themes.spec.ts` checks every theme in both modes: text ≥ 7:1, secondary text and status
 colours ≥ 4.5:1, and the accent ≥ 4.5:1 at every hue (its lightness is fixed per mode, only
@@ -85,25 +90,27 @@ only on the System page; everywhere else, something that needs attention gets fu
 
 ### Type
 
-Three families, all self-hosted under `web/static/fonts` (SIL OFL; nothing fetched at runtime):
+Two families, self-hosted under `web/static/fonts` (SIL OFL; nothing fetched at runtime):
 
-- **Hanken Grotesk** (variable) — `--font-ui`: everything you read or operate, and titles
-  (`--font-title`, weight 720, tight tracking). Tabular numerals are on globally. Descriptions
-  and opening lines use the title face at weight 400 in `--voice-style` (upright; italic in
-  the Album theme).
-- **Martian Mono** (variable, set at 80 % width) — `--font-data`, class `.data`: dates, counts,
-  camera settings, file names, paths, system status. Never a control, never a sentence.
+- **Atkinson Hyperlegible Next** (variable, 200–800) — `--font-ui`, `--font-title` and
+  `--font-data`: everything you read or operate, titles (weight 750) and data. Drawn by the
+  Braille Institute for readers with low vision, which makes it the base of a later Larger
+  text mode. Tabular numerals are on globally. Descriptions and opening lines use the title
+  face at weight 400 in `--voice-style` (upright; italic in the Album theme).
 - **Newsreader** — `--font-serif`: the Album theme's title and voice face only.
 
-| Token | Size | Role |
-|---|---|---|
-| `--fs-12` | 12 px | metadata, counts, group labels, captions under thumbnails |
-| `--fs-14` | 14 px | interface text (the base) |
-| `--fs-16` | 16 px | reading text |
+A terminal command or a path an admin reads uses the system's monospace (`--font-code`).
+Text is never letter-spaced and never set in capitals (`style-guard.spec.ts` checks).
+
+| Token           | Size                        | Role                                                                                       |
+| --------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
+| `--fs-12`       | 12 px                       | metadata, counts, group labels, captions under thumbnails                                  |
+| `--fs-14`       | 14 px                       | interface text (the base)                                                                  |
+| `--fs-16`       | 16 px                       | reading text                                                                               |
 | `--field-phone` | 16 px, in pixels on purpose | every field on a phone (no zoom-on-focus); grows with the look's text dial, never under 16 |
-| `--fs-20` | 20 px | section titles, month and year headings, dialog titles |
-| `--fs-28` | 28 px | page titles (`h1`) |
-| `--fs-40` | 40 px | display: album and person titles, Welcome / sign-in |
+| `--fs-20`       | 20 px                       | section titles, month and year headings, dialog titles                                     |
+| `--fs-28`       | 28 px                       | page titles (`h1`)                                                                         |
+| `--fs-40`       | 40 px                       | display: album and person titles, Welcome / sign-in                                        |
 
 The sizes are in rem and the root is the browser's own text size (16 px unless the reader set
 another) times the look's text dial, so at the dial's 100 % a token renders at the pixels in
@@ -112,62 +119,77 @@ these tables: interface text 14, small text 12, a page title 28, `--s-4` 16
 promised in pixels (`--target`, `--dock`, `--top`, the corners) stays.
 
 Line heights: `--lh-tight` 1.15 (titles), `--lh-ui` 1.45 (interface), `--lh-text` 1.6 (prose,
-max `--measure` 36 rem). Group labels (`h3`, `legend`) are 12 px / 600 / `--ink-2`, **sentence
-case** — no uppercase tracking. A count beside a title is set in the data face at 12 px.
+max `--measure` 36 rem). Group labels (`h3`, `legend`) are 14 px / 650 / `--ink-2`, sentence
+case. A count goes under or beside its title in `--ink-2`, never boxed or dotted.
 
 ### Space, shape, motion
 
-| Token | Value |
-|---|---|
-| `--s-1 … --s-8` | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px — the only spacings used |
-| `--page-x` | 24 px laptop, 12 px phone (grids on a phone use `--gutter` and pad their words) |
-| `--gutter` | 2 px between photos, and beside them on a phone; the look's gap dial moves it (0–8 px), so nothing else uses it |
-| `--fine` | 2 px: the finest line and gap inside a control (the ruler's needle, an icon and its word); no dial moves it |
-| `--r-1` / `--r-2` / `--r-pill` | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded (a person's face is a round badge, not a photo) |
-| `--check-radius` | 4 px: checkbox corners (`--r-1` would make a 16 px box round) |
-| `--target` | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button |
-| `--top` | 56 px top bar on a laptop; 0 on a phone. Everything sticky offsets by it |
-| `--dock` | 56 px: the floating dock on a phone, and the photo view's action bar |
-| `--bar` | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock |
-| `--pill` | 52 px: the least height of the selection pill; the toast steps over it by this much |
-| `--blur` | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
-| `--margin` | 224 px (14rem) right margin for notes and filters on a laptop |
-| `--motion` / `--motion-sheet` / `--ease` | 200 ms · 240 ms for sheets · `cubic-bezier(.2,0,0,1)`; off under `prefers-reduced-motion` |
+| Token                                     | Value                                                                                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--s-1 … --s-8`                           | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px — the only spacings used                                                                                            |
+| `--page-x`                                | 24 px laptop, 12 px phone (grids on a phone use `--gutter` and pad their words)                                                                            |
+| `--gutter`                                | 2 px between photos, and beside them on a phone; the look's gap dial moves it (0–8 px), so nothing else uses it                                            |
+| `--fine`                                  | 2 px: the finest line and gap inside a control (the ruler's needle, an icon and its word) and the seam between rows of a group; no dial moves it           |
+| `--r-1` / `--r-2` / `--r-pill`            | 12 px controls · 20 px raised surfaces · full round for bars and chips; photos are never rounded (a person's face is a round badge, not a photo)           |
+| `--check-radius`                          | 4 px: checkbox corners (`--r-1` would make a 16 px box round)                                                                                              |
+| `--target`                                | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button                         |
+| `--top`                                   | 56 px top bar on a laptop; 0 on a phone. Everything sticky offsets by it                                                                                   |
+| `--dock`                                  | 56 px: the floating dock on a phone, and the photo view's action bar                                                                                       |
+| `--bar`                                   | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock                                                           |
+| `--pill`                                  | 52 px: the least height of the selection pill; the toast steps over it by this much                                                                        |
+| `--blur`                                  | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
+| `--margin`                                | 224 px (14rem) right margin for notes and filters on a laptop                                                                                              |
+| `--press` / `--motion` / `--motion-sheet` | 120 ms a control giving under the finger · 200 ms fades and colour · 380 ms sheets and page changes; off under `prefers-reduced-motion`                    |
+| `--ease` / `--ease-sheet`                 | `cubic-bezier(.2,0,0,1)` · `cubic-bezier(.32,.72,0,1)`, the curve of an iPhone sheet                                                                       |
 
 Layers, lowest first (a number of 1 to 5 inside one component orders its own pieces and is
 not a token):
 
-| Token | Value | What |
-|---|---|---|
-| `--z-ruler` | 4 | the time ruler beside the photos |
-| `--z-bar` | 20 | the top bar on a laptop |
-| `--z-selection` | 25 | the selection pill |
-| `--z-dock` | 28 | the dock on a phone (over the pill, so its open menu is not covered) |
-| `--z-menu` / `--z-lasso` | 30 | an open menu / the rectangle drawn while selecting with the mouse |
-| `--z-sheet-backdrop` / `--z-sheet` | 35 / 40 | the filter sheet on a phone and the scrim under it |
-| `--z-loupe` | 50 | the photo view |
-| `--z-toast` | 60 | the toast |
-| `--z-editor` | 70 | the editor, over the photo view it opens from |
-| `--z-skip` | 100 | the skip link, when focused |
+| Token                              | Value   | What                                                                 |
+| ---------------------------------- | ------- | -------------------------------------------------------------------- |
+| `--z-ruler`                        | 4       | the time ruler beside the photos                                     |
+| `--z-bar`                          | 20      | the top bar on a laptop                                              |
+| `--z-selection`                    | 25      | the selection pill                                                   |
+| `--z-dock`                         | 28      | the dock on a phone (over the pill, so its open menu is not covered) |
+| `--z-menu` / `--z-lasso`           | 30      | an open menu / the rectangle drawn while selecting with the mouse    |
+| `--z-sheet-backdrop` / `--z-sheet` | 35 / 40 | the filter sheet on a phone and the scrim under it                   |
+| `--z-loupe`                        | 50      | the photo view                                                       |
+| `--z-toast`                        | 60      | the toast                                                            |
+| `--z-editor`                       | 70      | the editor, over the photo view it opens from                        |
+| `--z-skip`                         | 100     | the skip link, when focused                                          |
 
 ### Component rules
 
-- **Buttons** are words. Default: no box, `--tint` wash on hover (pointer devices only). Quiet
-  actions in a toolbar are `--ink-2` and turn `--ink` on hover. **`.primary`** — the one action
-  a dialog or form exists for — is filled with `--ink` (never the accent), 600 weight. Pressed
-  toggles (Info, Arrange, crop ratio, Grid/Calendar) are underlined, not filled.
-- **Fields** are a soft box (`--tint` fill, `--r-1`) that takes an accent border on focus.
+- **Buttons** are words when the action needs saying. Default: no box, `--tint` wash on hover
+  (pointer devices only). **`.primary`** — the one action a dialog or form exists for — is
+  filled with `--ink` (never the accent), 600 weight. Every control gives a little under the
+  finger (scale 0.95, `--press`).
+- **Icon buttons** (`ui/IconButton`, `.icon-button`): an action everyone knows, as its icon
+  alone; round, 44 px, named by `label` (accessible name and tooltip). `filled` puts it on a
+  `--fill` disc when it stands on the page. Its word shows under it when the root carries
+  `data-words="all"` (the later Larger text mode) or when `worded` is set.
+- **Chips** (`ui/Chip`, `.chip`): a question asked of the photos (a filter) or a suggestion.
+  Pill, `--fill`; once answered it shows the answer in ink with an × that clears it.
+- **Segmented** (`ui/Segmented`): a few choices side by side (Grid / Calendar, Dark / Light);
+  the chosen one sits under `--lens`.
+- **Tile groups** (`ui/TileGroup`, `ui/TileRow`, `.tiles`, `.tile-row`): settings, admin,
+  utilities and a sheet's lists. Rows are tiles (icon, title, one quiet line, a value, a
+  chevron when it opens something) on a rounded group, separated by a `--fine` seam; on a
+  sheet they take `--fill`. A red `.attention-dot` marks what needs an admin.
+- **Switches**: a checkbox with `role="switch"`, drawn as a sliding knob; on is ink.
+- **Fields** are a soft box (`--fill`, `--r-1`) that takes a 2 px inset accent ring on focus.
   Labels sit above (`.field`), 12 px. Selects keep the native chevron. A date is typed or
   pasted into a text field (`DateField`) that shows it day first on the 24-hour clock; the
   browser's own date control is not used, because it follows the browser's language.
-- **Checkboxes and radios** are drawn (1.5 px `--ink-2` outline, `--check-radius` corners;
+- **Checkboxes and radios** are drawn (2 px `--ink-2` outline, `--check-radius` corners;
   checked = ink fill with a `--bg` check / inner ring), so both themes match. `.choice` lays an
   option out in a row.
-- **Sliders**: hairline track, small ink thumb; larger thumb on touch.
+- **Sliders**: a 4 px `--fill` track, a small ink thumb; larger thumb on touch.
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
   right, Cancel left of the primary. On a phone every dialog, the filters and the loupe's info
-  become **bottom sheets**, as wide as the screen, with rounded top corners and safe-area
-  padding. A dialog, the photo editor and the filter sheet each add a history step
+  become **bottom sheets**, as wide as the screen, with rounded top corners, a grab handle and
+  safe-area padding; they rise on the sheet curve and follow the finger down from the handle or
+  the title, closing when let go far or fast enough (`lib/sheet-drag.ts`). A dialog, the photo editor and the filter sheet each add a history step
   (`lib/history-step.ts`), so Back closes them; what was chosen in the filter sheet stays.
   So does the photo's Info sheet on a phone (`lib/info-sheet.svelte.ts`): Back closes the
   sheet, the next Back the photo; on a laptop Info is a panel beside the photo, with no step.
@@ -187,9 +209,10 @@ not a token):
   Share comes after Add to album (on a phone in Download's place, Download under More). What does not fit beside the count and Clear
   (a narrow phone, large text, a long count) joins More: nothing leaves the glass. Escape clears.
 - **Focus**: 2 px accent outline, 2 px offset (inset on photo tiles).
-- **Icons**: a small set of 1.6 px-stroke SVGs drawn for this app, one component, no icon
-  font. In navigation and action bars an icon carries its word beneath or beside it. Every
-  icon button has the accessible name of the action.
+- **Icons**: a set of 2 px-stroke SVGs on a 24 grid drawn for this app (`lib/icons.ts`), one
+  component, no icon font. In the main navigation an icon carries its word; elsewhere an
+  icon button stands alone (see Icon buttons). Every icon button has the accessible name of
+  the action.
 - **Glass** (`.glass`): only for bars that float over photos (dock, top bar, photo actions,
   selection, time ruler). It turns solid `--raised` where blur is unavailable, under
   "reduce transparency", or if it costs the 60 fps scroll budget. Glass is the rule and solid
@@ -251,15 +274,15 @@ not a token):
 
 ## 3. Layout by device
 
-| | Laptop (≥ 1024 px) | Phone (< 640 px) |
-|---|---|---|
-| Navigation | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
-| Filters | right margin, always visible, collapsible | bottom sheet |
-| Loupe metadata | right margin "sidenote" | Info opens a bottom sheet |
-| Loupe actions | Close and Info at the top, one glass bar at the bottom | the same |
-| Time ruler | upright at the right edge | lying above the dock, fading when idle |
-| Selection | click / shift-click / drag-lasso | long-press, then drag or tap |
-| Grid row height | ~220 px | ~110 px, pinch to change |
+|                 | Laptop (≥ 1024 px)                                                 | Phone (< 640 px)                                                                                          |
+| --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Navigation      | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
+| Filters         | right margin, always visible, collapsible                          | bottom sheet                                                                                              |
+| Loupe metadata  | right margin "sidenote"                                            | Info opens a bottom sheet                                                                                 |
+| Loupe actions   | Close and Info at the top, one glass bar at the bottom             | the same                                                                                                  |
+| Time ruler      | upright at the right edge                                          | lying above the dock, fading when idle                                                                    |
+| Selection       | click / shift-click / drag-lasso                                   | long-press, then drag or tap                                                                              |
+| Grid row height | ~220 px                                                            | ~110 px, pinch to change                                                                                  |
 
 The row heights are for the look's medium photo size; small is ¾ of it and large 1.4 times.
 Only the look sets it: there is no photo size setting per device.

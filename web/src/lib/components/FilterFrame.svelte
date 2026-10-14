@@ -100,7 +100,6 @@
 		overflow-y: auto;
 		box-sizing: border-box;
 		padding: var(--s-5) var(--s-4) var(--s-6);
-		border-left: 1px solid var(--hairline);
 		display: none;
 		font-size: var(--fs-14);
 		scrollbar-width: thin;

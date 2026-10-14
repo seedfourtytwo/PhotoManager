@@ -19,7 +19,9 @@ describe('shape and motion tokens', () => {
 			'--gutter': '2px',
 			'--fine': '2px',
 			'--motion': '200ms',
-			'--motion-sheet': '240ms'
+			'--motion-sheet': '380ms',
+			'--press': '120ms',
+			'--ease-sheet': 'cubic-bezier(0.32, 0.72, 0, 1)'
 		});
 	});
 	it('keeps the Album theme small-cornered', () => {
@@ -30,6 +32,14 @@ describe('shape and motion tokens', () => {
 			/#[0-9a-f]{3,8}\b|rgb\(/i.test(value)
 		);
 		expect(literals).toEqual([]);
+	});
+});
+
+describe('type', () => {
+	// One family for everything (DESIGN_PRINCIPLES §2): figures stay tabular, nothing is mono.
+	it('reads and shows data in the same face', () => {
+		expect(root['--font-ui']).toMatch(/^'Atkinson Hyperlegible Next'/);
+		expect(root['--font-data']).toBe('var(--font-ui)');
 	});
 });
 

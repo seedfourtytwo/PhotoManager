@@ -200,7 +200,6 @@
 		margin: 0;
 		padding: var(--s-1);
 		background: var(--raised);
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-2);
 		min-width: calc(var(--margin) * 0.75);
 	}

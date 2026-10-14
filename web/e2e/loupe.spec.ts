@@ -286,7 +286,7 @@ test.describe('photo view', () => {
 		const readout = loupe(page).locator('.readout');
 		await expect(readout).toContainText(/\d{4}-\d{2}-\d{2} · \d{2}:\d{2}/);
 		await expect(readout).toContainText(/\d+ × \d+ · \S+\.\w{3,4}$/);
-		await expect(readout).toHaveCSS('font-family', /Martian Mono/);
+		await expect(readout).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
 	});
 
 	test('the bar holds Favourite, Download, Album, Edit and More; More holds the rest', async ({

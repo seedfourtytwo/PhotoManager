@@ -48,7 +48,6 @@
    question a browser does not know is false even when negated. */
 .glass {
 	background: var(--raised);
-	border: 1px solid var(--hairline);
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
 	.glass {
@@ -89,4 +88,90 @@
 		animation: none !important;
 		scroll-behavior: auto !important;
 	}
+}
+
+/* Grouped rows (settings, admin, utilities, a sheet's list): tiles on a rounded group,
+   separated by a seam of --fine, never a line. On a sheet the tiles take the fill. */
+.tiles {
+	--tile: var(--raised);
+	display: flex;
+	flex-direction: column;
+	gap: var(--fine);
+	border-radius: var(--r-2);
+	overflow: hidden;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+:where(dialog, .sheet) .tiles {
+	--tile: var(--fill);
+}
+.tile-row {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	width: 100%;
+	min-height: 3.5rem;
+	padding: var(--s-2) var(--s-4);
+	box-sizing: border-box;
+	background: var(--tile);
+	color: var(--ink);
+	text-align: left;
+	text-decoration: none;
+	border-radius: 0;
+	font: inherit;
+}
+.tile-row > svg {
+	color: var(--ink-2);
+}
+.tile-row .tile-main {
+	flex: 1;
+	min-width: 0;
+	display: grid;
+	gap: 0;
+}
+.tile-row .tile-title {
+	font-weight: 600;
+}
+.tile-row .tile-line {
+	font-size: var(--fs-14);
+	color: var(--ink-2);
+}
+.tile-row .tile-value {
+	color: var(--ink-2);
+}
+.tile-row .tile-chevron {
+	color: var(--ink-3);
+	width: var(--s-4);
+	height: var(--s-4);
+}
+.tile-row.danger .tile-title {
+	color: var(--fail);
+}
+@media (hover: hover) {
+	a.tile-row:hover,
+	button.tile-row:not(:disabled):hover {
+		background: color-mix(in oklab, var(--tile), var(--ink) 6%);
+	}
+}
+a.tile-row:active,
+button.tile-row:active {
+	opacity: 0.8;
+}
+/* The label above a group, with an optional action on its line. */
+.group-label {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	margin: var(--s-5) 0 var(--s-2);
+	padding: 0 var(--s-4);
+}
+/* A red dot: something needs an admin. */
+.attention-dot {
+	width: 0.625rem;
+	height: 0.625rem;
+	border-radius: 50%;
+	background: var(--fail);
+	flex: none;
 }

@@ -230,7 +230,6 @@
 		background: var(--accent);
 		color: var(--on-accent);
 		line-height: 1;
-		text-transform: uppercase;
 		white-space: nowrap;
 	}
 

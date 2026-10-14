@@ -148,8 +148,8 @@
 		padding: var(--s-1);
 		list-style: none;
 		background: var(--raised);
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-2);
+		box-shadow: var(--lift);
 	}
 	.panel a,
 	.panel button {
