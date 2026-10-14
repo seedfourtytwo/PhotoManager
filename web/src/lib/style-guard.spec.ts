@@ -87,6 +87,7 @@ describe('style guard', () => {
 		'/src/lib/components/PhotoInfo.svelte', // (c)
 		'/src/lib/components/Editor.svelte', // (c)
 		'/src/lib/components/PhotoGrid.svelte', // (b) library
+		'/src/lib/components/KeepOnPhone.svelte', // (b)
 		'/src/lib/components/Timeline.svelte', // (b)
 		'/src/lib/components/PeopleEditor.svelte', // (d) collections
 		'/src/lib/components/PortraitDialog.svelte', // (d)

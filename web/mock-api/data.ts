@@ -228,6 +228,8 @@ export function makeState(options: { users: 'none' | 'seed'; count?: number; see
 			}
 		],
 		devices: [],
+		syncRules: [],
+		syncSent: new Map(),
 		remotes: ['gdrive', 'nas'],
 		remoteSources: new Map(),
 		createdFolders: new Set(),

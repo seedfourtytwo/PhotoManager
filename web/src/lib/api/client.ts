@@ -29,6 +29,7 @@ import type {
 	DateChange,
 	Device,
 	DevicePlatform,
+	DeviceSync,
 	DirectoryEntry,
 	DownloadEstimate,
 	PhotoFile,
@@ -52,6 +53,8 @@ import type {
 	MapPoint,
 	MlStatus,
 	NewDevice,
+	SyncRule,
+	SyncRuleIn,
 	NewUser,
 	PinBody,
 	Person,
@@ -426,6 +429,14 @@ export function createApi(options: ApiOptions = {}) {
 		createDevice: (body: { name: string; platform: DevicePlatform }) =>
 			request<NewDevice>('POST', '/api/devices', body),
 		revokeDevice: (id: Id) => request<void>('DELETE', `/api/devices/${id}`),
+		// keep on my phone (v1.7)
+		deviceSync: (id: Id) => get<DeviceSync>(`/api/devices/${id}/sync`),
+		keepOnDevice: (id: Id, rule: SyncRuleIn) =>
+			request<SyncRule>('POST', `/api/devices/${id}/sync/rules`, rule),
+		dropFromDevice: (id: Id, ruleId: Id) =>
+			request<void>('DELETE', `/api/devices/${id}/sync/rules/${ruleId}`),
+		resendToDevice: (id: Id) =>
+			request<{ forgotten: number }>('POST', `/api/devices/${id}/sync/resend`),
 
 		// remote (rclone) sources (admin, v1.1)
 		remotes: () => get<{ remotes: string[] }>('/api/remote-sources/remotes'),

@@ -2,6 +2,7 @@
 import type { AlbumSummary, AssetDetail, AssetOut } from '../src/lib/api/types.ts';
 import { live, setFor, type AccessHelpers } from './access.ts';
 import { editedSize } from './images.ts';
+import { displayName } from './names.ts';
 import type { MockAlbum, MockAsset, MockUser, World } from './types.ts';
 
 export function shapeHelpers(h: World & AccessHelpers) {
@@ -30,6 +31,7 @@ export function shapeHelpers(h: World & AccessHelpers) {
 	function toDetail(user: MockUser, a: MockAsset): AssetDetail {
 		return {
 			...toOut(user, a),
+			name: displayName(a, h.visible(user)),
 			byte_size: a.byte_size,
 			mime_type: a.mime_type,
 			camera_make: a.camera_make,

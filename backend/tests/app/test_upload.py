@@ -294,8 +294,8 @@ class FakeDevices:
         ]
         return True
 
-    def user_for_token_hash(self, token_hash: str, now: datetime) -> int | None:
-        return next((d.user_id for d, h in self.rows if h == token_hash), None)
+    def device_for_token_hash(self, token_hash: str, now: datetime) -> Device | None:
+        return next((d for d, h in self.rows if h == token_hash), None)
 
 
 def test_a_token_is_shown_once_and_only_its_hash_is_stored() -> None:
@@ -304,7 +304,7 @@ def test_a_token_is_shown_once_and_only_its_hash_is_stored() -> None:
     device, token = tokens.create(3, "C's iPhone", "ios")
     assert token.startswith("pa_dev_") and len(token) > 40
     assert store.rows[0][1] == hash_token(token) != token
-    assert tokens.authenticate(token) == 3
+    assert tokens.authenticate(token) == device and device.user_id == 3
     assert tokens.authenticate("pa_dev_wrong") is None
     assert tokens.authenticate("not-ours") is None
     assert tokens.list(3) == [device]

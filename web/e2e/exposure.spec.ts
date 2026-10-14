@@ -18,14 +18,11 @@ import {
 const SHOT = { f_number: 2.8, exposure_time: 0.004, iso: 400, focal_length: 35 };
 const NONE = { f_number: null, exposure_time: null, iso: null, focal_length: null };
 const WRITTEN = 'f/2.8 · 1/250 s · ISO 400 · 35 mm';
-const LONG_NAME = `${'a-very-long-file-name-from-an-old-export-'.repeat(3)}final.jpeg`;
+const LONG_NAME = `${'a-very-long-file-name-from-an-old-export-'.repeat(3)}final`;
 
-/** Opens the newest photo with these exposure values and this file name. */
-async function open(page: Page, exposure: Exposure, file = 'IMG_0001.JPG') {
-	await withDetail(page, (detail) => ({
-		...exposure,
-		origins: [{ ...detail.origins[0], relative_path: `2019/${file}` }]
-	}));
+/** Opens the newest photo with these exposure values and this name (a tidied name). */
+async function open(page: Page, exposure: Exposure, name = 'Beach day') {
+	await withDetail(page, () => ({ ...exposure, name }));
 	await page.locator('.tile').first().click();
 	return loupe(page).locator('.readout');
 }
@@ -35,12 +32,10 @@ test.beforeEach(async ({ page }) => {
 	await signIn(page);
 });
 
-test('the bar reads aperture, shutter, ISO and focal length, then the file name', async ({
-	page
-}) => {
+test('the bar reads aperture, shutter, ISO and focal length, then the name', async ({ page }) => {
 	const readout = await open(page, SHOT);
 	const line = readout.locator('span[aria-hidden="true"]');
-	await expect(line).toHaveText(`${WRITTEN} · IMG_0001.JPG`);
+	await expect(line).toHaveText(`${WRITTEN} · Beach day`);
 	await expect(line).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
 	await expect(line).toHaveCSS('font-variant-numeric', /tabular-nums/);
 	await expectAccessible(page);
@@ -49,12 +44,12 @@ test('the bar reads aperture, shutter, ISO and focal length, then the file name'
 test('a screen reader hears the settings in words', async ({ page }) => {
 	const readout = await open(page, SHOT);
 	await expect(readout.locator('.visually-hidden')).toHaveText(
-		'f 2.8, 1/250 second, ISO 400, 35 millimetres, IMG_0001.JPG'
+		'f 2.8, 1/250 second, ISO 400, 35 millimetres, Beach day'
 	);
 	// What is read out: the first line, then the words; the written form is skipped.
 	const heard = await readout.ariaSnapshot();
 	expect(heard).toMatch(
-		/^- paragraph: \d{4}-\d{2}-\d{2} · \d{2}:\d{2}.* f 2\.8, 1\/250 second, ISO 400, 35 millimetres, IMG_0001\.JPG$/
+		/^- paragraph: \d{4}-\d{2}-\d{2} · \d{2}:\d{2}.* f 2\.8, 1\/250 second, ISO 400, 35 millimetres, Beach day$/
 	);
 	expect(heard).not.toContain('f/2.8');
 });
@@ -62,23 +57,23 @@ test('a screen reader hears the settings in words', async ({ page }) => {
 test('a photo with only some of the settings shows those, with no gap', async ({ page }) => {
 	const readout = await open(page, { ...NONE, iso: 400, focal_length: 35 });
 	await expect(readout.locator('span[aria-hidden="true"]')).toHaveText(
-		'ISO 400 · 35 mm · IMG_0001.JPG'
+		'ISO 400 · 35 mm · Beach day'
 	);
 	await expect(readout.locator('.visually-hidden')).toHaveText(
-		'ISO 400, 35 millimetres, IMG_0001.JPG'
+		'ISO 400, 35 millimetres, Beach day'
 	);
 });
 
-test('a photo with no settings keeps camera, pixel size and file name, read as written', async ({
+test('a photo with no settings keeps camera, pixel size and name, read as written', async ({
 	page
 }) => {
 	const readout = await open(page, NONE);
-	await expect(readout.locator('span').last()).toHaveText(/\d+ × \d+ · IMG_0001\.JPG$/);
+	await expect(readout.locator('span').last()).toHaveText(/\d+ × \d+ · Beach day$/);
 	await expect(readout.locator('.visually-hidden')).toHaveCount(0);
 	await expect(readout.locator('[aria-hidden]')).toHaveCount(0);
 });
 
-test('at 320 px a long file name is cut with an ellipsis; the settings stay whole and nothing leaves the bar', async ({
+test('at 320 px a long name is cut with an ellipsis; the settings stay whole and nothing leaves the bar', async ({
 	page
 }) => {
 	test.skip(isPhone(page), 'one project sets the width itself');

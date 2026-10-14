@@ -136,6 +136,7 @@ class SqliteDevices(SqliteBase):
             created_at=created,
             last_used_at=_time(row["last_used_at"]),
             revoked_at=_time(row["revoked_at"]),
+            last_sync_at=_time(row["last_sync_at"]),
         )
 
     def add_device(
@@ -162,10 +163,10 @@ class SqliteDevices(SqliteBase):
         )
         return revoked == 1
 
-    def user_for_token_hash(self, token_hash: str, now: datetime) -> int | None:
+    def device_for_token_hash(self, token_hash: str, now: datetime) -> Device | None:
         with self._lock:
             row = self._one(
-                "SELECT id, user_id FROM device WHERE token_hash = ? AND revoked_at IS NULL",
+                "SELECT id FROM device WHERE token_hash = ? AND revoked_at IS NULL",
                 (token_hash,),
             )
             if row is None:
@@ -173,4 +174,6 @@ class SqliteDevices(SqliteBase):
             self._write(
                 "UPDATE device SET last_used_at = ? WHERE id = ?", (now.isoformat(), row["id"])
             )
-            return int(row["user_id"])
+            used = self._one("SELECT * FROM device WHERE id = ?", (row["id"],))
+            assert used is not None
+            return self._device(used)

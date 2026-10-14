@@ -98,10 +98,11 @@ copies down.
 | 4b.3 | **Bulk scopes**: whole day / month / year, an album, a person, or "everything matching the current filter"; shows count and size before starting — *API: ids, album or any filter, with estimate* | Must | M2 |
 | 4b.4 | **Format**: Original · JPEG (quality slider) · PNG · WebP; HEIC → JPEG is the common case — *API done in M2* | Should | M3 |
 | 4b.5 | **Resize on export**: presets (Original, 4K long edge, 2048, 1080, "email" 1280) or custom long edge; never upscale — *API done in M2* | Should | M3 |
-| 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (`date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
+| 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (photo name 4b.10, `date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
 | 4b.7 | Phone: photos go to the device's own share sheet (Web Share API: AirDrop on an iPhone, Quick Share on Android) — *built: **Share** on the photo view's bar, in the selection pill for up to 10 photos (one sheet, all files), and "Save to Photos" in the download dialog; the person picks where they go, the app sends nothing itself; Share only appears when the app is opened over HTTPS (browsers hide it on plain http, e.g. a LAN or VPN IP address; 11.1) and on a device with a share sheet; more than 10 photos → ZIP download* | Should | M3 ✅ |
 | 4b.8 | Large exports run as a background job with progress and a "ready" link, resumable if the connection drops | Could | M4 |
 | 4b.9 | Standalone converter: drop files in, get them back converted/resized (without importing them) | Could | M4 |
+| 4b.10 | **Photo names**: a photo is called after the minute it was taken (`2015-06-12 14.32`; `· 2`, `· 3` for others the viewer sees in that minute, by time then id), or, when its date is only the file's modification time, its file name tidied (extension and copy marks such as `(Copy)`, ` - Copy`, ` copy 2`, `(1)` dropped), or `Photo <id>` when no word is left (Facebook's `10174880_…_n.jpg`). Display only: nothing is stored and no file is renamed. The photo bar shows the name when it is not just the date; the details show it, and an admin also reads each source's original file and path. Single downloads, `/original`, shares and ZIPs (default naming) carry it with the real extension; "Original file names" stays a ZIP option | Should | M3 ✅ |
 
 ## 4c. Basic editor (non-destructive)
 
@@ -229,7 +230,7 @@ itself. The phone has to push, and only an installed app can do that on its own.
 | 10.4 | **Free automatic iPhone upload via Apple Shortcuts** (built into iOS, no app, no cost): a personal automation — e.g. "when charging" or "every night" — finds photos added since the last run and posts them to the upload API. We ship the shortcut + a setup guide. Needs a spike first: batch-size limits and whether it runs without a tap on current iOS | Should | M4 |
 | 10.4b | **Partner's iPhone via Proton**: her phone backs up to Proton, we pull from Proton. Done through Proton's own `proton-drive` CLI (issue 8): the Photos section, the whole Drive or one folder; the sign-in stays in Proton's tool. Still to do: timed re-checks | Could | M4 ✅ (manual pull) |
 | 10.5 | **Own phone app** — full web feature parity + background sync. Parked: an iPhone app needs the paid Apple Developer Program ($99/yr) or re-signing every 7 days with a free Apple ID | Later | — |
-| 10.6 | Phone app: server → phone sync ("keep this album on my phone") | Later | — |
+| 10.6 | **Keep on my phone**: server → phone, one way. Per device, choose albums, people, searches or library filters to keep on it, and what to leave off (a person, an album, screenshots); the server merges them into one list (only photos you may download, never hidden or trashed) that the phone fetches with its device token. Free iPhone client: an Apple Shortcut "when charging" (guide `docs/guides/keep-on-my-phone.md`, not yet tried on a real iPhone). Deleting on the phone deletes nothing here | Should | M4 ✅ (server, web; Shortcut untested) |
 | 10.7 | Phone app: free-up-space helper | Later | — |
 
 **Laptop:** no app and no sync. Once the server exists, the laptop is just a browser. New

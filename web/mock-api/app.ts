@@ -12,6 +12,7 @@ import { albumRoutes } from './routes/albums.ts';
 import { assetRoutes } from './routes/assets.ts';
 import { authRoutes } from './routes/auth.ts';
 import { backupRoutes } from './routes/backups.ts';
+import { deviceSyncRoutes } from './routes/device-sync.ts';
 import { deviceRoutes } from './routes/devices.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { folderRoutes } from './routes/folders.ts';
@@ -58,6 +59,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		...backupRoutes(h),
 		...folderRoutes(h),
 		...deviceRoutes(h),
+		...deviceSyncRoutes(h),
 		...remoteSourceRoutes(h),
 		...protonRoutes(h)
 	];

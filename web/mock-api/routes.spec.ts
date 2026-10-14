@@ -58,6 +58,28 @@ describe('integration rules', () => {
 		expect(run.message).toMatch(/folder not found/);
 	});
 
+	it('names a photo after its minute (numbered within it) or its tidied file, downloads too', async () => {
+		const api = await h.signedIn();
+		const [a, b, c] = h.mock.state.assets.filter((x) => x.trashed_at === null && !x.held);
+		Object.assign(a, { taken_at: '2015-06-12T14:32:40', date_source: 'exif' });
+		Object.assign(b, { taken_at: '2015-06-12T14:32:05', date_source: 'exif' });
+		c.date_source = 'file_mtime';
+		c.sources[0].relative_path = '2015/Beach day (Copy).jpg';
+		expect((await api.asset(b.id)).name).toBe('2015-06-12 14.32');
+		expect((await api.asset(a.id)).name).toBe('2015-06-12 14.32 · 2');
+		expect((await api.asset(c.id)).name).toBe('Beach day');
+		const single = await api.raw(`/api/assets/${a.id}/download?format=original`);
+		expect(single.headers.get('content-disposition')).toContain(
+			`filename*=UTF-8''${encodeURIComponent('2015-06-12 14.32 · 2.svg')}`
+		);
+		const zip = await api.raw('/api/downloads', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ ...zipRequest({ ids: [c.id] }), naming: 'name' })
+		});
+		expect(Buffer.from(await zip.arrayBuffer()).includes('Beach day.svg')).toBe(true);
+	});
+
 	it('names the ZIP after the album or the scope', async () => {
 		const api = await h.signedIn();
 		const form = (request: DownloadRequest) =>
@@ -382,6 +404,56 @@ describe('backups, devices and remote sources', () => {
 		expect(JSON.stringify(listed)).not.toContain(created.token);
 		await api.revokeDevice(created.device.id);
 		expect((await api.devices()).find((d) => d.id === created.device.id)?.revoked).toBe(true);
+	});
+
+	it('keeps albums, people and filters on a device, minus what it leaves off', async () => {
+		const api = await h.signedIn();
+		const { device } = await api.createDevice({ name: 'iPhone', platform: 'ios' });
+		const [a, b] = (await api.assets({}, null, 2)).items;
+		const album = await api.createAlbum({ title: 'Summer', asset_ids: [a.id, b.id] });
+		const kept = await api.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect(kept).toMatchObject({ kind: 'album', label: 'Summer', count: 2, gone: false });
+		const again = await api.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'exclude'
+		});
+		expect(again.id).toBe(kept.id);
+		await api.keepOnDevice(device.id, { kind: 'album', album_id: album.id, mode: 'include' });
+		await api.trashAssets([b.id]);
+		const sync = await api.deviceSync(device.id);
+		expect(sync.rules.map((r) => [r.kind, r.mode, r.count])).toEqual([['album', 'include', 1]]);
+		expect(sync.count).toBe(1);
+		expect(sync.bytes).toBe((await api.asset(a.id)).byte_size);
+		expect(sync.device.last_sync_at).toBeNull();
+		await api.dropFromDevice(device.id, kept.id);
+		expect((await api.deviceSync(device.id)).rules).toEqual([]);
+		expect(await api.resendToDevice(device.id)).toEqual({ forgotten: 0 });
+		await expect(
+			api.keepOnDevice(device.id, { kind: 'album', album_id: 999, mode: 'include' })
+		).rejects.toMatchObject({ status: 404 });
+		await api.revokeDevice(device.id);
+		await expect(api.deviceSync(device.id)).rejects.toMatchObject({ status: 404 });
+	});
+
+	it('counts the photos of a kept album its owner may only view', async () => {
+		h.mock.state.access.set(2, { everyone: 'view', users: [] });
+		const partner = await h.signedIn('partner', '2345');
+		const { device } = await partner.createDevice({ name: 'Phone', platform: 'ios' });
+		const free = h.mock.state.assets.find((a) => a.sources[0].source_id === 1)!;
+		const viewOnly = h.mock.state.assets.find((a) => a.sources[0].source_id === 2)!;
+		const album = await partner.createAlbum({ title: 'Mixed', asset_ids: [free.id, viewOnly.id] });
+		const rule = await partner.keepOnDevice(device.id, {
+			kind: 'album',
+			album_id: album.id,
+			mode: 'include'
+		});
+		expect([rule.count, rule.view_only]).toEqual([2, 1]);
+		expect((await partner.deviceSync(device.id)).count).toBe(1);
 	});
 
 	it('lists rclone remotes, adds a remote source and pulls it', async () => {
