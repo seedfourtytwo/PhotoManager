@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from photo_assistant.domain.capture_time import DateSource, MetadataDates
+from photo_assistant.domain.exposure import NO_EXPOSURE, Exposure
 from photo_assistant.domain.media_types import MediaKind
 from photo_assistant.domain.recheck import Recheck
 
@@ -27,6 +28,7 @@ class PhotoMetadata:
     mime_type: str | None = None
     live_photo_id: str | None = None  # Apple ContentIdentifier, pairs a photo with its video
     error: str | None = None  # set when the file could not be read as an image
+    exposure: Exposure = NO_EXPOSURE
 
     @property
     def display_size(self) -> tuple[int, int] | None:
@@ -65,6 +67,7 @@ class NewAsset:
     camera_model: str | None
     orientation: int | None
     library_path: str  # relative to the data root
+    exposure: Exposure = NO_EXPOSURE
 
 
 @dataclass(frozen=True, slots=True)
