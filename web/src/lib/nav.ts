@@ -1,4 +1,5 @@
 /** Where things are: the places of the app and what sits behind the account button. */
+import type { BackupHealth } from './api';
 import { photos } from './format';
 import type { IconName } from './icons';
 import type { CollectionsRow } from './look';
@@ -66,4 +67,13 @@ export function accountItems(
 /** The first letter of a name for the account button; a whole emoji counts as one character. */
 export function initialOf(name: string | undefined): string {
 	return ([...(name ?? '').trim()][0] ?? '?').toUpperCase();
+}
+
+/**
+ * The one sentence an admin's avatar dot stands for (the first backup problem), or null: a
+ * member never sees backup state, and all being well shows nothing.
+ */
+export function attentionOf(isAdmin: boolean, health: BackupHealth | null): string | null {
+	if (!isAdmin || !health) return null;
+	return health.problems[0]?.message ?? null;
 }

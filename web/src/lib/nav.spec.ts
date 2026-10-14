@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLACES, accountItems, collectionRows, initialOf } from './nav';
+import { PLACES, accountItems, attentionOf, collectionRows, initialOf } from './nav';
 
 const current = (path: string) => PLACES.find((place) => place.match(path))?.label;
 
@@ -105,5 +105,32 @@ describe('collections rows', () => {
 			'Albums',
 			'People'
 		]);
+	});
+});
+
+describe('attentionOf', () => {
+	const problem = {
+		message: 'The last backup failed 3 days ago.',
+		severity: 'alert',
+		target_id: null
+	} as const;
+	const health = (problems: (typeof problem)[]) => ({
+		protected: problems.length === 0,
+		places_ok: 0,
+		places_total: 1,
+		problems: [...problems]
+	});
+
+	it('tells an admin the first thing that needs them', () => {
+		expect(attentionOf(true, health([problem]))).toBe('The last backup failed 3 days ago.');
+	});
+	it('says nothing when all is well', () => {
+		expect(attentionOf(true, health([]))).toBeNull();
+	});
+	it('says nothing to a member, whatever the backups', () => {
+		expect(attentionOf(false, health([problem]))).toBeNull();
+	});
+	it('says nothing before the answer arrives', () => {
+		expect(attentionOf(true, null)).toBeNull();
 	});
 });

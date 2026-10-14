@@ -1,0 +1,120 @@
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+	import Avatar from './Avatar.svelte';
+	import Icon from './Icon.svelte';
+
+	type Props = {
+		title: string;
+		/** One quiet line under the title (a count, a date); live, so a change is heard. */
+		line?: string;
+		/** A way back to where this page was opened from. */
+		back?: { href: string; label: string };
+		/** Icon buttons at the right of the title row. */
+		actions?: Snippet;
+		/** Leave the title to the page (a person's or album's own hero); the row keeps back and actions. */
+		hideTitle?: boolean;
+	};
+	let { title, line, back, actions, hideTitle = false }: Props = $props();
+
+	// The large title scrolls away; a compact glass title takes its place (phone). Observed, not
+	// computed on every scroll event.
+	let heading = $state<HTMLElement>();
+	let gone = $state(false);
+	$effect(() => {
+		if (!heading) return;
+		const watch = new IntersectionObserver(([entry]) => (gone = !entry.isIntersecting), {
+			rootMargin: '-48px 0px 0px 0px'
+		});
+		watch.observe(heading);
+		return () => watch.disconnect();
+	});
+</script>
+
+<header class="page-head">
+	<div class="row">
+		{#if back}
+			<a class="back" href={back.href}><Icon name="back" />{back.label}</a>
+			<span class="grow"></span>
+		{/if}
+		{#if !hideTitle}
+			<div class="titles" class:grow={!back}>
+				<h1 bind:this={heading}>{title}</h1>
+				{#if line}<p class="line" aria-live="polite">{line}</p>{/if}
+			</div>
+		{/if}
+		{#if actions}<div class="actions">{@render actions()}</div>{/if}
+		<span class="me"><Avatar /></span>
+	</div>
+</header>
+<div class="compact glass" class:on={gone} aria-hidden="true">{title}</div>
+
+<style>
+	.page-head {
+		padding: var(--s-2) var(--page-x) var(--s-2);
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		gap: var(--s-2);
+		min-height: 3.5rem;
+		flex-wrap: wrap;
+	}
+	.grow {
+		flex: 1;
+		min-width: 0;
+	}
+	h1 {
+		overflow-wrap: anywhere;
+	}
+	.line {
+		margin: 0;
+		color: var(--ink-2);
+		font-size: var(--fs-14);
+	}
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: var(--s-1);
+	}
+	.back {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--fine);
+		min-height: var(--target);
+		padding-right: var(--s-2);
+		margin-left: calc(-1 * var(--s-2));
+		color: var(--ink);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	/* The compact title: phone only; the laptop has its top bar. */
+	.compact {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: var(--z-bar);
+		padding: calc(env(safe-area-inset-top) + var(--s-3)) var(--s-7) var(--s-3);
+		text-align: center;
+		font-weight: 700;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		opacity: 0;
+		transform: translateY(calc(-1 * var(--s-2)));
+		pointer-events: none;
+		transition:
+			opacity var(--motion) var(--ease),
+			transform var(--motion) var(--ease);
+	}
+	.compact.on {
+		opacity: 1;
+		transform: none;
+	}
+	@media (min-width: 1024px) {
+		.compact,
+		.me {
+			display: none;
+		}
+	}
+</style>
