@@ -298,6 +298,7 @@
 					<label class="row">
 						Names
 						<select bind:value={options.naming}>
+							<option value="name">Photo names</option>
 							<option value="original">Original file names</option>
 							<option value="date">Date and place</option>
 						</select>

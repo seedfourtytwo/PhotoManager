@@ -16,7 +16,7 @@ export const DEFAULT_OPTIONS: DownloadOptions = {
 	max_edge: null,
 	strip_location: false,
 	strip_all_metadata: false,
-	naming: 'original',
+	naming: 'name',
 	folders: 'flat'
 };
 

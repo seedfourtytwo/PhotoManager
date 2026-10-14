@@ -258,7 +258,7 @@ test('download: two plain choices, and Smaller sends a 2048 JPEG without opening
 		quality: 90,
 		max_edge: 2048,
 		strip_location: false,
-		naming: 'original',
+		naming: 'name',
 		folders: 'flat'
 	});
 });

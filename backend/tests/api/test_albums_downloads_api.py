@@ -117,13 +117,16 @@ def test_zip_of_originals_by_ids_album_and_filter(admin: TestClient, ids: list[i
     response = admin.post("/api/downloads", json=body)
     assert response.headers["content-type"] == "application/zip"
     assert response.headers["x-skipped"] == "0"
-    assert sorted(zip_names(response.content)) == ["2019/IMG_0.jpg", "2020/IMG_1.jpg"]
+    assert sorted(zip_names(response.content)) == [
+        "2019/2019-07-01 12.00.jpg",
+        "2020/2020-07-02 12.00.jpg",
+    ]
     album = admin.post("/api/albums", json={"title": "A", "asset_ids": [ids[3]]}).json()["id"]
     by_album = admin.post(
         "/api/downloads", json={"album_id": album, "naming": "date", "folders": "month"}
     )
     assert zip_names(by_album.content) == ["2020/07/2020-07-04_120000_Paris.jpg"]
-    by_filter = admin.post("/api/downloads", json={"filters": {"year": 2019}})
+    by_filter = admin.post("/api/downloads", json={"filters": {"year": 2019}, "naming": "original"})
     assert sorted(zip_names(by_filter.content)) == ["IMG_0.jpg", "IMG_2.jpg"]
     assert admin.post("/api/downloads", json={"ids": ids, "album_id": album}).status_code == 422
     assert admin.post("/api/downloads", json={"album_id": 999}).status_code == 404
@@ -139,13 +142,13 @@ def test_zip_converts_resizes_and_strips(admin: TestClient, ids: list[int], tmp_
     with zipfile.ZipFile(io.BytesIO(content)) as z:
         (name,) = z.namelist()
         data = z.read(name)
-    assert name == "IMG_0.png"
+    assert name == "2019-07-01 12.00.png"
     with Image.open(io.BytesIO(data)) as im:
         assert im.format == "PNG" and im.size == (100, 75)
     loc = admin.post("/api/downloads", json={"ids": [ids[0]], "strip_location": True})
     with zipfile.ZipFile(io.BytesIO(loc.content)) as z:
         out = tmp_path / "out.jpg"
-        out.write_bytes(z.read("IMG_0.jpg"))
+        out.write_bytes(z.read("2019-07-01 12.00.jpg"))
     reader = ExifToolReader()
     try:
         (meta,) = reader.read_many([out])
@@ -185,18 +188,18 @@ def test_stripping_an_original_copies_it_without_loading_it_into_memory(
     monkeypatch.setattr(Path, "read_bytes", refuse)
     response = admin.post("/api/downloads", json={"ids": [ids[0]], "strip_location": True})
     monkeypatch.undo()
-    assert zip_names(response.content) == ["IMG_0.jpg"]
+    assert zip_names(response.content) == ["2019-07-01 12.00.jpg"]
 
 
 def test_single_download(admin: TestClient, ids: list[int]) -> None:
     original = admin.get(f"/api/assets/{ids[0]}/download")
     assert original.status_code == 200 and original.headers["content-type"] == "image/jpeg"
-    assert 'filename="IMG_0.jpg"' in original.headers["content-disposition"]
+    assert 'filename="2019-07-01 12.00.jpg"' in original.headers["content-disposition"]
     webp = admin.get(
         f"/api/assets/{ids[0]}/download", params={"format": "webp", "max_edge": 50, "quality": 50}
     )
     assert webp.headers["content-type"] == "image/webp"
-    assert "IMG_0.webp" in webp.headers["content-disposition"]
+    assert "2019-07-01 12.00.webp" in webp.headers["content-disposition"]
     with Image.open(io.BytesIO(webp.content)) as im:
         assert im.size == (50, 38)
     assert admin.get(f"/api/assets/{ids[0]}/download", params={"format": "gif"}).status_code == 422
@@ -241,9 +244,9 @@ def test_a_photo_that_fails_is_left_out_of_the_zip_and_listed_in_its_manifest(
         assert len([n for n in names if n != "manifest.txt"]) == 3
         with zipfile.ZipFile(io.BytesIO(response.content)) as z:
             manifest = z.read("manifest.txt").decode()
-        assert "1 photo could not be included" in manifest and "IMG_1" in manifest
+        assert "1 photo could not be included" in manifest and "2020-07-02 12.00" in manifest
     fine = admin.post("/api/downloads", json={"ids": [ids[0]], "format": "jpeg"})
-    assert zip_names(fine.content) == ["IMG_0.jpg"], "no manifest when nothing failed"
+    assert zip_names(fine.content) == ["2019-07-01 12.00.jpg"], "no manifest when nothing failed"
 
 
 @pytest.mark.parametrize("fmt", ["original", "jpeg", "webp", "png"])

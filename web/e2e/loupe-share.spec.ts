@@ -73,6 +73,8 @@ test('Share hands the sheet one file: the photo’s download, under its name', a
 	await expect.poll(() => shared(page)).toHaveLength(1);
 	const [files] = await shared(page);
 	const name = attachmentName(response.headers()['content-disposition']);
+	const detail = await (await page.request.get(`/api/assets/${id}`)).json();
+	expect(name.startsWith(`${detail.name}.`), `${name} is named after the photo`).toBe(true);
 	expect(files).toEqual([
 		{ name, type: response.headers()['content-type'].split(';')[0], size: expect.any(Number) }
 	]);
