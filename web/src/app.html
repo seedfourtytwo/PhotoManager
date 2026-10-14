@@ -4,6 +4,13 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
+		<!-- Added to an iPhone's Home Screen: named Photos whatever page it was added from (iOS
+		     takes the page title otherwise), its own 180 px icon, and drawn under the status bar
+		     with white text, as the dark page wants. In the page itself, not added by the app's
+		     script, so iOS finds them whenever it looks. -->
+		<meta name="apple-mobile-web-app-title" content="Photos" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<!-- First paint in the look this browser last showed, so the default look never flashes.
 		     Reads the cache as src/lib/look/cache.ts does (a look kept with its account, each
 		     field by the sheet's own rule) and sets what applyLook sets (apply.ts);
