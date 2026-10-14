@@ -1,4 +1,5 @@
 import { page, userEvent } from 'vitest/browser';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { AssetDetail, AssetOut } from '$lib/api';
@@ -77,6 +78,9 @@ function open(items = photos, index = 0) {
 }
 
 const viewer = () => page.getByRole('dialog', { name: 'Photo viewer' });
+/** How large the open photo is drawn: 1 is its fit. */
+const zoom = () =>
+	Number(document.querySelector<HTMLElement>('.stage')!.style.getPropertyValue('--zoom'));
 const idle = () => expect.element(viewer(), { timeout: 4000 }).toHaveClass(/idle/);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -94,16 +98,20 @@ describe('Loupe: gestures', () => {
 		const { finger, onindex, onclose } = open();
 		finger('pointerdown');
 		finger('pointerdown', 40, { pointerId: 2 });
+		// Both fingers drift the same way, far past every swipe threshold: no nearer, no further.
 		finger('pointermove', -150);
+		finger('pointermove', -110, { pointerId: 2 });
 		// A pinch does not pull the photo along either.
 		expect(document.querySelector('.stage')!.classList.contains('held')).toBe(false);
-		finger('pointerup', -150, { pointerId: 2 });
-		// One finger of the pinch is still down: nothing starts with a third touch.
-		finger('pointerdown', 0, { pointerId: 3 });
-		finger('pointerup', 0, { pointerId: 3, clientY: 400 });
+		finger('pointerup', -110, { pointerId: 2 });
+		// One finger of the pinch is still down: a third touch is no tap and no swipe.
+		finger('pointerdown', -110, { pointerId: 3 });
+		finger('pointerup', -110, { pointerId: 3, clientY: 400 });
 		finger('pointerup', -150);
 		expect(onindex).not.toHaveBeenCalled();
 		expect(onclose).not.toHaveBeenCalled();
+		await tick();
+		expect(zoom()).toBe(1);
 		// With every finger up, one finger swipes again.
 		finger('pointerdown');
 		finger('pointerup', -150);
@@ -116,6 +124,114 @@ describe('Loupe: gestures', () => {
 		finger('pointerdown', 0, { pointerType: 'mouse', button: 2 });
 		finger('pointerup', 0, { pointerType: 'mouse', button: 2 });
 		await wait(400);
+		await expect.element(viewer()).not.toHaveClass(/idle/);
+	});
+});
+
+describe('Loupe: zoom', () => {
+	const favourites = (calls: Call[]) =>
+		calls.filter((c) => c.method !== 'GET' && c.path.endsWith('/state')).length;
+	const doubleTap = (finger: ReturnType<typeof open>['finger'], dx = 0) => {
+		for (let i = 0; i < 2; i++) {
+			finger('pointerdown', dx);
+			finger('pointerup', dx);
+		}
+	};
+	const zoomButton = () => page.getByRole('button', { name: 'Zoom' });
+
+	it('a double tap zooms in and does not favourite; the next one goes back to the fit', async () => {
+		const { calls } = server();
+		const { finger } = open();
+		await expect.element(zoomButton()).toHaveAttribute('aria-pressed', 'false');
+		doubleTap(finger);
+		await tick();
+		expect(zoom()).toBe(2.5);
+		await expect.element(zoomButton()).toHaveAttribute('aria-pressed', 'true');
+		doubleTap(finger);
+		await tick();
+		expect(zoom()).toBe(1);
+		await expect.element(zoomButton()).toHaveAttribute('aria-pressed', 'false');
+		expect(favourites(calls)).toBe(0);
+	});
+
+	it('two fingers spreading zoom in, and the photo stays zoomed when they lift', async () => {
+		server();
+		const { finger, onindex, onclose } = open();
+		finger('pointerdown', -30);
+		finger('pointerdown', 30, { pointerId: 2 });
+		finger('pointermove', -60);
+		finger('pointermove', 60, { pointerId: 2 });
+		await tick();
+		expect(zoom()).toBe(2);
+		// While the fingers move it follows at once: no easing behind them.
+		expect(document.querySelector('.stage')!.classList.contains('moving')).toBe(true);
+		finger('pointerup', -60);
+		finger('pointerup', 60, { pointerId: 2 });
+		await tick();
+		expect(zoom()).toBe(2);
+		expect(document.querySelector('.stage')!.classList.contains('moving')).toBe(false);
+		expect(onindex).not.toHaveBeenCalled();
+		expect(onclose).not.toHaveBeenCalled();
+	});
+
+	it('fingers squeezed under the fit spring back to it', async () => {
+		server();
+		const { finger } = open();
+		finger('pointerdown', -80);
+		finger('pointerdown', 80, { pointerId: 2 });
+		finger('pointermove', -50);
+		finger('pointermove', 50, { pointerId: 2 });
+		await tick();
+		expect(zoom()).toBeLessThan(1);
+		finger('pointerup', -50);
+		finger('pointerup', 50, { pointerId: 2 });
+		await tick();
+		expect(zoom()).toBe(1);
+	});
+
+	it('one finger moves a zoomed photo: it neither steps nor closes', async () => {
+		server();
+		const { finger, onindex, onclose } = open();
+		doubleTap(finger);
+		finger('pointerdown');
+		finger('pointermove', -150);
+		finger('pointerup', -150);
+		finger('pointerdown');
+		finger('pointermove', 0, { clientY: 500 });
+		finger('pointerup', 0, { clientY: 500 });
+		expect(onindex).not.toHaveBeenCalled();
+		expect(onclose).not.toHaveBeenCalled();
+		await tick();
+		expect(zoom()).toBe(2.5);
+	});
+
+	it('another photo opens at its fit', async () => {
+		server();
+		const { finger, view } = open();
+		doubleTap(finger);
+		await tick();
+		expect(zoom()).toBe(2.5);
+		await view.rerender({ index: 1 });
+		await vi.waitFor(() => expect(zoom()).toBe(1));
+	});
+
+	it('Z and the Zoom button do what the double tap does', async () => {
+		server();
+		open();
+		await userEvent.keyboard('z');
+		await tick();
+		expect(zoom()).toBe(2.5);
+		await zoomButton().click();
+		await tick();
+		expect(zoom()).toBe(1);
+	});
+
+	it('zooming in puts the chrome away; back at the fit it returns', async () => {
+		server();
+		const { finger } = open();
+		doubleTap(finger);
+		await expect.element(viewer()).toHaveClass(/idle/);
+		doubleTap(finger);
 		await expect.element(viewer()).not.toHaveClass(/idle/);
 	});
 });

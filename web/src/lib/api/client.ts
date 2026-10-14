@@ -31,7 +31,7 @@ import type {
 	DevicePlatform,
 	DirectoryEntry,
 	DownloadEstimate,
-	DownloadOptions,
+	PhotoFile,
 	DownloadRequest,
 	Face,
 	Facets,
@@ -55,7 +55,10 @@ import type {
 	NewUser,
 	PinBody,
 	Person,
+	Portrait,
+	PortraitChoice,
 	PrintedPdf,
+	SingleDownloadOptions,
 	PrintOptions,
 	PrintPlan,
 	PrintRequest,
@@ -198,6 +201,15 @@ export function createApi(options: ApiOptions = {}) {
 	}
 
 	const get = <T>(path: string) => request<T>('GET', path);
+	function singlePath(id: Id, options: SingleDownloadOptions): string {
+		const params = new URLSearchParams({
+			format: options.format,
+			quality: String(options.quality)
+		});
+		if (options.max_edge) params.set('max_edge', String(options.max_edge));
+		if (options.strip_location) params.set('strip_location', 'true');
+		return `/api/assets/${id}/download?${params}`;
+	}
 	const query = (path: string, values: Record<string, string | number | boolean | undefined>) =>
 		withQuery(
 			path,
@@ -294,18 +306,12 @@ export function createApi(options: ApiOptions = {}) {
 		estimateDownload: (body: DownloadRequest) =>
 			request<DownloadEstimate>('POST', '/api/downloads/estimate', body),
 		downloadAction: `${base}/api/downloads`,
-		singleDownloadUrl: (
-			id: Id,
-			options: Pick<DownloadOptions, 'format' | 'quality' | 'max_edge'> &
-				Partial<Pick<DownloadOptions, 'strip_location'>>
-		) => {
-			const params = new URLSearchParams({
-				format: options.format,
-				quality: String(options.quality)
-			});
-			if (options.max_edge) params.set('max_edge', String(options.max_edge));
-			if (options.strip_location) params.set('strip_location', 'true');
-			return `${base}/api/assets/${id}/download?${params}`;
+		singleDownloadUrl: (id: Id, options: SingleDownloadOptions) =>
+			`${base}${singlePath(id, options)}`,
+		/** The same file as `singleDownloadUrl`, held in memory: for the device's share sheet. */
+		singleDownload: async (id: Id, options: SingleDownloadOptions): Promise<PhotoFile> => {
+			const { blob, headers } = await binary('GET', singlePath(id, options));
+			return { blob, filename: fileNameFrom(headers.get('content-disposition'), `photo-${id}`) };
 		},
 
 		// albums
@@ -351,10 +357,20 @@ export function createApi(options: ApiOptions = {}) {
 		similar: (id: Id, limit = 50) =>
 			get<ScoredAsset[]>(query(`/api/assets/${id}/similar`, { limit })),
 		faces: (id: Id) => get<Face[]>(`/api/assets/${id}/faces`),
-		people: () => get<Person[]>('/api/people'),
+		/** The people listed in People; `hidden` asks for the ones hidden from it instead. */
+		people: (hidden = false) =>
+			get<Person[]>(query('/api/people', { hidden: hidden || undefined })),
 		person: (id: Id) => get<Person>(`/api/people/${id}`),
 		renamePerson: (id: Id, name: string | null) =>
 			request<Person>('PATCH', `/api/people/${id}`, { name }),
+		hidePerson: (id: Id, hidden: boolean) =>
+			request<Person>('PATCH', `/api/people/${id}`, { hidden }),
+		/** The faces a portrait can be chosen from, the best first, each as its automatic one. */
+		personFaces: (id: Id, limit = 24) =>
+			get<Portrait[]>(query(`/api/people/${id}/faces`, { limit })),
+		setPortrait: (id: Id, choice: PortraitChoice) =>
+			request<Person>('PUT', `/api/people/${id}/portrait`, choice),
+		clearPortrait: (id: Id) => request<Person>('DELETE', `/api/people/${id}/portrait`),
 		mergePeople: (id: Id, sourceIds: Id[]) =>
 			request<Person>('POST', `/api/people/${id}/merge`, { source_ids: sourceIds }),
 		personAssets: (id: Id, cursor: string | null = null, limit = 200) =>

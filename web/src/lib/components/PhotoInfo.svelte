@@ -72,7 +72,7 @@
 			</ul>
 		{/if}
 	{/if}
-	<p class="quiet small keys">← → step · F full screen · I info · Esc close</p>
+	<p class="quiet small keys">← → step · Z zoom · F full screen · I info · Esc close</p>
 </aside>
 
 <style>

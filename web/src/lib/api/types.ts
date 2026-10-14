@@ -243,6 +243,11 @@ export type DownloadOptions = {
 export type DownloadScope = { ids: Id[] } | { album_id: Id } | { filters: AssetFilters };
 export type DownloadRequest = DownloadScope & DownloadOptions;
 export type DownloadEstimate = { count: number; bytes: number };
+/** What GET /api/assets/{id}/download takes: one photo, so nothing about names or folders. */
+export type SingleDownloadOptions = Pick<DownloadOptions, 'format' | 'quality' | 'max_edge'> &
+	Partial<Pick<DownloadOptions, 'strip_location'>>;
+/** One photo's file in memory, under the name the server gives its download. */
+export type PhotoFile = { blob: Blob; filename: string };
 
 // --- albums --------------------------------------------------------------------------------
 
@@ -309,10 +314,21 @@ export type Person = {
 	id: Id;
 	name: string | null;
 	face_count: number;
+	/** Left out of People: a stranger someone chose not to list. */
+	hidden: boolean;
 	asset_count: number;
-	/** Crop the asset's thumbnail to this box for the People grid. */
+	/** The face the portrait is of. */
 	cover: Face | null;
+	/** The round picture, as you get it: only ever from a photo you may see. */
+	portrait: Portrait | null;
 };
+/**
+ * A round picture: a circle on photo `asset_id` as displayed without its edits. `cx`, `cy`:
+ * the centre as fractions of the width and height; `size`: the square round it as a fraction
+ * of the shorter edge. `url` is the picture itself and changes whenever the picture does.
+ */
+export type Portrait = PortraitChoice & { asset_id: Id; chosen: boolean; url: string };
+export type PortraitChoice = { face_id: Id; cx: number; cy: number; size: number };
 export type MlStatus = {
 	clip: { ready: boolean; detail: string };
 	faces: { ready: boolean; detail: string };

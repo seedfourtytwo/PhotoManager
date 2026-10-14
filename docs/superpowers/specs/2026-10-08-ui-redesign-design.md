@@ -110,7 +110,7 @@ filter. Opening a sheet or a photo adds a history step, so Back on the phone clo
 ### 4.3 Photo view (the loupe)
 
 - Phone: swipe sideways for previous/next, pull down to close, swipe up for details,
-  double-tap to favourite. A glass bar at the bottom holds a two-line readout (date · time ·
+  double-tap to favourite (now: to zoom, see "As built" under §4.5). A glass bar at the bottom holds a two-line readout (date · time ·
   place / aperture · shutter · ISO · focal length · file name, in `--font-data`) and five
   actions with icon and label: Favourite, Share, Album, Edit, More.
 - Laptop: same bar; details open as a right-hand panel; keyboard shortcuts unchanged.
@@ -131,9 +131,18 @@ Download, Fix date, Delete, and More. `Esc` clears.
 
 **As built in step 3, and what is still open** (plan: `docs/superpowers/plans/2026-10-08-redesign-3-photo-view.md`):
 
-- **Share** is not built, in the photo bar or in the pill: nothing here says what sharing one
-  photo does, and handing it to the phone's share sheet sends photo data to other apps.
-  Download holds its place (Favourite · Download · Album · Edit · More).
+- **Share**, as built later: the device's own share sheet (the Web Share API), opened by the
+  person for the photo they are looking at. It is the same act as Download, with the device
+  offering where the file goes; the app uploads and sends nothing itself, and nothing was
+  added to the server. Where the browser has a share sheet (a phone over HTTPS, some
+  laptops) the bar is Favourite · Share · Album · Edit · More and Download is under More.
+  Where it has none, the bar is Favourite · Download · Album · Edit · More and Share is not
+  shown. Share is offered where Download is (a photo that may only be viewed has neither).
+  The file is the one a download gives, under the same name: as it was taken for a JPEG, PNG,
+  WebP or GIF; a full-size JPEG for anything else (HEIC, raw), for an edited photo and for an
+  original over 50 MB. If fetching takes longer than the browser lets a tap count, the
+  button asks for one more tap (`web/src/lib/share.ts`). Not in the pill: sharing several
+  photos at once is still to be decided.
 - **Aperture, shutter, ISO and focal length** are not in the API or the database. The
   readout's second line is camera · pixel size · file name until they are.
 - The pill says **Move to trash** where this page says Delete: that is what it does, and the
@@ -142,6 +151,9 @@ Download, Fix date, Delete, and More. `Esc` clears.
   transform), not native snap-scrolling (§6).
 - The ruler jumps where a drag ends, not while the finger moves: a far month may need many
   pages. Long-press then drag adds photos to the run; dragging back does not take them out.
+- **Double-tap zooms** instead of favouriting (C, 2026-10-13), as on an iPhone; two fingers
+  zoom too, and the bar's Favourite button is how a photo is hearted here. The photo shown
+  is the 2048 px preview, so zoom stops at four times the fit.
 
 ### 4.6 System (admin)
 

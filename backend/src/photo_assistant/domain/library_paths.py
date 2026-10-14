@@ -74,6 +74,15 @@ def edited_relpath(kind: str, content_hash: str, recipe_key: str) -> PurePosixPa
     )
 
 
+def portrait_relpath(content_hash: str, recipe_key: str) -> PurePosixPath:
+    """``derived/portrait/<hh>/<hash>-<recipe key>.webp``: a person's round picture, cut from
+    the original. The recipe is only the cut, so the same photo and cut are rendered once."""
+    edited_relpath("preview", content_hash, recipe_key)  # validates the hash and the key
+    return PurePosixPath(
+        "derived", "portrait", content_hash[:2], f"{content_hash}-{recipe_key}.webp"
+    )
+
+
 def nested_or_same(a: PurePath, b: PurePath) -> bool:
     """True if either folder contains the other (or they are the same).
 

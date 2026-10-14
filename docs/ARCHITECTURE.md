@@ -53,7 +53,9 @@ faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, f
 `taken_at` and the removal of degenerate crops; `0023` gives ownerless sources to the first
 admin (see Visibility in §7); `0026` keeps what the last global face-clustering pass saw
 (`face_cluster_pass`, `face_cluster_mark`); `0027` gives each account its look
-(`user.look`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+(`user.look`); `0029` lets a person's portrait be a chosen circle on one of their photos
+(`person.portrait_cx/cy/size`, empty = automatic; the round picture is cut from the original
+on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],

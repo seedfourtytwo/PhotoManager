@@ -52,7 +52,7 @@ separate, explicit "purge from library copy" that never touches the source.
 | 2.5b | **To review** (issue 8): a newly imported photo that looks like one already in the library, or that the auto-tagger sees as a screenshot, document, receipt or meme, is copied in but held out of the library. A grouped review screen offers Keep (joins the library, never held again) or Discard (30-day trash). Applies to every source | Should | M2 ✅ |
 | 2.6 | Quality signals: blur, exposure, eyes-closed (from face landmarks) → used for "best of" picks | Could | M3 |
 | 2.7 | Semantic embeddings (CLIP-family) for every photo | Must | M3 |
-| 2.8 | Face detection + clustering into people; user names clusters; merge/split | Should | M3 |
+| 2.8 | Face detection + clustering into people; user names clusters; merge/split; **hide** a person you do not want listed (a stranger in the background): they leave People, their faces stay grouped so they do not come back as a new "Someone", and a "Hidden" list brings them back (issue 53). A person's **portrait** is a round picture the server cuts from the original: by default a square about twice the face with room for hair and chin, never stretched; "Change portrait" on their page picks which of their photos to use and moves and zooms it inside the circle, and "Use automatic" goes back (issue 53) | Should | M3 |
 | 2.9 | Auto-tags from embeddings against a fixed vocabulary (beach, snow, food, document, screenshot…) | Should | M3 ✅ (API) |
 | 2.10 | Screenshot / document / meme detection → filtered out of "memories" by default | Should | M3 |
 | 2.11 | Captions from local vision LLM (via AI socket) | Could | M5 |
@@ -99,7 +99,7 @@ copies down.
 | 4b.4 | **Format**: Original · JPEG (quality slider) · PNG · WebP; HEIC → JPEG is the common case — *API done in M2* | Should | M3 |
 | 4b.5 | **Resize on export**: presets (Original, 4K long edge, 2048, 1080, "email" 1280) or custom long edge; never upscale — *API done in M2* | Should | M3 |
 | 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (`date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
-| 4b.7 | Phone: single photos use the share sheet (Web Share API) so they can go straight into the iPhone Photos app; multiple → ZIP to Files | Should | M3 |
+| 4b.7 | Phone: single photos use the share sheet (Web Share API) so they can go straight into the iPhone Photos app; multiple → ZIP to Files — *one photo: **Share** on the photo view's bar and "Save to Photos" in the download dialog, only where the browser has a share sheet (HTTPS, 11.1); the person picks where it goes, the app sends nothing itself; several photos at once: not built* | Should | M3 ✅ (one photo) |
 | 4b.8 | Large exports run as a background job with progress and a "ready" link, resumable if the connection drops | Could | M4 |
 | 4b.9 | Standalone converter: drop files in, get them back converted/resized (without importing them) | Could | M4 |
 

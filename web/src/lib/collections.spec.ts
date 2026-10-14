@@ -14,7 +14,9 @@ const person = (id: number, name: string | null, asset_count: number): Person =>
 	name,
 	asset_count,
 	face_count: asset_count,
-	cover: null
+	hidden: false,
+	cover: null,
+	portrait: null
 });
 const album = (id: number, title: string, updated_at: string): AlbumSummary => ({
 	id,

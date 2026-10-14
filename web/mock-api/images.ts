@@ -4,6 +4,7 @@
  */
 import type { Recipe } from '../src/lib/api/types.ts';
 import { coverScale, rotatedAspect } from '../src/lib/crop.ts';
+import type { Circle } from '../src/lib/portrait.ts';
 import { rng } from './library.ts';
 import type { MockAsset } from './types.ts';
 
@@ -42,6 +43,15 @@ function scene(asset: MockAsset, w: number, h: number): string {
 <rect width="${w}" height="${h}" fill="url(#${id})"/>
 <circle cx="${sunX.toFixed(1)}" cy="${sunY.toFixed(1)}" r="${sunR.toFixed(1)}" fill="${dusk ? '#ffd9a0' : '#fff6de'}" opacity="0.9"/>
 ${land}`;
+}
+
+/** A person's round picture: the square round `circle`, cut from the photo without its edits. */
+export function renderPortrait(asset: MockAsset, circle: Circle): string {
+	const bw = 600;
+	const bh = (bw * asset.height) / asset.width;
+	const side = circle.size * Math.min(bw, bh);
+	const box = [circle.cx * bw - side / 2, circle.cy * bh - side / 2, side, side];
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.map((v) => v.toFixed(1)).join(' ')}" width="320" height="320">${scene(asset, bw, bh)}</svg>`;
 }
 
 /** The photo as SVG, with the edit recipe applied unless `raw` (the editor's base image). */

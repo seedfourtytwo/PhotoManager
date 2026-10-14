@@ -344,9 +344,14 @@ Without model files every route still answers; nothing fails because a model is 
 | GET | `/api/assets/{id}/similar` | `limit` ≤ 200 | `(AssetOut + {score})[]`; `503` models not installed; `409` not analysed yet |
 | GET | `/api/assets/{id}/faces` | – | `[{id, asset_id, box: {x, y, w, h}, score, person_id}]` (box in fractions of the displayed photo) |
 | GET | `/api/assets/{id}/tags` | – | `{tags: [{name, score}], screen_or_document: bool\|null}` |
-| GET | `/api/people` | – | `[{id, name, face_count, asset_count, cover: Face\|null}]` (counts over what you may see) |
+| GET | `/api/people` | `hidden` (default `false`) | `[{id, name, face_count, asset_count, hidden, cover: Face\|null, portrait: Portrait\|null}]` (counts over what you may see). The people listed; `hidden=true` answers the ones hidden from the list instead. `Portrait` = `{face_id, asset_id, cx, cy, size, chosen, url}`: the person's round picture as a circle on photo `asset_id` as displayed without its edits (`cx`, `cy`: the centre as fractions of the width and height; `size`: the square round it as a fraction of the shorter edge). `chosen: false` is the automatic circle round the face. `url` is the picture, ready to use; it changes whenever the picture does, so it can be cached for good. A portrait is only ever from a photo you may see: if the chosen one is not, you get the automatic one of the best face you may see |
 | GET | `/api/people/{id}` | – | `Person`; `404` |
-| PATCH | `/api/people/{id}` | `{name}` | `Person` (members/admins; guests `403`) |
+| PATCH | `/api/people/{id}` | `{name?, hidden?}` | `Person` (members/admins; guests `403`). Only what is sent changes; `name: null` takes the name away; an empty body is `422`. A hidden person keeps their faces, so later photos of them join the same person; they still open by id and are still found by `person:Name` |
+| GET | `/api/people/{id}/portrait` | `v` (from `url`) | `image/webp`, a square of at most 320 px cut from the original: your portrait of that person. `404` no such person for you, or the original is missing |
+| PUT | `/api/people/{id}/portrait` | `{face_id, cx, cy, size}` | `Person` (members/admins; guests `403`). The face must be that person's, on a photo you may see (`404`). Numbers outside the photo are brought inside it; `422` for what is not a number. One portrait for everyone who may see that photo |
+| DELETE | `/api/people/{id}/portrait` | – | `Person` (guests `403`): the automatic circle again, on the same photo |
+| GET | `/api/people/{id}/faces` | `limit` ≤ 100 (default 24) | `Portrait[]`: that person's faces on photos you may see, the best first, each as its automatic portrait with its own `url` |
+| GET | `/api/faces/{id}/portrait` | `v` (from `url`) | `image/webp`: the automatic portrait of one face; `404` unless you may see its photo |
 | POST | `/api/people/{id}/merge` | `{source_ids}` | `Person` (guests `403`) |
 | POST | `/api/people/split` | `{face_ids, person_id?, name?}` | `Person` (no `person_id` → a new person; guests `403`) |
 | GET | `/api/people/{id}/assets` | `limit`, `cursor` | `{items: AssetOut[], next_cursor}` newest first |
