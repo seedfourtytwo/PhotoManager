@@ -21,20 +21,23 @@
 
 	// A cloud folder's own copy in the library's data folder goes; the cloud is not touched.
 	const cloud = $derived(source.kind === 'rclone' || source.kind === 'proton');
+	// Already no longer watched: this removes it for good, and the access it gave goes too.
+	const final = $derived(source.kind === 'kept');
 
-	const choices: { value: PhotosOnlyHere; label: string; about: string }[] = [
+	const choices = $derived<{ value: PhotosOnlyHere; label: string; about: string }[]>([
 		{
 			value: 'keep',
 			label: 'Keep them in the library',
-			about:
-				'Only admins will still see them, and anyone in an album they are in. Members who saw them through this folder no longer do.'
+			about: final
+				? 'Only admins will still see them, and anyone in an album they are in. Members who see them only through this folder will no longer see them.'
+				: 'The photos stay, and everyone who sees them now still will.'
 		},
 		{
 			value: 'trash',
 			label: 'Move them to the trash',
 			about: 'You can restore them for 30 days; then they leave the library.'
 		}
-	];
+	]);
 
 	async function stop() {
 		busy = true;
@@ -48,9 +51,13 @@
 	}
 </script>
 
-<Dialog title={`Stop watching “${source.label}”?`} {onclose}>
+<Dialog title={final ? `Remove “${source.label}”?` : `Stop watching “${source.label}”?`} {onclose}>
 	<p>
-		The library stops checking this folder for new photos.
+		{#if final}
+			This folder is no longer watched; removing it takes it off the list for good.
+		{:else}
+			The library stops checking this folder for new photos.
+		{/if}
 		{#if cloud}
 			Nothing in the cloud folder is changed; only the library’s own copy of it is deleted.
 		{:else}
@@ -92,7 +99,7 @@
 	{/if}
 	{#snippet actions()}
 		<button class="primary" type="button" disabled={removal === null || busy} onclick={stop}
-			>Stop watching</button
+			>{final ? 'Remove' : 'Stop watching'}</button
 		>
 	{/snippet}
 </Dialog>

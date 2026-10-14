@@ -26,7 +26,7 @@ from photo_assistant.adapters.sqlite_enrich import EnrichMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
 from photo_assistant.adapters.sqlite_review import ReviewMixin
 from photo_assistant.adapters.sqlite_trash import TrashMixin
-from photo_assistant.domain.access import SourceAccess, default_source_access
+from photo_assistant.domain.access import KEPT_KIND, SourceAccess, default_source_access
 from photo_assistant.domain.model import (
     REPORT_ORDER,
     Asset,
@@ -226,14 +226,8 @@ class SqliteRepository(
         not started go with it; a running one raises SourceBusyError and nothing changes.
         Photos stay: their other sources' rows, albums and edits are not touched."""
         source = (source_id,)
-        its_checks = "kind = ? AND json_extract(payload_json, '$.source_id') = ?"
         with self._transaction():
-            running = f"SELECT 1 FROM job WHERE {its_checks} AND status = 'running'"
-            if self._one(running, (check_kind, source_id)):
-                raise SourceBusyError(
-                    "this folder is being checked right now; try again when the check is done"
-                )
-            self._write(f"DELETE FROM job WHERE {its_checks}", (check_kind, source_id))
+            self._end_checks(source_id, check_kind)
             trashed = self._count(
                 """UPDATE asset SET trashed_at = ?, trashed_by = ?
                    WHERE trashed_at IS NULL AND id IN (SELECT value FROM json_each(?))""",
@@ -250,6 +244,28 @@ class SqliteRepository(
             self._write("DELETE FROM import_run WHERE source_id = ?", source)
             self._write("DELETE FROM source WHERE id = ?", source)
         return trashed
+
+    def detach_source(self, source_id: int, *, check_kind: str) -> None:
+        """One transaction: the source is no longer watched (kind "kept", never checked
+        again) and frees its folder for a new source; its access list and its photos' rows
+        stay, so everyone sees what they saw. Checks as in ``remove_source``."""
+        with self._transaction():
+            self._end_checks(source_id, check_kind)
+            self._write(
+                """UPDATE source SET kind = ?, root = 'kept:' || id, enabled = 0,
+                       recheck = ?, config_json = NULL WHERE id = ?""",
+                (KEPT_KIND, Recheck.OFF.value, source_id),
+            )
+
+    def _end_checks(self, source_id: int, check_kind: str) -> None:
+        """Inside a transaction: refuse while a check of the source runs, drop the others."""
+        its_checks = "kind = ? AND json_extract(payload_json, '$.source_id') = ?"
+        running = f"SELECT 1 FROM job WHERE {its_checks} AND status = 'running'"
+        if self._one(running, (check_kind, source_id)):
+            raise SourceBusyError(
+                "this folder is being checked right now; try again when the check is done"
+            )
+        self._write(f"DELETE FROM job WHERE {its_checks}", (check_kind, source_id))
 
     # --- assets ----------------------------------------------------------------------------
 

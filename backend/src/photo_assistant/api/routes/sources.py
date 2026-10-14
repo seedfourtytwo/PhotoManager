@@ -27,9 +27,10 @@ from photo_assistant.api.services import Services
 from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
 from photo_assistant.app.stop_watching import PhotosOnlyHere
 from photo_assistant.app.sync_source import SCAN_JOB_KIND
-from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.access import KEPT_KIND, Level, Viewer
 from photo_assistant.domain.library_paths import folder_path_problem
 from photo_assistant.domain.model import Source
+from photo_assistant.domain.recheck import Recheck
 from photo_assistant.domain.remote_source import PROTON, RCLONE, RemoteConfigError
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
@@ -38,7 +39,7 @@ router = APIRouter(prefix="/api/sources", tags=["sources"])
 def _problem(source: Source) -> str | None:
     """What stops a rescan, shown next to the source (QA A13). A remote source's staging
     folder only exists after its first pull, so it is never "not found"."""
-    if source.kind not in (RCLONE, PROTON) and not Path(source.root).is_dir():
+    if source.kind not in (RCLONE, PROTON, KEPT_KIND) and not Path(source.root).is_dir():
         return "folder not found"
     return None
 
@@ -95,6 +96,8 @@ def patch_source(
     services: ServicesDep, admin: AdminUser, viewer: ViewerDep, source_id: int, body: SourcePatch
 ) -> SourceOut:
     require_source(services, source_id)
+    if body.enabled or (body.recheck is not None and body.recheck is not Recheck.OFF):
+        services.stop_watching.require_watchable(source_id)
     if body.enabled is not None:
         services.repo.set_source_enabled(source_id, body.enabled)
     if body.label is not None:
@@ -120,11 +123,14 @@ def remove_source(
     source_id: int,
     photos: Annotated[PhotosOnlyHere, Query()] = PhotosOnlyHere.KEEP,
 ) -> SourceRemoved:
-    """Stop watching a folder. Only the library's records change, never the folder itself."""
+    """Stop watching a folder. ``keep`` detaches it (everyone keeps seeing its photos); on a
+    source already detached, or with ``trash``, it is removed. Never touches the folder."""
     removed = services.stop_watching.stop(source_id, photos, admin.id)
     if removed.trashed:
         services.repo.enqueue_once(GROUP_JOB, FULL_REGROUP)  # groups lose members
-    return SourceRemoved(only_here=removed.only_here, trashed=removed.trashed)
+    return SourceRemoved(
+        only_here=removed.only_here, trashed=removed.trashed, detached=removed.detached
+    )
 
 
 @router.get("/{source_id}/access", dependencies=ADMIN_ONLY)
@@ -159,6 +165,6 @@ def scan_all(services: ServicesDep) -> list[Queued]:
 
 @router.post("/{source_id}/scan", status_code=status.HTTP_202_ACCEPTED, dependencies=ADMIN_ONLY)
 def scan_source(services: ServicesDep, source_id: int) -> Queued:
-    require_source(services, source_id)
+    services.stop_watching.require_watchable(source_id)
     job_id = services.repo.enqueue(SCAN_JOB_KIND, {"source_id": source_id})
     return Queued(job_id=job_id, source_id=source_id)

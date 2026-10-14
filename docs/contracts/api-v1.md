@@ -165,14 +165,24 @@ off or disabled, possibly a moment already past (it runs at the server's next lo
 **Stop watching a folder (v1.6).** `GET /api/sources/{id}/removal` (admin) answers
 `{photos, only_here}`: the live photos in the source, and those no other source holds.
 `DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
-removes the source, its access list, its import history and its checks that have not started, and answers
-`{only_here, trashed}`. Photos another source also holds are not touched. With `keep` the
-photos found only there stay in the library with no source: by the access rule only admins
-see them, plus the members of an album they are in. With `trash` they go to the trash
-(`trashed_by` = the admin, restorable for 30 days). Nothing in the folder itself is read,
-changed or deleted; a cloud source's own pulled copy (`staging/<id>`) is deleted. An upload
-inbox is `422`; a check of that source running right now, or any import into the library,
-is `409` (try again when it ends). Adding the same folder again later finds the same photos.
+answers `{only_here, trashed, detached}`. Photos another source also holds are not touched.
+
+- `keep` on a watched source *detaches* it (`detached: true`): `kind` becomes `"kept"`, it is
+  disabled, `recheck` is `off` and `path` is `null`. Its access list and its photos stay, so
+  everyone who sees them still does, at the same level, and the folder is free to be added
+  again. Scanning it, `enabled: true` or a `recheck` other than `off` is `422` ("this folder
+  is no longer watched; add it again to watch it"). It is never in "Check all" or a timed
+  check. Its label, owner and access can still be changed.
+- `keep` on a `"kept"` source, or `trash` on any source, removes it (`detached: false`): the
+  source, its access list and its import history. With `keep` the photos found only there
+  stay with no source, so by the access rule only admins see them, plus members of an album
+  they are in. With `trash` they go to the trash (`trashed_by` is the admin, restorable for
+  30 days).
+
+Either way its checks that have not started are dropped. Nothing in the folder itself is
+changed. A cloud source's own pulled copy (`staging/<id>`) is deleted. An upload inbox is
+`422`. A check of that source running right now, or any import into the library, is `409`
+(try again when it ends).
 
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|

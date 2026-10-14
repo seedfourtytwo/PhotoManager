@@ -21,7 +21,7 @@ export function sourceRoutes(h: Helpers): Route[] {
 					: h.now(); // never checked: due at once
 		return {
 			...s,
-			path: isAdmin ? s.path : null,
+			path: isAdmin && s.kind !== 'kept' ? s.path : null,
 			problem: s.path.includes('gone') ? 'folder not found' : null,
 			asset_count: h
 				.state()
@@ -60,13 +60,27 @@ export function sourceRoutes(h: Helpers): Route[] {
 				'this folder is being checked right now; try again when the check is done'
 			);
 		const { onlyHere } = holdings(id);
+		state.jobs = state.jobs.filter((job) => !itsCheck(job));
+		if (photos === 'keep' && source.kind !== 'kept') {
+			// Detached: never checked again, its folder free, its access and photos as they were.
+			Object.assign(source, { kind: 'kept', path: `kept:${id}`, enabled: false, recheck: 'off' });
+			return { only_here: onlyHere.length, trashed: 0, detached: true };
+		}
 		if (photos === 'trash') for (const a of onlyHere) a.trashed_at = nowIso();
 		for (const a of state.assets) a.sources = a.sources.filter((o) => o.source_id !== id);
-		state.jobs = state.jobs.filter((job) => !itsCheck(job));
 		state.reports = state.reports.filter((r) => r.source_id !== id);
 		state.access.delete(id);
 		state.sources = state.sources.filter((s) => s !== source);
-		return { only_here: onlyHere.length, trashed: photos === 'trash' ? onlyHere.length : 0 };
+		const trashed = photos === 'trash' ? onlyHere.length : 0;
+		return { only_here: onlyHere.length, trashed, detached: false };
+	}
+
+	/** A folder no longer watched cannot be checked or switched back on (as the server). */
+	function requireWatchable(id: number): MockSource {
+		const source = findSource(id);
+		if (source.kind === 'kept')
+			throw new HttpError(422, 'this folder is no longer watched; add it again to watch it');
+		return source;
 	}
 
 	return [
@@ -154,6 +168,8 @@ export function sourceRoutes(h: Helpers): Route[] {
 				const body = (ctx.body ?? {}) as SourcePatch;
 				if (body.recheck !== undefined && !(body.recheck === 'off' || body.recheck in RECHECK_MS))
 					throw new HttpError(422, 'Check automatically: off, hourly, daily or weekly.');
+				if (body.enabled || (body.recheck !== undefined && body.recheck !== 'off'))
+					requireWatchable(source.id);
 				if (body.enabled !== undefined) source.enabled = body.enabled;
 				if (body.label) source.label = body.label;
 				if (body.recheck !== undefined) source.recheck = body.recheck;
@@ -179,8 +195,7 @@ export function sourceRoutes(h: Helpers): Route[] {
 			/^\/api\/sources\/(\d+)\/scan$/,
 			(ctx) => {
 				admin(ctx);
-				if (!h.state().sources.some((s) => s.id === idParam(ctx)))
-					throw new HttpError(404, 'Source not found.');
+				requireWatchable(idParam(ctx));
 				return ok(h.queueScan(idParam(ctx)), 202);
 			}
 		],

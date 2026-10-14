@@ -55,7 +55,7 @@ from photo_assistant.app.sync_source import SCAN_JOB_KIND
 from photo_assistant.app.trash import PURGE_JOB, Trash
 from photo_assistant.app.upload import INBOX_RESCAN_SECONDS
 from photo_assistant.app.worker import Lanes, StaleJobSweep, new_owner_id
-from photo_assistant.domain.access import SESSION_IDLE_LIMIT
+from photo_assistant.domain.access import KEPT_KIND, SESSION_IDLE_LIMIT
 from photo_assistant.domain.job_queue import STALE_SWEEP_INTERVAL
 
 # What the daily "prune old records" task keeps (these tables otherwise only grow):
@@ -104,6 +104,11 @@ class Services:
         self.integrations.ai.close()
         self.exiftool.close()
         self.db.close()
+
+
+def watched_roots(repo: SqliteRepository) -> list[Path]:
+    """The folders the library reads from (a detached source's root is no folder)."""
+    return [Path(s.root) for s in repo.list_sources() if s.kind != KEPT_KIND]
 
 
 def build_services(settings: Settings, role: str = "cli") -> Services:
@@ -194,7 +199,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         rclone=RcloneTool(settings.integrations.rclone_binary, settings.integrations.rclone_config),
         queue=repo,
         housekeeping=housekeeping,
-        source_roots=lambda: [Path(s.root) for s in repo.list_sources()],
+        source_roots=lambda: watched_roots(repo),
         mirror=ProtonMirror(integrations.proton),
     )
     editor = Editor(

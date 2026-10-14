@@ -117,14 +117,25 @@
 		}
 	}
 
+	// A folder no longer watched ("Stop watching", keep) still gives access to its photos.
+	const watched = $derived(sources.filter((s) => s.kind !== 'kept'));
+	const unwatched = $derived(sources.filter((s) => s.kind === 'kept'));
+
+	function removedText(source: Source, removed: SourceRemoved): string {
+		if (removed.detached)
+			return `Stopped watching “${source.label}”. Its photos stay, seen by the same people.`;
+		const kept = removed.only_here - removed.trashed;
+		const verb = source.kind === 'kept' ? 'Removed' : 'Stopped watching';
+		return (
+			`${verb} “${source.label}”.` +
+			(removed.trashed ? ` ${photos(removed.trashed)} moved to the trash.` : '') +
+			(kept ? ` ${photos(kept)} found only there stay; only admins see them.` : '')
+		);
+	}
+
 	async function stopped(source: Source, removed: SourceRemoved) {
 		stopping = null;
-		const kept = removed.only_here - removed.trashed;
-		notice.show(
-			`Stopped watching “${source.label}”.` +
-				(removed.trashed ? ` ${photos(removed.trashed)} moved to the trash.` : '') +
-				(kept ? ` ${photos(kept)} found only there stay; only admins see them.` : '')
-		);
+		notice.show(removedText(source, removed));
 		library.forget(); // filter labels and the photos members see changed
 		await load();
 	}
@@ -139,7 +150,7 @@
 		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
 	</header>
 	<ul>
-		{#each sources as source (source.id)}
+		{#each watched as source (source.id)}
 			{@const run = lastRun(source.id)}
 			<li class:off={!source.enabled}>
 				<div class="name">
@@ -205,10 +216,10 @@
 							>Report</button
 						>
 					{/if}
-					<button type="button" onclick={() => toggle(source)}
-						>{source.enabled ? 'Pause checking' : 'Resume checking'}</button
-					>
 					{#if source.kind !== 'inbox'}
+						<button type="button" onclick={() => toggle(source)}
+							>{source.enabled ? 'Pause checking' : 'Resume checking'}</button
+						>
 						<button type="button" onclick={() => (stopping = source)}>Stop watching</button>
 					{/if}
 				</div>
@@ -216,6 +227,29 @@
 		{/each}
 	</ul>
 </section>
+
+{#if unwatched.length}
+	<section aria-labelledby="a-unwatched">
+		<h3 id="a-unwatched">No longer watched</h3>
+		<p class="quiet small hint">
+			Their photos stay, seen by the same people. Nothing here is checked again.
+		</p>
+		<ul>
+			{#each unwatched as source (source.id)}
+				<li>
+					<div class="name">
+						<span>{source.label}</span>
+						<span class="quiet small">{photos(source.asset_count)}</span>
+					</div>
+					<div class="actions">
+						<button type="button" onclick={() => (accessFor = source)}>Access</button>
+						<button type="button" onclick={() => (stopping = source)}>Remove</button>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	</section>
+{/if}
 
 {#if adding}
 	<AddFolder onclose={() => (adding = false)} onadded={addedFolder} />

@@ -74,7 +74,8 @@ export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Re
 export type SourceRemoval = { photos: number; only_here: number };
 /** v1.6: photos found only in a removed folder stay (admins and album members see them) or go to the trash. */
 export type PhotosOnlyHere = 'keep' | 'trash';
-export type SourceRemoved = { only_here: number; trashed: number };
+/** `detached`: kept as a folder no longer watched (kind "kept"), its photos seen as before. */
+export type SourceRemoved = { only_here: number; trashed: number; detached: boolean };
 
 export type Access = { everyone: Level | null; users: { user_id: Id; level: Level }[] };
 
