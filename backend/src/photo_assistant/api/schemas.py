@@ -259,6 +259,7 @@ class AlbumRef(BaseModel):
 
 
 class AssetDetail(AssetOut):
+    name: str  # the display name (domain/display_name.py); downloads carry it
     byte_size: int
     mime_type: str | None
     camera_make: str | None
@@ -453,7 +454,7 @@ class DownloadRequest(BaseModel):
     max_edge: int | None = Field(default=None, ge=1, le=MAX_EDGE)
     strip_location: bool = False
     strip_all_metadata: bool = False
-    naming: Naming = Naming.ORIGINAL
+    naming: Naming = Naming.NAME
     folders: Folders = Folders.FLAT
 
     def options(self) -> ExportOptions:
