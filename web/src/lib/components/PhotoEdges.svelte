@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
+
 	type Props = {
 		index: number;
 		/** How many photos there are to step through. */
@@ -18,8 +20,7 @@
 	class:faded
 	aria-label="Previous photo"
 	disabled={index === 0}
-	onclick={() => onstep(-1)}
-	><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.5 12l7.5 7.5" /></svg></button
+	onclick={() => onstep(-1)}><Icon name="back" /></button
 >
 <button
 	type="button"
@@ -28,8 +29,7 @@
 	class:inset
 	aria-label="Next photo"
 	disabled={index >= count - 1}
-	onclick={() => onstep(1)}
-	><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5 16.5 12 9 19.5" /></svg></button
+	onclick={() => onstep(1)}><Icon name="chevron" /></button
 >
 
 <style>
@@ -52,15 +52,6 @@
 			color: var(--ink);
 		}
 	}
-	.edge svg {
-		width: 22px;
-		height: 22px;
-		fill: none;
-		stroke: currentColor;
-		stroke-width: 1.5;
-		stroke-linecap: round;
-		stroke-linejoin: round;
-	}
 	.edge:disabled {
 		visibility: hidden;
 	}
@@ -71,7 +62,7 @@
 		right: 0;
 	}
 	.next.inset {
-		right: var(--margin);
+		right: var(--details);
 	}
 	/* They fade with the rest of the chrome; keyboard focus keeps one in sight. */
 	.edge.faded:not(:focus-visible) {
@@ -84,10 +75,6 @@
 		.edge {
 			width: var(--target);
 			height: 5rem;
-		}
-		.edge svg {
-			width: 18px;
-			height: 18px;
 		}
 	}
 </style>

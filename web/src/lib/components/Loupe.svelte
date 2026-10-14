@@ -8,12 +8,12 @@
 	import { infoSheet } from '$lib/info-sheet.svelte';
 	import { photoOnScreen } from '$lib/loupe.svelte';
 	import { modal } from '$lib/modal';
-	import Icon from './Icon.svelte';
 	import PhotoBar from './PhotoBar.svelte';
 	import PhotoDialogs, { type PhotoDialog } from './PhotoDialogs.svelte';
 	import PhotoEdges from './PhotoEdges.svelte';
 	import PhotoInfo from './PhotoInfo.svelte';
 	import PhotoStage from './PhotoStage.svelte';
+	import IconButton from './ui/IconButton.svelte';
 
 	type Props = {
 		items: AssetOut[];
@@ -245,7 +245,7 @@
 		<PhotoEdges {index} count={items.length} faded={chrome.idle} inset={info} onstep={go} />
 
 		<div class="top" role="toolbar" aria-label="Photo actions">
-			<button type="button" class="pill glass" onclick={onclose}><Icon name="close" />Close</button>
+			<IconButton icon="close" label="Close" class="glass close" onclick={onclose} />
 			<PhotoBar
 				{asset}
 				{detail}
@@ -257,25 +257,33 @@
 				onrestore={() => onrestore?.(asset)}
 			/>
 			<div class="right">
-				<button type="button" class="pill glass" aria-pressed={info} onclick={() => setInfo(!info)}
-					><Icon name="info" />Info</button
-				>
-				<button
-					type="button"
-					class="pill glass wordy"
+				<IconButton
+					icon="zoom"
+					label="Zoom"
+					class="glass"
 					aria-pressed={zoomedIn}
-					onclick={() => stage?.zoom()}>Zoom</button
-				>
+					onclick={() => stage?.zoom()}
+				/>
 				{#if canFullscreen}
-					<button type="button" class="pill glass wordy fullscreen" onclick={toggleFullscreen}
-						>Full screen</button
-					>
+					<IconButton
+						icon="fullscreen"
+						label="Full screen"
+						class="glass fullscreen"
+						onclick={toggleFullscreen}
+					/>
 				{/if}
+				<IconButton
+					icon="info"
+					label="Details"
+					class="glass"
+					aria-pressed={info}
+					onclick={() => setInfo(!info)}
+				/>
 			</div>
 		</div>
 
 		{#if info}
-			<PhotoInfo {asset} {detail} {trash} />
+			<PhotoInfo {asset} {detail} {trash} onclose={() => setInfo(false)} />
 		{/if}
 	{/if}
 </dialog>
@@ -290,9 +298,11 @@
 {/if}
 
 <style>
-	/* The loupe: the photo takes the whole screen. Its chrome floats over it as glass (Close and
-	   Info at the top, one bar at the bottom) and fades when idle. */
+	/* The loupe: the photo takes the whole screen. Its chrome floats over it as glass (round
+	   Close and Details at the top, one bar at the bottom) and fades when idle. */
 	.loupe {
+		/* The details beside the photo on a laptop: wide enough for a label and its value. */
+		--details: calc(var(--margin) * 1.5);
 		position: fixed;
 		inset: 0;
 		width: 100vw;
@@ -311,7 +321,7 @@
 		outline: none;
 	}
 	.loupe.info {
-		grid-template-columns: minmax(0, 1fr) var(--margin);
+		grid-template-columns: minmax(0, 1fr) var(--details);
 	}
 	/* The viewer fades in under the photo the transition moves (or by itself, without one). */
 	.loupe {
@@ -330,38 +340,27 @@
 		pointer-events: none;
 		transition: opacity var(--motion) var(--ease);
 	}
-	.pill,
+	.top :global(.close),
 	.right {
 		position: absolute;
+		top: var(--s-3);
 		pointer-events: auto;
 	}
-	.pill {
-		top: var(--s-3);
+	.top :global(.close) {
 		left: var(--s-3);
-		display: inline-flex;
-		align-items: center;
-		gap: var(--s-1);
-		padding: var(--s-1) var(--s-3) var(--s-1) var(--s-2);
-		border-radius: var(--r-pill);
-		white-space: nowrap;
 	}
 	.right {
-		top: var(--s-3);
 		right: var(--s-3);
 		display: flex;
 		gap: var(--s-2);
 	}
-	.right .pill {
-		position: static;
+	/* Zoomed in and the details open show themselves; their buttons stay plain ink (the
+	   accent is for selection, and a filled circle would swallow the i). */
+	.right :global(.icon-button[aria-pressed='true']) {
+		color: var(--ink);
 	}
-	/* A pill of a word alone, with no icon before it. */
-	.pill.wordy {
-		padding-left: var(--s-3);
-	}
-	.pill[aria-pressed='true'] {
-		text-decoration: underline;
-		text-underline-offset: 0.35em;
-		text-decoration-thickness: 1px;
+	.right :global(.icon-button[aria-pressed='true'] svg) {
+		fill: none;
 	}
 	/* Chrome fades when idle; any touch, key or mouse movement brings it back, and keyboard
 	   focus keeps it (a tapped button's plain focus does not). */
@@ -373,17 +372,17 @@
 		.loupe.info {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.pill,
+		.top :global(.close),
 		.right {
 			top: calc(env(safe-area-inset-top) + var(--s-2));
 		}
-		.pill {
+		.top :global(.close) {
 			left: calc(env(safe-area-inset-left) + var(--s-3));
 		}
 		.right {
 			right: calc(env(safe-area-inset-right) + var(--s-3));
 		}
-		.fullscreen {
+		.right :global(.fullscreen) {
 			display: none;
 		}
 	}
