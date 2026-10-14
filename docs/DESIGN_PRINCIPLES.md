@@ -219,9 +219,9 @@ not a token):
   the exception: the stylesheet asks `(prefers-reduced-transparency: reduce)` and never its
   negation, because Safari does not know the question and would then show no glass at all.
 - **The look form** (Admin → People → Look): one control per field of the sheet, each with
-  its range or its choices, so nothing can be entered that the server would refuse. The
-  exceptions are `showToday` and `startPage`: they have no control until the Today page
-  exists. "Try on
+  its range or its choices, so nothing can be entered that the server would refuse. Home has
+  two: Show Home (off takes Home out of the dock) and Opens on (Home or Library; without Home
+  only Library, so the choice is off). "Try on
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
   quiet line at the top of every page says whose look is being tried and offers Stop trying.
 - **Collections rows** show what is behind them, not a sentence about it: people as round
@@ -265,6 +265,29 @@ not a token):
   is not swiped; another photo opens at its fit. The heart is the Favourite button, first in
   the bar. It opens from its tile and closes back to it as
   a view transition.
+- **Home** reads top to bottom like a story, and a block shows only when it has photos: the
+  date ("Wednesday 14 October") with the avatar; On this day, its cover full width at its own
+  shape (a tall one stops short of the screen, whole), a display title in plain words ("Three
+  years ago today", "A year ago this week") and one line of where and with whom; Memories, a
+  sideways row of 3:4 covers with title and dates; Pinned, the account's own photos as a
+  justified block ("Choose" opens the Library, where a photo's More and the selection's More
+  pin and unpin); People, faces with names; New this week, one sentence ("42 photos arrived
+  from Léa's iPhone") over the newest photos. A cover or a memory plays (a round play mark on
+  it); a photo opens the photo view and steps through its block. While Home is asked for, the
+  room of a cover and a row stays quiet (no spinner). With nothing to show, one sentence says
+  so and what to do. Home is where a session opens, unless the look says Library: only the
+  first page of a tab after signing in moves there, and a page asked for (a link) is never
+  moved.
+- **The story player** plays a memory full screen over everything (a modal dialog in the top
+  layer): about forty photos spread over the period, each whole for 3.2 s while it is pushed
+  in slowly and the next fades in over it (transform and opacity only; the next two are
+  fetched ahead). Progress is a row of segments at the top, the running one filling as a
+  `scaleX` animation. The title and dates sit on glass at the bottom; × and Pause are round
+  glass buttons at the top. Tap the right two thirds for the next photo, the left third for
+  the previous; the arrow keys do the same. A finger held down pauses it, a pull down follows
+  the finger and closes it past the sheet's threshold; ×, Escape and Back close it too. It
+  stands still while the page is hidden. Next after the last photo ends it. Reduced motion:
+  plain cuts, no push-in. No music yet.
 - **The time ruler** is the one signature: even ticks for the months, the years in the data
   face, an accent needle with the month in view. Upright at the right edge on a laptop; lying
   above the dock on a phone, where it shows while the page scrolls and fades when idle. A drag

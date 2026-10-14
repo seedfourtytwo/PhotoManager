@@ -123,7 +123,8 @@ mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases
   the app unusable.
 - `PUT /api/me/look` changes the mode of the sheet as it is stored at that moment, in one
   step: an admin's save at the same time is never half undone.
-- `showToday` and `startPage` are stored and answered but have no effect until the Today page exists.
+- `showToday: false` takes Home out of the dock; `startPage` is where a session opens (Home or
+  Library; `web/src/lib/start-page.svelte.ts`).
 
 ## Sources (existing, plus access)
 

@@ -84,7 +84,7 @@ Each view is a way to *see* the library, not decoration. See `DESIGN_PRINCIPLES.
 | 4.4 | **Map** — clustered points, draw-to-filter | Should | M3 |
 | 4.5 | **Small multiples** — one row per year for the same week/place ("every summer at the house") | Could | M3 |
 | 4.6 | **People** — face grid, then a person's timeline | Should | M3 ✅ (API) |
-| 4.7 | **On this day** — same date, previous years — *API: `GET /api/home` answers it with memories (trips of ten photos or more, named after place and months) and the week's new photos; each account pins photos of its own for Home (issue 54)* | Could | M3 ✅ (API) |
+| 4.7 | **On this day** — same date, previous years — *Home (issue 54): On this day, memories, the account's pinned photos, people and the week's new photos, read top to bottom; a memory or the day plays full screen as a story (no music yet); Pin to Home in a photo's More and the selection's More. API: `GET /api/home`* | Could | M3 ✅ |
 | 4.8 | **Slideshow / ambient mode** for a TV or tablet | Could | M5 |
 
 ## 4b. Download & convert
@@ -173,7 +173,7 @@ folder can be shared with everyone, with a few people, or kept to one person.
 | 8.6 | Each account's phone inbox is its own source, private to that account by default | Should | M4 |
 | 8.7 | Remote access via Tailscale (no public exposure) | Should | M6 |
 | 8.8 | Account groups (e.g. "family", "friends") to grant access in one go | Could | M4 |
-| 8.9 | **Per-account look**: each account has a look (theme, dark/light/device mode, accent hue, corners, photo gap, text size, photo size, which Collections rows in which order, dock labels) stored as a validated sheet of values, never CSS. The account chooses its mode in Settings; an admin sets the rest (the photo size too: there is no per-device setting for it) in Admin → People → Look, with "Try on my screen" before "Save for …". The two Today switches are stored but wait for the Today page | Should | ✅ |
+| 8.9 | **Per-account look**: each account has a look (theme, dark/light/device mode, accent hue, corners, photo gap, text size, photo size, which Collections rows in which order, dock labels) stored as a validated sheet of values, never CSS. The account chooses its mode in Settings; an admin sets the rest (the photo size too: there is no per-device setting for it) in Admin → People → Look, with "Try on my screen" before "Save for …". Home's two switches: whether the dock shows Home, and whether the app opens on Home or Library | Should | ✅ |
 
 ## 9. Operate
 
