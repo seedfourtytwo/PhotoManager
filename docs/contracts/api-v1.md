@@ -163,6 +163,28 @@ least that long ago (a failed check counts, so it is not retried at once), unles
 already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
 off or disabled, possibly a moment already past (it runs at the server's next look).
 
+**Stop watching a folder (v1.8).** `GET /api/sources/{id}/removal` (admin) answers
+`{photos, only_here}`: the live photos in the source, and those no other source holds.
+`DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
+answers `{only_here, trashed, detached}`. Photos another source also holds are not touched.
+
+- `keep` on a watched source *detaches* it (`detached: true`): `kind` becomes `"kept"`, it is
+  disabled, `recheck` is `off` and `path` is `null`. Its access list and its photos stay, so
+  everyone who sees them still does, at the same level, and the folder is free to be added
+  again. Scanning it, `enabled: true` or a `recheck` other than `off` is `422` ("this folder
+  is no longer watched; add it again to watch it"). It is never in "Check all" or a timed
+  check. Its label, owner and access can still be changed.
+- `keep` on a `"kept"` source, or `trash` on any source, removes it (`detached: false`): the
+  source, its access list and its import history. With `keep` the photos found only there
+  stay with no source, so by the access rule only admins see them, plus members of an album
+  they are in. With `trash` they go to the trash (`trashed_by` is the admin, restorable for
+  30 days).
+
+Either way its checks that have not started are dropped. Nothing in the folder itself is
+changed. A cloud source's own pulled copy (`staging/<id>`) is deleted. An upload inbox is
+`422`. A check of that source running right now, or any import into the library, is `409`
+(try again when it ends).
+
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
 | PUT | `/api/sources/{id}/access` | `Access` | `Access` (admin) |
@@ -179,12 +201,12 @@ New sources default to `{everyone: "download", users: []}`.
 | `from`, `to` | inclusive day range `YYYY-MM-DD` |
 | `year`, `month` | shortcuts (month needs year) |
 | `source_id` | repeatable; only sources you can see count (a hidden source's id selects nothing, v1.2) |
-| `person_id` | repeatable: photos with **any** of these people on them (v1.8); an unknown id selects nothing, one outside 1…2⁶³−1 is `400` |
+| `person_id` | repeatable: photos with **any** of these people on them (v1.9); an unknown id selects nothing, one outside 1…2⁶³−1 is `400` |
 | `camera` | exact `camera_model` |
 | `place` | matches country, region or city (case-insensitive) |
 | `q` | free text over file names (in sources you can see, v1.2), place names, camera, album titles (of albums you can see) |
 | `favourite` | `true` = only my favourites |
-| `pinned` | `true` = only the photos I pinned to my Home, `false` = the others (v1.8) |
+| `pinned` | `true` = only the photos I pinned to my Home, `false` = the others (v1.9) |
 | `hidden` | `true` = only my hidden; default hides them |
 | `guessed_date` | `true` = only photos whose date came from the file (`file_mtime`) |
 | `has_location` | `true`/`false` |
@@ -207,7 +229,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{name, byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
-| PATCH | `/api/assets/{id}/state` | `{favourite?, pinned?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above). `pinned` (v1.8) is per account like `favourite`: `true` pins (a photo pinned again keeps its first time), `false` unpins |
+| PATCH | `/api/assets/{id}/state` | `{favourite?, pinned?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above). `pinned` (v1.9) is per account like `favourite`: `true` pins (a photo pinned again keeps its first time), `false` unpins |
 | POST | `/api/assets/state` | `{ids, favourite?, pinned?, hidden?}` | `{updated}` |
 | POST | `/api/assets/dates` | `{ids, set?: "YYYY-MM-DDTHH:MM:SS", shift_minutes?: int}` (exactly one) | `{updated}`; needs `edit`; sets `date_source="manual"`, keeps the previous value. `422` if a photo would end up more than a day after the server's local now (v1.2) |
 | GET | `/api/assets/{id}/edit` | – | `Recipe` |
@@ -249,15 +271,15 @@ renders via libvips with the edit recipe applied.
 `photos-<words>.zip` (`photos-all.zip` with no filter); `ids` → `photos-<n>.zip` (`n` = distinct ids
 asked for). Filter words, in this order, lowercase, joined by `-`: day range (`2019-07-04`,
 `2019-07-01-to-2019-08-31`, `from-…`, `to-…`), `year[-month]` (`2019`, `2019-07`),
-`<n>-source(s)`, `1-person`/`<n>-people` (v1.8), camera, place, `q` (each slugged: runs of
-non-letters/digits → `-`), `favourites`, `pinned` (v1.8), `hidden`, `guessed-dates`,
+`<n>-source(s)`, `1-person`/`<n>-people` (v1.9), camera, place, `q` (each slugged: runs of
+non-letters/digits → `-`), `favourites`, `pinned` (v1.9), `hidden`, `guessed-dates`,
 `with-location`/`without-location`. E.g.
 `{year: 2019, place: "France"}` → `photos-2019-france.zip`. Names are sanitised (no `/ \ : * ? " < > |`
 or control characters → `_`; blank titles → `album.zip`) and at most 100 characters. The ASCII
 `filename` drops accents and turns other non-ASCII characters into `_`. Single-photo downloads
 use the same header shape.
 
-## Home (v1.8, issue 54)
+## Home (v1.9, issue 54)
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -573,7 +595,17 @@ Additions only.
 
 ---
 
-# v1.8 changes (person filter, pinned photos, Home)
+# v1.8 changes (stop watching a folder)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Sources | New: `GET /api/sources/{id}/removal` and `DELETE /api/sources/{id}` (see "Sources" above). | Admin → Folders has "Stop watching" with a confirm sheet (`api.sourceRemoval`, `api.removeSource`); the enabled switch reads "Pause checking" / "Resume checking". |
+
+---
+
+# v1.9 changes (person filter, pinned photos, Home)
 
 Additions only.
 

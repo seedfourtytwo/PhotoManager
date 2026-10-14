@@ -36,6 +36,10 @@ class SourceExistsError(ConflictError, ValueError):
     hierarchy: code that catches ValueError keeps working.)"""
 
 
+class SourceBusyError(ConflictError):
+    """The source cannot be removed now: a check of it, or an import, is running."""
+
+
 class InvalidAlbumOrderError(InvalidError, ValueError):
     """An album order that lists a photo twice, or one that is not in the album."""
 
