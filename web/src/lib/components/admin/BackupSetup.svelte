@@ -143,7 +143,7 @@
 						/>
 						<span
 							>{disk.label}
-							<span class="quiet">· disk, {formatBytes(disk.free_bytes)} free</span></span
+							<span class="quiet">disk, {formatBytes(disk.free_bytes)} free</span></span
 						>
 					</label>
 				{/each}
@@ -155,7 +155,7 @@
 							checked={choice === `rclone:${remote}:`}
 							onchange={() => choose(`rclone:${remote}:`, remote)}
 						/>
-						<span>{remote} <span class="quiet">· cloud or network</span></span>
+						<span>{remote} <span class="quiet">cloud or network</span></span>
 					</label>
 				{/each}
 				<label class="choice">

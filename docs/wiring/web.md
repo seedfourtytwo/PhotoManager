@@ -138,9 +138,12 @@ Mock-only routes live under `/__mock/` and are never called by the app.
   the sixteen biggest places (its newest photo is the cover, and tells a country from a city).
   A row that fails says so in the toast and the others stay. The ordering rules are pure, in
   `lib/collections.ts`.
-- **Navigation**: Library · Collections (People, Places, Albums) · Search everywhere, in a top
-  bar on a laptop and a floating dock on a phone. The account menu holds To review, Trash,
-  Settings, Admin (admins) and Sign out. The selection pill shows Add to album, Download,
+- **Navigation**: the places of `PLACES` (`lib/nav.ts`: Library, Collections) and Search, in a
+  top bar on a laptop and a floating dock on a phone; the avatar opens You (`/settings`: look,
+  Needs you and Admin for admins, phones, Change PIN, Sign out). There is no account menu: To
+  review and Trash are reached from Collections. A page change is a view transition of the page
+  area (`onNavigate` in the root layout, `pageMove` decides the direction, `movePage` in
+  `lib/motion.ts` runs it). The selection pill shows Add to album, Download,
   Fix date and Move to trash (the first three on a phone) and puts the rest under “More”.
 - **Date fields** (`DateField`, the reader in `lib/dates.ts`): Fix date's “Set exactly” and
   the filters' From / To are one text field, never the browser's own date control, so the

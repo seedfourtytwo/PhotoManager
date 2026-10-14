@@ -102,7 +102,7 @@ export function undoDateChange(
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = [
+export const MONTHS = [
 	'January',
 	'February',
 	'March',

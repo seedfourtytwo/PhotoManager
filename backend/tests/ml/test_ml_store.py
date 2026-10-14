@@ -554,7 +554,10 @@ def indexed_random_library(seed: int) -> tuple[SqliteRepository, SqliteMlStore, 
     photos = list(range(1, 61))
     for user in range(1, len(ROLES) + 1):
         for asset in rng.sample(photos, 6):
-            conn.execute("INSERT INTO user_asset VALUES (?, ?, 0, 1)", (user, asset))
+            conn.execute(
+                "INSERT INTO user_asset (user_id, asset_id, favourite, hidden) VALUES (?, ?, 0, 1)",
+                (user, asset),
+            )
     for asset in rng.sample(photos, 5):
         conn.execute("UPDATE asset SET held_reason = 'lookalike' WHERE id = ?", (asset,))
     people = [store.create_empty_person(name) for name in ("Lea", None, "Tom", None)]

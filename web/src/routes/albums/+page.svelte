@@ -1,15 +1,13 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { ALBUM_TITLE_MAX, type AlbumSummary } from '$lib/api';
+	import type { AlbumSummary } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
-	import Dialog from '$lib/components/Dialog.svelte';
-	import { photos } from '$lib/format';
+	import { formatCount } from '$lib/format';
+	import NewAlbumDialog from '$lib/components/NewAlbumDialog.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
+	import IconButton from '$lib/components/ui/IconButton.svelte';
 
 	let albums = $state<AlbumSummary[] | null>(null);
 	let creating = $state(false);
-	let title = $state('');
-	let description = $state('');
-	let busy = $state(false);
 
 	$effect(() => {
 		api
@@ -17,42 +15,25 @@
 			.then((a) => (albums = a))
 			.catch((e: unknown) => notice.error(e));
 	});
-
-	async function create(event: SubmitEvent) {
-		event.preventDefault();
-		if (busy || !title.trim()) return;
-		busy = true;
-		try {
-			const album = await api.createAlbum({
-				title: title.trim(),
-				description: description.trim() || undefined
-			});
-			// In place of the dialog's history step: Back from the album is the list of albums.
-			await goto(`/albums/${album.id}`, { replaceState: true });
-		} catch (e) {
-			notice.error(e);
-		} finally {
-			busy = false;
-		}
-	}
 </script>
 
 <svelte:head><title>Albums · Photos</title></svelte:head>
 
-<div class="page">
-	<header>
-		<h1>Albums</h1>
+<PageHead title="Albums" back={{ href: '/collections', label: 'Collections' }}>
+	{#snippet actions()}
 		{#if session.canEdit}
-			<button type="button" onclick={() => (creating = true)}>New album</button>
+			<IconButton icon="plus" label="New album" filled onclick={() => (creating = true)} />
 		{/if}
-	</header>
+	{/snippet}
+</PageHead>
 
+<div class="page">
 	{#if albums && albums.length === 0}
 		<div class="empty-state">
 			<p>No albums yet.</p>
 			<p>
 				Select photos in the <a href="/">library</a> and choose “Add to album”{#if session.canEdit},
-					or start an empty one with New album{/if}.
+					or start an empty one with +{/if}.
 			</p>
 		</div>
 	{/if}
@@ -65,9 +46,11 @@
 						{#if album.cover}<img src={album.cover.url} alt="" loading="lazy" />{/if}
 					</span>
 					<span class="title">{album.title}</span>
-					<span class="quiet small">
-						{photos(album.count)}{#if album.role !== 'owner'}&nbsp;· shared with you ({album.role}){/if}
-					</span>
+					<span class="count data"
+						>{formatCount(album.count)}<span class="visually-hidden"
+							>{album.count === 1 ? ' photo' : ' photos'}</span
+						>{#if album.role !== 'owner'}, shared with you{/if}</span
+					>
 				</a>
 			</li>
 		{/each}
@@ -75,40 +58,12 @@
 </div>
 
 {#if creating}
-	<Dialog title="New album" onclose={() => (creating = false)}>
-		<!-- A form, so Enter in a field creates the album. -->
-		<form id="new-album" onsubmit={create}>
-			<label class="field">Title <input bind:value={title} maxlength={ALBUM_TITLE_MAX} /></label>
-			{#if title.length >= ALBUM_TITLE_MAX}
-				<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
-			{/if}
-			<label class="field">Description <input bind:value={description} /></label>
-		</form>
-		{#snippet actions()}
-			<button class="primary" type="submit" form="new-album" disabled={busy || !title.trim()}
-				>Create</button
-			>
-		{/snippet}
-	</Dialog>
+	<NewAlbumDialog onclose={() => (creating = false)} />
 {/if}
 
 <style>
 	.page {
-		padding: 0 var(--page-x) var(--s-7);
-	}
-	header {
-		display: flex;
-		align-items: baseline;
-		gap: var(--s-4);
-		padding: var(--s-5) 0 var(--s-5);
-	}
-	header button {
-		color: var(--ink-2);
-	}
-	@media (hover: hover) {
-		header button:hover {
-			color: var(--ink);
-		}
+		padding: var(--s-2) var(--page-x) var(--s-7);
 	}
 	.albums {
 		list-style: none;
@@ -116,9 +71,10 @@
 		padding: 0;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-		gap: var(--s-6) var(--s-5);
+		gap: var(--s-5) var(--s-4);
 	}
 	a {
+		position: relative; /* holds the count's hidden word */
 		display: grid;
 		gap: var(--s-1);
 		text-decoration: none;
@@ -129,7 +85,7 @@
 		aspect-ratio: 4 / 3;
 		background: var(--hairline);
 		overflow: hidden;
-		margin-bottom: var(--s-2);
+		margin-bottom: var(--s-1);
 	}
 	.cover img {
 		width: 100%;
@@ -138,15 +94,17 @@
 		display: block;
 	}
 	.title {
-		font-family: var(--font-title);
-		font-weight: var(--title-weight);
-		font-size: var(--fs-20);
+		font-weight: 600;
 		line-height: var(--lh-tight);
+		overflow-wrap: anywhere;
+	}
+	.count {
+		color: var(--ink-2);
+		font-size: var(--fs-14);
 	}
 	@media (hover: hover) {
 		a:hover .title {
 			text-decoration: underline;
-			text-decoration-thickness: 1px;
 			text-underline-offset: 0.2em;
 		}
 	}
@@ -156,10 +114,7 @@
 	@media (max-width: 639px) {
 		.albums {
 			grid-template-columns: 1fr 1fr;
-			gap: var(--s-5) var(--s-3);
-		}
-		.title {
-			font-size: var(--fs-16);
+			gap: var(--s-4) var(--s-3);
 		}
 	}
 </style>

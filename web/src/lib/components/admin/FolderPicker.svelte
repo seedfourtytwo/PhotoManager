@@ -129,6 +129,5 @@
 	}
 	.field input {
 		font-family: var(--font-data);
-		font-stretch: 80%;
 	}
 </style>

@@ -1,9 +1,18 @@
 <script lang="ts">
 	import type { ImportRun, Recheck, Source, SourceRemoved } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
-	import { formatCount, formatWhen, nextCheckText, photos } from '$lib/format';
+	import { folderLine, folderNeedsYou } from '$lib/folders';
+	import { nextCheckText, photos } from '$lib/format';
+	import type { MenuItem } from '$lib/menu';
 	import { protonPlaceName } from '$lib/proton';
+	import Dialog from '../Dialog.svelte';
+	import Menu from '../Menu.svelte';
+	import IconButton from '../ui/IconButton.svelte';
+	import TileGroup from '../ui/TileGroup.svelte';
+	import TileRow from '../ui/TileRow.svelte';
 	import AccessDialog from './AccessDialog.svelte';
+	import ActionCard from './ActionCard.svelte';
+	import ActionCards from './ActionCards.svelte';
 	import AddCloud from './AddCloud.svelte';
 	import AddFolder from './AddFolder.svelte';
 	import ProtonSource from './ProtonSource.svelte';
@@ -21,6 +30,22 @@
 	let accessFor = $state<Source | null>(null);
 	let reportFor = $state<{ run: ImportRun; label: string } | null>(null);
 	let stopping = $state<Source | null>(null);
+	/** The folder whose sheet is open; it follows the list, so an import shows live. */
+	let openId = $state<number | null>(null);
+	const open = $derived(sources.find((s) => s.id === openId) ?? null);
+
+	const ADD: MenuItem[] = [
+		{ label: 'Add folder', run: () => (adding = true) },
+		{ label: 'Add from Proton', run: () => (proton = true) },
+		{ label: 'Add cloud folder', run: () => (cloud = true) }
+	];
+
+	/** An action that opens its own dialog takes the sheet's place. */
+	function then(next: (source: Source) => void) {
+		const source = open;
+		openId = null;
+		if (source) next(source);
+	}
 
 	const PAUSED_HINT =
 		'Photos already in the library stay; new photos in this folder aren’t picked up until you resume.';
@@ -70,7 +95,7 @@
 
 	const place = (source: Source) =>
 		source.kind === 'proton' && source.path
-			? `Proton Drive · ${protonPlaceName(source.path)}`
+			? `Proton Drive, ${protonPlaceName(source.path)}`
 			: (source.path ?? '');
 
 	async function pull(source: Source) {
@@ -141,114 +166,108 @@
 	}
 </script>
 
-<section aria-labelledby="a-sources">
-	<header>
-		<h2 id="a-sources">Folders</h2>
-		<button type="button" onclick={() => (adding = true)}>Add folder</button>
-		<button type="button" onclick={() => (proton = true)}>Add from Proton</button>
-		<button type="button" onclick={() => (cloud = true)}>Add cloud folder</button>
-		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
-	</header>
-	<ul>
-		{#each watched as source (source.id)}
-			{@const run = lastRun(source.id)}
-			<li class:off={!source.enabled}>
-				<div class="name">
-					<span>{source.label}</span>
-					<span class="quiet small path">{place(source)}</span>
-					{#if source.problem}<span class="problem small">{source.problem}</span>{/if}
-				</div>
-				<div class="quiet small">
-					{photos(source.asset_count)}{#if !source.enabled}&nbsp;· <span>paused</span>{/if}
-					{#if run?.status === 'running'}
-						&nbsp;· <span class="live"
-							>importing · {formatCount(run.summary.files_seen)} file{run.summary.files_seen === 1
-								? ''
-								: 's'} so far</span
-						>
-					{:else if run?.status === 'failed'}
-						&nbsp;· <span class="problem"
-							>last import failed: {run.message ?? 'no reason given'}</span
-						>
-					{:else if run}&nbsp;· last import {run.status === 'done' ? '' : `${run.status} · `}{run
-							.summary.imported}
-						new{#if run.summary.failed}, {run.summary.failed} failed{/if}{#if run.summary.skipped},
-							{run.summary.skipped} skipped{/if}{#if run.finished_at}&nbsp;· checked {formatWhen(
-								run.finished_at
-							)}{/if}
-						{#if run.message}&nbsp;· <span class="problem">{run.message}</span>{/if}
-					{/if}
-				</div>
-				{#if !source.enabled}<p class="quiet small hint">{PAUSED_HINT}</p>{/if}
-				<div class="auto quiet small">
-					<label
-						>Check automatically
-						<select
-							value={source.recheck}
-							onchange={(e) =>
-								setRecheck(source, e.currentTarget.value as Recheck, e.currentTarget)}
-						>
-							<option value="off">Off</option>
-							<option value="hourly">Every hour</option>
-							<option value="daily">Every day</option>
-							<option value="weekly">Every week</option>
-						</select>
-					</label>
-					{#if source.next_check_at}<span>{nextCheckText(source.next_check_at)}</span>{/if}
-				</div>
-				<div class="actions">
-					{#if source.kind === 'rclone'}
-						<button type="button" disabled={busy || !source.enabled} onclick={() => pull(source)}
-							>Pull now</button
-						>
-					{:else if source.kind === 'proton'}
-						<button type="button" disabled={busy || !source.enabled} onclick={() => pull(source)}
-							>Check again</button
-						>
-					{:else}
-						<button type="button" disabled={busy || !source.enabled} onclick={() => scan(source)}
-							>Check again</button
-						>
-					{/if}
-					<button type="button" onclick={() => (accessFor = source)}>Access</button>
-					{#if run}
-						<button type="button" onclick={() => (reportFor = { run, label: source.label })}
-							>Report</button
-						>
-					{/if}
-					{#if source.kind !== 'inbox'}
-						<button type="button" onclick={() => toggle(source)}
-							>{source.enabled ? 'Pause checking' : 'Resume checking'}</button
-						>
-						<button type="button" onclick={() => (stopping = source)}>Stop watching</button>
-					{/if}
-				</div>
-			</li>
-		{/each}
-	</ul>
-</section>
+<TileGroup label="Folders">
+	{#snippet action()}
+		<span class="label-actions">
+			<IconButton icon="refresh" label="Check all" disabled={busy} onclick={() => scan()} />
+			<Menu label="Add" text="Add" icon="plus" round filled={false} items={ADD} />
+		</span>
+	{/snippet}
+	{#each watched as source (source.id)}
+		{@const run = lastRun(source.id)}
+		<TileRow
+			icon={source.kind === 'rclone' || source.kind === 'proton' ? 'cloud' : 'folder'}
+			title={source.label}
+			line={folderLine(source, run)}
+			attention={folderNeedsYou(source, run)}
+			onclick={() => (openId = source.id)}
+		/>
+	{/each}
+</TileGroup>
 
 {#if unwatched.length}
-	<section aria-labelledby="a-unwatched">
-		<h3 id="a-unwatched">No longer watched</h3>
-		<p class="quiet small hint">
-			Their photos stay, seen by the same people. Nothing here is checked again.
-		</p>
-		<ul>
-			{#each unwatched as source (source.id)}
-				<li>
-					<div class="name">
-						<span>{source.label}</span>
-						<span class="quiet small">{photos(source.asset_count)}</span>
-					</div>
-					<div class="actions">
-						<button type="button" onclick={() => (accessFor = source)}>Access</button>
-						<button type="button" onclick={() => (stopping = source)}>Remove</button>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	</section>
+	<TileGroup label="No longer watched">
+		{#each unwatched as source (source.id)}
+			<TileRow
+				icon="folder"
+				title={source.label}
+				line={photos(source.asset_count)}
+				onclick={() => (openId = source.id)}
+			/>
+		{/each}
+	</TileGroup>
+	<p class="quiet small hint">
+		Their photos stay, seen by the same people. Nothing here is checked again.
+	</p>
+{/if}
+
+{#if open}
+	{@const run = lastRun(open.id)}
+	{@const kept = open.kind === 'kept'}
+	<Dialog title={open.label} cancelLabel="Close" onclose={() => (openId = null)}>
+		{#if place(open)}<p class="path"><code>{place(open)}</code></p>{/if}
+		{#if open.problem}<p class="problem">{open.problem}</p>{/if}
+		<p class="quiet">{folderLine(open, run)}</p>
+		{#if !open.enabled && !kept}<p class="quiet small">{PAUSED_HINT}</p>{/if}
+		<ActionCards>
+			{#if !kept}
+				{@const remote = open.kind === 'rclone' || open.kind === 'proton'}
+				<ActionCard
+					icon="refresh"
+					label={open.kind === 'rclone' ? 'Pull now' : 'Check again'}
+					disabled={busy || !open.enabled}
+					onclick={() => open && (remote ? pull(open) : scan(open))}
+				/>
+			{/if}
+			<ActionCard
+				icon="person"
+				label="Who sees it"
+				onclick={() => then((source) => (accessFor = source))}
+			/>
+			{#if run && !kept}
+				<ActionCard
+					icon="report"
+					label="Report"
+					onclick={() =>
+						then((source) => {
+							// read now: once the sheet is closed, its own `run` is gone with it
+							const last = lastRun(source.id);
+							if (last) reportFor = { run: last, label: source.label };
+						})}
+				/>
+			{/if}
+			{#if open.kind !== 'inbox' && !kept}
+				<ActionCard
+					icon="power"
+					label={open.enabled ? 'Pause checking' : 'Resume checking'}
+					onclick={() => open && toggle(open)}
+				/>
+			{/if}
+			{#if open.kind !== 'inbox'}
+				<ActionCard
+					icon="x"
+					label={kept ? 'Remove' : 'Stop watching'}
+					onclick={() => then((source) => (stopping = source))}
+				/>
+			{/if}
+		</ActionCards>
+		{#if !kept}
+			<label class="field">
+				Check by itself
+				<select
+					value={open.recheck}
+					onchange={(e) =>
+						open && setRecheck(open, e.currentTarget.value as Recheck, e.currentTarget)}
+				>
+					<option value="off">Off</option>
+					<option value="hourly">Every hour</option>
+					<option value="daily">Every day</option>
+					<option value="weekly">Every week</option>
+				</select>
+			</label>
+			{#if open.next_check_at}<p class="quiet small">{nextCheckText(open.next_check_at)}</p>{/if}
+		{/if}
+	</Dialog>
 {/if}
 
 {#if adding}
@@ -285,63 +304,25 @@
 {/if}
 
 <style>
-	header button,
-	.actions button {
-		color: var(--ink-2);
-	}
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	li {
-		padding: var(--s-3) 0;
-		border-bottom: 1px solid var(--hairline);
-	}
-	li:last-child {
-		border-bottom: 0;
-	}
-	li.off .name span:first-child {
-		color: var(--ink-2);
-	}
-	.name {
-		display: flex;
-		gap: var(--s-1) var(--s-3);
-		align-items: baseline;
-		flex-wrap: wrap;
-		margin-bottom: var(--s-1);
-	}
-	.name span:first-child {
-		font-weight: 600;
-	}
-	.path {
-		font-family: var(--font-data);
-		font-stretch: 80%;
-		overflow-wrap: anywhere;
-	}
-	.auto {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0 var(--s-3);
-		margin-top: var(--s-1);
-	}
-	.auto label {
-		display: flex;
-		align-items: baseline;
-		gap: var(--s-2);
-	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0 2px;
-		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
+	.label-actions {
+		display: inline-flex;
+		align-items: center;
+		margin: calc(-1 * var(--s-2)) calc(-1 * var(--s-2)) calc(-1 * var(--s-2)) 0;
 	}
 	.hint {
-		margin: var(--s-1) 0 0;
+		margin: var(--s-2) var(--s-4) 0;
 	}
-	.live,
+	p {
+		margin: 0 0 var(--s-2);
+	}
+	/* The folder on the server: for an admin, in the system's monospace. */
+	.path code {
+		font-family: var(--font-code);
+		font-size: var(--fs-14);
+		overflow-wrap: anywhere;
+	}
 	.problem {
 		color: var(--ink);
+		font-weight: 600;
 	}
 </style>

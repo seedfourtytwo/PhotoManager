@@ -27,6 +27,8 @@ export type Route = [string, RegExp, Handler];
 export const ok = (json: unknown, status = 200): Result => ({ status, json });
 export const noContent: Result = { status: 204 };
 export const nowIso = () => new Date().toISOString().slice(0, 19);
+/** A mock clock reading (ms) as the API writes a time. */
+export const isoAt = (ms: number) => new Date(ms).toISOString().slice(0, 19);
 export const me = (ctx: Ctx) => ctx.user!;
 export const idParam = (ctx: Ctx, i = 0) => Number(ctx.params[i]);
 

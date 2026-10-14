@@ -9,6 +9,7 @@ test.beforeEach(async ({ page }) => {
 test('print an album: choose size and theme, see every page, warnings, then the PDF', async ({
 	page
 }) => {
+	await page.getByRole('button', { name: 'More', exact: true }).click(); // Print waits behind ⋯
 	await page.getByRole('link', { name: 'Print' }).click();
 	await expect(page).toHaveURL(/\/albums\/1\/print$/);
 	await expect(page.getByRole('heading', { name: /Print/ })).toBeVisible();

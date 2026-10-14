@@ -42,6 +42,8 @@
 		onnav?: (id: Id, key: NavKey) => void;
 		/** Accessible name of the grid. */
 		label?: string;
+		/** A few words on a tile ("3 days" in the trash), on a shade at its corner. */
+		note?: (item: AssetOut) => string | undefined;
 	};
 	let {
 		items,
@@ -56,7 +58,8 @@
 		active,
 		onfocusphoto,
 		onnav,
-		label = 'Photos'
+		label = 'Photos',
+		note
 	}: Props = $props();
 
 	let own = $state<Id | null>(null);
@@ -223,6 +226,7 @@
 							d="M8 13.6S2.2 10.1 2.2 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.8 1.2c0 4-5.8 7.5-5.8 7.5z"
 						/></svg
 					>{/if}
+				{#if note?.(item)}<span class="note">{note(item)}</span>{/if}
 				<span class="check" aria-hidden="true"></span>
 			</button>
 		{/if}
@@ -269,27 +273,24 @@
 	img.whole {
 		object-fit: contain;
 	}
-	/* Selection: the accent as an inset frame (a hairline of shade keeps it visible on any
-	   photo); the photo itself stays uncropped and undimmed. */
+	/* Selection: the accent as a 3 px frame inside the photo; the photo itself stays uncropped
+	   and undimmed. */
 	.tile.selected::after {
 		content: '';
 		position: absolute;
 		inset: 0;
-		box-shadow:
-			inset 0 0 0 3px var(--accent),
-			inset 0 0 0 4px var(--photo-shade-25);
+		box-shadow: inset 0 0 0 3px var(--accent);
 	}
+	/* The circle that chooses: a 2 px white ring round a shade, readable on any photo. */
 	.check {
 		position: absolute;
 		top: var(--s-2);
 		left: var(--s-2);
-		width: 20px;
-		height: 20px;
+		width: 22px;
+		height: 22px;
 		border-radius: 50%;
-		box-sizing: border-box;
-		border: 1.5px solid var(--on-photo);
-		background: var(--photo-shade-18) center / 14px no-repeat;
-		box-shadow: 0 0 0 1px var(--photo-shade-20);
+		background: var(--photo-shade-55) center / 14px no-repeat;
+		box-shadow: inset 0 0 0 var(--fine) var(--on-photo);
 		opacity: 0;
 		transition: opacity var(--motion) var(--ease);
 	}
@@ -306,7 +307,7 @@
 	.tile.selected .check {
 		background-color: var(--accent);
 		background-image: var(--check);
-		border-color: var(--accent);
+		box-shadow: none;
 		opacity: 1;
 	}
 	.fav {
@@ -317,6 +318,19 @@
 		height: 14px;
 		fill: var(--on-photo);
 		filter: drop-shadow(0 0 1.5px var(--photo-shade-55));
+	}
+	.note {
+		position: absolute;
+		left: var(--s-1);
+		bottom: var(--s-1);
+		padding: 0 var(--s-2);
+		border-radius: var(--r-pill);
+		background: var(--photo-shade-55);
+		color: var(--on-photo);
+		font-size: var(--fs-12);
+		font-weight: 600;
+		line-height: var(--lh-ui);
+		white-space: nowrap;
 	}
 	@media (hover: none) {
 		.check {

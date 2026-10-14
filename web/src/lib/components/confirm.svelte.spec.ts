@@ -44,7 +44,13 @@ describe('Devices: Revoke', () => {
 		);
 		render(Devices);
 		const deletes = () => calls.filter((c) => c.method === 'DELETE');
-		await page.getByRole('button', { name: 'Revoke' }).click();
+		// Revoke sits in the phone's own sheet, under what it keeps.
+		const revoke = async () => {
+			await page.getByRole('button', { name: /^Léa’s iPhone/ }).click();
+			const sheet = page.getByRole('dialog', { name: 'Léa’s iPhone' });
+			await sheet.getByRole('button', { name: /^Revoke/ }).click();
+		};
+		await revoke();
 		const confirm = page.getByRole('dialog', { name: 'Revoke “Léa’s iPhone”?' });
 		await expect.element(confirm.getByText(/cannot be shown again/)).toBeInTheDocument();
 		expect(deletes()).toHaveLength(0);
@@ -52,7 +58,7 @@ describe('Devices: Revoke', () => {
 		await expect.element(confirm).not.toBeInTheDocument();
 		expect(deletes()).toHaveLength(0);
 
-		await page.getByRole('button', { name: 'Revoke' }).click();
+		await revoke();
 		await confirm.getByRole('button', { name: 'Revoke' }).click();
 		await vi.waitFor(() =>
 			expect(deletes()).toEqual([{ method: 'DELETE', url: '/api/devices/4' }])
@@ -94,12 +100,13 @@ describe('Devices: what a phone keeps', () => {
 					}
 		);
 		render(Devices);
+		await page.getByRole('button', { name: /^Léa’s iPhone/ }).click();
 		const keeps = page.getByRole('group', { name: 'What Léa’s iPhone keeps' });
-		await expect.element(keeps.getByText('Summer')).toBeInTheDocument();
+		await expect.element(keeps.getByText('Summer', { exact: true })).toBeInTheDocument();
 		await expect
-			.element(keeps.getByText(/38 photos · 76.0 MB · 12 sent · last synced/))
+			.element(keeps.getByText(/38 photos, 76.0 MB, 12 sent, last synced/))
 			.toBeInTheDocument();
-		await keeps.getByRole('checkbox', { name: 'Leave out screenshots' }).click();
+		await keeps.getByRole('switch', { name: 'Leave out screenshots' }).click();
 		await vi.waitFor(() =>
 			expect(calls.filter((c) => c.method === 'POST')).toEqual([
 				{ method: 'POST', url: '/api/devices/4/sync/rules' }

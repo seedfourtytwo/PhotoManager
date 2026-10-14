@@ -19,10 +19,12 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
-/* The look's text-size dial (lib/look/apply.ts). Sizes and spaces are in rem, so the whole
-   page follows the root; --target stays in pixels. */
+/* The root is the browser's own text size (1rem: 16 px unless the reader chose another) times
+   the look's text-size dial (lib/look/apply.ts). Sizes and spaces are in rem, so the whole
+   page follows it and a token renders at the pixels its name says; --target stays in pixels.
+   The interface text on it is the body's 14. */
 html {
-	font-size: calc(var(--fs-14) * var(--text-scale, 1));
+	font-size: calc(var(--fs-16) * var(--text-scale, 1));
 }
 
 ::selection {
@@ -46,7 +48,6 @@ h2 {
 	font-family: var(--font-title);
 	font-weight: var(--title-weight);
 	font-optical-sizing: auto;
-	letter-spacing: -0.02em;
 }
 h1 {
 	font-size: var(--fs-28);
@@ -55,13 +56,12 @@ h2 {
 	font-size: var(--fs-20);
 }
 
-/* Group labels inside panels and forms: small sans, sentence case, secondary value. */
+/* Group labels above a group of rows or fields: sentence case, secondary value. */
 h3 {
 	font-family: var(--font-ui);
-	font-size: var(--fs-12);
-	font-weight: 600;
+	font-size: var(--fs-14);
+	font-weight: 650;
 	color: var(--ink-2);
-	letter-spacing: 0.01em;
 }
 
 p {
@@ -78,18 +78,18 @@ a:hover {
 	text-decoration-color: currentColor;
 }
 
+/* A command or a path an admin reads: the system's monospace, the only one in the app. */
 code,
 kbd {
-	font-family: var(--font-data);
+	font-family: var(--font-code);
 	font-size: 0.92em;
-	font-stretch: 80%;
 }
 
-/* Data: dates, counts, camera settings, file names. Never for a control or a sentence. */
+/* Data: dates, counts, camera settings, file names. The reading face with its figures lined
+   up; it stays a class so data can be found and restyled in one place. */
 .data {
 	font-family: var(--font-data);
-	font-stretch: 80%;
-	letter-spacing: 0.02em;
+	font-variant-numeric: tabular-nums;
 }
 
 :focus-visible {

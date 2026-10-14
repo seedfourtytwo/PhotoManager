@@ -23,6 +23,7 @@ from photo_assistant.adapters.sqlite_database import Database, open_database
 from photo_assistant.adapters.sqlite_database import migrations as _migrations
 from photo_assistant.adapters.sqlite_edits import EditsMixin
 from photo_assistant.adapters.sqlite_enrich import EnrichMixin
+from photo_assistant.adapters.sqlite_home import HomeMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
 from photo_assistant.adapters.sqlite_review import ReviewMixin
 from photo_assistant.adapters.sqlite_trash import TrashMixin
@@ -83,6 +84,7 @@ class SqliteRepository(
     AccountsMixin,
     AccessMixin,
     LibraryMixin,
+    HomeMixin,
     AlbumsMixin,
     EditsMixin,
     EnrichMixin,

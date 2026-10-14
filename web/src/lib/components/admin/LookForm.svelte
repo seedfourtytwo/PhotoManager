@@ -19,7 +19,6 @@
 	 * One account's look, set by an admin (spec 2026-10-08 §5): every field of the sheet is a
 	 * control with its range or its choices, so nothing can be typed that the server would
 	 * refuse. "Try on my screen" shows the sheet here without saving; "Save for …" stores it.
-	 * Not in the form: the two Today switches, which wait for the Today page.
 	 */
 	let { user, onclose }: { user: ManagedUser; onclose: () => void } = $props();
 
@@ -229,6 +228,30 @@
 		</fieldset>
 
 		<fieldset>
+			<legend>Home</legend>
+			<label class="choice">
+				<input
+					type="checkbox"
+					checked={current.showToday}
+					onchange={(e) => set({ showToday: e.currentTarget.checked })}
+				/>
+				Show Home
+			</label>
+			<!-- Without Home there is only Library to open on (the sheet's own rule). -->
+			<label class="field opens">
+				Opens on
+				<select
+					value={current.startPage}
+					disabled={!current.showToday}
+					onchange={(e) => set({ startPage: e.currentTarget.value as Look['startPage'] })}
+				>
+					<option value="today">Home</option>
+					<option value="library">Library</option>
+				</select>
+			</label>
+		</fieldset>
+
+		<fieldset>
 			<legend>Phone</legend>
 			<label class="choice">
 				<input
@@ -285,8 +308,12 @@
 		text-align: right;
 		font-size: var(--fs-12);
 	}
-	.size {
+	.size,
+	.opens {
 		max-width: 50%;
+	}
+	.opens {
+		margin-top: var(--s-2);
 	}
 	ul {
 		list-style: none;

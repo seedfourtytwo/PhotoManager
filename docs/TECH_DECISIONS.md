@@ -5,7 +5,7 @@ Researched September 2026; versions pinned at M1 kickoff.
 
 ## Build vs adopt
 
-**Decision:** our own app. We *borrow ideas* from Immich and PhotoPrism (both open source,
+**Decision:** our own app. We _borrow ideas_ from Immich and PhotoPrism (both open source,
 both mature) but do not build on them.
 **Why:** our differentiator is albums, print and the AI album planner, plus a quiet
 Tufte-style UI. Immich is a large Postgres + Redis + multi-container stack optimised for
@@ -64,16 +64,16 @@ in this codebase, and plain SQL keeps the schema readable.
 - **imagehash** + **Pillow** — 64-bit pHash of each thumbnail for near-duplicates
   (≤ 6 bits within 10 min) next to bursts (same camera within 3 s).
 - **zipstream-ng** — ZIPs streamed while sent, entries stored (not deflated).
-- ExifTool (already installed) strips location/metadata from *temporary copies* for downloads.
+- ExifTool (already installed) strips location/metadata from _temporary copies_ for downloads.
 
 ## Local ML: ONNX Runtime (CUDA on the RTX 2070, CPU fallback)
 
-| Task | Model | Notes |
-|---|---|---|
-| Semantic search / auto-tags | CLIP-family ONNX export (e.g. Immich's ViT-B-32 or a multilingual M-CLIP variant for French + English queries) | Choose by benchmark on our own photos in M3 |
-| Face detect + embed | **InsightFace `buffalo_l`** (chosen 2026-09-29 for accuracy) | Weights are **non-commercial research only**: fine for a private family library, never for anything we distribute. Downloaded on first run, never committed or bundled. YuNet + SFace (Apache-2.0) stays as a switchable fallback behind the same port. |
-| Clustering | DBSCAN-style incremental clustering (as Immich does) | Pure-Python domain logic, unit tested |
-| Geocoding | `reverse_geocoder` / GeoNames offline dump | No network |
+| Task                        | Model                                                                                                          | Notes                                                                                                                                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Semantic search / auto-tags | CLIP-family ONNX export (e.g. Immich's ViT-B-32 or a multilingual M-CLIP variant for French + English queries) | Choose by benchmark on our own photos in M3                                                                                                                                                                                                             |
+| Face detect + embed         | **InsightFace `buffalo_l`** (chosen 2026-09-29 for accuracy)                                                   | Weights are **non-commercial research only**: fine for a private family library, never for anything we distribute. Downloaded on first run, never committed or bundled. YuNet + SFace (Apache-2.0) stays as a switchable fallback behind the same port. |
+| Clustering                  | DBSCAN-style incremental clustering (as Immich does)                                                           | Pure-Python domain logic, unit tested                                                                                                                                                                                                                   |
+| Geocoding                   | `reverse_geocoder` / GeoNames offline dump                                                                     | No network                                                                                                                                                                                                                                              |
 
 Python dependencies for local ML (added 2026-09-30, branch `feat/ml`): `onnxruntime` (runs
 CLIP, SCRFD and ArcFace directly — no `insightface` package, which pulls in a large build
@@ -100,13 +100,13 @@ no network and no model). Added 2026-09-29.
 
 ## Sources
 
-| Source | Tool | Status / caveats |
-|---|---|---|
-| Local folder / external disk | direct | Primary path, M1 |
-| MEGA | `rclone` mega backend | Works; rclone docs warn MEGA may block logins under heavy use → throttle (`--tpslimit`), pull once into staging |
-| Proton Drive | Proton's official `proton-drive` CLI (v0.9.0+), not rclone | Signs in through a browser on the machine and keeps its session in the system keyring, so the app never sees or stores the Proton password (rclone's reverse-engineered backend needs it, and cannot read the Photos section). Reads both the Photos section and "My files". We only ever build its list and download commands. It has no incremental copy, so the adapter keeps its own list of fetched items (`adapters/proton_drive.py`). Open: how long a session lasts unattended. |
-| iPhone | `libimobiledevice` + `ifuse` (USB/Wi-Fi) or iCloud "Download originals" folder | Wireless ADB does not apply to iPhone |
-| Android | `adb pull /sdcard/DCIM` over wireless debugging | Could-have |
+| Source                       | Tool                                                                           | Status / caveats                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local folder / external disk | direct                                                                         | Primary path, M1                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| MEGA                         | `rclone` mega backend                                                          | Works; rclone docs warn MEGA may block logins under heavy use → throttle (`--tpslimit`), pull once into staging                                                                                                                                                                                                                                                                                                                                                                         |
+| Proton Drive                 | Proton's official `proton-drive` CLI (v0.9.0+), not rclone                     | Signs in through a browser on the machine and keeps its session in the system keyring, so the app never sees or stores the Proton password (rclone's reverse-engineered backend needs it, and cannot read the Photos section). Reads both the Photos section and "My files". We only ever build its list and download commands. It has no incremental copy, so the adapter keeps its own list of fetched items (`adapters/proton_drive.py`). Open: how long a session lasts unattended. |
+| iPhone                       | `libimobiledevice` + `ifuse` (USB/Wi-Fi) or iCloud "Download originals" folder | Wireless ADB does not apply to iPhone                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Android                      | `adb pull /sdcard/DCIM` over wireless debugging                                | Could-have                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 All sources are **pull-only** into `staging/`; the import step is the same for all.
 
@@ -114,6 +114,7 @@ All sources are **pull-only** into `staging/`; the import step is the same for a
 
 **Why:** small bundles and fast rendering on phones; one responsive codebase for laptop and
 mobile; installable as a PWA (no app-store work). Built as static files served by FastAPI.
+
 - Virtualised justified grid (own component, tested) — the core performance piece.
 - No runtime dependencies at all (`web/package.json` has only `devDependencies`): everything
   below is our own code.
@@ -125,7 +126,7 @@ mobile; installable as a PWA (no app-store work). Built as static files served b
 - API client and types written by hand (`web/src/lib/api/client.ts`, `types.ts`) from
   `docs/contracts/api-v1.md`; a backend test checks every route in that contract exists
   (`tests/api/test_contract.py`). Not generated: `openapi-typescript` is not used.
-**Rejected:** React (heavier, no clear gain here), native mobile apps (later, if ever).
+  **Rejected:** React (heavier, no clear gain here), native mobile apps (later, if ever).
 
 ## Print: Typst (via `typst` Python package)
 
@@ -170,13 +171,14 @@ on iOS, so this is the only free automatic route without our own app.
 **Rejected for now:** PhotoSync Premium (paid); own iOS app (needs the $99/yr Apple Developer
 Program, or re-signing every 7 days with a free Apple ID). If built later: Capacitor around the
 same SvelteKit UI, so it has every web feature.
-**Upload parsing:** `python-multipart` (the parser FastAPI itself uses), driven as a *streaming*
+**Upload parsing:** `python-multipart` (the parser FastAPI itself uses), driven as a _streaming_
 parser so each file goes straight to `data/tmp`, hashed as it arrives and cut off at the size
 limit, instead of being spooled whole to the system temp folder first. Added 2026-09-29.
 
 ## Concurrency, jobs and rendering (fix/backend, 2026-10-02)
 
 No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
+
 - **One `Database` per process** (`adapters/sqlite_database.py`): one writer connection and one
   lock shared by every store, per-thread read-only WAL connections for reads. Replaces one
   connection + RLock per store (several locks on one connection could interleave transactions).
@@ -193,23 +195,26 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 
 ## Tooling
 
-| Concern | Tool |
-|---|---|
-| Task runner | `just` |
-| Python lint/format/types | ruff, ruff format, mypy strict (the whole package), pyright in editor OK |
-| Python tests | pytest, hypothesis, pytest-cov, import-linter; PyYAML (reads `deploy/compose.yml` in the deploy tests); `httpx2` is the transport of Starlette ≥ 1.x's `TestClient` (with plain `httpx` it warns, an error under our warning filter) — kept on purpose (reviewed 2026-10-02, B20) |
-| Web lint/format/types | eslint, prettier, svelte-check, TypeScript strict |
-| Web tests | Vitest in browser mode (`vitest-browser-svelte` on `@vitest/browser-playwright`), Playwright (E2E, mobile + desktop viewports), axe-core (`@axe-core/playwright`) |
-| Pre-commit | pre-commit (ruff, prettier + eslint, gitleaks, no large files) |
-| CI | GitHub Actions (`.github/workflows/ci.yml`), on every pull request and on main: backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step: `just e2e` and `just e2e-mock` run locally |
-| Versioning | Conventional Commits. No release tooling yet |
+| Concern                  | Tool                                                                                                                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task runner              | `just`                                                                                                                                                                                                                                                                            |
+| Python lint/format/types | ruff, ruff format, mypy strict (the whole package), pyright in editor OK                                                                                                                                                                                                          |
+| Python tests             | pytest, hypothesis, pytest-cov, import-linter; PyYAML (reads `deploy/compose.yml` in the deploy tests); `httpx2` is the transport of Starlette ≥ 1.x's `TestClient` (with plain `httpx` it warns, an error under our warning filter) — kept on purpose (reviewed 2026-10-02, B20) |
+| Web lint/format/types    | eslint, prettier, svelte-check, TypeScript strict                                                                                                                                                                                                                                 |
+| Web tests                | Vitest in browser mode (`vitest-browser-svelte` on `@vitest/browser-playwright`), Playwright (E2E, mobile + desktop viewports), axe-core (`@axe-core/playwright`)                                                                                                                 |
+| Pre-commit               | pre-commit (ruff, prettier + eslint, gitleaks, no large files)                                                                                                                                                                                                                    |
+| CI                       | GitHub Actions (`.github/workflows/ci.yml`), on every pull request and on main: backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step: `just e2e` and `just e2e-mock` run locally                            |
+| Versioning               | Conventional Commits. No release tooling yet                                                                                                                                                                                                                                      |
 
-## Typefaces (decided 2026-10-08)
+## Typefaces (decided 2026-10-14)
 
-Hanken Grotesk (sans, variable weight) for everything you read or operate, including titles;
-Martian Mono (variable weight and width, set at 80 % width) for data: dates, counts, camera
-settings, file names, system status. Newsreader (serif, optical sizes) stays as the title face
-of the Album theme. All SIL Open Font License; the woff2 files and licences are vendored in
+Atkinson Hyperlegible Next (variable weight 200–800, Braille Institute) for everything you read
+or operate, titles and data included (tabular figures). Chosen by C for the redesign of
+2026-10-14: drawn for readers with low vision, so a later Larger text mode for C's parents
+starts from a legible face. Newsreader (serif, optical sizes) stays as the title face of the
+Album theme. A command or path an admin reads uses the system monospace. All SIL Open Font
+License; the woff2 files (from Fontsource 5.3.0) and licences are vendored in
 `web/static/fonts/`, served by the app itself — no font CDN, nothing fetched at runtime.
-Fallbacks: the system sans, the system monospace, Iowan/Charter/Georgia.
-Replaced Instrument Sans (2026-10-02) in the 2026-10-08 redesign.
+Fallbacks: the system sans, Iowan/Charter/Georgia.
+Replaced Hanken Grotesk and Martian Mono (2026-10-08), which had replaced Instrument Sans
+(2026-10-02).

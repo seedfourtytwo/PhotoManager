@@ -23,6 +23,9 @@ def test_an_empty_filter_is_fine() -> None:
         (AssetFilter(year=0), "year"),
         (AssetFilter(from_day=date(2020, 1, 2), to_day=date(2020, 1, 1)), "before"),
         (AssetFilter(q="x" * 201), "too long"),
+        (AssetFilter(source_ids=(0,)), "no such source"),
+        (AssetFilter(person_ids=(0,)), "no such person"),
+        (AssetFilter(person_ids=(2**63,)), "no such person"),
     ],
 )
 def test_contradictions_are_explained(f: AssetFilter, message: str) -> None:

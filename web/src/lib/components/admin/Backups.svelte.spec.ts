@@ -107,18 +107,18 @@ describe('the Proton Drive copy row', () => {
 	it('is up to date', async () => {
 		render(Backups, props([withCopy({})]));
 		await expect
-			.element(page.getByText(/Copy on Proton Drive · My files \/ Backup · up to date 1 Oct 2026/))
+			.element(page.getByText(/Copy on Proton Drive, My files \/ Backup, up to date 1 Oct 2026/))
 			.toBeVisible();
 		expect(page.getByRole('img', { name: 'ok' }).elements()).toHaveLength(2);
 	});
 	it('waits to go online', async () => {
 		render(Backups, props([withCopy({ last_success_at: '2026-10-02T02:30:00' })]));
-		await expect.element(page.getByText(/· waiting to go online/)).toBeVisible();
+		await expect.element(page.getByText(/, waiting to go online/)).toBeVisible();
 		await expect.element(page.getByRole('img', { name: 'not connected' })).toBeVisible();
 	});
 	it('failed, with its reason', async () => {
 		render(Backups, props([withCopy({ mirror_error: 'sign in again' })]));
-		await expect.element(page.getByText(/· failed: sign in again/)).toBeVisible();
+		await expect.element(page.getByText(/, failed: sign in again/)).toBeVisible();
 		await expect.element(page.getByRole('img', { name: 'needs attention' })).toBeVisible();
 	});
 	it('is the first copy, after the next backup', async () => {
@@ -126,10 +126,10 @@ describe('the Proton Drive copy row', () => {
 			Backups,
 			props([withCopy({ last_mirror_at: null, last_success_at: null, last_run: null })])
 		);
-		await expect.element(page.getByText(/· first copy after the next backup/)).toBeVisible();
+		await expect.element(page.getByText(/, first copy after the next backup/)).toBeVisible();
 	});
 	it('says the first copy is not made yet once a backup exists', async () => {
 		render(Backups, props([withCopy({ last_mirror_at: null })]));
-		await expect.element(page.getByText(/· first copy not made yet/)).toBeVisible();
+		await expect.element(page.getByText(/, first copy not made yet/)).toBeVisible();
 	});
 });

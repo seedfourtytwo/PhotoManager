@@ -26,7 +26,7 @@ describe('summarizeUpload', () => {
 					['notes.txt', 'rejected', 'not a photo']
 				])
 			)
-		).toBe('2 photos added · 1 already in the library · 1 refused (notes.txt: not a photo)');
+		).toBe('2 photos added, 1 already in the library, 1 refused (notes.txt: not a photo)');
 	});
 
 	it('says one photo in the singular and nothing for empty parts', () => {

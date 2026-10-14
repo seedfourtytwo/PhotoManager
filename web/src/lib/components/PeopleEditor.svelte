@@ -51,11 +51,13 @@
 {/snippet}
 
 {#if list}
-	<ul>
-		{#each people as entry, i (entry.user_id)}
-			<li>{@render person(entry, i)}</li>
-		{/each}
-	</ul>
+	{#if people.length}
+		<ul class="tiles">
+			{#each people as entry, i (entry.user_id)}
+				<li class="tile-row">{@render person(entry, i)}</li>
+			{/each}
+		</ul>
+	{/if}
 	<div class="add">{@render adder()}</div>
 {:else}
 	{#each people as entry, i (entry.user_id)}
@@ -84,20 +86,18 @@
 			grid-column: 1 / -1;
 		}
 	}
+	/* One tile per person, on the sheet's fill; space, not lines, between them. */
 	ul {
-		list-style: none;
-		padding: 0;
 		margin: var(--s-3) 0;
 	}
 	li {
 		display: grid;
 		grid-template-columns: 1fr auto auto;
-		align-items: center;
-		gap: var(--s-3);
-		border-bottom: 1px solid var(--hairline);
+		gap: var(--s-2);
+		padding-block: var(--s-1);
 	}
-	li select {
-		border-bottom: 0;
+	li > span {
+		overflow-wrap: anywhere;
 	}
 	li button {
 		color: var(--ink-2);

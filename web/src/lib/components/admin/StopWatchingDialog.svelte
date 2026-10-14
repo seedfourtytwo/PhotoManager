@@ -81,20 +81,24 @@
 			{/if}
 		</p>
 		<fieldset>
-			<legend>Photos found only here</legend>
-			{#each choices as pick (pick.value)}
-				<label>
-					<input
-						type="radio"
-						name="only-here"
-						value={pick.value}
-						bind:group={choice}
-						aria-describedby={`sw-${pick.value}`}
-					/>
-					<span>{pick.label}</span>
-					<span id={`sw-${pick.value}`} class="quiet small">{pick.about}</span>
-				</label>
-			{/each}
+			<legend class="quiet small">Photos found only here</legend>
+			<div class="tiles">
+				{#each choices as pick (pick.value)}
+					<label class="tile-row">
+						<input
+							type="radio"
+							name="only-here"
+							value={pick.value}
+							bind:group={choice}
+							aria-describedby={`sw-${pick.value}`}
+						/>
+						<span class="tile-main">
+							<span class="tile-title">{pick.label}</span>
+							<span id={`sw-${pick.value}`} class="tile-line">{pick.about}</span>
+						</span>
+					</label>
+				{/each}
+			</div>
 		</fieldset>
 	{/if}
 	{#snippet actions()}
@@ -112,17 +116,21 @@
 		border: 0;
 		margin: 0;
 		padding: 0;
-		display: grid;
-		gap: var(--s-2);
 	}
-	label {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		column-gap: var(--s-2);
-		align-items: baseline;
-		color: var(--ink);
+	legend {
+		padding: 0 0 var(--s-2);
 	}
-	label .small {
-		grid-column: 2;
+	/* Each choice is a tile; the picked one says so in its title as well as its radio. */
+	.tile-row {
+		cursor: pointer;
+		padding-block: var(--s-3);
+	}
+	.tile-row input {
+		flex: none;
+		margin: 0;
+		accent-color: var(--accent);
+	}
+	.tile-row:has(input:not(:checked)) .tile-title {
+		font-weight: 400;
 	}
 </style>

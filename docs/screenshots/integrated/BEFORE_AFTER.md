@@ -5,6 +5,11 @@ dark, and `light/` holds the key screens in the light theme. They are all synthe
 mock library). The earlier set is in git at `1e3007a` (`git show 1e3007a:docs/screenshots/integrated/<file>`).
 `docs/DESIGN_PRINCIPLES.md` §2 has the resulting tokens and component rules.
 
+The whole set was rendered again when the root text size became the browser's 16 px: until
+then it was 14 px, and type and spacing showed at 14/16 of the sizes in the design tables
+(interface text 12.25 px for 14, a page title 24.5 px for 28). Photos are no smaller for it:
+the laptop's side column is still 224 px.
+
 > **Rows marked † are superseded** by the redesign that followed
 > (`docs/superpowers/specs/2026-10-08-ui-redesign-design.md`); the table is kept as the record
 > of this review. The rail became a top bar on a laptop and a floating dock on a phone, with
@@ -14,6 +19,12 @@ mock library). The earlier set is in git at `1e3007a` (`git show 1e3007a:docs/sc
 > accent. The screenshots in this folder are taken from the app as it is, so they show the
 > redesign and no longer the "After" column of the marked rows; `DESIGN_PRINCIPLES.md` §2
 > describes today's look.
+>
+> **Redesign 2** (`docs/superpowers/specs/2026-10-14-ui-redesign-2-design.md`) followed: one
+> typeface, Atkinson Hyperlegible Next, for titles, text and figures (Hanken Grotesk and Martian
+> Mono are gone); no borders, capitals or letter-spacing; filters as chips; Home opens the app.
+> The set was rendered again for it: `00-home` and `00b-story` (the story player) are new,
+> `21-phone-sheet` replaces the account menu, which became You (`16-settings`).
 
 | Area | Before | After |
 |---|---|---|

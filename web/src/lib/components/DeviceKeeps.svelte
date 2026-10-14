@@ -1,10 +1,13 @@
 <script lang="ts">
-	/** One device's "Keep on my phone" list in Settings: what it keeps, what it leaves off,
-	 * how big it is and when the device last asked for it (FEATURES 10.6). */
+	/** One phone's "Keep on my phone" list, in its sheet on You: what it keeps, what it leaves
+	 * off, how big it is and when the phone last asked for it (FEATURES 10.6). */
 	import type { DeviceSync, Id, SyncRule } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { formatBytes, formatWhen, photos } from '$lib/format';
 	import { SCREENSHOTS, ruleFor, ruleLabel, splitRules, viewOnlyNote } from '$lib/keep';
+	import IconButton from './ui/IconButton.svelte';
+	import TileGroup from './ui/TileGroup.svelte';
+	import TileRow from './ui/TileRow.svelte';
 
 	let { deviceId }: { deviceId: Id } = $props();
 	let sync = $state<DeviceSync | null>(null);
@@ -59,91 +62,70 @@
 </script>
 
 {#if sync}
-	<div class="keeps" aria-label={`What ${sync.device.name} keeps`} role="group">
+	<div aria-label={`What ${sync.device.name} keeps`} role="group">
+		<p class="quiet data">
+			{photos(sync.count)}, {formatBytes(sync.bytes)}, {sync.sent} sent, {lastSync}
+		</p>
 		{#if !sync.rules.length}
-			<p class="quiet small">
+			<p class="quiet">
 				Keeps nothing yet. Choose Keep on phone on an album, a person, a search or the library's
 				filters.
 			</p>
 		{/if}
 		{#each [{ title: 'Keeps', rules: groups.keeps }, { title: 'Leaves off', rules: groups.leavesOff }] as group (group.title)}
 			{#if group.rules.length}
-				<h3>{group.title}</h3>
-				<ul>
+				<TileGroup label={group.title}>
 					{#each group.rules as rule (rule.id)}
-						<li>
-							<span class:quiet={rule.gone}>{ruleLabel(rule)}</span>
-							<span class="quiet small data">{photos(rule.count)}</span>
-							<button
-								type="button"
-								disabled={busy}
-								aria-label={`Remove ${ruleLabel(rule)}`}
-								onclick={() => drop(rule)}>Remove</button
-							>
-							{#if viewOnlyNote(rule)}<p class="small note">{viewOnlyNote(rule)}</p>{/if}
-						</li>
+						<TileRow
+							title={ruleLabel(rule)}
+							line={viewOnlyNote(rule) ?? undefined}
+							value={photos(rule.count)}
+						>
+							{#snippet trailing()}
+								<IconButton
+									icon="x"
+									label={`Remove ${ruleLabel(rule)}`}
+									disabled={busy}
+									onclick={() => drop(rule)}
+								/>
+							{/snippet}
+						</TileRow>
 					{/each}
-				</ul>
+				</TileGroup>
 			{/if}
 		{/each}
-		<p class="quiet small data">
-			{photos(sync.count)} · {formatBytes(sync.bytes)} · {sync.sent} sent · {lastSync}
-		</p>
-		<div class="tools">
-			<label class="choice small">
-				<input
-					type="checkbox"
-					checked={screenshotsOff}
-					disabled={busy}
-					onchange={toggleScreenshots}
-				/>
-				Leave out screenshots
-			</label>
-			<button type="button" disabled={busy || !sync.sent} onclick={resend}
-				>Send everything again</button
-			>
+		<div class="apart">
+			<TileGroup>
+				<label class="tile-row">
+					<span class="tile-main"><span class="tile-title">Leave out screenshots</span></span>
+					<input
+						type="checkbox"
+						role="switch"
+						checked={screenshotsOff}
+						disabled={busy}
+						onchange={toggleScreenshots}
+					/>
+				</label>
+				{#if sync.sent}
+					<TileRow
+						icon="refresh"
+						title="Send everything again"
+						line="The next sync sends every kept photo again"
+						onclick={resend}
+					>
+						{#snippet trailing()}{/snippet}
+					</TileRow>
+				{/if}
+			</TileGroup>
 		</div>
 	</div>
 {/if}
 
 <style>
-	.keeps {
-		flex-basis: 100%;
-		padding-left: var(--s-4);
-	}
-	h3 {
-		margin: var(--s-2) 0 0;
-	}
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	li {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--s-1) var(--s-3);
-		align-items: baseline;
-		padding: var(--s-1) 0;
-	}
-	.note {
-		flex-basis: 100%;
-		margin: 0;
-	}
-	li button {
-		margin-left: auto;
-		color: var(--ink-2);
-	}
 	p {
-		margin: var(--s-1) 0;
+		margin: 0 0 var(--s-2);
 	}
-	.tools {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--s-1) var(--s-4);
-	}
-	.tools button {
-		color: var(--ink-2);
+	.apart {
+		margin-top: var(--s-5);
 	}
 </style>

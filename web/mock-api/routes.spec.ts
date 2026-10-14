@@ -3,7 +3,7 @@
  * and the M2-integration rules, exercised through the typed client against the mock.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { DownloadRequest } from '../src/lib/api/index.ts';
+import type { AssetFilters, DownloadRequest } from '../src/lib/api/index.ts';
 import { startMock, type Harness } from './harness.ts';
 
 let h: Harness;
@@ -107,6 +107,59 @@ describe('integration rules', () => {
 		const response = await api.raw('/api/nothing-here');
 		expect(response.status).toBe(404);
 		expect(await response.json()).toEqual({ detail: expect.any(String) });
+	});
+});
+
+describe('the person filter and pinned photos', () => {
+	it('narrows the library to photos with any of the given people on them', async () => {
+		const api = await h.signedIn();
+		const [a, b] = await api.people();
+		const ids = async (filters: AssetFilters) =>
+			new Set((await api.assets(filters, null, 500)).items.map((x) => x.id));
+		const theirs = async (id: number) =>
+			(await api.personAssets(id, null, 500)).items.map((x) => x.id);
+		expect(await ids({ person_id: [a.id] })).toEqual(new Set(await theirs(a.id)));
+		const either = new Set([...(await theirs(a.id)), ...(await theirs(b.id))]);
+		expect(await ids({ person_id: [a.id, b.id] })).toEqual(either);
+		expect((await api.facets({ person_id: [a.id] })).total).toBe(a.asset_count);
+		expect(await ids({ person_id: [999] })).toEqual(new Set());
+	});
+
+	it('pins photos for one account only, through the state routes', async () => {
+		const api = await h.signedIn();
+		const partner = await h.signedIn('partner', '2345');
+		const before = (await api.assets({ pinned: true }, null, 500)).items.map((x) => x.id);
+		const [x, y] = (await api.assets({ pinned: false }, null, 2)).items;
+		expect((await api.setState(x.id, { pinned: true })).pinned).toBe(true);
+		expect(await api.setStates({ ids: [y.id], pinned: true })).toEqual({ updated: 1 });
+		const pinned = (await api.assets({ pinned: true }, null, 500)).items;
+		expect(pinned.map((p) => p.id).sort()).toEqual([...before, x.id, y.id].sort());
+		expect(pinned.every((p) => p.pinned)).toBe(true);
+		expect((await partner.assets({ pinned: true }, null, 500)).items).toEqual([]);
+		expect((await api.setState(x.id, { pinned: false })).pinned).toBe(false);
+	});
+
+	it('leaves photos with a guessed date out when asked to', async () => {
+		const api = await h.signedIn();
+		const real = (await api.assets({ guessed_date: false }, null, 500)).items;
+		expect(real.length).toBeGreaterThan(0);
+		expect(real.some((a) => a.date_source === 'file_mtime')).toBe(false);
+	});
+
+	it('names a ZIP of people or pinned photos after them', async () => {
+		const api = await h.signedIn();
+		const name = async (filters: AssetFilters) =>
+			(
+				await api.raw('/api/downloads', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(zipRequest({ filters }))
+				})
+			).headers.get('content-disposition');
+		expect(await name({ person_id: [1] })).toContain('photos-1-person.zip');
+		expect(await name({ source_id: [1], person_id: [1, 2], pinned: true })).toContain(
+			'photos-1-source-2-people-pinned.zip'
+		);
 	});
 });
 

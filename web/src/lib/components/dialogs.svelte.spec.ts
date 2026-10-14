@@ -169,13 +169,11 @@ describe('DownloadDialog', () => {
 	it('re-estimates as options change and shows count and size', async () => {
 		const sent = stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
 		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
-		await expect
-			.element(page.getByText(/3 selected photos\s+· about 12\.4 MB/))
-			.toBeInTheDocument();
+		await expect.element(page.getByText(/3 selected photos, about 12\.4 MB/)).toBeInTheDocument();
 		await page.getByRole('button', { name: 'More options' }).click();
 		await page.getByRole('radio', { name: 'WebP' }).click();
 		await expect.element(page.getByRole('slider')).toBeInTheDocument();
-		await page.getByRole('radio', { name: '4K · 3840' }).click();
+		await page.getByRole('radio', { name: '4K, 3840' }).click();
 		await vi.waitFor(() =>
 			expect(sent.at(-1)?.body).toMatchObject({ ids: [1, 2, 3], format: 'webp', max_edge: 3840 })
 		);

@@ -2,6 +2,7 @@
 import { goto } from '$app/navigation';
 import { ApiError, type User } from '$lib/api';
 import { look } from '$lib/look';
+import { arrival } from '$lib/start-page.svelte';
 import { api, onUnauthorized } from './api';
 import { library } from './library.svelte';
 
@@ -17,7 +18,16 @@ function currentPath(): string {
 }
 
 /**
- * Where to go after signing in: `next` if it is a path on this site, else the library. The
+ * The sign-in page, coming back to `here` afterwards. A bare `/` as a tab's first page asks
+ * for nothing in particular: the account's start page decides where the app opens
+ * (start-page.svelte). Later in the tab it is the Library someone was looking at.
+ */
+export function signInPath(here: string, arrived: boolean): string {
+	return here === '/' && !arrived ? '/login' : `/login?next=${encodeURIComponent(here)}`;
+}
+
+/**
+ * Where to go after signing in: `next` if it is a path on this site, else `/`. The
  * URL parser decides, because it reads `/\evil.example` as another site, like browsers do.
  */
 function sameSitePath(next: string | null): string {
@@ -53,7 +63,7 @@ class Session {
 		library.forget();
 		look.belongsTo(null);
 		if (isPublicRoute(location.pathname)) return;
-		void goto(`/login?next=${encodeURIComponent(currentPath())}`, { replaceState: true });
+		void goto(signInPath(currentPath(), arrival.done), { replaceState: true });
 	}
 
 	/**
@@ -86,9 +96,11 @@ class Session {
 		}
 	}
 
+	/** A page that was asked for (`next`) is where the session arrives; else its start page. */
 	signedIn(user: User, next: string | null) {
 		this.user = user;
 		library.forget();
+		if (next) arrival.mark();
 		void goto(sameSitePath(next), { replaceState: true });
 	}
 
@@ -97,6 +109,7 @@ class Session {
 		this.user = null;
 		library.forget();
 		look.belongsTo(null);
+		arrival.forget();
 		await goto('/login', { replaceState: true });
 	}
 }

@@ -84,5 +84,5 @@ export function summarizeUpload(result: UploadResult): string {
 		const why = rejected.map((f) => `${f.name}: ${f.reason ?? 'refused'}`).join(', ');
 		parts.push(`${rejected.length} refused (${why})`);
 	}
-	return parts.join(' · ') || 'Nothing was uploaded';
+	return parts.join(', ') || 'Nothing was uploaded';
 }

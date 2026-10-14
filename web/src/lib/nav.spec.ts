@@ -1,16 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { PLACES, accountItems, collectionRows, initialOf } from './nav';
+import {
+	PLACES,
+	attentionOf,
+	backLabel,
+	collectionRows,
+	initialOf,
+	pageMove,
+	placesFor
+} from './nav';
 
 const current = (path: string) => PLACES.find((place) => place.match(path))?.label;
 
 describe('places', () => {
-	it('are Library and Collections, in that order', () => {
-		expect(PLACES.map((place) => [place.label, place.href])).toEqual([
-			['Library', '/'],
-			['Collections', '/collections']
+	it('are Home, Library and Collections, in that order', () => {
+		expect(PLACES.map((place) => [place.label, place.href, place.icon])).toEqual([
+			['Home', '/home', 'home'],
+			['Library', '/', 'library'],
+			['Collections', '/collections', 'collections']
 		]);
 	});
+	it('leave Home out when the look does not show it', () => {
+		expect(placesFor(true)).toEqual(PLACES);
+		expect(placesFor(false).map((place) => place.label)).toEqual(['Library', 'Collections']);
+	});
 	it.each([
+		['/home', 'Home'],
 		['/', 'Library'],
 		['/calendar', 'Library'],
 		['/collections', 'Collections'],
@@ -23,55 +37,17 @@ describe('places', () => {
 	])('%s belongs to %s', (path, label) => {
 		expect(current(path)).toBe(label);
 	});
-	it.each(['/search', '/trash', '/settings', '/admin', '/review', '/albumsx', '/mapping'])(
-		'%s belongs to no place',
-		(path) => {
-			expect(current(path)).toBeUndefined();
-		}
-	);
-});
-
-describe('account menu', () => {
-	const noop = () => {};
-	it('lists To review, Trash, Settings and Sign out for a member', () => {
-		const items = accountItems({ isAdmin: false, waiting: 0 }, '/', noop);
-		expect(items.map((item) => item.label)).toEqual(['To review', 'Trash', 'Settings', 'Sign out']);
-	});
-	it('adds Admin before Sign out for an admin', () => {
-		const items = accountItems({ isAdmin: true, waiting: 0 }, '/', noop);
-		expect(items.map((item) => item.label)).toEqual([
-			'To review',
-			'Trash',
-			'Settings',
-			'Admin',
-			'Sign out'
-		]);
-	});
-	it('carries the number of photos waiting on To review', () => {
-		expect(accountItems({ isAdmin: false, waiting: 4 }, '/', noop)[0]).toMatchObject({
-			href: '/review',
-			count: 4,
-			countLabel: '4 photos'
-		});
-	});
-	it('says "1 photo" in the singular', () => {
-		expect(accountItems({ isAdmin: false, waiting: 1 }, '/', noop)[0].countLabel).toBe('1 photo');
-	});
-	it('groups thousands', () => {
-		expect(accountItems({ isAdmin: false, waiting: 1204 }, '/', noop)[0].countLabel).toBe(
-			'1,204 photos'
-		);
-	});
-	it('marks the page you are on, including pages below it', () => {
-		const items = accountItems({ isAdmin: true, waiting: 0 }, '/settings/devices', noop);
-		expect(items.filter((item) => item.current).map((item) => item.label)).toEqual(['Settings']);
-	});
-	it('signs out through the function it was given', () => {
-		let called = 0;
-		accountItems({ isAdmin: false, waiting: 0 }, '/', () => called++)
-			.at(-1)
-			?.run?.();
-		expect(called).toBe(1);
+	it.each([
+		'/search',
+		'/trash',
+		'/settings',
+		'/admin',
+		'/review',
+		'/albumsx',
+		'/mapping',
+		'/homes'
+	])('%s belongs to no place', (path) => {
+		expect(current(path)).toBeUndefined();
 	});
 });
 
@@ -105,5 +81,94 @@ describe('collections rows', () => {
 			'Albums',
 			'People'
 		]);
+	});
+});
+
+describe('attentionOf', () => {
+	const problem = {
+		message: 'The last backup failed 3 days ago.',
+		severity: 'alert',
+		target_id: null
+	} as const;
+	const health = (problems: (typeof problem)[]) => ({
+		protected: problems.length === 0,
+		places_ok: 0,
+		places_total: 1,
+		problems: [...problems]
+	});
+
+	it('tells an admin the first thing that needs them', () => {
+		expect(attentionOf(true, health([problem]))).toBe('The last backup failed 3 days ago.');
+	});
+	it('says nothing when all is well', () => {
+		expect(attentionOf(true, health([]))).toBeNull();
+	});
+	it('says nothing to a member, whatever the backups', () => {
+		expect(attentionOf(false, health([problem]))).toBeNull();
+	});
+	it('says nothing before the answer arrives', () => {
+		expect(attentionOf(true, null)).toBeNull();
+	});
+});
+
+describe('backLabel', () => {
+	it.each([
+		['/', 'Library'],
+		['/calendar', 'Library'],
+		['/collections', 'Collections'],
+		['/search', 'Search']
+	])('names the bar’s page %s: %s', (path, label) => {
+		expect(backLabel(path)).toBe(label);
+	});
+	it.each(['/people/12', '/admin', '/trash'])('says Back for any other page (%s)', (path) => {
+		expect(backLabel(path)).toBe('Back');
+	});
+});
+
+describe('pageMove', () => {
+	it('is nothing when only the query or the photo changes (a filter, the photo view)', () => {
+		expect(pageMove({ from: '/', to: '/' })).toBeNull();
+		expect(pageMove({ from: '/search', to: '/search', delta: -1 })).toBeNull();
+	});
+	it.each([
+		['/', '/collections'],
+		['/collections', '/'],
+		['/', '/search'],
+		['/', '/calendar']
+	])('switches from %s to %s: two places of the bar cross-fade', (from, to) => {
+		expect(pageMove({ from, to })).toBe('switch');
+		expect(pageMove({ from, to, delta: -1 })).toBe('switch');
+	});
+	it.each([
+		['/collections', '/people'],
+		['/people', '/people/12'],
+		['/', '/settings'],
+		['/settings', '/admin'],
+		['/albums/3', '/albums/3/print'],
+		['/people/12', '/people/13']
+	])('drills in from %s to %s', (from, to) => {
+		expect(pageMove({ from, to })).toBe('forward');
+	});
+	it.each([
+		['/people/12', '/people'],
+		['/people', '/collections'],
+		['/admin', '/settings'],
+		['/settings', '/']
+	])('goes back from %s to %s', (from, to) => {
+		expect(pageMove({ from, to })).toBe('back');
+	});
+	it('follows the history: Back slides back, Forward drills in, whatever the depth', () => {
+		expect(pageMove({ from: '/people', to: '/people/12', delta: -1 })).toBe('back');
+		expect(pageMove({ from: '/people/12', to: '/people', delta: 1 })).toBe('forward');
+	});
+	it('takes the move the pressed link asks for', () => {
+		expect(pageMove({ from: '/people/12', to: '/collections', asked: 'switch' })).toBe('switch');
+		expect(pageMove({ from: '/people', to: '/people/12', asked: 'back' })).toBe('back');
+	});
+	it('ignores a word it does not know', () => {
+		expect(pageMove({ from: '/collections', to: '/people', asked: 'sideways' })).toBe('forward');
+	});
+	it('is nothing when the browser has already shown the way back (a swipe)', () => {
+		expect(pageMove({ from: '/people/12', to: '/people', delta: -1, shown: true })).toBeNull();
 	});
 });

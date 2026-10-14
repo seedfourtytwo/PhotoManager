@@ -20,6 +20,7 @@ class AssetView:
     asset: Asset
     level: Level
     favourite: bool = False
+    pinned: bool = False
     hidden: bool = False
     private: bool = False
     place: Place | None = None
@@ -67,6 +68,15 @@ class Facets:
     places: list[Count]
     guessed_dates: int
     total: int
+
+
+@dataclass(frozen=True, slots=True)
+class Arrivals:
+    """Photos imported lately (Home, issue 54)."""
+
+    count: int
+    newest: list[int]  # ids, the newest arrival first, as many as were asked for
+    sources: list[Count]  # key = source id, label = source label: the folders they came from
 
 
 @dataclass(frozen=True, slots=True)

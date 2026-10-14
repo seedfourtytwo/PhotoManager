@@ -92,8 +92,13 @@ test.describe('first run and sign-in', () => {
 		await expect(page.locator('.dots i.on')).toHaveCount(0);
 
 		for (const digit of ADMIN.pin) await key(digit).tap();
-		await expect(page).toHaveURL(/\/$/);
-		await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
+		// Signing in with no page asked for opens the start page: Home (spec 2026-10-14 §4).
+		await expect(page).toHaveURL(/\/home$/);
+		await expect(
+			page
+				.getByRole('navigation', { name: 'Main' })
+				.getByRole('link', { name: 'Home', exact: true })
+		).toHaveAttribute('aria-current', 'page');
 	});
 
 	test('on a laptop there is no number pad: the PIN is typed and shows as dots', async ({
@@ -108,20 +113,24 @@ test.describe('first run and sign-in', () => {
 		await page.keyboard.type(ADMIN.pin.slice(0, 3));
 		await expect(page.locator('.dots i.on')).toHaveCount(3);
 		await page.keyboard.type(ADMIN.pin.slice(3));
-		await expect(page).toHaveURL(/\/$/);
+		await expect(page).toHaveURL(/\/home$/);
 	});
 
-	test('sign out, and change PIN from settings', async ({ page }) => {
+	test('sign out, and change PIN in its sheet on You', async ({ page }) => {
 		await resetMock();
 		await signIn(page, '/settings');
 		await expectAccessible(page);
-		await page.getByLabel('Current PIN').fill('0000');
-		await page.getByLabel('New PIN').fill('5678');
+		await expect(page.getByLabel('Current PIN')).toHaveCount(0); // not on the page itself
 		await page.getByRole('button', { name: 'Change PIN' }).click();
-		// The admin's backup warning is also an alert on every page: pick this one by its words.
-		await expect(page.getByRole('alert').filter({ hasText: 'current PIN' })).toBeVisible();
-		await page.getByLabel('Current PIN').fill(ADMIN.pin);
-		await page.getByRole('button', { name: 'Change PIN' }).click();
+		const sheet = page.getByRole('dialog', { name: 'Change PIN' });
+		await sheet.getByLabel('Current PIN').fill('0000');
+		await sheet.getByLabel('New PIN').fill('5678');
+		await expectAccessible(page);
+		await sheet.getByRole('button', { name: 'Change PIN' }).click();
+		await expect(sheet.getByRole('alert')).toContainText('current PIN');
+		await sheet.getByLabel('Current PIN').fill(ADMIN.pin);
+		await sheet.getByRole('button', { name: 'Change PIN' }).click();
+		await expect(sheet).toBeHidden();
 		await expect(toast(page)).toContainText('PIN changed');
 		await page.getByRole('button', { name: 'Sign out' }).click();
 		await expect(page).toHaveURL(/\/login$/);
@@ -184,18 +193,22 @@ test('a locked account is told how it gets unlocked; the right PIN works once an
 	await signIn(page, '/', GUEST);
 });
 
-/** Admin → People: only the guest is marked Locked and has Unlock; using it clears both. */
+/** Admin → People: only the guest's tile says Locked; its sheet has Unlock, which clears it. */
 async function unlockFromPeople(page: Page) {
-	const rowOf = (username: string) =>
-		page.getByRole('row').filter({ has: page.getByRole('cell', { name: username, exact: true }) });
-	const row = rowOf(GUEST.username);
-	await expect(row.getByText('Locked', { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Unlock' })).toHaveCount(1);
-	await expect(rowOf(ADMIN.username).getByText('Locked', { exact: true })).toHaveCount(0);
-	await row.getByRole('button', { name: 'Unlock' }).click();
+	const tileOf = (name: string) =>
+		page
+			.getByRole('region', { name: 'People' })
+			.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+	const tile = tileOf(GUEST.name);
+	await expect(tile).toContainText('Locked');
+	await expect(tileOf(ADMIN.name)).not.toContainText('Locked');
+	await tile.click();
+	const sheet = page.getByRole('dialog', { name: GUEST.name });
+	await sheet.getByRole('button', { name: 'Unlock' }).click();
 	await expect(
 		page.getByRole('status').filter({ hasText: `${GUEST.username} can try their PIN again.` })
 	).toBeVisible();
-	await expect(row.getByText('Locked', { exact: true })).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Unlock' })).toHaveCount(0);
+	await expect(sheet.getByRole('button', { name: 'Unlock' })).toHaveCount(0);
+	await sheet.getByRole('button', { name: 'Close' }).click();
+	await expect(tile).not.toContainText('Locked');
 }

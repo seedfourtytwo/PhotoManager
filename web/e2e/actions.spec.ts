@@ -11,6 +11,7 @@ import {
 	REAL_BACKEND,
 	resetMock,
 	scrollToTile,
+	selectEverything,
 	selectionAction,
 	selectTiles,
 	signIn,
@@ -33,7 +34,7 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 	await selectTiles(page, [0, 1]);
 	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
-	await expect(dialog.getByText(/2 selected photos\s+· about [\d.]+ [KMG]B/)).toBeVisible();
+	await expect(dialog.getByText(/2 selected photos, about [\d.]+ [KMG]B/)).toBeVisible();
 	await expectAccessible(page);
 
 	await dialog.getByRole('button', { name: 'More options' }).click();
@@ -65,12 +66,14 @@ test('download dialog: estimate, options, and the streamed ZIP request body', as
 
 test('download everything matching a filter', async ({ page }) => {
 	await page.goto('/?year=2019');
-	await page.getByRole('button', { name: 'Download all' }).click();
+	// It needs no photo chosen: Select, then the pill's More.
+	await page.getByRole('button', { name: 'Select', exact: true }).click();
+	await selectionAction(page, /^Download all \d+ photos$/);
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/all \d+ matching photos/)).toBeVisible();
 	await dialog.getByRole('button', { name: 'More options' }).click();
 	const estimate = page.waitForRequest((r) => r.url().endsWith('/api/downloads/estimate'));
-	await dialog.getByLabel('Email · 1280').check();
+	await dialog.getByLabel('Email, 1280 px').check();
 	expect((await estimate).postDataJSON()).toMatchObject({
 		filters: { year: 2019 },
 		max_edge: 1280
@@ -120,7 +123,12 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	expect(recipe).toMatchObject({ rotate: 90, flip_horizontal: false, straighten: 0 });
 	expect(recipe.crop.w).toBeGreaterThan(0);
 	await expect(editor).toHaveCount(0);
-	if (!isPhone(page)) await expect(page.getByText(/· edited/)).toBeVisible();
+	if (!isPhone(page))
+		await expect(
+			loupe(page)
+				.getByRole('complementary', { name: 'Details' })
+				.getByText('edited', { exact: true })
+		).toBeVisible();
 
 	await page.getByRole('button', { name: 'Edit' }).click();
 	const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/edit'));
@@ -314,12 +322,15 @@ test('trash: “Delete for good” for a selection and “Empty trash” both as
 	await expect(confirm).toBeHidden();
 	await expect(tiles).toHaveCount(1);
 
-	// Nothing selected: Empty trash takes what is left.
+	// Nothing selected: Empty trash, behind ⋯ in the head, takes what is left.
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Empty trash' }).click();
 	await expect(confirm).toContainText('1 library copy');
 	await confirm.getByRole('button', { name: 'Delete for good' }).click();
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Empty trash' })).toHaveCount(0);
+	// an empty trash has nothing to select or empty
+	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveCount(0);
 });
 
 test.describe('selection pill', () => {
@@ -340,24 +351,24 @@ test.describe('selection pill', () => {
 		await expectAccessible(page);
 	});
 
-	test('the pill offers Add to album, Download, Fix date, Move to trash and More', async ({
+	test('the pill: its ×, the count, then Add to album, Download, Move to trash and More', async ({
 		page
 	}) => {
 		await selectTiles(page, [0]);
+		await expect(pill(page).getByRole('button').first()).toHaveAccessibleName('Clear selection');
+		await expect(pill(page).getByRole('status').locator('.n')).toHaveText('1');
 		const actions = pill(page).locator('.actions > button');
-		// A 390 px phone has room for two beside the count and Clear; the others join the rest
-		// under More.
-		const onBar = ['Add to album', 'Download', 'Fix date', 'Move to trash'].slice(
-			0,
-			isPhone(page) ? 2 : 4
-		);
-		await expect(actions).toHaveText([...onBar, 'More']);
-		await expect(actions.locator('svg')).toHaveCount(onBar.length + 1);
+		// Icons alone, named by their words: all three fit beside the count on a 390 px phone.
+		await expect
+			.poll(() => actions.evaluateAll((all) => all.map((b) => b.getAttribute('aria-label'))))
+			.toEqual(['Add to album', 'Download', 'Move to trash', 'More']);
+		await expect(actions.locator('svg')).toHaveCount(4);
 		const more = pill(page).getByRole('button', { name: 'More' });
 		await more.click();
-		for (const name of ['Favourite', 'Hide', 'Make private'])
+		// The library pages in as it scrolls: until it all has, Select all says what it takes.
+		await expect(pill(page).getByRole('button', { name: /^Select (all|loaded)/ })).toBeVisible();
+		for (const name of ['Fix date', 'Favourite', 'Hide', 'Make private'])
 			await expect(pill(page).getByRole('button', { name, exact: true })).toBeVisible();
-		await expect(pill(page).getByRole('button', { name: 'Move to trash' })).toBeVisible();
 		// Escape closes More first, then clears the selection.
 		await page.keyboard.press('Escape');
 		await expect(more).toHaveAttribute('aria-expanded', 'false');
@@ -385,13 +396,15 @@ test.describe('selection pill', () => {
 		await expect(loupe(page)).toBeVisible();
 	});
 
-	test('with the filter sheet open, Escape closes the sheet and keeps the selection', async ({
+	test('with a filter sheet open, Escape closes the sheet and keeps the selection', async ({
 		page
 	}) => {
-		test.skip(!isPhone(page), 'the laptop has its filters in the margin');
 		await selectTiles(page, [0]);
-		await page.getByRole('button', { name: 'Filter', exact: true }).click();
-		const sheet = page.getByRole('complementary', { name: 'Filters' });
+		await page
+			.getByRole('group', { name: 'Filters' })
+			.getByRole('button', { name: 'When', exact: true })
+			.click();
+		const sheet = page.getByRole('dialog', { name: 'When' });
 		await expect(sheet).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(sheet).toBeHidden();
@@ -432,7 +445,7 @@ test.describe('selection pill', () => {
 			test.skip(isPhone(page), 'one project sets the widths itself');
 			await page.setViewportSize({ width, height: 800 });
 			if (one) await page.locator('.tile .check').first().click({ force: true });
-			else await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+			else await selectEverything(page);
 			await expect(pill(page).getByRole('status')).toHaveText(
 				one ? '1 selected' : /^\d{3} selected$/
 			);
@@ -453,9 +466,13 @@ test.describe('selection pill', () => {
 		await signIn(page);
 		await page.setViewportSize({ width: 320, height: 800 });
 		await bigText(page);
-		const all = page.getByRole('button', { name: 'Select all', exact: true });
+		// "Select all" once every page has loaded ("Select loaded (n)" until then).
+		await page.getByRole('button', { name: 'Select', exact: true }).click();
+		const more = pill(page).getByRole('button', { name: 'More' });
+		const all = pill(page).getByRole('button', { name: 'Select all', exact: true });
 		await expect(async () => {
 			await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+			if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
 			await expect(all).toBeVisible({ timeout: 500 });
 		}).toPass({ timeout: 20_000 });
 		await all.click();
@@ -531,6 +548,7 @@ test.describe('keyboard focus is never left on nothing', () => {
 		await expect(toast(page)).toContainText('Deleted 1 library copy for good');
 		await expect.poll(() => focus(page)).toBe('a photo');
 		// The last one goes: there is no photo left to take the focus, the page does.
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Empty trash' }).click();
 		await page
 			.getByRole('dialog', { name: 'Delete for good?' })

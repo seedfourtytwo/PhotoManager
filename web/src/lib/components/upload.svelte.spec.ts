@@ -156,7 +156,7 @@ describe('UploadButton: many photos at once', () => {
 		await page.getByLabelText('Photos to upload').upload(photos(40));
 		await vi.waitFor(() => expect(onuploaded).toHaveBeenCalledOnce());
 		expect(notice.text).toBe(
-			'1 photo added · 39 refused (p1.jpg: too many files in one upload, ' +
+			'1 photo added, 39 refused (p1.jpg: too many files in one upload, ' +
 				'p2.jpg: too many files in one upload, p3.jpg: too many files in one upload, and 36 more)'
 		);
 	});

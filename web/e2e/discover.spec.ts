@@ -32,7 +32,7 @@ test('search without models: word matches, and a calm note that leads an admin t
 	await box.fill('sarlat');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
-	await expect(page.locator('.meta')).toContainText(/\d+ photos? · matching words/);
+	await expect(page.locator('.meta')).toContainText(/\d+ photos?, matching words/);
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await expectAccessible(page);
 	await page.locator('.tile').first().click();
@@ -68,10 +68,39 @@ test('without models, People leads an admin to where faces are set up', async ({
 	await expect(page.getByRole('heading', { name: 'Search and faces' })).toBeVisible();
 });
 
+test('search before typing: faces, places and, once search by meaning is set up, things', async ({
+	page
+}) => {
+	await resetMock('seed', { models: true });
+	await signIn(page, '/search');
+	const people = page.getByRole('region', { name: 'People' });
+	await expect(people.getByRole('link', { name: 'Sam', exact: true })).toBeVisible();
+	await expect(people.getByRole('link', { name: /^Someone/ })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Things' }).getByRole('link')).not.toHaveCount(0);
+	await expectAccessible(page);
+	const place = page.getByRole('region', { name: 'Places' }).getByRole('link').first();
+	const name = (await place.textContent())!.trim();
+	await place.click();
+	await expect.poll(() => new URL(page.url()).searchParams.get('q')).toMatch(`place:`);
+	await expect(page.getByRole('searchbox', { name: 'Search' })).toHaveValue(
+		new RegExp(`^place:"?${name}"?$`)
+	);
+	await expect(page.locator('.tile').first()).toBeVisible();
+});
+
+test('search before typing, without models: no things to suggest, they would find nothing', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page, '/search');
+	await expect(page.getByRole('region', { name: 'Places' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Things' })).toHaveCount(0);
+});
+
 test('search with models ranks by meaning; facets are read back', async ({ page }) => {
 	await resetMock('seed', { models: true });
 	await signIn(page, '/search?q=sunset%20date%3A2019');
-	await expect(page.locator('.meta')).toContainText(/ranked by meaning · date: 2019/);
+	await expect(page.locator('.meta')).toContainText(/ranked by meaning, date: 2019/);
 	await expect(page.getByRole('note')).toHaveCount(0);
 });
 
@@ -84,12 +113,16 @@ test('people: grid of faces, rename, merge, and a person’s photos', async ({ p
 	const someone = page.getByRole('link', { name: /^Someone/ }).first();
 	await someone.click();
 	await expect(page.locator('.tile').first()).toBeVisible();
-	await page.getByRole('button', { name: 'Name' }).click();
+	// the person's tools wait behind the round ⋯
+	const more = page.getByRole('button', { name: 'More', exact: true });
+	await more.click();
+	await page.getByRole('button', { name: 'Name', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Name this person' });
 	await dialog.getByLabel('Name').fill('Uncle Jo');
 	await dialog.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('heading', { name: 'Uncle Jo' })).toBeVisible();
 
+	await more.click();
 	await page.getByRole('button', { name: 'Merge with…' }).click();
 	const merge = page.getByRole('dialog', { name: 'Merge people' });
 	await merge.getByRole('checkbox').first().check();
@@ -105,10 +138,9 @@ test('guests see people but cannot rename or merge', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await resetMock();
 	await signIn(page, '/people', GUEST);
-	await page
-		.getByRole('link', { name: /photos$/ })
-		.first()
-		.click();
+	await page.getByRole('main').locator('.people a').first().click();
+	await expect(page).toHaveURL(/\/people\/\d+$/);
+	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: /^(Name|Rename)$/ })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Merge with…' })).toHaveCount(0);
 });

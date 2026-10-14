@@ -1,33 +1,52 @@
 <script lang="ts">
 	import '$lib/tokens.css';
 	import { onMount, untrack } from 'svelte';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
-	import FilterPanel from '$lib/components/FilterPanel.svelte';
-	import BackupBanner from '$lib/components/BackupBanner.svelte';
 	import LookTrial from '$lib/components/LookTrial.svelte';
 	import {
 		backupWatch,
 		forgetOldDensity,
-		isFilterable,
 		isPublicRoute,
 		loadLook,
 		notice,
-		session,
-		settings
+		session
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
+	import { cachedOwner } from '$lib/look/cache';
 	import { dropBadPhotoParam } from '$lib/loupe.svelte';
+	import { movePage } from '$lib/motion';
+	import { pageMove } from '$lib/nav';
+	import { arrival, landing, mayLand } from '$lib/start-page.svelte';
 
 	let { children } = $props();
 
 	const bare = $derived(isPublicRoute(page.url.pathname));
-	const filterable = $derived(isFilterable(page.url.pathname));
 
 	afterNavigate(({ to }) => {
 		if (to) dropBadPhotoParam(to.url);
+	});
+
+	// A page change slides or fades the page while the bars stay (motion.ts, utilities.css).
+	// Not to or from sign-in, which has no bars; not when only the query or the photo changes.
+	onNavigate((navigation) => {
+		const from = navigation.from?.url.pathname;
+		const to = navigation.to?.url.pathname;
+		if (!from || !to || isPublicRoute(from) || isPublicRoute(to)) return;
+		const pressed = navigation.type === 'link' ? navigation.event.target : null;
+		const move = pageMove({
+			from,
+			to,
+			delta: navigation.delta,
+			asked:
+				pressed instanceof Element
+					? pressed.closest('[data-move]')?.getAttribute('data-move')
+					: null,
+			shown: navigation.type === 'popstate' && navigation.event.hasUAVisualTransition
+		});
+		if (move) return movePage(move, navigation.complete);
 	});
 
 	onMount(() => {
@@ -38,11 +57,31 @@
 
 	// Each account has its own look: fetch it for whoever is signed in now. (Leaving takes the
 	// look away again, a trial included: session.lost and session.signOut.) Untracked: only
-	// who is signed in starts a fetch, not the look it changes.
+	// who is signed in starts a fetch, not the look it changes. `lookOf`: whose look is on
+	// screen, cached from before or just fetched (or failed to be: then the cache's stands).
 	const signedInAs = $derived(session.user?.id);
+	let lookOf = $state<number | null>(null);
 	$effect(() => {
-		if (signedInAs !== undefined) untrack(() => void loadLook());
+		const who = signedInAs;
+		if (who === undefined) return;
+		untrack(() => {
+			if (cachedOwner() === who) lookOf = who;
+			void loadLook().then(() => (lookOf = who));
+		});
 	});
+
+	// The first page a tab shows after signing in may move to the account's start page
+	// (lib/start-page.svelte.ts). A bare `/` waits for that, so Library never flashes on the way.
+	let moving = $state(false);
+	$effect(() => {
+		if (arrival.done || bare || !session.user || lookOf !== session.user.id) return;
+		arrival.mark();
+		const to = landing(page.url, look.saved);
+		if (!to) return;
+		moving = true;
+		void goto(to, { replaceState: true }).finally(() => (moving = false));
+	});
+	const holding = $derived(moving || (!arrival.done && mayLand(page.url)));
 
 	function cameBack() {
 		if (document.visibilityState !== 'visible') return;
@@ -83,8 +122,8 @@
 		return () => watch.disconnect();
 	});
 
-	// Admins see the backup warning on every page: ask again on each navigation, and
-	// forget it for anyone who is not (or no longer) an admin.
+	// An admin's avatar carries a dot while a backup needs them: ask again on each navigation,
+	// and forget it for anyone who is not (or no longer) an admin. Members never see it.
 	$effect(() => {
 		void page.url.pathname;
 		if (!bare) void backupWatch.refresh(session.isAdmin);
@@ -108,14 +147,12 @@
 {#if bare}
 	<main id="main" class="bare">{@render children()}</main>
 {:else if session.user}
-	<div class="app" class:filters={filterable && settings.filtersOpen}>
+	<div class="app">
 		<Nav />
 		<main id="main" tabindex="-1">
 			<LookTrial />
-			<BackupBanner health={session.isAdmin ? backupWatch.health : null} />
-			{@render children()}
+			{#if !holding}{@render children()}{/if}
 		</main>
-		{#if filterable}<FilterPanel />{/if}
 	</div>
 {:else if session.error}
 	<main id="main" class="bare">
@@ -156,9 +193,6 @@
 		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: auto 1fr;
 		min-height: 100dvh;
-	}
-	.app.filters {
-		grid-template-columns: minmax(0, 1fr) var(--margin);
 	}
 	main {
 		min-width: 0;
@@ -202,8 +236,9 @@
 		gap: var(--s-3);
 		background: var(--raised);
 		color: var(--ink);
-		border: 1px solid var(--hairline);
+		border: 0; /* a popover's own border would show */
 		border-radius: var(--r-2);
+		box-shadow: var(--lift);
 		padding: var(--s-2) var(--s-4);
 		font-size: var(--fs-14);
 		max-width: min(40rem, calc(100vw - 2 * var(--s-4)));
@@ -231,8 +266,7 @@
 		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
 	@media (max-width: 1023px) {
-		.app,
-		.app.filters {
+		.app {
 			grid-template-columns: minmax(0, 1fr);
 			grid-template-rows: 1fr;
 		}

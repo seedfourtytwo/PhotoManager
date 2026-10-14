@@ -1,12 +1,13 @@
 /**
  * "Opening a sheet or a photo adds a history step, so Back on the phone closes it" (redesign
- * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts, its Info
+ * spec §4.2). The photo's own step is in loupe.spec.ts and loupe-gestures.spec.ts, its Details
  * sheet's in back-info.spec.ts; these are the sheets and dialogs.
  */
+import type { Page } from '@playwright/test';
 import {
 	delayRoute,
 	expect,
-	isPhone,
+	firstMonthWithPhotos,
 	loupe,
 	loupeAction,
 	resetMock,
@@ -27,45 +28,47 @@ test.beforeEach(async ({ page }) => {
 	await expect(page.locator('.tile').first()).toBeVisible();
 });
 
-const filters = (page: import('@playwright/test').Page) =>
-	page.getByRole('complementary', { name: 'Filters' });
+/** A filter question's sheet: a bottom sheet on a phone, a popover under its chip on a laptop. */
+const sheet = (page: Page, name: string) => page.getByRole('dialog', { name });
+const ask = (page: Page, name: string) =>
+	page.getByRole('group', { name: 'Filters' }).getByRole('button', { name, exact: true }).click();
 
-test('phone: Back closes the filter sheet and stays in the library', async ({ page }) => {
-	test.skip(!isPhone(page), 'the filters are a sheet on a phone only');
-	await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	await expect(filters(page)).toBeVisible();
+test('Back closes a filter sheet and stays in the library', async ({ page }) => {
+	await ask(page, 'When');
+	await expect(sheet(page, 'When')).toBeVisible();
 	await page.goBack();
-	await expect(filters(page)).toBeHidden();
+	await expect(sheet(page, 'When')).toBeHidden();
 	await expect(page).toHaveURL(/\/$/);
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(/\/collections$/);
 });
 
-test('phone: a filter sheet closed with Done leaves no step behind', async ({ page }) => {
-	test.skip(!isPhone(page), 'the filters are a sheet on a phone only');
-	await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	await filters(page).getByRole('button', { name: 'Done' }).click();
-	await expect(filters(page)).toBeHidden();
+test('a filter sheet closed with Done leaves no step behind', async ({ page }) => {
+	await ask(page, 'Where');
+	await sheet(page, 'Where').getByRole('button', { name: 'Done' }).click();
+	await expect(sheet(page, 'Where')).toBeHidden();
 	await page.goBack();
 	await expect(page).toHaveURL(/\/collections$/);
 });
 
 for (const how of ['Back', 'Done'] as const) {
-	test(`phone: a filter chosen in the sheet stays when ${how} closes it, and the next Back undoes it`, async ({
+	test(`what is chosen in a filter sheet stays when ${how} closes it, and the next Back undoes it`, async ({
 		page
 	}) => {
-		test.skip(!isPhone(page), 'the filters are a sheet on a phone only');
-		await page.getByRole('button', { name: 'Filter', exact: true }).click();
-		await filters(page).getByRole('button', { name: /^2019/ }).click();
+		await ask(page, 'When');
+		const when = sheet(page, 'When');
+		await when.getByRole('button', { name: /^2019/ }).click();
 		await expect(page).toHaveURL(/year=2019/);
-		await expect(filters(page), 'choosing does not close the sheet').toBeVisible();
-		await filters(page).getByLabel('Favourites').check();
-		await expect(page).toHaveURL(/year=2019&favourite=true/);
+		await expect(when, 'choosing does not close the sheet').toBeVisible();
+		const month = await firstMonthWithPhotos(when.getByRole('group', { name: 'Months in 2019' }));
+		await month.button.click();
+		const chosen = new RegExp(`year=2019&month=${month.number}$`);
+		await expect(page).toHaveURL(chosen);
 		if (how === 'Back') await page.goBack();
-		else await filters(page).getByRole('button', { name: 'Done' }).click();
-		await expect(filters(page)).toBeHidden();
-		await expect(page).toHaveURL(/year=2019&favourite=true/);
+		else await when.getByRole('button', { name: 'Done' }).click();
+		await expect(when).toBeHidden();
+		await expect(page).toHaveURL(chosen);
 		await page.goBack();
 		await expect(page).toHaveURL(/\/$/);
 		await page.goBack();
@@ -101,7 +104,7 @@ test('over an open photo, Back closes the dialog, then the photo', async ({ page
 	await page.locator('.tile').first().click();
 	const viewer = loupe(page);
 	await expect(viewer).toBeVisible();
-	await loupeAction(page, 'Album');
+	await loupeAction(page, 'Add to album');
 	const dialog = page.getByRole('dialog', { name: 'Add to album' });
 	await expect(dialog).toBeVisible();
 	await page.goBack();

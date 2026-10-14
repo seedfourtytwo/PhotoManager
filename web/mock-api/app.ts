@@ -16,6 +16,7 @@ import { deviceSyncRoutes } from './routes/device-sync.ts';
 import { deviceRoutes } from './routes/devices.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { folderRoutes } from './routes/folders.ts';
+import { homeRoutes } from './routes/home.ts';
 import { importRoutes } from './routes/imports.ts';
 import { lookRoutes } from './routes/look.ts';
 import { peopleRoutes } from './routes/people.ts';
@@ -49,6 +50,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		...sourceRoutes(h),
 		...importRoutes(h),
 		...assetRoutes(h),
+		...homeRoutes(h),
 		...downloadRoutes(h),
 		...albumRoutes(h),
 		...reviewRoutes(h),
@@ -84,7 +86,11 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 				/** A user name to start locked, as after 30 wrong PINs. */
 				locked?: string;
 			};
-			state = makeState({ users: body.users ?? 'seed', count: body.count ?? initialCount });
+			state = makeState({
+				users: body.users ?? 'seed',
+				count: body.count ?? initialCount,
+				now: now()
+			});
 			for (const user of state.users)
 				if (user.username === body.locked)
 					Object.assign(user, { failedPins: LOCK_AFTER_WRONG_PINS, locked: true });

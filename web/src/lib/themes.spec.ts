@@ -22,11 +22,13 @@ const COLOURS = [
 	'--ink-3',
 	'--hairline',
 	'--tint',
+	'--fill',
 	'--acc-l',
 	'--acc-c',
 	'--acc-h',
 	'--on-accent',
 	'--scrim',
+	'--lift',
 	'--ok',
 	'--fail',
 	'--check'
@@ -57,6 +59,12 @@ describe.each(Object.entries(VARIANTS))('%s', (name, selectors) => {
 		expect(contrast(hexLuminance(tokens['--ink-2']), bg)).toBeGreaterThanOrEqual(4.5);
 		expect(contrast(hexLuminance(tokens['--ok']), bg)).toBeGreaterThanOrEqual(4.5);
 		expect(contrast(hexLuminance(tokens['--fail']), bg)).toBeGreaterThanOrEqual(4.5);
+	});
+	// Chips, fields, segmented controls and the rows of a sheet sit on --fill.
+	it('keeps text readable on a filled control', () => {
+		const fill = hexLuminance(tokens['--fill']);
+		expect(contrast(hexLuminance(tokens['--ink']), fill)).toBeGreaterThanOrEqual(7);
+		expect(contrast(hexLuminance(tokens['--ink-2']), fill)).toBeGreaterThanOrEqual(4.5);
 	});
 	it.each(HUES)('keeps the accent readable at hue %i', (hue) => {
 		const accent = oklchLuminance(Number(tokens['--acc-l']), Number(tokens['--acc-c']), hue);

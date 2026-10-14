@@ -190,6 +190,34 @@ describe('LookForm', () => {
 		);
 	});
 
+	it('Home: whether the dock shows it, and which page the app opens on', async () => {
+		const calls = serve(hers, echo); // hers opens on Library
+		render(LookForm, { user: donna, onclose: () => {} });
+		const opens = form().getByRole('combobox', { name: 'Opens on', exact: true });
+		const shown = form().getByRole('checkbox', { name: 'Show Home' });
+		await expect.element(opens).toHaveValue('library');
+		await expect.element(shown).toBeChecked();
+		await opens.selectOptions('today');
+		await button('Save for Donna').click();
+		await vi.waitFor(() =>
+			expect(calls.at(-1)?.body).toMatchObject({ showToday: true, startPage: 'today' })
+		);
+	});
+
+	it('without Home the app opens on Library, and that is not a choice', async () => {
+		const calls = serve(parseLook({}), echo);
+		render(LookForm, { user: donna, onclose: () => {} });
+		const opens = form().getByRole('combobox', { name: 'Opens on', exact: true });
+		await expect.element(opens).toHaveValue('today');
+		await form().getByRole('checkbox', { name: 'Show Home' }).click();
+		await expect.element(opens).toBeDisabled();
+		await expect.element(opens).toHaveValue('library');
+		await button('Save for Donna').click();
+		await vi.waitFor(() =>
+			expect(calls.at(-1)?.body).toMatchObject({ showToday: false, startPage: 'library' })
+		);
+	});
+
 	it('a refused save says why and keeps the form open', async () => {
 		serve(hers, () => ({ status: 422, json: { detail: "unknown look field 'css'" } }));
 		const onclose = vi.fn();

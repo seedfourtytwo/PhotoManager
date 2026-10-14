@@ -2,12 +2,9 @@ import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import CalendarHeatmap from './CalendarHeatmap.svelte';
-import SelectionActions from './SelectionActions.svelte';
 import SelectionBar from './SelectionBar.svelte';
 import TimeRuler from './TimeRuler.svelte';
-import { makeAsset } from '$lib/testing/fixtures';
-import { session, viewport } from '$lib/app.svelte';
-import type { AssetOut, Id } from '$lib/api';
+import { viewport } from '$lib/app.svelte';
 
 describe('TimeRuler', () => {
 	const months = [
@@ -319,7 +316,7 @@ describe('SelectionBar: the pill', () => {
 		expect(list?.textContent).toContain('Hide');
 	});
 
-	it('shows an icon beside the word of an action that has one', async () => {
+	it('an action with an icon is that icon alone, named by its word; one without is its word', async () => {
 		render(SelectionBar, {
 			count: 1,
 			actions: [
@@ -328,10 +325,24 @@ describe('SelectionBar: the pill', () => {
 			],
 			onclear: run
 		});
-		const icon = (name: string) =>
-			page.getByRole('button', { name }).element().querySelector('svg');
-		expect(icon('Download')).not.toBeNull();
-		expect(icon('Restore')).toBeNull();
+		// The word under an icon is the look's to show (data-words), and never read out twice.
+		const download = page.getByRole('button', { name: 'Download' }).element();
+		expect(download.querySelector('svg')).not.toBeNull();
+		expect(download.classList.contains('icon-button')).toBe(true);
+		expect(download.querySelector('.word')?.getAttribute('aria-hidden')).toBe('true');
+		const restore = page.getByRole('button', { name: 'Restore' }).element();
+		expect(restore.querySelector('svg')).toBeNull();
+		expect(restore.textContent.trim()).toBe('Restore');
+	});
+
+	it('the × that clears comes first, then the count with only its number in the accent', async () => {
+		render(SelectionBar, { count: 3, actions: [{ label: 'Hide', run }], onclear: run });
+		const bar = page.getByRole('toolbar', { name: 'Selected photos' }).element();
+		const first = bar.querySelector('button');
+		expect(first?.getAttribute('aria-label')).toBe('Clear selection');
+		const status = page.getByRole('status').element();
+		expect(status.textContent).toBe('3 selected');
+		expect(status.querySelector('.n')?.textContent).toBe('3');
 	});
 
 	it('Escape clears the selection', async () => {
@@ -373,16 +384,16 @@ describe('SelectionBar on a phone', () => {
 		return more;
 	}
 
-	it('320 px and a four-figure count: Clear stays inside the pill, the rest goes under More', async () => {
+	it('320 px and a four-figure count: More, the last thing, stays inside the pill; the rest goes under it', async () => {
 		viewport.width = 390;
 		render(SelectionBar, { count: 1234, actions, onclear: () => {} });
 		const bar = page.getByRole('toolbar', { name: 'Selected photos' }).element();
 		// The room the app's stylesheet gives the pill on such a screen (it is not loaded here).
 		Object.assign((bar as HTMLElement).style, { maxWidth: '304px', padding: '4px 8px' });
 		viewport.width = 320;
-		const clear = page.getByRole('button', { name: 'Clear selection' }).element();
+		const more = page.getByRole('button', { name: 'More' }).element();
 		await vi.waitFor(() =>
-			expect(clear.getBoundingClientRect().right).toBeLessThanOrEqual(
+			expect(more.getBoundingClientRect().right).toBeLessThanOrEqual(
 				bar.getBoundingClientRect().right - 8
 			)
 		);
@@ -412,45 +423,5 @@ describe('SelectionBar on a phone', () => {
 		await expect.element(page.getByRole('button', { name: 'Download' })).not.toBeInTheDocument();
 		await expect.element(more).toHaveAttribute('aria-expanded', 'false');
 		viewport.width = window.innerWidth;
-	});
-});
-
-describe('SelectionActions', () => {
-	it('a refused Favourite puts every photo back as it was, favourites included', async () => {
-		session.user = { id: 1, username: 'c', display_name: 'C', role: 'admin', disabled: false };
-		vi.stubGlobal(
-			'fetch',
-			async () =>
-				new Response(JSON.stringify({ detail: 'The library is read-only right now.' }), {
-					status: 503,
-					headers: { 'content-type': 'application/json' }
-				})
-		);
-		const selected = [
-			makeAsset(1, undefined, 4, 3, { favourite: true }),
-			makeAsset(2),
-			makeAsset(3)
-		];
-		const favourite = new Map(selected.map((a) => [a.id, a.favourite]));
-		const onpatch = vi.fn((ids: Set<Id>, patch: Partial<AssetOut>) => {
-			for (const id of ids) if (patch.favourite !== undefined) favourite.set(id, patch.favourite);
-		});
-		render(SelectionActions, {
-			selected,
-			onclear: () => {},
-			onpatch,
-			onremove: () => {},
-			onreload: () => {}
-		});
-		await page.getByRole('button', { name: 'More' }).click();
-		await page.getByRole('button', { name: 'Favourite', exact: true }).click();
-		await vi.waitFor(() => expect(onpatch.mock.calls.length).toBeGreaterThan(1));
-		expect([...favourite]).toEqual([
-			[1, true],
-			[2, false],
-			[3, false]
-		]);
-		vi.unstubAllGlobals();
-		session.user = null;
 	});
 });

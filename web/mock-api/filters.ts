@@ -17,13 +17,31 @@ export function countBy<T>(items: T[], key: (t: T) => string | null | undefined)
 }
 
 export function filterHelpers(h: World & AccessHelpers) {
-	function matches(user: MockUser, a: MockAsset, f: AssetFilters): boolean {
+	/** The photos with any of the people on them, or null when the filter names none. */
+	function withPeople(f: AssetFilters): Set<number> | null {
+		if (!f.person_id?.length) return null;
+		const people = new Set(f.person_id);
+		return new Set(
+			h
+				.state()
+				.faces.filter((face) => face.person_id !== null && people.has(face.person_id))
+				.map((face) => face.asset_id)
+		);
+	}
+
+	function matches(
+		user: MockUser,
+		a: MockAsset,
+		f: AssetFilters,
+		people: Set<number> | null
+	): boolean {
 		const day = a.taken_at.slice(0, 10);
 		if (f.from && day < f.from) return false;
 		if (f.to && day > f.to) return false;
 		if (f.year !== undefined && Number(a.taken_at.slice(0, 4)) !== f.year) return false;
 		if (f.month !== undefined && Number(a.taken_at.slice(5, 7)) !== f.month) return false;
 		if (f.source_id && !a.sources.some((s) => f.source_id!.includes(s.source_id))) return false;
+		if (people && !people.has(a.id)) return false;
 		if (f.camera && a.camera_model !== f.camera) return false;
 		if (f.place) {
 			const p = a.place?.place;
@@ -51,18 +69,22 @@ export function filterHelpers(h: World & AccessHelpers) {
 			if (!hay.includes(needle)) return false;
 		}
 		if (f.favourite && !setFor(h.state().favourites, user.id).has(a.id)) return false;
+		const isPinned = setFor(h.state().pinned, user.id).has(a.id);
+		if (f.pinned !== undefined && isPinned !== f.pinned) return false;
 		const isHidden = setFor(h.state().hidden, user.id).has(a.id);
 		if (f.hidden ? !isHidden : isHidden) return false;
-		if (f.guessed_date && a.date_source !== 'file_mtime') return false;
+		const guessed = a.date_source === 'file_mtime';
+		if (f.guessed_date !== undefined && guessed !== f.guessed_date) return false;
 		if (f.has_location !== undefined && (a.place !== null) !== f.has_location) return false;
 		return true;
 	}
 
 	function filtered(user: MockUser, params: URLSearchParams | AssetFilters): MockAsset[] {
 		const f = params instanceof URLSearchParams ? filtersFromParams(params) : params;
+		const people = withPeople(f);
 		return h
 			.visible(user)
-			.filter((a) => matches(user, a, f))
+			.filter((a) => matches(user, a, f, people))
 			.sort(newestFirst);
 	}
 

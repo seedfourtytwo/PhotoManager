@@ -48,28 +48,31 @@
 <Dialog title="Add to album" {onclose}>
 	<p class="quiet">{photos(ids.length)}</p>
 	<!-- A form, so Enter in the title adds. A group, not a radiogroup: it also holds the title
-	     field. The radios share a name. -->
-	<form id="add-to-album" class="list" role="group" aria-label="Album" onsubmit={save}>
-		<label>
+	     field. The radios share a name; each album is a tile with its count at the right. -->
+	<form id="add-to-album" class="tiles list" role="group" aria-label="Album" onsubmit={save}>
+		<label class="tile-row">
 			<input type="radio" name="album" value="new" bind:group={choice} />
-			New album
+			<span class="tile-main"><span class="tile-title">New album</span></span>
 		</label>
 		{#if choice === 'new'}
-			<input
-				class="title"
-				bind:value={title}
-				maxlength={ALBUM_TITLE_MAX}
-				placeholder="Title"
-				aria-label="New album title"
-			/>
-			{#if title.length >= ALBUM_TITLE_MAX}
-				<p class="quiet small full">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
-			{/if}
+			<div class="tile-row new">
+				<input
+					class="title"
+					bind:value={title}
+					maxlength={ALBUM_TITLE_MAX}
+					placeholder="Title"
+					aria-label="New album title"
+				/>
+				{#if title.length >= ALBUM_TITLE_MAX}
+					<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
+				{/if}
+			</div>
 		{/if}
 		{#each albums as album (album.id)}
-			<label>
+			<label class="tile-row">
 				<input type="radio" name="album" value={album.id} bind:group={choice} />
-				{album.title} <span class="quiet small">{album.count}</span>
+				<span class="tile-main"><span class="tile-title">{album.title}</span></span>
+				<span class="tile-value data">{album.count}</span>
 			</label>
 		{/each}
 	</form>
@@ -83,30 +86,23 @@
 		margin: 0 0 var(--s-3);
 	}
 	.list {
-		display: grid;
-		gap: 0;
 		max-height: 50dvh;
 		overflow-y: auto;
 	}
-	label {
-		display: flex;
-		gap: var(--s-2);
-		align-items: center;
-		min-height: 2rem;
-		color: var(--ink);
+	.tile-row {
+		cursor: pointer;
 	}
-	label .small {
-		margin-left: auto;
+	/* The title of a new album, under its choice. */
+	.new {
+		display: grid;
+		gap: var(--s-1);
+		cursor: auto;
 	}
+	.new p {
+		margin: 0;
+	}
+	/* A field on a tile stands out from it. */
 	.title {
-		margin: 0 0 var(--s-2) var(--s-5);
-	}
-	.full {
-		margin: 0 0 var(--s-2) var(--s-5);
-	}
-	@media (pointer: coarse) {
-		label {
-			min-height: var(--target);
-		}
+		background: var(--raised);
 	}
 </style>

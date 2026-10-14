@@ -55,7 +55,7 @@
 
 <script lang="ts">
 	import type { AssetOut, DownloadEstimate, DownloadOptions, DownloadScope } from '$lib/api';
-	import { api, notice, photoShare, SHARE_AGAIN, viewport } from '$lib/app.svelte';
+	import { api, notice, photoShare, shareAgain, viewport } from '$lib/app.svelte';
 	import {
 		DEFAULT_OPTIONS,
 		EDGE_PRESETS,
@@ -68,6 +68,7 @@
 	import { errorMessage, formatBytes } from '$lib/format';
 	import { canShare } from '$lib/share';
 	import Dialog from './Dialog.svelte';
+	import Icon from './Icon.svelte';
 
 	type Props = {
 		scope: DownloadScope;
@@ -119,9 +120,9 @@
 	async function share(asset: AssetOut) {
 		busy = true;
 		try {
-			const outcome = await photoShare.share(asset, options);
+			const outcome = await photoShare.share([asset.id], options);
 			if (outcome === 'shared') onclose();
-			else if (outcome === 'ready') notice.show(SHARE_AGAIN);
+			else if (outcome === 'ready') notice.show(shareAgain(1));
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -173,12 +174,11 @@
 				you only lets you see its photos.
 			</span>
 		{:else if estimate}
-			{single ? '1 photo' : scopeLabel(scope, estimate.count)}
-			<span class="quiet"
-				>· about {formatBytes(
+			{single ? '1 photo' : scopeLabel(scope, estimate.count)}<span class="quiet"
+				>, about {formatBytes(
 					estimate.bytes
-				)}{#if !single && 'ids' in scope && estimate.count < scope.ids.length}
-					· {scope.ids.length - estimate.count} you may only view are left out{/if}</span
+				)}{#if !single && 'ids' in scope && estimate.count < scope.ids.length}; {scope.ids.length -
+						estimate.count} you may only view are left out{/if}</span
 			>
 		{:else if estimateError}
 			<span class="quiet">{estimateError}</span>
@@ -187,10 +187,10 @@
 		{/if}
 	</p>
 
-	<fieldset class="plain">
+	<fieldset class="plain tiles">
 		<legend class="visually-hidden">What to download</legend>
 		{#each simpleChoices(hasEdits) as pick (pick.value)}
-			<label class="pick">
+			<label class="tile-row">
 				<input
 					type="radio"
 					name="simple"
@@ -202,8 +202,10 @@
 						options = applySimple(options, pick.value);
 					}}
 				/>
-				<span id={`dl-${pick.value}`}>{pick.label}</span>
-				<span id={`dl-${pick.value}-about`} class="quiet small about">{pick.about}</span>
+				<span class="tile-main">
+					<span id={`dl-${pick.value}`} class="tile-title">{pick.label}</span>
+					<span id={`dl-${pick.value}-about`} class="tile-line">{pick.about}</span>
+				</span>
 			</label>
 		{/each}
 	</fieldset>
@@ -221,7 +223,7 @@
 		class="more"
 		aria-expanded={more}
 		aria-controls="dl-more"
-		onclick={() => (more = !more)}>More options</button
+		onclick={() => (more = !more)}>More options<Icon name="chevron" /></button
 	>
 	{#if more}
 		<div id="dl-more">
@@ -341,31 +343,29 @@
 		margin: var(--s-1) 0 0;
 	}
 	.plain {
-		margin-top: var(--s-2);
+		margin: var(--s-2) 0 var(--s-3);
 	}
-	/* A plain choice: the option, and under it what you get. The whole block is the target. */
-	.pick {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		column-gap: var(--s-2);
-		align-items: center;
-		padding: var(--s-2) 0;
+	/* A plain choice: the option, and under it what you get. The whole tile is the target. */
+	.plain .tile-row {
+		cursor: pointer;
 	}
-	.about {
-		grid-column: 2;
-	}
+	/* More options opens under itself: its chevron turns to point down. */
 	.more {
-		display: block;
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s-1);
 		margin: var(--s-3) 0 0;
-		padding: 0;
-		border: 0;
-		background: none;
+		padding-inline: 0;
 		color: var(--ink-2);
-		text-decoration: underline;
-		text-underline-offset: 0.2em;
+	}
+	.more :global(svg) {
+		transition: transform var(--motion) var(--ease);
 	}
 	.more[aria-expanded='true'] {
 		color: var(--ink);
+	}
+	.more[aria-expanded='true'] :global(svg) {
+		transform: rotate(90deg);
 	}
 	@media (pointer: coarse) {
 		.more {

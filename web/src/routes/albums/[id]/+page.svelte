@@ -3,23 +3,33 @@
 	import { ALBUM_TITLE_MAX, type Id } from '$lib/api';
 	import { AlbumView } from '$lib/album.svelte';
 	import { session, settings, viewport } from '$lib/app.svelte';
-	import { photos } from '$lib/format';
+	import { albumLine } from '$lib/album-line';
+	import type { MenuItem } from '$lib/menu';
 	import { EMPTY, applyClick } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import { tileOf } from '$lib/tiles';
+	import { spread } from '$lib/story';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
+	import AddPhotosDialog from '$lib/components/AddPhotosDialog.svelte';
+	import AlbumHero from '$lib/components/AlbumHero.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
+	import Menu from '$lib/components/Menu.svelte';
+	import PageHead from '$lib/components/PageHead.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
 	import ShareDialog from '$lib/components/ShareDialog.svelte';
+	import StoryPlayer from '$lib/components/home/StoryPlayer.svelte';
+	import type { AssetOut } from '$lib/api';
 
 	const id = $derived(Number(page.params.id));
 	const view = new AlbumView(() => id);
 	const album = $derived(view.album);
 	const items = $derived(view.items);
+	/** The album as a story: its photos spread over its length. */
+	let playing = $state.raw<AssetOut[] | null>(null);
 	let arrange = $state(false);
 	let title = $state('');
 	let description = $state('');
@@ -35,6 +45,24 @@
 		)
 	);
 	const order = $derived(items.map((a) => a.id));
+	/** Behind the round ⋯: the rest of what can be done with the album. */
+	const more = $derived<MenuItem[]>(
+		album
+			? [
+					{ label: 'Download', run: () => (view.dialog = 'download') },
+					...(items.length ? [{ label: 'Print', href: `/albums/${album.id}/print` }] : []),
+					...(canEdit
+						? [
+								{ label: 'Arrange', pressed: arrange, run: () => (arrange = !arrange) },
+								{ label: 'Rename', run: openRename }
+							]
+						: []),
+					...(album.role === 'owner'
+						? [{ label: 'Delete album', danger: true, run: () => (view.dialog = 'delete') }]
+						: [])
+				]
+			: []
+	);
 	const selected = $derived(items.filter((a) => view.selection.ids.has(a.id)));
 	const loupeId = $derived(openPhotoId(page));
 	const loupeIndex = $derived(loupeId === undefined ? -1 : order.indexOf(loupeId));
@@ -52,6 +80,12 @@
 		view.open();
 	});
 
+	function openRename() {
+		title = album?.title ?? '';
+		description = album?.description ?? '';
+		view.dialog = 'rename';
+	}
+
 	function move(assetId: Id, to: number) {
 		view.move(assetId, to);
 		// Keep keyboard focus on the moved photo.
@@ -61,47 +95,38 @@
 
 <svelte:head><title>{album?.title ?? 'Album'} · Photos</title></svelte:head>
 
+<PageHead title={album?.title ?? 'Album'} hideTitle back={{ href: '/albums', label: 'Albums' }}>
+	{#snippet actions()}
+		{#if album}<Menu label="More" text="More" icon="more" round items={more} />{/if}
+	{/snippet}
+</PageHead>
+
+{#if album && !view.error}
+	<AlbumHero
+		{album}
+		line={albumLine(items)}
+		onplay={items.length ? () => (playing = spread(items)) : undefined}
+		onadd={canEdit ? () => (view.dialog = 'add') : undefined}
+		onshare={album.role === 'owner' ? () => (view.dialog = 'share') : undefined}
+	>
+		{#snippet actions()}
+			{#if album && session.canEdit}
+				<KeepOnPhone target={{ kind: 'album', album_id: album.id }} what="this album" />
+			{/if}
+		{/snippet}
+	</AlbumHero>
+{/if}
+
 <div class="page">
 	{#if view.error}
 		<p class="quiet">{view.error} <a href="/albums">All albums</a></p>
 	{:else if album}
-		<header>
-			<p class="small crumb"><a href="/albums">Albums</a></p>
-			<h1>{album.title}</h1>
-			{#if album.description}<p class="quiet desc">{album.description}</p>{/if}
-			<p class="quiet small">
-				{photos(items.length)}{#if album.role !== 'owner'}&nbsp;· shared with you as {album.role}{/if}
+		{#if arrange}
+			<p class="arranging" role="note">
+				Drag photos into place, or focus one and press Alt+← / Alt+→.
+				<button type="button" onclick={() => (arrange = false)}>Done arranging</button>
 			</p>
-			<div class="tools">
-				<button type="button" onclick={() => (view.dialog = 'download')}>Download</button>
-				{#if items.length}<a class="button" href={`/albums/${album.id}/print`}>Print</a>{/if}
-				{#if session.canEdit}
-					<KeepOnPhone target={{ kind: 'album', album_id: album.id }} what="this album" />
-				{/if}
-				{#if canEdit}
-					<button type="button" aria-pressed={arrange} onclick={() => (arrange = !arrange)}>
-						{arrange ? 'Done arranging' : 'Arrange'}
-					</button>
-					<button
-						type="button"
-						onclick={() => {
-							title = album?.title ?? '';
-							description = album?.description ?? '';
-							view.dialog = 'rename';
-						}}>Rename</button
-					>
-				{/if}
-				{#if album.role === 'owner'}
-					<button type="button" onclick={() => (view.dialog = 'share')}>Share</button>
-					<button type="button" onclick={() => (view.dialog = 'delete')}>Delete album</button>
-				{/if}
-			</div>
-			{#if arrange}
-				<p class="quiet small" role="note">
-					Drag photos into place, or focus one and press Alt+← / Alt+→.
-				</p>
-			{/if}
-		</header>
+		{/if}
 
 		<div bind:clientWidth={width}>
 			<PhotoGrid
@@ -155,7 +180,17 @@
 	/>
 {/if}
 
-{#if album && view.dialog === 'share'}
+{#if album && view.dialog === 'add'}
+	<AddPhotosDialog
+		albumId={album.id}
+		inAlbum={new Set(order)}
+		onclose={() => (view.dialog = null)}
+		onadded={() => {
+			view.dialog = null;
+			void view.load();
+		}}
+	/>
+{:else if album && view.dialog === 'share'}
 	<ShareDialog albumId={album.id} ownerId={album.owner_id} onclose={() => (view.dialog = null)} />
 {:else if album && view.dialog === 'download'}
 	<DownloadDialog
@@ -199,71 +234,38 @@
 	</Dialog>
 {/if}
 
+{#if playing?.length && album}
+	<StoryPlayer
+		photos={playing}
+		title={album.title}
+		dates={albumLine(items)}
+		poster={playing[0]}
+		onclose={() => (playing = null)}
+	/>
+{/if}
+
 <style>
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}
-	/* The album opens like a book's title page: a display serif, its caption beneath. */
-	header {
-		padding: var(--s-5) 0 var(--s-4);
-	}
-	header p {
-		margin: 0;
-	}
-	.crumb a {
-		color: var(--ink-2);
-	}
-	h1 {
-		font-size: var(--fs-40);
-		font-weight: var(--title-weight);
-		margin: var(--s-4) 0 var(--s-2);
-		max-width: 20ch;
-	}
-	.desc {
-		font-family: var(--font-title);
-		font-weight: 400;
-		font-style: var(--voice-style);
-		font-size: var(--fs-20);
-		margin-bottom: var(--s-1) !important;
-		max-width: var(--measure);
-	}
-	.tools {
+	.arranging {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0 2px;
-		margin: var(--s-4) 0 0 calc(-1 * var(--s-2));
-	}
-	.tools button,
-	.tools a {
+		align-items: center;
+		gap: var(--s-1) var(--s-3);
+		margin: 0 0 var(--s-3);
 		color: var(--ink-2);
 	}
-	@media (hover: hover) {
-		.tools button:hover,
-		.tools a:hover {
-			color: var(--ink);
-		}
-	}
-	.tools button[aria-pressed='true'] {
+	.arranging button {
+		font-weight: 600;
 		color: var(--ink);
-		text-decoration: underline;
-		text-underline-offset: 0.35em;
-		text-decoration-thickness: 1px;
-	}
-	[role='note'] {
-		margin-top: var(--s-2);
 	}
 	@media (max-width: 639px) {
 		.page {
 			padding: 0 var(--gutter) var(--s-7);
 		}
-		header {
+		.page > p {
 			padding-inline: var(--s-2);
-		}
-		h1 {
-			font-size: var(--fs-28);
-		}
-		.desc {
-			font-size: var(--fs-16);
 		}
 	}
 </style>

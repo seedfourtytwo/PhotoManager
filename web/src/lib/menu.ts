@@ -9,4 +9,6 @@ export type MenuItem = {
 	run?: () => void;
 	/** An action that is a switch: whether it is on. */
 	pressed?: boolean;
+	/** An action that destroys something (Empty trash): said in the fail colour. */
+	danger?: boolean;
 };

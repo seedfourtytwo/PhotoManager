@@ -119,7 +119,6 @@
 		font-style: var(--voice-style);
 		font-size: var(--fs-40);
 		font-weight: var(--title-weight);
-		letter-spacing: -0.015em;
 	}
 	.lede {
 		margin: var(--s-3) 0 0;

@@ -51,11 +51,17 @@ export async function openAdmin(page: Page) {
 	await signIn(page, '/admin');
 }
 
-/** Opens the account menu (the button with the person's initial); returns the main nav. */
-export async function openAccountMenu(page: Page): Promise<Locator> {
-	const nav = page.getByRole('navigation', { name: 'Main' });
-	await nav.getByRole('button', { name: /^Account/ }).click();
-	return nav;
+/** The avatar, named "You" (and, for an admin, what needs them): it opens You. */
+export const avatar = (page: Page) => page.getByRole('link', { name: /^You\b/ });
+
+/** Follow a link the way a click in the app does (no reload). */
+export async function follow(page: Page, href: string) {
+	await page.evaluate((to) => {
+		const link = Object.assign(document.createElement('a'), { href: to });
+		document.body.append(link);
+		link.click();
+		link.remove();
+	}, href);
 }
 
 /**
@@ -200,6 +206,9 @@ export async function centre(target: Locator) {
 /** Select photos the way each device does it: click the check circle, or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');
+	// The presses below skip Playwright's own wait for a target that takes them, and a page
+	// that is still sliding in takes no tap (as on an iPhone): wait for the move to end.
+	await expect(page.locator('html')).not.toHaveAttribute('data-page-move');
 	for (const [n, i] of indexes.entries()) {
 		const tile = tiles.nth(i);
 		if (!isPhone(page)) await tile.locator('.check').click({ force: true });
@@ -235,12 +244,44 @@ export async function viewOnlyPhoto(page: Page): Promise<number> {
 	throw new Error('no view-only photo for this user');
 }
 
-/** Run an action of the selection pill; on a phone the later ones are under "More". */
-export async function selectionAction(page: Page, name: string) {
+/**
+ * Select every photo the Library has loaded: Select in the head, then the pill's More, where
+ * it says "Select all" (or "Select loaded (n)" while more are to load).
+ */
+export async function selectEverything(page: Page, name: string | RegExp = /^Select (all|loaded)/) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
-	const button = bar.getByRole('button', { name, exact: true });
+	if (!(await bar.isVisible()))
+		await page.getByRole('button', { name: 'Select', exact: true }).click();
+	const more = bar.getByRole('button', { name: 'More' });
+	if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+	await bar.getByRole('button', { name, exact: typeof name === 'string' }).click();
+}
+
+/** Run an action of the selection pill; on a phone the later ones are under "More". */
+export async function selectionAction(page: Page, name: string | RegExp) {
+	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
+	const button = bar.getByRole('button', { name, exact: typeof name === 'string' });
 	if (!(await button.isVisible())) await bar.getByRole('button', { name: 'More' }).click();
 	await button.click();
+}
+
+/**
+ * The first month of a year's grid in the When sheet that has photos (the mock's and the real
+ * server's libraries differ): its name ("March 2019") and its number (3).
+ */
+export async function firstMonthWithPhotos(months: Locator) {
+	const all = await months.getByRole('button').all();
+	const index = (await Promise.all(all.map((month) => month.isEnabled()))).indexOf(true);
+	const label = (await all[index].getAttribute('aria-label')) ?? '';
+	return { button: all[index], name: label.split(':')[0], number: index + 1 };
+}
+
+/**
+ * A closed sheet's history step is undone a moment after it closes: going on to another page
+ * before that is cut short. Waits until it is gone.
+ */
+export async function sheetStepGone(page: Page) {
+	await page.waitForFunction(() => !JSON.stringify(history.state ?? {}).includes('"sheet"'));
 }
 
 /** The open photo: the photo view (the loupe), a modal dialog. */

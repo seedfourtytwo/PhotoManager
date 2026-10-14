@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
-	import { api, notice, settings, ui, viewport } from '$lib/app.svelte';
+	import { api, notice, settings, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { photos } from '$lib/format';
 	import { eachPage } from '$lib/paging';
@@ -17,6 +17,7 @@
 	} from '$lib/geo';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import { LAND_PATH } from '$lib/world';
+	import FilterChips from '$lib/components/FilterChips.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 
@@ -175,18 +176,18 @@
 	<header>
 		<h1>Map</h1>
 		<p class="quiet">
-			{photos(points.length)} with a location{#if describeFilters(filters)}&ensp;·&ensp;{describeFilters(
+			{photos(points.length)} with a location{#if describeFilters(filters)},&ensp;{describeFilters(
 					filters
 				)}{/if}
 		</p>
 		<span class="tools">
-			{#if !viewport.desktop}<button type="button" onclick={() => (ui.sheet = true)}>Filter</button
-				>{/if}
 			<button type="button" onclick={() => zoom(0.5)} aria-label="Zoom in">Zoom in</button>
 			<button type="button" onclick={() => zoom(2)} aria-label="Zoom out">Zoom out</button>
 			<button type="button" onclick={() => (view = { x: 0, y: 0, w: 360 })}>World</button>
 		</span>
 	</header>
+	<!-- The Library's filter chips; they run to the page's edges, as they do there. -->
+	<div class="chips-room"><FilterChips /></div>
 
 	<div class="map" bind:clientWidth={width}>
 		<svg
@@ -228,7 +229,6 @@
 						r={Math.max(r, 3 / pxPerUnit)}
 						class="dot"
 						class:chosen={chosen?.ids[0] === c.ids[0]}
-						stroke-width={1 / pxPerUnit}
 					/>
 				</a>
 			{/each}
@@ -337,8 +337,8 @@
 			color: var(--ink);
 		}
 	}
-	.map {
-		border: 1px solid var(--hairline);
+	.chips-room {
+		margin: 0 calc(-1 * var(--page-x));
 	}
 	svg {
 		display: block;
@@ -360,7 +360,6 @@
 	.dot {
 		fill: var(--ink);
 		fill-opacity: 0.8;
-		stroke: var(--bg);
 	}
 	.dot.chosen,
 	a:focus-visible .dot {
@@ -421,9 +420,6 @@
 		.tools {
 			flex-basis: 100%;
 			margin: 0 0 0 calc(-1 * var(--s-2));
-		}
-		.map {
-			border-inline: 0;
 		}
 	}
 </style>

@@ -98,20 +98,21 @@
 		fill: var(--ink-2);
 		font-family: var(--font-ui);
 	}
+	/* Ink by value: the stronger the ink, the more photos that day (zero-based, one hue). */
 	.day {
 		fill: var(--ink);
 	}
+	/* The day under the pointer or the keyboard takes the accent, whole: no outline round it. */
 	a:focus-visible .day,
 	a:hover .day {
-		stroke: var(--accent);
-		stroke-width: 1.5;
+		fill: var(--accent);
+		fill-opacity: 1;
 	}
 	a:focus {
 		outline: none;
 	}
 	.empty {
-		fill: var(--hairline);
-		opacity: 0.7;
+		fill: var(--fill);
 	}
 	.legend {
 		margin-top: var(--s-5);

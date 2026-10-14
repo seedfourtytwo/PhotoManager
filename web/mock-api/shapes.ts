@@ -19,6 +19,7 @@ export function shapeHelpers(h: World & AccessHelpers) {
 			thumb: { url: `/api/assets/${a.id}/thumb?v=${a.edit_version}` },
 			preview_ready: true,
 			favourite: setFor(h.state().favourites, user.id).has(a.id),
+			pinned: setFor(h.state().pinned, user.id).has(a.id),
 			hidden: setFor(h.state().hidden, user.id).has(a.id),
 			private: a.private_owner !== null,
 			place: a.place ? { ...a.place.place } : null,
