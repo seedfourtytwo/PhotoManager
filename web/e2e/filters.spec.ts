@@ -4,7 +4,15 @@
  * set chip shows its answer with an × that clears it. The address keeps every filter.
  */
 import type { Page } from '@playwright/test';
-import { expect, expectAccessible, isPhone, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	expectAccessible,
+	firstMonthWithPhotos,
+	isPhone,
+	resetMock,
+	signIn,
+	test
+} from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
@@ -61,12 +69,13 @@ test('after a year, its months: one chosen names the chip, an empty one cannot b
 	const months = when.getByRole('group', { name: 'Months in 2019' });
 	await expect(months.getByRole('button')).toHaveCount(12);
 	await expect(months.getByRole('button', { name: /^February 2019: 0$/ })).toBeDisabled();
-	await months.getByRole('button', { name: /^January 2019/ }).click();
-	await expect(page).toHaveURL(/\?year=2019&month=1$/);
+	const month = await firstMonthWithPhotos(months);
+	await month.button.click();
+	await expect(page).toHaveURL(new RegExp(`\\?year=2019&month=${month.number}$`));
 	// Every year is still counted (under the other filters), so another can be chosen.
 	await expect(when.getByRole('button', { name: /^2021/ })).toBeVisible();
 	await when.getByRole('button', { name: 'Done' }).click();
-	await expect(chip(page, 'January 2019')).toBeVisible();
+	await expect(chip(page, month.name)).toBeVisible();
 });
 
 test('filter by place, then reload the bookmarked URL', async ({ page }) => {

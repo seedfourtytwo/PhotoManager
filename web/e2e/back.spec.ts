@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 import {
 	delayRoute,
 	expect,
+	firstMonthWithPhotos,
 	loupe,
 	loupeAction,
 	resetMock,
@@ -60,12 +61,14 @@ for (const how of ['Back', 'Done'] as const) {
 		await when.getByRole('button', { name: /^2019/ }).click();
 		await expect(page).toHaveURL(/year=2019/);
 		await expect(when, 'choosing does not close the sheet').toBeVisible();
-		await when.getByRole('button', { name: /^January 2019/ }).click();
-		await expect(page).toHaveURL(/year=2019&month=1$/);
+		const month = await firstMonthWithPhotos(when.getByRole('group', { name: 'Months in 2019' }));
+		await month.button.click();
+		const chosen = new RegExp(`year=2019&month=${month.number}$`);
+		await expect(page).toHaveURL(chosen);
 		if (how === 'Back') await page.goBack();
 		else await when.getByRole('button', { name: 'Done' }).click();
 		await expect(when).toBeHidden();
-		await expect(page).toHaveURL(/year=2019&month=1$/);
+		await expect(page).toHaveURL(chosen);
 		await page.goBack();
 		await expect(page).toHaveURL(/\/$/);
 		await page.goBack();

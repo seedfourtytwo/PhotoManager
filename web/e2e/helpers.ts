@@ -258,11 +258,22 @@ export async function selectEverything(page: Page, name: string | RegExp = /^Sel
 }
 
 /** Run an action of the selection pill; on a phone the later ones are under "More". */
-export async function selectionAction(page: Page, name: string) {
+export async function selectionAction(page: Page, name: string | RegExp) {
 	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
-	const button = bar.getByRole('button', { name, exact: true });
+	const button = bar.getByRole('button', { name, exact: typeof name === 'string' });
 	if (!(await button.isVisible())) await bar.getByRole('button', { name: 'More' }).click();
 	await button.click();
+}
+
+/**
+ * The first month of a year's grid in the When sheet that has photos (the mock's and the real
+ * server's libraries differ): its name ("March 2019") and its number (3).
+ */
+export async function firstMonthWithPhotos(months: Locator) {
+	const all = await months.getByRole('button').all();
+	const index = (await Promise.all(all.map((month) => month.isEnabled()))).indexOf(true);
+	const label = (await all[index].getAttribute('aria-label')) ?? '';
+	return { button: all[index], name: label.split(':')[0], number: index + 1 };
 }
 
 /** The open photo: the photo view (the loupe), a modal dialog. */

@@ -68,7 +68,7 @@ test('download everything matching a filter', async ({ page }) => {
 	await page.goto('/?year=2019');
 	// It needs no photo chosen: Select, then the pill's More.
 	await page.getByRole('button', { name: 'Select', exact: true }).click();
-	await selectionAction(page, 'Download all 28 photos');
+	await selectionAction(page, /^Download all \d+ photos$/);
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/all \d+ matching photos/)).toBeVisible();
 	await dialog.getByRole('button', { name: 'More options' }).click();

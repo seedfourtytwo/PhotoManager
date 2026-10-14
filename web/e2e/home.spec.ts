@@ -8,6 +8,7 @@ import {
 	isPhone,
 	loupe,
 	loupeAction,
+	REAL_BACKEND,
 	resetMock,
 	selectTiles,
 	selectionAction,
@@ -25,9 +26,13 @@ async function homeWith(page: Page, change: (home: HomeData) => Partial<HomeData
 	});
 }
 
-/** A day of the library as On this day: the day of one of its photos, `years` ago. */
+/**
+ * A day of the library as On this day: the day of one of its photos, `years` ago. Home leaves
+ * dates guessed from a file out, so the photo's date is not a guess.
+ */
 async function dayOfPhoto(page: Page, years = 3): Promise<HomeData['on_this_day']> {
-	const { items } = (await (await page.request.get('/api/assets?limit=1')).json()) as AssetPage;
+	const answer = await page.request.get('/api/assets?limit=1&guessed_date=false');
+	const { items } = (await answer.json()) as AssetPage;
 	const cover = items[0];
 	const day = cover.taken_at.slice(0, 10);
 	return {
@@ -52,6 +57,7 @@ test.beforeEach(async () => {
 test('home: each block shows when it has photos, top to bottom, and not when it has none', async ({
 	page
 }) => {
+	test.skip(REAL_BACKEND, 'named people need the ML models, which the E2E server does not have');
 	await signIn(page, '/home');
 	const day = await dayOfPhoto(page);
 	await homeWith(page, () => ({ on_this_day: day }));
@@ -289,7 +295,7 @@ test('home: fits a phone 320 px wide without scrolling sideways', async ({ page 
 	test.skip(!isPhone(page), 'a phone’s width');
 	await page.setViewportSize({ width: 320, height: 640 });
 	await signIn(page, '/home');
-	await expect(block(page, 'Memories')).toBeVisible();
+	await expect(block(page, 'New this week')).toBeVisible();
 	const wide = await page.evaluate(
 		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 	);
