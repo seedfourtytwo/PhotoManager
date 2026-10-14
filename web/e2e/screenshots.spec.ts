@@ -120,13 +120,14 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Close' }).click();
 
-	if (isPhone(page)) await page.getByRole('button', { name: 'Filter', exact: true }).click();
 	await page
-		.getByRole('complementary', { name: 'Filters' })
-		.getByRole('button', { name: /^2019/ })
+		.getByRole('group', { name: 'Filters' })
+		.getByRole('button', { name: 'When', exact: true })
 		.click();
+	const when = page.getByRole('dialog', { name: 'When' });
+	await when.getByRole('button', { name: /^2019/ }).click();
 	await shot(page, '05-filters', p);
-	if (isPhone(page)) await page.getByRole('button', { name: 'Done' }).click();
+	await when.getByRole('button', { name: 'Done' }).click();
 
 	await page.goto('/');
 	await selectTiles(page, [1, 2, 4]);

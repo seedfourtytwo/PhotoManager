@@ -29,7 +29,7 @@ test('the grid is one Tab stop; arrow keys move between photos', async ({ page }
 	await expect(page).toHaveURL(new RegExp(`photo=${focusedId}`));
 });
 
-test('first load fetches one page, and facets only once the filters are open', async ({ page }) => {
+test('first load fetches one page, and facets only once a filter is asked', async ({ page }) => {
 	const pages: string[] = [];
 	const facets: string[] = [];
 	page.on('request', (r) => {
@@ -40,13 +40,13 @@ test('first load fetches one page, and facets only once the filters are open', a
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await page.waitForTimeout(1500); // a second page, were one asked for, would be on its way by now
 	expect(pages).toHaveLength(1);
-	if (isPhone(page)) {
-		expect(facets).toHaveLength(0);
-		await page.getByRole('button', { name: 'Filter', exact: true }).click();
-		await expect.poll(() => facets.length).toBeGreaterThan(0);
-	} else {
-		await expect.poll(() => facets.length).toBeGreaterThan(0);
-	}
+	// The chips need no counts: a sheet counts its answers when it opens, on every screen.
+	expect(facets).toHaveLength(0);
+	await page
+		.getByRole('group', { name: 'Filters' })
+		.getByRole('button', { name: 'When', exact: true })
+		.click();
+	await expect.poll(() => facets.length).toBeGreaterThan(0);
 });
 
 test('only photos within about a screen and a half are in the page', async ({ page }) => {

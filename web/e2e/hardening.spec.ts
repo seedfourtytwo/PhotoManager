@@ -10,6 +10,7 @@ import {
 	NOTHING_HAPPENS_MS,
 	REAL_BACKEND,
 	resetMock,
+	selectEverything,
 	selectTiles,
 	signIn,
 	test
@@ -383,17 +384,21 @@ test('library: “select” says how many it takes while more photos are still t
 	test.skip(REAL_BACKEND, 'needs a library larger than one page');
 	await resetMock('seed', { count: 450 });
 	await signIn(page);
-	const loaded = await page.getByRole('button', { name: /^Select loaded \(\d+\)$/ }).textContent();
+	// Under the pill's More, which Select brings before a photo is chosen.
+	await page.getByRole('button', { name: 'Select', exact: true }).click();
+	const bar = page.getByRole('toolbar', { name: 'Selected photos' });
+	await bar.getByRole('button', { name: 'More' }).click();
+	const loaded = await bar.getByRole('button', { name: /^Select loaded \(\d+\)$/ }).textContent();
 	const n = Number(loaded!.match(/\d+/)![0]);
 	expect(n).toBeLessThan(450);
-	await page.getByRole('button', { name: /^Select loaded/ }).click();
+	await expect(bar.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
+	await bar.getByRole('button', { name: /^Select loaded/ }).click();
 	await expect(page.getByText(`${n} selected`)).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
 });
 
 test('selecting a few photos says nothing about the 10,000 limit', async ({ page }) => {
 	await signIn(page);
-	await page.getByRole('button', { name: /^Select (all|loaded)/ }).click();
+	await selectEverything(page);
 	await expect(page.getByText(/\d+ selected/)).toBeVisible();
 	await expect(page.getByText(/the most one action can change/)).toHaveCount(0);
 });

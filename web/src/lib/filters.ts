@@ -2,7 +2,7 @@
  * Asset filters <-> URL query. The page URL and the API use the same parameter names, so a
  * library view is shareable and bookmarkable, and the query can be forwarded to the API as-is.
  */
-import type { AssetFilters, Facets } from './api/types';
+import type { AssetFilters } from './api/types';
 // With its extension: the mock API runs this file in plain Node.
 import { plural } from './format.ts';
 
@@ -119,10 +119,6 @@ export function withFilter<K extends Key>(
 	return inOrder(next);
 }
 
-export function activeFilterCount(filters: AssetFilters): number {
-	return describeParts(filters).length;
-}
-
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function formatDay(day: string): string {
@@ -151,33 +147,4 @@ function describeParts(f: AssetFilters): string[] {
 /** Filters in words, e.g. "2019 · Paris · favourites". */
 export function describeFilters(filters: AssetFilters): string {
 	return describeParts(filters).join(' · ');
-}
-
-export type FacetSet = {
-	main: Facets;
-	/** Facets with the year (and month) filter left out; null when no year is chosen. */
-	withoutYear: Facets | null;
-	/** Facets with the source filter left out; null when no source is chosen. */
-	withoutSource: Facets | null;
-};
-
-/**
- * What the filter panel lists: every year and source counted under the *other* filters (so
- * choosing 2019 doesn't hide 2020), plus chosen values that match nothing, so they can be
- * unticked.
- */
-export function mergeFacets(
-	set: FacetSet,
-	filters: AssetFilters,
-	sourceLabels: ReadonlyMap<number, string>
-): Facets {
-	const years = [...(set.withoutYear ?? set.main).years];
-	if (filters.year !== undefined && !years.some((y) => y.year === filters.year))
-		years.push({ year: filters.year, count: 0 });
-	years.sort((a, b) => b.year - a.year);
-	const sources = [...(set.withoutSource ?? set.main).sources];
-	for (const id of filters.source_id ?? [])
-		if (!sources.some((s) => s.id === id))
-			sources.push({ id, label: sourceLabels.get(id) ?? `Source ${id}`, count: 0 });
-	return { ...set.main, years, sources };
 }

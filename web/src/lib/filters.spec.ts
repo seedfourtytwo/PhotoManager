@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Facets } from './api/types';
 import {
-	activeFilterCount,
-	mergeFacets,
 	describeFilters,
 	filtersFromParams,
 	filtersToParams,
@@ -103,10 +100,9 @@ describe('withFilter', () => {
 	});
 });
 
-describe('activeFilterCount and describeFilters', () => {
-	it('counts what narrows the view and says it in words', () => {
+describe('describeFilters', () => {
+	it('says what narrows the view in words', () => {
 		const filters = { year: 2019, place: 'Paris', favourite: true, guessed_date: true };
-		expect(activeFilterCount(filters)).toBe(4);
 		expect(describeFilters(filters)).toBe('2019 · Paris · favourites · guessed dates');
 		expect(describeFilters({})).toBe('');
 	});
@@ -121,54 +117,5 @@ describe('activeFilterCount and describeFilters', () => {
 		expect(describeFilters({ from: '2019-07-01', to: '2019-07-31', has_location: false })).toBe(
 			'1 Jul 2019 – 31 Jul 2019 · without location'
 		);
-	});
-});
-
-describe('mergeFacets (other values of the chosen dimension stay listed)', () => {
-	const facets = (years: number[], sources: number[]): Facets => ({
-		years: years.map((year) => ({ year, count: 1 })),
-		sources: sources.map((id) => ({ id, label: `S${id}`, count: 1 })),
-		cameras: [],
-		places: [],
-		guessed_dates: 0,
-		total: 1
-	});
-
-	it('lists every year and source counted without its own filter', () => {
-		const merged = mergeFacets(
-			{
-				main: facets([2019], [1]),
-				withoutYear: facets([2020, 2019], [1]),
-				withoutSource: facets([2019], [1, 2])
-			},
-			{ year: 2019, source_id: [1] },
-			new Map()
-		);
-		expect(merged.years.map((y) => y.year)).toEqual([2020, 2019]);
-		expect(merged.sources.map((s) => s.id)).toEqual([1, 2]);
-	});
-
-	it('keeps a selected source with no matches, so it can be unticked', () => {
-		const merged = mergeFacets(
-			{ main: facets([], []), withoutYear: null, withoutSource: facets([2019], [1]) },
-			{ source_id: [1, 3] },
-			new Map([[3, 'Scans']])
-		);
-		expect(merged.sources).toEqual([
-			{ id: 1, label: 'S1', count: 1 },
-			{ id: 3, label: 'Scans', count: 0 }
-		]);
-	});
-
-	it('keeps a selected year with no matches', () => {
-		const merged = mergeFacets(
-			{ main: facets([], []), withoutYear: facets([2020], []), withoutSource: null },
-			{ year: 1999 },
-			new Map()
-		);
-		expect(merged.years).toEqual([
-			{ year: 2020, count: 1 },
-			{ year: 1999, count: 0 }
-		]);
 	});
 });

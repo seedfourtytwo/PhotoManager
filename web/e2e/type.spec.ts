@@ -33,13 +33,15 @@ test('phone: every field is at least 16 px, so focusing one never zooms the page
 	expect(await fontSize(page.getByLabel('PIN'))).toBeGreaterThanOrEqual(16);
 
 	await signIn(page);
-	await page.getByRole('button', { name: 'Filter', exact: true }).click();
-	const filters = page.getByRole('complementary', { name: 'Filters' });
-	expect(await fontSize(filters.getByLabel('From'))).toBeGreaterThanOrEqual(16);
-	expect(await fontSize(filters.getByRole('searchbox'))).toBeGreaterThanOrEqual(16);
-	expect(await fontSize(filters.getByRole('combobox', { name: 'Place' }))).toBeGreaterThanOrEqual(
-		16
-	);
+	const chips = page.getByRole('group', { name: 'Filters' });
+	await chips.getByRole('button', { name: 'When', exact: true }).click();
+	const when = page.getByRole('dialog', { name: 'When' });
+	expect(await fontSize(when.getByLabel('From'))).toBeGreaterThanOrEqual(16);
+	await when.getByRole('button', { name: 'Done' }).click();
+	await chips.getByRole('button', { name: 'Where', exact: true }).click();
+	const where = page.getByRole('dialog', { name: 'Where' });
+	expect(await fontSize(where.getByRole('searchbox'))).toBeGreaterThanOrEqual(16);
+	await where.getByRole('button', { name: 'Done' }).click();
 
 	await page.goto('/albums');
 	await page.getByRole('button', { name: 'New album' }).click();

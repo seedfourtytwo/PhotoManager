@@ -73,8 +73,8 @@ test('filter by place, then reload the bookmarked URL', async ({ page }) => {
 	const where = await ask(page, 'Where');
 	await where.getByRole('searchbox', { name: 'Find a place' }).fill('lis');
 	await expect(where.getByRole('group', { name: 'Places' }).getByRole('button')).toHaveText([
-		/^Lisbon\s*\d+$/,
-		/^No place recorded/
+		/^\s*Lisbon\s*\d+\s*$/,
+		/^\s*No place recorded/
 	]);
 	await where.getByRole('button', { name: /^Lisbon/ }).click();
 	await expect(page).toHaveURL(/\?place=Lisbon$/);
@@ -84,8 +84,12 @@ test('filter by place, then reload the bookmarked URL', async ({ page }) => {
 	);
 	await page.reload();
 	await expect(chip(page, 'Lisbon')).toBeVisible();
-	// "No place recorded" answers the same question: it takes the place's room.
-	await (await ask(page, 'Where')).getByRole('button', { name: /^No place recorded/ }).click();
+	// The chip, named by its answer, asks the question again. "No place recorded" answers the
+	// same question: it takes the place's room.
+	await chip(page, 'Lisbon').click();
+	await sheet(page, 'Where')
+		.getByRole('button', { name: /^No place recorded/ })
+		.click();
 	await expect(page).toHaveURL(/\?has_location=false$/);
 	await sheet(page, 'Where').getByRole('button', { name: 'Done' }).click();
 	await expect(chip(page, 'No place recorded')).toBeVisible();

@@ -138,25 +138,24 @@ case. A count goes under or beside its title in `--ink-2`, never boxed or dotted
 | `--bar`                                   | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock                                                           |
 | `--pill`                                  | 52 px: the least height of the selection pill; the toast steps over it by this much                                                                        |
 | `--blur`                                  | `blur(18px) saturate(1.4)`: the frosted-glass look of bars over photos (with `--glass`; solid where blur is unavailable or `prefers-reduced-transparency`) |
-| `--margin`                                | 224 px (14rem) right margin for notes and filters on a laptop                                                                                              |
+| `--margin`                                | 224 px (14rem) right margin for notes on a laptop                                                                                                          |
 | `--press` / `--motion` / `--motion-sheet` | 120 ms a control giving under the finger · 200 ms fades and colour · 380 ms sheets and page changes; off under `prefers-reduced-motion`                    |
 | `--ease` / `--ease-sheet`                 | `cubic-bezier(.2,0,0,1)` · `cubic-bezier(.32,.72,0,1)`, the curve of an iPhone sheet                                                                       |
 
 Layers, lowest first (a number of 1 to 5 inside one component orders its own pieces and is
 not a token):
 
-| Token                              | Value   | What                                                                 |
-| ---------------------------------- | ------- | -------------------------------------------------------------------- |
-| `--z-ruler`                        | 4       | the time ruler beside the photos                                     |
-| `--z-bar`                          | 20      | the top bar on a laptop                                              |
-| `--z-selection`                    | 25      | the selection pill                                                   |
-| `--z-dock`                         | 28      | the dock on a phone (over the pill, so its open menu is not covered) |
-| `--z-menu` / `--z-lasso`           | 30      | an open menu / the rectangle drawn while selecting with the mouse    |
-| `--z-sheet-backdrop` / `--z-sheet` | 35 / 40 | the filter sheet on a phone and the scrim under it                   |
-| `--z-loupe`                        | 50      | the photo view                                                       |
-| `--z-toast`                        | 60      | the toast                                                            |
-| `--z-editor`                       | 70      | the editor, over the photo view it opens from                        |
-| `--z-skip`                         | 100     | the skip link, when focused                                          |
+| Token                    | Value | What                                                                 |
+| ------------------------ | ----- | -------------------------------------------------------------------- |
+| `--z-ruler`              | 4     | the time ruler beside the photos                                     |
+| `--z-bar`                | 20    | the top bar on a laptop                                              |
+| `--z-selection`          | 25    | the selection pill                                                   |
+| `--z-dock`               | 28    | the dock on a phone (over the pill, so its open menu is not covered) |
+| `--z-menu` / `--z-lasso` | 30    | an open menu / the rectangle drawn while selecting with the mouse    |
+| `--z-loupe`              | 50    | the photo view                                                       |
+| `--z-toast`              | 60    | the toast                                                            |
+| `--z-editor`             | 70    | the editor, over the photo view it opens from                        |
+| `--z-skip`               | 100   | the skip link, when focused                                          |
 
 ### Component rules
 
@@ -186,11 +185,12 @@ not a token):
   option out in a row.
 - **Sliders**: a 4 px `--fill` track, a small ink thumb; larger thumb on touch.
 - **Dialogs** are `--raised` with an `--r-2` radius over `--scrim`; a title; actions bottom
-  right, Cancel left of the primary. On a phone every dialog, the filters and the loupe's info
-  become **bottom sheets**, as wide as the screen, with rounded top corners, a grab handle and
+  right, Cancel left of the primary. On a phone every dialog, a filter question and the loupe's
+  info become **bottom sheets**, as wide as the screen, with rounded top corners, a grab handle and
   safe-area padding; they rise on the sheet curve and follow the finger down from the handle or
-  the title, closing when let go far or fast enough (`lib/sheet-drag.ts`). A dialog, the photo editor and the filter sheet each add a history step
-  (`lib/history-step.ts`), so Back closes them; what was chosen in the filter sheet stays.
+  the title, closing when let go far or fast enough (`lib/sheet-drag.ts`). A dialog, the photo
+  editor and a filter sheet each add a history step (`lib/history-step.ts`), so Back closes
+  them; what was chosen in a filter sheet stays.
   So does the photo's Info sheet on a phone (`lib/info-sheet.svelte.ts`): Back closes the
   sheet, the next Back the photo; on a laptop Info is a panel beside the photo, with no step.
   The editor with changes that are not saved asks first, whichever way it is left (Back,
@@ -202,12 +202,23 @@ not a token):
   steps over the selection pill and a phone's lying ruler. In the photo view the bottom is the
   bar's, so it sits under Close and Info; it is always on top of an open dialog and inside it,
   where a screen reader still hears it.
-- **Selection**: a 3 px accent frame inset on the photo (with a 1 px shade so it reads on any
-  photo) and a filled accent circle with a check. The actions come to the photos as a floating
-  glass pill at the bottom centre: the count (the only accent text), Add to album, Download,
-  Fix date, Move to trash, and More for the rest. With a share sheet and up to ten photos,
-  Share comes after Add to album (on a phone in Download's place, Download under More). What does not fit beside the count and Clear
-  (a narrow phone, large text, a long count) joins More: nothing leaves the glass. Escape clears.
+- **Selection**: the circle that chooses a photo is a 2 px white ring round a shade, so it
+  reads on any photo; chosen, it is a filled accent circle with a check and the photo takes a
+  3 px accent frame inside its edge. The actions come to the photos as a floating glass pill at
+  the bottom centre: × (stop) first, then "3 selected" with only the number in the accent, then
+  icons named by their words: Add to album, Share where the device has a share sheet and up
+  to ten photos are chosen (else Download), Move to trash, and More for the rest (Select all,
+  Fix date, Download, Favourite, Hide, Make private, and "Download all" of a filtered
+  Library). Select in the Library's head brings the pill before a photo is chosen; then a tap
+  chooses. What does not fit (a narrow phone, large text, a long count) joins More: nothing
+  leaves the glass. Escape clears.
+- **Filters** are a row of chips under the Library's title, the same on a phone and a laptop:
+  Who (once the server filters by person), When, Where, Favourites, Camera, More, then
+  "Clear all" when two or more are set. Favourites toggles where it is; each of the others asks
+  one question in a sheet (a bottom sheet on a phone, a popover under its chip on a laptop),
+  counted under the other filters. A set chip shows its answer ("July 2019", "Lisbon",
+  "Phone, Old hard disk") in ink with an × that clears that question. Words to search for
+  that come with a link show as one more chip. The address keeps every filter.
 - **Focus**: 2 px accent outline, 2 px offset (inset on photo tiles).
 - **Icons**: a set of 2 px-stroke SVGs on a 24 grid drawn for this app (`lib/icons.ts`), one
   component, no icon font. In the main navigation an icon carries its word; elsewhere an
@@ -265,19 +276,23 @@ not a token):
   is not swiped; another photo opens at its fit. The heart is the Favourite button, first in
   the bar. It opens from its tile and closes back to it as
   a view transition.
-- **The time ruler** is the one signature: even ticks for the months, the years in the data
-  face, an accent needle with the month in view. Upright at the right edge on a laptop; lying
-  above the dock on a phone, where it shows while the page scrolls and fades when idle. A drag
-  moves the needle and the Library jumps where it is let go; a tap on a year jumps to it.
-- **Charts** (year bars, calendar, map) use `--ink` only, zero-based, directly labelled; the
-  chosen map dot takes the accent because it is the selection.
+- **The time ruler** is the one signature: even 2 px ticks for the months (drawn, never a
+  gradient), the years in the interface face, and the needle as a filled accent pill naming
+  the month in view. Upright at the right edge on a laptop; lying above the dock on a phone,
+  where it shows while the page scrolls and fades when idle. A drag moves the needle and the
+  Library jumps where it is let go; a tap on a year jumps to it. Month headings say the month
+  and nothing else; on a phone they stick under the compact title.
+- **Charts** (year bars, calendar, map) use `--ink` only, zero-based, directly labelled; a
+  chosen year bar is in full ink, the others lighter. The calendar heat map draws each day's
+  ink by its count, with no stroke; the day under the pointer or the keyboard takes the
+  accent. The chosen map dot takes the accent because it is the selection.
 
 ## 3. Layout by device
 
 |                 | Laptop (≥ 1024 px)                                                 | Phone (< 640 px)                                                                                          |
 | --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | Navigation      | glass top bar: Library · Collections · Search · the account button | floating glass dock: Library · Collections, with Search and the account button as round buttons beside it |
-| Filters         | right margin, always visible, collapsible                          | bottom sheet                                                                                              |
+| Filters         | a row of chips under the title; a question opens under its chip    | the same chips; a question opens as a bottom sheet                                                        |
 | Loupe metadata  | right margin "sidenote"                                            | Info opens a bottom sheet                                                                                 |
 | Loupe actions   | Close and Info at the top, one glass bar at the bottom             | the same                                                                                                  |
 | Time ruler      | upright at the right edge                                          | lying above the dock, fading when idle                                                                    |
