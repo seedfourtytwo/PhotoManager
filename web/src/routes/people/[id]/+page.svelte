@@ -9,6 +9,7 @@
 	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
 	import { EMPTY, applyClick, type Selection } from '$lib/selection';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
 	import PortraitDialog from '$lib/components/PortraitDialog.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -151,6 +152,10 @@
 						>
 						<button type="button" onclick={() => (dialog = 'portrait')}>Change portrait</button>
 						<button type="button" onclick={openMerge}>Merge with…</button>
+						<KeepOnPhone
+							target={{ kind: 'person', person_id: person.id }}
+							what={person.name ?? 'this person'}
+						/>
 						{#if person.hidden}
 							<button type="button" disabled={busy} onclick={() => setHidden(false)}
 								>Show again</button

@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 from pydantic.alias_generators import to_camel
 
-from photo_assistant.domain.access import Role, User
+from photo_assistant.domain.access import KEPT_KIND, Role, User
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folders, Naming
 from photo_assistant.domain.library_filter import AssetFilter
@@ -132,6 +132,19 @@ class SourcePatch(BaseModel):
     recheck: Recheck | None = None  # check it again by itself: off, hourly, daily or weekly
 
 
+class SourceRemoval(BaseModel):
+    """What stopping watching a source would do: its photos, and those no other source holds."""
+
+    photos: int
+    only_here: int
+
+
+class SourceRemoved(BaseModel):
+    only_here: int
+    trashed: int
+    detached: bool  # kept as a source no longer watched (its photos seen as before)
+
+
 class SourceOut(BaseModel):
     id: int
     label: str
@@ -158,7 +171,7 @@ class SourceOut(BaseModel):
         return cls(
             id=s.id,
             label=s.label,
-            path=(place or s.root) if show_path else None,
+            path=(place or s.root) if show_path and s.kind != KEPT_KIND else None,
             enabled=s.enabled,
             kind=s.kind,
             owner_id=s.owner_id,

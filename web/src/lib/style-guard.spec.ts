@@ -84,6 +84,7 @@ describe('style guard', () => {
 	const LINES_PENDING = new Set([
 		'/src/lib/components/Devices.svelte', // (a) You, after the phone-sync PR
 		'/src/lib/components/PhotoGrid.svelte', // (b) library
+		'/src/lib/components/KeepOnPhone.svelte', // (b)
 		'/src/lib/components/Timeline.svelte', // (b)
 		'/src/lib/components/PeopleEditor.svelte', // (d) collections
 		'/src/lib/components/PortraitDialog.svelte', // (d)

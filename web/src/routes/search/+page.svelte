@@ -8,6 +8,7 @@
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
+	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 
 	const q = $derived(page.url.searchParams.get('q')?.trim() ?? '');
 	const like = $derived(Number(page.url.searchParams.get('like')) || null);
@@ -129,7 +130,12 @@
 	{:else if busy}
 		<p class="quiet">Searching…</p>
 	{:else if result || similar}
-		<p class="quiet small meta" aria-live="polite">{summary}</p>
+		<p class="quiet small meta" aria-live="polite">
+			{summary}
+			{#if result && q && session.canEdit}
+				<KeepOnPhone target={{ kind: 'filter', filters: { q } }} what="this search" />
+			{/if}
+		</p>
 		{#if items.length === 0}
 			<div class="empty-state">
 				<p>Nothing found.</p>

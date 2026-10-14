@@ -64,6 +64,7 @@ class DeviceOut(BaseModel):
     platform: str
     created_at: datetime
     last_used_at: datetime | None
+    last_sync_at: datetime | None  # it last asked for its "Keep on my phone" list
     revoked: bool
 
     @classmethod
@@ -74,6 +75,7 @@ class DeviceOut(BaseModel):
             platform=d.platform,
             created_at=d.created_at,
             last_used_at=d.last_used_at,
+            last_sync_at=d.last_sync_at,
             revoked=d.revoked_at is not None,
         )
 
