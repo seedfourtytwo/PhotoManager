@@ -79,22 +79,15 @@ describe('style guard', () => {
 	});
 
 	// Groups separate by space or by a seam of --fine (DESIGN_PRINCIPLES §2): no hairlines.
-	// The redesign's area branches (docs/superpowers/specs/2026-10-14-ui-redesign-2-design.md
-	// §11) take their files off this list; it must be empty when the redesign is done.
-	const LINES_PENDING = new Set([]);
-	const lines = Object.entries(sources).flatMap(([path, text]) =>
-		[
-			...text.matchAll(
-				/(border(-(top|bottom|left|right|block|inline)(-(start|end))?)?|outline|box-shadow):[^;}]*\b1px\b[^;}]*/g
-			)
-		].map((m) => ({ path, rule: m[0] }))
-	);
 	it('no stylesheet draws a 1 px line', () => {
-		expect(lines.filter(({ path }) => !LINES_PENDING.has(path))).toEqual([]);
-	});
-	it('a file leaves the pending list once its lines are gone', () => {
-		const still = new Set(lines.map(({ path }) => path));
-		expect([...LINES_PENDING].filter((path) => !still.has(path))).toEqual([]);
+		const lines = Object.entries(sources).flatMap(([path, text]) =>
+			[
+				...text.matchAll(
+					/(border(-(top|bottom|left|right|block|inline)(-(start|end))?)?|outline|box-shadow):[^;}]*\b1px\b[^;}]*/g
+				)
+			].map((m) => `${path}: ${m[0]}`)
+		);
+		expect(lines).toEqual([]);
 	});
 
 	it('the browser chrome colours equal the Safelight dark page colour', () => {
