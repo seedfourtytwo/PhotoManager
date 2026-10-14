@@ -13,7 +13,8 @@ Conventions
   does so every 15 days of use, together with its marker cookie `pa_session_fresh`), so a
   session that is used does not end; clients have nothing to do.
   Every `/api/*` route needs a session **except** `/api/health`, `/api/setup` (GET/POST),
-  `/api/auth/accounts`, `/api/auth/login`. No session → `401`. Not allowed → `403`. Hidden from you → `404`.
+  `/api/auth/accounts`, `/api/auth/login`, and the two `/api/sync/…` routes of "Keep on my
+  phone", which take a device token instead (v1.7). No session → `401`. Not allowed → `403`. Hidden from you → `404`.
 - Roles: `admin` (everything, manages users/sources/access), `member`, `guest`
   (view + download only; never edits).
 - Access levels on a source: `view` < `download` < `edit`. Admins have `edit` everywhere.
@@ -162,7 +163,7 @@ least that long ago (a failed check counts, so it is not retried at once), unles
 already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
 off or disabled, possibly a moment already past (it runs at the server's next look).
 
-**Stop watching a folder (v1.7).** `GET /api/sources/{id}/removal` (admin) answers
+**Stop watching a folder (v1.8).** `GET /api/sources/{id}/removal` (admin) answers
 `{photos, only_here}`: the live photos in the source, and those no other source holds.
 `DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
 answers `{only_here, trashed, detached}`. Photos another source also holds are not touched.
@@ -331,7 +332,7 @@ access `{everyone: null, users: [{owner, edit}]}`: **private to the uploader** u
 | POST | `/api/upload` | session or device | multipart, any field name, many files | `{files: [{name, outcome: "stored"\|"duplicate"\|"rejected", stored_as, content_hash, asset_id, reason}], import_job_id\|null}`; `400` broken multipart, `415` not multipart. `duplicate` = you already have it (or it was purged); `asset_id` is only ever the id of a photo you can see, else `null` (v1.2) |
 | POST | `/api/upload/check` | session or device | `{hashes: [blake3 hex]}` (≤ 5000) | `{missing: [...]}` — missing **for you** (v1.2): purged photos count as present; a photo that exists but is hidden from you is missing (uploading it links the existing photo to your inbox: one library copy, and you gain access through your inbox) |
 | GET | `/api/upload/jobs/{import_job_id}` | session or device | – | `{id, status: "queued"\|"running"\|"done"\|"failed", run_after}`: the import your own upload queued (`import_job_id` of `POST /api/upload`). `run_after` (UTC time, else `null`) is set while a failed import waits for its next attempt. Any other job, anyone else's upload and an unknown id are all `404` (admins too: they have `GET /api/jobs`); guests `403`. The web app waits for this job after an upload, not for the whole queue. |
-| GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, revoked}]` |
+| GET | `/api/devices` | session | – | `[{id, name, platform, created_at, last_used_at, last_sync_at, revoked}]` (`last_sync_at` v1.7: when it last asked for its "Keep on my phone" list) |
 | POST | `/api/devices` | session | `{name, platform: "ios"\|"android"\|"desktop"\|"other"}` | `201 {device, token}` (the token is shown once) |
 | DELETE | `/api/devices/{id}` | session | – | `204`; `404` if not yours |
 
@@ -343,6 +344,42 @@ byte of them is stored (v1.4). The answer is still `200`: each such file comes b
 `outcome: "rejected"` and a `reason` that says so ("the library disk is almost full (… GB
 free; uploads keep at least … GB free): free up space on the server, then send it again"),
 and `import_job_id` is `null` when nothing was stored.
+
+## Keep on my phone (v1.7)
+
+Server → device, one way (FEATURES 10.6). Each device has its own rules: an album, a person or
+filters, each kept on it (`include`) or off it (`exclude`). Its **list** is every photo some
+include names minus every photo some exclude names, each once, and only photos its owner may
+**download** (an album grants view only, so a shared album's photos go only where a source
+gives download) and has not hidden; nothing in the trash or held for review. The list follows
+the library: it is computed on every request. What the device deletes is **not** deleted here.
+
+Rules are chosen from a signed-in browser (session only; a device token gets `401`; guests
+have no devices). `404` for a device that is not yours or is revoked.
+
+| Method | Path | Auth | Body | Response |
+|---|---|---|---|---|
+| GET | `/api/devices/{id}/sync` | session | – | `{device: Device, rules: [Rule], count, bytes, sent}`: the list's size, and how many of it the phone said it saved |
+| POST | `/api/devices/{id}/sync/rules` | session | `{kind: "album"\|"person"\|"filter", mode: "include"\|"exclude", album_id?, person_id?, filters?}` | `Rule`. Naming the same thing again changes its mode (same `id`). `filters` is the `/api/assets` query as JSON (as in downloads; search facets such as `tag:screenshot` or `person:Lea` go in `q` and mean what they mean in search, words matched without ranking). `404` an album or person you cannot see, `422` a rule that names the wrong thing or more than 50 rules, `400` filters that make no sense |
+| DELETE | `/api/devices/{id}/sync/rules/{rule_id}` | session | – | `204`; `404` |
+| POST | `/api/devices/{id}/sync/resend` | session | – | `{forgotten}`: the photos the phone said it saved count as new again |
+
+`Rule` = `{id, kind, mode, album_id, person_id, filters, label, count, gone, view_only}`:
+`label` is the album's title or the person's name (`null` for filters: the app describes them),
+`count` the photos it names that you can see, `gone` true when it names nothing you can see any
+more, `view_only` (includes only, else 0) how many of them you may only view, so they can't go
+to the phone (typically an album shared with you whose photos no source lets you download).
+
+The device reads its list with its own token, `Authorization: Bearer <device token>` and
+nothing else (a session gets `401`). It changes nothing in the library; it only says which
+photos it saved. A run killed between fetching and saving offers those photos again, and the
+`hash` in the manifest lets a phone skip one it already has.
+
+| Method | Path | Auth | Body | Response |
+|---|---|---|---|---|
+| GET | `/api/sync/manifest` | device | query `new`, `after`, `limit` | `{device, total, total_bytes, remaining, items: [{id, hash, name, taken_at, bytes, mime_type, url}], next_after}`, in id order. `new=true`: only photos the phone has not said it saved. `limit` 1–200 (default 50); `next_after` (else `null`) is the `after` of the next page. Records `last_sync_at` |
+| GET | `/api/sync/assets/{id}/original` | device | – | the untouched original, `Content-Disposition` with its file name (the photo's display name, as in downloads); `404` for a photo not on this device's list (whatever else its owner may see). Fetching marks nothing |
+| POST | `/api/sync/sent` | device | `{ids: [id]}` (1–200) | `{sent}`: the phone saved these, so `new=true` leaves them out from now on. Every id must be on this device's list, else `422` and nothing is marked. Saying it again is harmless |
 
 ## Remote sources (admin)
 
@@ -504,7 +541,18 @@ Additions only.
 
 ---
 
-# v1.7 changes (stop watching a folder)
+# v1.7 changes (Keep on my phone, FEATURES 10.6)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Devices | `Device` has `last_sync_at`. New: `GET /api/devices/{id}/sync`, `POST /api/devices/{id}/sync/rules`, `DELETE /api/devices/{id}/sync/rules/{rule_id}`, `POST /api/devices/{id}/sync/resend` (see "Keep on my phone" above). | Settings → Phones and devices shows each device's list (what it keeps and leaves off, count, size, last sync) and offers "Leave out screenshots" and "Send everything again"; album, person, library and search screens have "Keep on phone". |
+| Sync | New, device token only: `GET /api/sync/manifest`, `GET /api/sync/assets/{id}/original`, `POST /api/sync/sent`. | None: the Apple Shortcut calls them (`docs/guides/keep-on-my-phone.md`). |
+
+---
+
+# v1.8 changes (stop watching a folder)
 
 Additions only.
 

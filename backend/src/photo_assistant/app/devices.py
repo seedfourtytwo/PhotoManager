@@ -51,8 +51,8 @@ class DeviceTokens:
     def revoke(self, user_id: int, device_id: int) -> bool:
         return self._store.revoke_device(user_id, device_id, self._clock.now())
 
-    def authenticate(self, token: str) -> int | None:
-        """The user a valid, unrevoked token belongs to."""
+    def authenticate(self, token: str) -> Device | None:
+        """The device of a valid, unrevoked token (its ``user_id`` is whose it is)."""
         if not token.startswith(TOKEN_PREFIX):
             return None
-        return self._store.user_for_token_hash(hash_token(token), self._clock.now())
+        return self._store.device_for_token_hash(hash_token(token), self._clock.now())

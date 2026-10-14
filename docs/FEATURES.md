@@ -231,7 +231,7 @@ itself. The phone has to push, and only an installed app can do that on its own.
 | 10.4 | **Free automatic iPhone upload via Apple Shortcuts** (built into iOS, no app, no cost): a personal automation — e.g. "when charging" or "every night" — finds photos added since the last run and posts them to the upload API. We ship the shortcut + a setup guide. Needs a spike first: batch-size limits and whether it runs without a tap on current iOS | Should | M4 |
 | 10.4b | **Partner's iPhone via Proton**: her phone backs up to Proton, we pull from Proton. Done through Proton's own `proton-drive` CLI (issue 8): the Photos section, the whole Drive or one folder; the sign-in stays in Proton's tool. Still to do: timed re-checks | Could | M4 ✅ (manual pull) |
 | 10.5 | **Own phone app** — full web feature parity + background sync. Parked: an iPhone app needs the paid Apple Developer Program ($99/yr) or re-signing every 7 days with a free Apple ID | Later | — |
-| 10.6 | Phone app: server → phone sync ("keep this album on my phone") | Later | — |
+| 10.6 | **Keep on my phone**: server → phone, one way. Per device, choose albums, people, searches or library filters to keep on it, and what to leave off (a person, an album, screenshots); the server merges them into one list (only photos you may download, never hidden or trashed) that the phone fetches with its device token. Free iPhone client: an Apple Shortcut "when charging" (guide `docs/guides/keep-on-my-phone.md`, not yet tried on a real iPhone). Deleting on the phone deletes nothing here | Should | M4 ✅ (server, web; Shortcut untested) |
 | 10.7 | Phone app: free-up-space helper | Later | — |
 
 **Laptop:** no app and no sync. Once the server exists, the laptop is just a browser. New

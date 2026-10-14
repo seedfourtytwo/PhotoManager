@@ -2,6 +2,7 @@
 	import type { Device, DevicePlatform } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
 	import { errorMessage, formatWhen } from '$lib/format';
+	import DeviceKeeps from './DeviceKeeps.svelte';
 	import Dialog from './Dialog.svelte';
 
 	let devices = $state<Device[] | null>(null);
@@ -81,8 +82,8 @@
 	<h2 id="s-devices">Phones and devices</h2>
 	<p class="quiet small intro">
 		A device token lets a phone send its new photos here on its own (for example with Apple
-		Shortcuts while charging). It can only upload, into your own uploads; it cannot see or delete
-		anything.
+		Shortcuts while charging), and fetch what you choose to keep on it. It can upload into your own
+		uploads and download what you keep on it; it cannot see anything else or delete anything.
 	</p>
 	<ul>
 		{#each devices ?? [] as device (device.id)}
@@ -95,6 +96,7 @@
 				</span>
 				{#if !device.revoked}
 					<button type="button" onclick={() => (revoking = device)}>Revoke</button>
+					<DeviceKeeps deviceId={device.id} />
 				{/if}
 			</li>
 		{/each}
@@ -149,7 +151,8 @@
 			</ol>
 			<p class="quiet small">
 				The full walk-through, with a safer “only new photos” variant, is in the project's guide
-				<code>docs/guides/iphone-shortcut.md</code>.
+				<code>docs/guides/iphone-shortcut.md</code>. To get albums, people or searches onto the
+				phone, see <code>docs/guides/keep-on-my-phone.md</code>.
 			</p>
 		{/if}
 		{#snippet actions()}

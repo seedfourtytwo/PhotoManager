@@ -46,7 +46,7 @@ export function sourceRoutes(h: Helpers): Route[] {
 		return { photos, onlyHere };
 	}
 
-	/** Stop watching (v1.7), with the server's statuses and sentences (app/stop_watching.py). */
+	/** Stop watching (v1.8), with the server's statuses and sentences (app/stop_watching.py). */
 	function removeSource(id: number, photos: PhotosOnlyHere) {
 		const source = findSource(id);
 		if (source.kind === 'inbox')
