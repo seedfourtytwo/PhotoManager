@@ -162,7 +162,7 @@ least that long ago (a failed check counts, so it is not retried at once), unles
 already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
 off or disabled, possibly a moment already past (it runs at the server's next look).
 
-**Stop watching a folder (v1.6).** `GET /api/sources/{id}/removal` (admin) answers
+**Stop watching a folder (v1.7).** `GET /api/sources/{id}/removal` (admin) answers
 `{photos, only_here}`: the live photos in the source, and those no other source holds.
 `DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
 answers `{only_here, trashed, detached}`. Photos another source also holds are not touched.
@@ -223,7 +223,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/facets` | same filters | `{years:[{year,count}], sources:[{id,label,count}], cameras:[{name,count}], places:[{name,count}], guessed_dates:int, total:int}` |
 | GET | `/api/calendar` | same filters | `[{day:"YYYY-MM-DD", count}]` |
 | GET | `/api/map` | same filters | `[{id, lat, lon}]` |
-| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{byte_size, mime_type, camera_make, camera_model, latitude, longitude, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}` |
+| GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{name, byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
 | PATCH | `/api/assets/{id}/state` | `{favourite?, hidden?, private?}` | `AssetOut` (`private` needs `edit`; see Private above) |
@@ -251,7 +251,7 @@ DownloadRequest = {
   ids?: [id], album_id?: id, filters?: {…same as /api/assets query…},   # exactly one scope
   format: "original"|"jpeg"|"png"|"webp", quality: 1..100 (default 90),
   max_edge: int|null, strip_location: bool, strip_all_metadata: bool,
-  naming: "original"|"date", folders: "flat"|"year"|"month"
+  naming: "name"|"original"|"date" (default "name"), folders: "flat"|"year"|"month"
 }
 ```
 Needs `download` on every included asset (others are silently left out and counted in the
@@ -260,6 +260,8 @@ the ZIP is being produced (missing library file, render error) is left out and t
 goes on; the archive then ends with a `manifest.txt` entry listing each left-out file and why
 (`X-Skipped` is sent before streaming starts, so it only counts access) (v1.2). `original` + no resize streams the untouched file; any other option
 renders via libvips with the edit recipe applied.
+
+**Photo names (v1.7).** `AssetDetail.name` is the photo's display name (FEATURES 4b.10, `domain/display_name.py`): computed per viewer, never stored. `/api/assets/{id}/original`, `/api/assets/{id}/download` and ZIP entries with `naming: "name"` are named `<name><extension>`, the extension the original's own (or the output format's).
 
 **ZIP name (v1.3).** `Content-Disposition: attachment; filename="<ASCII>"; filename*=UTF-8''<name>`
 (RFC 6266/5987). `<name>` is: `album_id` → `<album title>.zip`; `filters` →
@@ -492,7 +494,17 @@ Additions only.
 
 ---
 
-# v1.6 changes (stop watching a folder)
+# v1.6 changes (exposure settings in the photo view)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Assets | `AssetDetail` (`GET /api/assets/{id}`) carries `f_number`, `exposure_time` (seconds), `iso` and `focal_length` (millimetres); each is `null` when the photo does not carry it. The timeline's `AssetOut` rows are unchanged. | The photo bar's second line reads aperture · shutter · ISO · focal length · file name (`$lib/readout`, `$lib/exposure`), with only the values that are there; a photo with none keeps camera · pixel size · file name. The details list them under the camera. A photo imported before this has `null` everywhere until the admin runs `just exposure-backfill`. |
+
+---
+
+# v1.7 changes (stop watching a folder)
 
 Additions only.
 

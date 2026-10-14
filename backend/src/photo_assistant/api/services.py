@@ -45,6 +45,7 @@ from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import RENDER_EDIT_JOB, Editor
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, GroupSimilar
+from photo_assistant.app.exposure_backfill import EXPOSURE_BACKFILL_JOB, BackfillExposure
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
 from photo_assistant.app.periodic import PeriodicTask
@@ -222,6 +223,8 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
             GROUP_JOB: GroupSimilar(
                 repo, ImageHashPhash(), lambda rel: store.absolute(rel), review=review
             ),
+            # reads library copies with the importer's ExifTool process, a batch per job
+            EXPOSURE_BACKFILL_JOB: BackfillExposure(repo, exiftool, store.absolute),
             PURGE_JOB: trash.purge_expired,
             RENDER_EDIT_JOB: editor.render_edits,
             **ml.handlers,

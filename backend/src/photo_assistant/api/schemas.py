@@ -272,12 +272,17 @@ class AlbumRef(BaseModel):
 
 
 class AssetDetail(AssetOut):
+    name: str  # the display name (domain/display_name.py); downloads carry it
     byte_size: int
     mime_type: str | None
     camera_make: str | None
     camera_model: str | None
     latitude: float | None
     longitude: float | None
+    f_number: float | None  # aperture: 2.8 for f/2.8
+    exposure_time: float | None  # shutter time in seconds: 0.004 for 1/250
+    iso: int | None
+    focal_length: float | None  # millimetres, the lens's own (not the 35 mm equivalent)
     imported_at: datetime
     origins: list[Origin]
     albums: list[AlbumRef]
@@ -462,7 +467,7 @@ class DownloadRequest(BaseModel):
     max_edge: int | None = Field(default=None, ge=1, le=MAX_EDGE)
     strip_location: bool = False
     strip_all_metadata: bool = False
-    naming: Naming = Naming.ORIGINAL
+    naming: Naming = Naming.NAME
     folders: Folders = Folders.FLAT
 
     def options(self) -> ExportOptions:

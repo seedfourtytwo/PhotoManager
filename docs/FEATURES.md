@@ -45,7 +45,7 @@ separate, explicit "purge from library copy" that never touches the source.
 
 | # | Feature | Prio | Milestone |
 |---|---|---|---|
-| 2.1 | EXIF/XMP/QuickTime metadata via ExifTool: capture time (with timezone repair), camera, lens, GPS, orientation | Must | M1 ✅ |
+| 2.1 | EXIF/XMP/QuickTime metadata via ExifTool: capture time (with timezone repair), camera, lens, GPS, orientation, exposure settings (aperture, shutter time, ISO, focal length; shown in the photo view) | Must | M1 ✅ |
 | 2.2 | Date fallback chain: EXIF → XMP → filename pattern (`IMG_20190704_…`) → file mtime; each photo records *which* source won | Must | M1 ✅ |
 | 2.3 | Thumbnails (fit 640 px, made during import from the source file, which also proves the file decodes) and previews (fit 2048 px, background job), orientation-corrected WebP via libvips | Must | M1 ✅ |
 | 2.4 | Offline reverse geocoding (country / region / city) — no network call | Should | M2 ✅ (API) |
@@ -99,10 +99,11 @@ copies down.
 | 4b.3 | **Bulk scopes**: whole day / month / year, an album, a person, or "everything matching the current filter"; shows count and size before starting — *API: ids, album or any filter, with estimate* | Must | M2 |
 | 4b.4 | **Format**: Original · JPEG (quality slider) · PNG · WebP; HEIC → JPEG is the common case — *API done in M2* | Should | M3 |
 | 4b.5 | **Resize on export**: presets (Original, 4K long edge, 2048, 1080, "email" 1280) or custom long edge; never upscale — *API done in M2* | Should | M3 |
-| 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (`date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
+| 4b.6 | Options: strip GPS/location, keep or strip all metadata, file naming (photo name 4b.10, `date_place_###` or original name), folder structure in ZIP (flat / by year / by month) — *API done in M2* | Should | M3 |
 | 4b.7 | Phone: single photos use the share sheet (Web Share API) so they can go straight into the iPhone Photos app; multiple → ZIP to Files — *one photo: **Share** on the photo view's bar and "Save to Photos" in the download dialog, only where the browser has a share sheet (HTTPS, 11.1); the person picks where it goes, the app sends nothing itself; several photos at once: not built* | Should | M3 ✅ (one photo) |
 | 4b.8 | Large exports run as a background job with progress and a "ready" link, resumable if the connection drops | Could | M4 |
 | 4b.9 | Standalone converter: drop files in, get them back converted/resized (without importing them) | Could | M4 |
+| 4b.10 | **Photo names**: a photo is called after the minute it was taken (`2015-06-12 14.32`; `· 2`, `· 3` for others the viewer sees in that minute, by time then id), or, when its date is only the file's modification time, its file name tidied (extension and copy marks such as `(Copy)`, ` - Copy`, ` copy 2`, `(1)` dropped), or `Photo <id>` when no word is left (Facebook's `10174880_…_n.jpg`). Display only: nothing is stored and no file is renamed. The photo bar shows the name when it is not just the date; the details show it, and an admin also reads each source's original file and path. Single downloads, `/original`, shares and ZIPs (default naming) carry it with the real extension; "Original file names" stays a ZIP option | Should | M3 ✅ |
 
 ## 4c. Basic editor (non-destructive)
 

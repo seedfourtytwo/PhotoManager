@@ -305,8 +305,9 @@ class SqliteRepository(
         return self._write(
             """INSERT INTO asset (content_hash, kind, mime_type, byte_size, width, height,
                    taken_at, tz_offset_min, date_source, latitude, longitude, camera_make,
-                   camera_model, orientation, library_path, imported_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   camera_model, orientation, library_path, imported_at,
+                   f_number, exposure_time, iso, focal_length)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 asset.content_hash,
                 asset.kind.value,
@@ -324,6 +325,10 @@ class SqliteRepository(
                 asset.orientation,
                 asset.library_path,
                 _iso(imported_at),
+                asset.exposure.f_number,
+                asset.exposure.exposure_time,
+                asset.exposure.iso,
+                asset.exposure.focal_length,
             ),
         )
 

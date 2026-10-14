@@ -22,7 +22,8 @@ import {
 	test,
 	toast,
 	touchSwipe,
-	viewOnlyPhoto
+	viewOnlyPhoto,
+	withDetail
 } from './helpers.ts';
 
 test.describe('as admin', () => {
@@ -216,7 +217,7 @@ test('guest: view-only photos say why they cannot be downloaded; no edit or priv
 
 for (const who of [MEMBER, ADMIN]) {
 	const admin = who === ADMIN;
-	test(`where a photo came from: ${admin ? 'an admin reads the path' : 'a member reads the folder name and the file, not the path'}`, async ({
+	test(`where a photo came from: ${admin ? 'an admin reads the original file and its path' : 'a member reads the folder name and the photo name, not the file'}`, async ({
 		page
 	}) => {
 		await resetMock();
@@ -231,10 +232,14 @@ for (const who of [MEMBER, ADMIN]) {
 		if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Info' }).click();
 		const about = loupe(page).getByRole('complementary', { name: 'About this photo' });
 		await expect(about.getByText('Came from')).toBeVisible();
-		await expect(
-			about.getByText(admin ? 'trips/2019/IMG_0001.JPG' : 'IMG_0001.JPG', { exact: true })
-		).toBeVisible();
-		if (!admin) await expect(about).not.toContainText('trips/2019');
+		await expect(about).toContainText('Named ');
+		if (admin) {
+			await expect(about.getByText('Original file')).toBeVisible();
+			await expect(about.getByText('trips/2019/IMG_0001.JPG', { exact: true })).toBeVisible();
+		} else {
+			await expect(about).not.toContainText('IMG_0001');
+			await expect(about).not.toContainText('Original file');
+		}
 	});
 }
 
@@ -274,6 +279,13 @@ test.describe('photo view', () => {
 	});
 
 	test('the bar reads the photo’s date, time and file name in the data face', async ({ page }) => {
+		// A photo that carries no exposure settings; one that does is in exposure.spec.ts.
+		await withDetail(page, () => ({
+			f_number: null,
+			exposure_time: null,
+			iso: null,
+			focal_length: null
+		}));
 		await page.locator('.tile').first().click();
 		const readout = loupe(page).locator('.readout');
 		await expect(readout).toContainText(/\d{4}-\d{2}-\d{2} · \d{2}:\d{2}/);

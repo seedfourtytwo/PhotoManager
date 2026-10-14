@@ -232,6 +232,22 @@ def test_ml_backfill_reports_missing_models(
     assert "Queued" in out and "missing" in out
 
 
+def test_exposure_backfill_queues_one_job_for_the_server_and_no_second_while_it_waits(
+    data_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["exposure-backfill"]) == 0
+    out = capsys.readouterr().out
+    assert "Queued" in out and "0 photos to read" in out, "says how much there is to do"
+    assert cli.main(["exposure-backfill"]) == 0
+    assert "Already waiting" in capsys.readouterr().out
+    services = build_services(get_settings())
+    try:
+        waiting = [job["kind"] for job in services.repo.list_jobs("queued")]
+    finally:
+        services.close()
+    assert waiting == ["exposure_backfill"], "the command queues; the server's worker runs it"
+
+
 # --- one command line: every sub-command is listed and reached -------------------------------
 
 SUB_COMMANDS = (
@@ -240,6 +256,7 @@ SUB_COMMANDS = (
     "create-user",
     "set-pin",
     "ml-backfill",
+    "exposure-backfill",
     "export-library",
     "verify-library",
     "doctor",
@@ -285,6 +302,7 @@ MINIMAL_ARGV = {
     "create-user": ["create-user", "name"],
     "set-pin": ["set-pin", "name"],
     "ml-backfill": ["ml-backfill"],
+    "exposure-backfill": ["exposure-backfill"],
     "export-library": ["export-library", "destination"],
     "verify-library": ["verify-library"],
     "doctor": ["doctor"],

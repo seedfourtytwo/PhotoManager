@@ -99,6 +99,29 @@ const SHAPES: [number, number][] = [
 	[8000, 2400]
 ];
 
+// What the mock library's cameras shoot with. A photo's settings follow from its id, not from
+// the generator: adding them left every other value of the library as it was.
+const APERTURES = [1.8, 2.8, 4, 5.6, 8, 11];
+const SHUTTERS = [1 / 2000, 1 / 500, 1 / 250, 1 / 60, 1 / 30, 0.5, 2.5];
+const ISOS = [64, 100, 200, 400, 800, 3200];
+const FOCAL_LENGTHS = [4.25, 24, 35, 50, 85];
+/** Every so many photos come from an old camera that wrote its ISO and nothing else. */
+const ISO_ONLY_EVERY = 9;
+
+type MockExposure = Pick<MockAsset, 'f_number' | 'exposure_time' | 'iso' | 'focal_length'>;
+
+function exposureOf(id: number, hasExif: boolean): MockExposure {
+	if (!hasExif) return { f_number: null, exposure_time: null, iso: null, focal_length: null };
+	const at = (values: number[], every: number) => values[Math.floor(id / every) % values.length];
+	const isoOnly = id % ISO_ONLY_EVERY === 0;
+	return {
+		f_number: isoOnly ? null : at(APERTURES, 1),
+		exposure_time: isoOnly ? null : at(SHUTTERS, 2),
+		iso: at(ISOS, 3),
+		focal_length: isoOnly ? null : at(FOCAL_LENGTHS, 5)
+	};
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const local = (d: Date) =>
 	`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
@@ -128,6 +151,7 @@ export function makeAsset(
 		place,
 		camera_make: guessed ? null : make,
 		camera_model: guessed ? null : model,
+		...exposureOf(id, !guessed),
 		byte_size: Math.round((width * height) / 4 + r.int(0, 400_000)),
 		mime_type: 'image/jpeg',
 		imported_at: '2026-09-20T10:00:00',

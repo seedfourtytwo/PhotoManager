@@ -9,12 +9,17 @@ import PhotoBar from './PhotoBar.svelte';
 const asset = makeAsset(7, '2019-07-01T10:00:00', 400, 300);
 const detailOf = (level: Level = 'edit', extra: Partial<AssetDetail> = {}): AssetDetail => ({
 	...asset,
+	name: '2019-07-01 10.00',
 	byte_size: 1000,
 	mime_type: 'image/jpeg',
 	camera_make: null,
 	camera_model: null,
 	latitude: null,
 	longitude: null,
+	f_number: null,
+	exposure_time: null,
+	iso: null,
+	focal_length: null,
 	imported_at: '2020-01-01T00:00:00',
 	origins: [],
 	albums: [],

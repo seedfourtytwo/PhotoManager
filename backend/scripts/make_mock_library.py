@@ -124,6 +124,25 @@ def exif_tags(
     return tags
 
 
+# What the mock cameras shoot with (as web/mock-api/library.ts). A photo's settings follow
+# from its number, not from the random generator: every other byte of a library made with
+# the same seed stays as it was before these tags were added.
+APERTURES = [1.8, 2.8, 4, 5.6, 8, 11]
+SHUTTERS = [1 / 2000, 1 / 500, 1 / 250, 1 / 60, 1 / 30, 0.5, 2.5]
+ISOS = [64, 100, 200, 400, 800, 3200]
+FOCAL_LENGTHS = [4.25, 24, 35, 50, 85]
+ISO_ONLY_EVERY = 9  # an old camera that wrote its ISO and nothing else
+
+
+def exposure_tags(n: int) -> dict[str, object]:
+    tags: dict[str, object] = {"EXIF:ISO": ISOS[n // 3 % len(ISOS)]}
+    if n % ISO_ONLY_EVERY:
+        tags["EXIF:FNumber"] = APERTURES[n % len(APERTURES)]
+        tags["EXIF:ExposureTime"] = SHUTTERS[n // 2 % len(SHUTTERS)]
+        tags["EXIF:FocalLength"] = FOCAL_LENGTHS[n // 5 % len(FOCAL_LENGTHS)]
+    return tags
+
+
 def shot_times(rng: random.Random, event: Event) -> list[datetime]:
     """Capture times for one event; a few bursts of five frames one second apart."""
     times: list[datetime] = []
@@ -149,7 +168,7 @@ def write_event(
         image.jpegsave(str(path), Q=72, strip=True)
         tool.set_tags(
             [str(path)],
-            exif_tags(rng, when, camera, event.place),
+            exif_tags(rng, when, camera, event.place) | exposure_tags(n),
             params=["-overwrite_original", "-q"],
         )
         n += 1

@@ -24,17 +24,33 @@ from photo_assistant.domain.export_naming import (
 JULY = datetime(2019, 7, 4, 18, 30, 5)
 
 
+def test_photos_are_named_by_their_display_name_by_default() -> None:
+    assert ExportOptions().naming is Naming.NAME
+    assert export_stem("2019-07-04 18.30 · 2", "IMG_1234.HEIC", JULY, Naming.NAME) == (
+        "2019-07-04 18.30 · 2"
+    )
+    assert export_stem("a/b:c", None, JULY, Naming.NAME) == "a_b_c", "made safe"
+
+
 def test_original_names_are_kept_but_made_safe() -> None:
-    assert export_stem("IMG_1234.HEIC", JULY, Naming.ORIGINAL) == "IMG_1234"
-    assert export_stem("a/b\\c:d?.jpg", JULY, Naming.ORIGINAL) == "a_b_c_d_"
-    assert export_stem("\x01bad.jpg", JULY, Naming.ORIGINAL) == "_bad"
-    assert export_stem(".jpg", JULY, Naming.ORIGINAL) == "photo"
+    assert export_stem("shown", "IMG_1234.HEIC", JULY, Naming.ORIGINAL) == "IMG_1234"
+    assert export_stem("shown", "a/b\\c:d?.jpg", JULY, Naming.ORIGINAL) == "a_b_c_d_"
+    assert export_stem("shown", "\x01bad.jpg", JULY, Naming.ORIGINAL) == "_bad"
+
+
+def test_without_a_usable_original_name_the_display_name_stands_in() -> None:
+    assert export_stem("Photo 7", ".jpg", JULY, Naming.ORIGINAL) == "Photo 7"
+    assert export_stem("Photo 7", None, JULY, Naming.ORIGINAL) == "Photo 7", "a hidden source"
 
 
 def test_date_names_carry_the_place_when_known() -> None:
-    assert export_stem("x.jpg", JULY, Naming.DATE) == "2019-07-04_183005"
-    assert export_stem("x.jpg", JULY, Naming.DATE, "Saint-Malo") == "2019-07-04_183005_Saint-Malo"
-    assert export_stem("x.jpg", JULY, Naming.DATE, "São Paulo") == "2019-07-04_183005_São-Paulo"
+    assert export_stem("s", "x.jpg", JULY, Naming.DATE) == "2019-07-04_183005"
+    assert export_stem("s", "x.jpg", JULY, Naming.DATE, "Saint-Malo") == (
+        "2019-07-04_183005_Saint-Malo"
+    )
+    assert (
+        export_stem("s", "x.jpg", JULY, Naming.DATE, "São Paulo") == "2019-07-04_183005_São-Paulo"
+    )
 
 
 @pytest.mark.parametrize(

@@ -31,8 +31,10 @@ from photo_assistant.api.schemas import (
 )
 from photo_assistant.api.services import Services
 from photo_assistant.app.enrich import FULL_REGROUP, GROUP_JOB
+from photo_assistant.app.photo_names import photo_names
 from photo_assistant.domain.access import Level, Viewer
 from photo_assistant.domain.date_fix import new_capture_times
+from photo_assistant.domain.export_naming import ExportOptions
 from photo_assistant.ports.library import AssetView
 
 router = APIRouter(prefix="/api/assets", tags=["assets"], dependencies=LOGGED_IN)
@@ -89,12 +91,17 @@ def detail_of(services: Services, viewer: Viewer, view: AssetView) -> AssetDetai
     albums = [AlbumRef(id=i, title=t) for i, t in services.repo.albums_of(viewer, a.id)]
     return AssetDetail(
         **asset_out(view).model_dump(),
+        name=photo_names(services.repo, viewer, [view])[a.id].shown,
         byte_size=a.byte_size,
         mime_type=a.mime_type,
         camera_make=a.camera_make,
         camera_model=a.camera_model,
         latitude=a.latitude,
         longitude=a.longitude,
+        f_number=a.exposure.f_number,
+        exposure_time=a.exposure.exposure_time,
+        iso=a.exposure.iso,
+        focal_length=a.exposure.focal_length,
         imported_at=a.imported_at,
         origins=origins,
         albums=albums,
@@ -184,9 +191,11 @@ def preview(
 
 @router.get("/{asset_id}/original")
 def original(services: ServicesDep, viewer: ViewerDep, asset_id: int) -> Response:
-    a = require_view(services, viewer, asset_id, Level.DOWNLOAD).asset
-    path = services.store.absolute(a.library_path)
+    view = require_view(services, viewer, asset_id, Level.DOWNLOAD)
+    path = services.store.absolute(view.asset.library_path)
     if not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "original missing from the library")
-    name = services.repo.first_origin_name(viewer, asset_id) or path.name
-    return FileResponse(path, media_type=a.mime_type or "application/octet-stream", filename=name)
+    names = photo_names(services.repo, viewer, [view])
+    (entry,) = services.downloads.plan([view], names, ExportOptions())  # untouched, as named
+    media_type = view.asset.mime_type or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=entry.name)

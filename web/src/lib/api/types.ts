@@ -72,7 +72,7 @@ export type SourceIn = { label: string; path: string };
 export type SourcePatch = Partial<{ enabled: boolean; label: string; recheck: Recheck }>;
 /** What "Stop watching" would do: the folder's photos, and those no other folder holds. */
 export type SourceRemoval = { photos: number; only_here: number };
-/** v1.6: photos found only in a removed folder stay (admins and album members see them) or go to the trash. */
+/** v1.7: keep the photos found only in that folder (a watched folder is detached; one no longer watched is removed) or trash them. */
 export type PhotosOnlyHere = 'keep' | 'trash';
 /** `detached`: kept as a folder no longer watched (kind "kept"), its photos seen as before. */
 export type SourceRemoved = { only_here: number; trashed: number; detached: boolean };
@@ -170,12 +170,21 @@ export type AssetOut = {
 export type AssetPage = { items: AssetOut[]; next_cursor: string | null };
 
 export type AssetDetail = AssetOut & {
+	/** What people call the photo, and what a download of it is named (without extension). */
+	name: string;
 	byte_size: number;
 	mime_type: string | null;
 	camera_make: string | null;
 	camera_model: string | null;
 	latitude: number | null;
 	longitude: number | null;
+	/** Aperture as its f-number: 2.8 for f/2.8. */
+	f_number: number | null;
+	/** Shutter time in seconds: 0.004 for 1/250. */
+	exposure_time: number | null;
+	iso: number | null;
+	/** Millimetres, the lens's own (not the 35 mm equivalent). */
+	focal_length: number | null;
 	imported_at: string;
 	origins: { source_id: Id; source_label: string; relative_path: string }[];
 	albums: { id: Id; title: string }[];
@@ -243,7 +252,7 @@ export type DownloadOptions = {
 	max_edge: number | null;
 	strip_location: boolean;
 	strip_all_metadata: boolean;
-	naming: 'original' | 'date';
+	naming: 'name' | 'original' | 'date';
 	folders: 'flat' | 'year' | 'month';
 };
 export type DownloadScope = { ids: Id[] } | { album_id: Id } | { filters: AssetFilters };

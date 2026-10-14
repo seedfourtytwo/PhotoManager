@@ -2,6 +2,7 @@
 	import type { AssetDetail, AssetOut } from '$lib/api';
 	import { session } from '$lib/app.svelte';
 	import { dateSourceLabel, formatTaken } from '$lib/dates';
+	import { exposureParts, exposureSpoken } from '$lib/exposure';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { placeLabel } from '$lib/geo';
 	import { cameFrom } from '$lib/readout';
@@ -18,6 +19,7 @@
 	/** Decimal places of a coordinate as written: about ten metres. */
 	const COORD_PLACES = 4;
 	const viewOnly = $derived(detail?.level === 'view');
+	const exposure = $derived(exposureParts(detail));
 </script>
 
 <aside class="sidenote" aria-label="About this photo">
@@ -50,6 +52,12 @@
 				{detail.camera_make ? `${detail.camera_make} · ` : ''}{detail.camera_model}
 			</p>
 		{/if}
+		{#if exposure.length}
+			<p class="exposure data">
+				<span aria-hidden="true">{exposure.join(' · ')}</span>
+				<span class="visually-hidden">{exposureSpoken(detail).join(', ')}</span>
+			</p>
+		{/if}
 		<!-- Not for the formatter to wrap: a line break inside "· edited" ends up in the text. -->
 		<!-- prettier-ignore -->
 		<p class="quiet small">
@@ -57,10 +65,16 @@
 				detail.byte_size
 			)}{#if asset.edited}&nbsp;· edited{/if}
 		</p>
+		<p class="quiet small">Named <span class="data">{detail.name}</span></p>
 		<h3>Came from</h3>
 		<ul>
 			{#each cameFrom(detail, session.isAdmin) as origin (origin.key)}
-				<li>{origin.label} <span class="quiet small">{origin.file}</span></li>
+				<li>
+					{origin.label}
+					{#if origin.file}
+						<span class="quiet small original">Original file <span>{origin.file}</span></span>
+					{/if}
+				</li>
 			{/each}
 		</ul>
 		{#if detail.albums.length}
@@ -114,6 +128,9 @@
 	li {
 		margin-bottom: var(--s-1);
 		overflow-wrap: anywhere;
+	}
+	.original {
+		display: block;
 	}
 	.keys {
 		margin-top: var(--s-6) !important;

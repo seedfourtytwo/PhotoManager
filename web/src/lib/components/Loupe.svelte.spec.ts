@@ -13,12 +13,17 @@ const photos = [1, 2, 3].map((id) =>
 );
 const detailOf = (asset: AssetOut, camera = `Camera ${asset.id}`): AssetDetail => ({
 	...asset,
+	name: `Photo ${asset.id}`,
 	byte_size: 1000,
 	mime_type: 'image/jpeg',
 	camera_make: null,
 	camera_model: camera,
 	latitude: null,
 	longitude: null,
+	f_number: null,
+	exposure_time: null,
+	iso: null,
+	focal_length: null,
 	imported_at: '2020-01-01T00:00:00',
 	origins: [],
 	albums: [],

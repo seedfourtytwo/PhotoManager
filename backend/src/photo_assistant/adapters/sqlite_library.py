@@ -19,6 +19,8 @@ from photo_assistant.adapters.sqlite_base import (
     source_from_row,
 )
 from photo_assistant.domain.access import Level, Viewer
+from photo_assistant.domain.capture_time import DateSource
+from photo_assistant.domain.display_name import Dated
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.library_filter import AssetFilter, like_pattern, search_terms
 from photo_assistant.domain.model import Source
@@ -462,6 +464,25 @@ class LibraryMixin(SqliteBase):
 
     def first_origin_name(self, viewer: Viewer, asset_id: int) -> str | None:
         return self.first_origin_names(viewer, [asset_id]).get(asset_id)
+
+    def minute_mates(self, viewer: Viewer, asset_ids: Sequence[int]) -> list[Dated]:
+        """The photos in the library this viewer sees, taken in the same wall-clock minute as
+        any of these (these included when they are among them). One query for any number."""
+        visible, _, params = visibility(viewer)
+        # a minute as a taken_at range ("…T14:32" up to "…T14:32;"), so the timeline index serves it
+        rows = self._all(
+            f"""WITH minute AS (
+                    SELECT DISTINCT substr(t.taken_at, 1, 16) AS m FROM asset t
+                     WHERE t.id IN (SELECT value FROM json_each(:assets)))
+                SELECT DISTINCT a.id, a.taken_at, a.date_source FROM minute
+                  JOIN asset a ON a.taken_at >= minute.m AND a.taken_at < minute.m || ';'
+                 WHERE {visible}""",
+            params | {"assets": json.dumps(list(asset_ids))},
+        )
+        return [
+            Dated(int(r["id"]), datetime.fromisoformat(r["taken_at"]), DateSource(r["date_source"]))
+            for r in rows
+        ]
 
     # --- per-user state --------------------------------------------------------------------
 
