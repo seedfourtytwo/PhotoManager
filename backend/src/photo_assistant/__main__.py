@@ -10,6 +10,8 @@ python -m photo_assistant doctor             check this machine is ready
 python -m photo_assistant export-library DEST / verify-library [ROOT]
 python -m photo_assistant backup list|add|run|check|restore-test …
 python -m photo_assistant ml-backfill        queue ML analysis of everything (after just models)
+python -m photo_assistant exposure-backfill  queue reading aperture, shutter, ISO and focal
+                                             length for photos imported before they were kept
 """
 
 import argparse
@@ -28,6 +30,7 @@ from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.accounts import AccountError
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB
+from photo_assistant.app.exposure_backfill import EXPOSURE_BACKFILL_JOB
 from photo_assistant.app.import_source import PREVIEW_JOB, SourceUnavailableError
 from photo_assistant.domain.access import PIN_LENGTH, Role
 from photo_assistant.domain.model import ImportReport, Outcome
@@ -192,6 +195,24 @@ def _ml_backfill() -> int:
     return 0
 
 
+def _exposure_backfill() -> int:
+    services = build_services(get_settings())
+    try:
+        queued = services.repo.enqueue_once(EXPOSURE_BACKFILL_JOB)
+        todo = services.repo.count_without_exposure()
+    finally:
+        services.close()
+    if queued is None:
+        print(f"Already waiting in the queue; the server's worker runs it ({todo} photos to read).")
+    else:
+        print(
+            f"Queued, {todo} photos to read: the server's worker reads aperture, shutter, ISO "
+            "and focal length from the library copy of every photo that has none yet. "
+            "Admin shows it working until it is done."
+        )
+    return 0
+
+
 def _import_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("folder", type=Path)
     parser.add_argument("--label", help="name shown for this source (default: folder name)")
@@ -234,6 +255,11 @@ COMMANDS: tuple[Command, ...] = (
         "ml-backfill",
         "queue ML analysis of every photo not analysed yet",
         lambda args: _ml_backfill(),
+    ),
+    Command(
+        "exposure-backfill",
+        "queue reading the exposure settings of photos imported before they were kept",
+        lambda args: _exposure_backfill(),
     ),
     *cli_ops.COMMANDS,
 )

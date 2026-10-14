@@ -216,6 +216,25 @@ where both are rendered anyway: thumbnail repairs and edited renders (`render_ed
 when a recipe is saved). The 4-core figure is a projection from the measured per-lane costs;
 re-measure on the laptop with `scripts/perf/import_e2e.py`.
 
+## Exposure settings (migration 0030)
+
+2,144 synthetic photos (`make_mock_library.py --count 2000 --size 800`, 1,995 of them with
+exposure tags), development machine (16 cores, other work running), median of 9 runs,
+`uv run python scripts/perf/exposure_backfill.py <folder>`:
+
+| | ms / photo | 10k photos |
+|---|---|---|
+| exposure backfill (read the library copy, store the four values; batches of 200) | **8.7** | 87 s |
+| metadata read at import, without the four exposure tags | 7.94 | — |
+| metadata read at import, with them | 8.37 | — |
+
+The backfill is one ExifTool read per photo and one transaction per batch; it holds the
+shared ExifTool process for one batch at a time (about 1.7 s), then lets an import in.
+Importing reads the four tags in the ExifTool call it already makes: no second process, no
+second pass. The read is 0.4 ms per photo slower (5 % of the read, under 0.5 % of the 97 ms
+the import lane spends per photo), which is inside the run-to-run spread of the import
+benchmark; not re-timed end to end.
+
 ## Download estimates (A14)
 
 Estimates now start from each photo's real bytes: `bytes × as-JPEG factor (per source type) ×
