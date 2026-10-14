@@ -30,11 +30,6 @@ async function open(page: Page, exposure: Exposure, file = 'IMG_0001.JPG') {
 	return loupe(page).locator('.readout');
 }
 
-// Every test here answers a request itself. A request that went through the app's service
-// worker (the built app has one) is not handed to the test, and when the worker takes over
-// the page is a matter of timing: without it, each request is.
-test.use({ serviceWorkers: 'block' });
-
 test.beforeEach(async ({ page }) => {
 	await resetMock();
 	await signIn(page);
