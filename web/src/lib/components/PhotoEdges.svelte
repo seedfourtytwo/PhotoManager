@@ -7,7 +7,8 @@
 		count: number;
 		/** The viewer's chrome is hidden: so are these, unless the keyboard is on one. */
 		faded: boolean;
-		/** The details take the right margin: Next stands at the photo's edge, not the screen's. */
+		/** The details are open: beside the photo on a laptop (Next stands at the photo's edge,
+		    not the screen's), over its lower half on a phone (both rise above them). */
 		inset: boolean;
 		onstep: (step: number) => void;
 	};
@@ -18,6 +19,7 @@
 	type="button"
 	class="edge prev"
 	class:faded
+	class:inset
 	aria-label="Previous photo"
 	disabled={index === 0}
 	onclick={() => onstep(-1)}><Icon name="back" /></button
@@ -71,6 +73,9 @@
 	@media (max-width: 1023px) {
 		.next.inset {
 			right: 0;
+		}
+		.edge.inset {
+			top: 25%;
 		}
 		.edge {
 			width: var(--target);
