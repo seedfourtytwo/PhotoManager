@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { ALBUM_TITLE_MAX, type Id } from '$lib/api';
 	import { AlbumView } from '$lib/album.svelte';
-	import { settings, viewport } from '$lib/app.svelte';
+	import { session, settings, viewport } from '$lib/app.svelte';
 	import { photos } from '$lib/format';
 	import { EMPTY, applyClick } from '$lib/selection';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
@@ -10,6 +10,7 @@
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
+	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 	import SelectionActions from '$lib/components/SelectionActions.svelte';
@@ -74,6 +75,9 @@
 			<div class="tools">
 				<button type="button" onclick={() => (view.dialog = 'download')}>Download</button>
 				{#if items.length}<a class="button" href={`/albums/${album.id}/print`}>Print</a>{/if}
+				{#if session.canEdit}
+					<KeepOnPhone target={{ kind: 'album', album_id: album.id }} what="this album" />
+				{/if}
 				{#if canEdit}
 					<button type="button" aria-pressed={arrange} onclick={() => (arrange = !arrange)}>
 						{arrange ? 'Done arranging' : 'Arrange'}

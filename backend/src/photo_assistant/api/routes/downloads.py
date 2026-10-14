@@ -114,7 +114,7 @@ def download_zip(services: ServicesDep, viewer: ViewerDep, body: DownloadBody) -
         zip_stream(files),
         media_type="application/zip",
         headers={
-            "Content-Disposition": _attachment(scope.zip_name),
+            "Content-Disposition": attachment_header(scope.zip_name),
             "X-Skipped": str(scope.asked - len(entries)),
         },
     )
@@ -142,11 +142,11 @@ def download_one(
     return StreamingResponse(
         content,
         media_type=media,
-        headers={"Content-Disposition": _attachment(entry.name)},
+        headers={"Content-Disposition": attachment_header(entry.name)},
     )
 
 
-def _attachment(name: str) -> str:
+def attachment_header(name: str) -> str:
     """RFC 6266: ``filename*`` carries the real UTF-8 name ('beach day 🌊.jpg'), ``filename``
     an ASCII stand-in for clients that ignore it."""
     return (

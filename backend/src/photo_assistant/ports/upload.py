@@ -92,6 +92,7 @@ class Device:
     created_at: datetime
     last_used_at: datetime | None = None
     revoked_at: datetime | None = None
+    last_sync_at: datetime | None = None  # it last asked for its "Keep on my phone" list
 
 
 class DeviceStore(Protocol):
@@ -103,6 +104,6 @@ class DeviceStore(Protocol):
 
     def revoke_device(self, user_id: int, device_id: int, now: datetime) -> bool: ...
 
-    def user_for_token_hash(self, token_hash: str, now: datetime) -> int | None:
-        """The owner of an active (not revoked) token; records its last use."""
+    def device_for_token_hash(self, token_hash: str, now: datetime) -> Device | None:
+        """The device of an active (not revoked) token; records its last use."""
         ...

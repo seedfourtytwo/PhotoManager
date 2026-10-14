@@ -130,9 +130,10 @@ def test_devices_are_listed_per_user_and_found_by_token_hash(db: Database) -> No
     assert [d.name for d in devices.list_devices(1)] == ["C's iPhone"]
     assert phone.created_at == NOW and phone.last_used_at is None
     later = NOW + timedelta(hours=1)
-    assert devices.user_for_token_hash("h1", later) == 1
-    assert devices.list_devices(1)[0].last_used_at == later
-    assert devices.user_for_token_hash("nope", later) is None
+    used = devices.device_for_token_hash("h1", later)
+    assert used is not None and (used.id, used.user_id) == (phone.id, 1)
+    assert used.last_used_at == later == devices.list_devices(1)[0].last_used_at
+    assert devices.device_for_token_hash("nope", later) is None
 
 
 def test_revoked_devices_no_longer_authenticate(db: Database) -> None:
@@ -141,7 +142,7 @@ def test_revoked_devices_no_longer_authenticate(db: Database) -> None:
     assert not devices.revoke_device(2, phone.id, NOW)  # not yours
     assert devices.revoke_device(1, phone.id, NOW)
     assert not devices.revoke_device(1, phone.id, NOW)  # already revoked
-    assert devices.user_for_token_hash("h1", NOW) is None
+    assert devices.device_for_token_hash("h1", NOW) is None
     assert devices.list_devices(1)[0].revoked_at == NOW
 
 

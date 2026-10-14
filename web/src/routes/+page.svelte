@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { AssetFilters, Id } from '$lib/api';
-	import { api, library, notice, settings, ui, viewport } from '$lib/app.svelte';
+	import { api, library, notice, session, settings, ui, viewport } from '$lib/app.svelte';
 	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { monthTotals } from '$lib/calendar';
 	import { TimelineLoader } from '$lib/loader.svelte';
@@ -23,6 +23,7 @@
 	import TimeRuler from '$lib/components/TimeRuler.svelte';
 	import UploadButton from '$lib/components/UploadButton.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
+	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
@@ -121,6 +122,9 @@
 		{/if}
 		{#if described && total}
 			<button type="button" onclick={() => (downloadAll = true)}>Download all</button>
+			{#if session.canEdit}
+				<KeepOnPhone target={{ kind: 'filter', filters }} what="these photos" />
+			{/if}
 		{/if}
 		{#if order.length}
 			<button type="button" onclick={() => select(selectAll(order))}
