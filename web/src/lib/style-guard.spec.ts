@@ -85,7 +85,6 @@ describe('style guard', () => {
 		'/src/lib/components/Devices.svelte', // (a) You, after the phone-sync PR
 		'/src/lib/components/PhotoBar.svelte', // (c) photo view
 		'/src/lib/components/PhotoInfo.svelte', // (c)
-		'/src/lib/components/Editor.svelte', // (c)
 		'/src/lib/components/PhotoGrid.svelte', // (b) library
 		'/src/lib/components/Timeline.svelte', // (b)
 		'/src/lib/components/PeopleEditor.svelte', // (d) collections

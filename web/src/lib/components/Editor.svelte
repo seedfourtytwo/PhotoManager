@@ -214,7 +214,7 @@
 			<button type="button" onclick={() => (recipe = flipRecipe(recipe, 'v'))}>Flip vertical</button
 			>
 		</div>
-		<div class="group" role="group" aria-label="Crop ratio">
+		<div class="segmented" role="group" aria-label="Crop ratio">
 			{#each RATIOS as r (r.label)}
 				<button type="button" aria-pressed={ratio === r.value} onclick={() => chooseRatio(r.value)}
 					>{r.label}</button
@@ -313,94 +313,81 @@
 		user-select: none;
 		pointer-events: none;
 	}
+	/* The crop frame: 2 px marks on the photo, thicker at the corners where it is held. */
 	.crop {
 		position: absolute;
 		box-sizing: border-box;
-		border: 1px solid var(--on-photo-90);
+		border: var(--fine) solid var(--on-photo-90);
 		/* Dim what will be cut away. */
 		box-shadow: 0 0 0 100vmax var(--photo-shade-55);
 		cursor: move;
 		touch-action: none;
 	}
 	.crop:focus-visible {
-		outline: 2px solid var(--accent);
+		outline: var(--fine) solid var(--accent);
 		outline-offset: 0;
 	}
 	.handle {
 		position: absolute;
-		width: 22px;
-		height: 22px;
+		width: var(--s-5);
+		height: var(--s-5);
 		touch-action: none;
 	}
 	.handle::after {
 		content: '';
 		position: absolute;
-		width: 10px;
-		height: 10px;
-		border: 2px solid var(--on-photo);
+		width: var(--s-3);
+		height: var(--s-3);
+		border: var(--s-1) solid var(--on-photo);
 	}
 	.nw {
-		left: -4px;
-		top: -4px;
+		left: calc(-1 * var(--s-1));
+		top: calc(-1 * var(--s-1));
 		cursor: nwse-resize;
 	}
 	.nw::after {
-		border-width: 2px 0 0 2px;
+		border-width: var(--s-1) 0 0 var(--s-1);
 	}
 	.ne {
-		right: -4px;
-		top: -4px;
+		right: calc(-1 * var(--s-1));
+		top: calc(-1 * var(--s-1));
 		cursor: nesw-resize;
 	}
 	.ne::after {
 		right: 0;
-		border-width: 2px 2px 0 0;
+		border-width: var(--s-1) var(--s-1) 0 0;
 	}
 	.sw {
-		left: -4px;
-		bottom: -4px;
+		left: calc(-1 * var(--s-1));
+		bottom: calc(-1 * var(--s-1));
 		cursor: nesw-resize;
 	}
 	.sw::after {
 		bottom: 0;
-		border-width: 0 0 2px 2px;
+		border-width: 0 0 var(--s-1) var(--s-1);
 	}
 	.se {
-		right: -4px;
-		bottom: -4px;
+		right: calc(-1 * var(--s-1));
+		bottom: calc(-1 * var(--s-1));
 		cursor: nwse-resize;
 	}
 	.se::after {
 		right: 0;
 		bottom: 0;
-		border-width: 0 2px 2px 0;
+		border-width: 0 var(--s-1) var(--s-1) 0;
 	}
+	/* The tools under the photo, apart from it by space. */
 	.tools {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--s-2) var(--s-5);
 		padding: var(--s-2) var(--s-4) calc(var(--s-3) + env(safe-area-inset-bottom));
-		border-top: 1px solid var(--hairline);
 	}
 	.group {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0 2px;
-	}
-	.group button[aria-pressed='true'] {
-		color: var(--ink);
-		text-decoration: underline;
-		text-underline-offset: 0.35em;
-		text-decoration-thickness: 1px;
-	}
-	.group button[aria-pressed='false'] {
-		color: var(--ink-2);
-	}
-	@media (hover: hover) {
-		.group button[aria-pressed='false']:hover {
-			color: var(--ink);
-		}
+		gap: 0 var(--fine);
 	}
 	.end {
 		margin-left: auto;
@@ -425,6 +412,15 @@
 		}
 		.group {
 			width: 100%;
+		}
+		/* The ratios share the width, each a whole target. */
+		.segmented {
+			display: flex;
+			width: 100%;
+			box-sizing: border-box;
+		}
+		.segmented button {
+			flex: 1;
 		}
 		.straighten {
 			width: 100%;
