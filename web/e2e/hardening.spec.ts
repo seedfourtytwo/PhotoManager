@@ -197,6 +197,7 @@ test('trash: “Empty trash” deletes what the page showed, not what arrived si
 	await expect(page.locator('.tile')).toHaveCount(1);
 	// Meanwhile another device moves a photo to the trash.
 	await page.request.delete('/api/assets', { data: { ids: [later] } });
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Empty trash' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Delete for good?' });
 	await expect(dialog).toContainText('1 library copy');

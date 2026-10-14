@@ -314,12 +314,15 @@ test('trash: “Delete for good” for a selection and “Empty trash” both as
 	await expect(confirm).toBeHidden();
 	await expect(tiles).toHaveCount(1);
 
-	// Nothing selected: Empty trash takes what is left.
+	// Nothing selected: Empty trash, behind ⋯ in the head, takes what is left.
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Empty trash' }).click();
 	await expect(confirm).toContainText('1 library copy');
 	await confirm.getByRole('button', { name: 'Delete for good' }).click();
 	await expect(page.getByText('The trash is empty.')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Empty trash' })).toHaveCount(0);
+	// an empty trash has nothing to select or empty
+	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveCount(0);
 });
 
 test.describe('selection pill', () => {
@@ -531,6 +534,7 @@ test.describe('keyboard focus is never left on nothing', () => {
 		await expect(toast(page)).toContainText('Deleted 1 library copy for good');
 		await expect.poll(() => focus(page)).toBe('a photo');
 		// The last one goes: there is no photo left to take the focus, the page does.
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Empty trash' }).click();
 		await page
 			.getByRole('dialog', { name: 'Delete for good?' })
