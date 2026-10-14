@@ -166,6 +166,7 @@ test('every screen', async ({ page }, info) => {
 	await page.getByRole('button', { name: 'Share' }).click();
 	await shot(page, '12-share', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('link', { name: 'Print' }).click();
 	await expect(page.getByRole('list', { name: 'Pages' }).getByRole('img').first()).toBeVisible();
 	await shot(page, '20-print', p);

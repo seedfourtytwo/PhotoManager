@@ -228,7 +228,6 @@
 						r={Math.max(r, 3 / pxPerUnit)}
 						class="dot"
 						class:chosen={chosen?.ids[0] === c.ids[0]}
-						stroke-width={1 / pxPerUnit}
 					/>
 				</a>
 			{/each}
@@ -337,9 +336,6 @@
 			color: var(--ink);
 		}
 	}
-	.map {
-		border: 1px solid var(--hairline);
-	}
 	svg {
 		display: block;
 		width: 100%;
@@ -360,7 +356,6 @@
 	.dot {
 		fill: var(--ink);
 		fill-opacity: 0.8;
-		stroke: var(--bg);
 	}
 	.dot.chosen,
 	a:focus-visible .dot {
@@ -421,9 +416,6 @@
 		.tools {
 			flex-basis: 100%;
 			margin: 0 0 0 calc(-1 * var(--s-2));
-		}
-		.map {
-			border-inline: 0;
 		}
 	}
 </style>

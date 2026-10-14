@@ -118,7 +118,7 @@
 		{#if arrange}
 			<p class="arranging" role="note">
 				Drag photos into place, or focus one and press Alt+← / Alt+→.
-				<button type="button" onclick={() => (arrange = false)}>Done</button>
+				<button type="button" onclick={() => (arrange = false)}>Done arranging</button>
 			</p>
 		{/if}
 

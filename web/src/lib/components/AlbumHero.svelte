@@ -23,7 +23,9 @@
 </script>
 
 <header class="hero">
-	<span class="cover">{#if album.cover}<img src={album.cover.url} alt="" />{/if}</span>
+	<span class="cover"
+		>{#if album.cover}<img src={album.cover.url} alt="" />{/if}</span
+	>
 	<div class="caption">
 		<h1>{album.title}</h1>
 		{#if album.description}<p class="description">{album.description}</p>{/if}

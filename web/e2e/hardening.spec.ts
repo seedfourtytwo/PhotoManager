@@ -306,6 +306,7 @@ test('album: two quick moves reach the server in order, the last one last', asyn
 	const ids = async () =>
 		tiles.evaluateAll((all) => all.map((t) => Number(t.getAttribute('data-id'))));
 	const before = await ids();
+	await page.getByRole('button', { name: 'More', exact: true }).click();
 	await page.getByRole('button', { name: 'Arrange' }).click();
 	await tiles.first().focus();
 	await page.keyboard.press('Alt+ArrowRight');
@@ -336,6 +337,7 @@ test.describe('a double click sends one request', () => {
 	test('Rename album saves once', async ({ page }) => {
 		const patches = await countSlow(page, '**/api/albums/1', 'PATCH');
 		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Rename' }).click();
 		const dialog = page.getByRole('dialog', { name: 'Rename album' });
 		await dialog.getByLabel('Title').fill('Renamed once');
@@ -347,6 +349,7 @@ test.describe('a double click sends one request', () => {
 	test('Delete album deletes once, without a “not found” afterwards', async ({ page }) => {
 		const deletes = await countSlow(page, '**/api/albums/1', 'DELETE');
 		await signIn(page, '/albums/1');
+		await page.getByRole('button', { name: 'More', exact: true }).click();
 		await page.getByRole('button', { name: 'Delete album' }).click();
 		await page
 			.getByRole('dialog', { name: 'Delete album?' })

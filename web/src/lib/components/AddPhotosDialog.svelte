@@ -57,24 +57,27 @@
 </script>
 
 <Dialog title="Add photos" wide {onclose}>
-	<div class="pick" bind:clientWidth={width}>
-		<PhotoGrid
-			items={offered}
-			{layout}
-			selected={picked}
-			selecting
-			onopen={toggle}
-			ontoggle={(id) => toggle(id)}
-			label="Photos to add"
-		/>
+	<!-- The photos scroll on their own, so Add stays in reach however far down one is. -->
+	<div class="pick">
+		<div bind:clientWidth={width}>
+			<PhotoGrid
+				items={offered}
+				{layout}
+				selected={picked}
+				selecting
+				onopen={toggle}
+				ontoggle={(id) => toggle(id)}
+				label="Photos to add"
+			/>
+		</div>
+		{#if loader.error}
+			<p role="alert">{loader.error}</p>
+		{:else if !loader.done}
+			<button type="button" class="more" disabled={loader.loading} onclick={() => loader.loadMore()}
+				>Show more</button
+			>
+		{/if}
 	</div>
-	{#if loader.error}
-		<p role="alert">{loader.error}</p>
-	{:else if !loader.done}
-		<button type="button" class="more" disabled={loader.loading} onclick={() => loader.loadMore()}
-			>Show more</button
-		>
-	{/if}
 	{#snippet actions()}
 		<button class="primary" type="button" disabled={busy || !picked.size} onclick={add}
 			>{picked.size ? `Add ${photos(picked.size)}` : 'Add'}</button
@@ -85,6 +88,9 @@
 <style>
 	/* The photos run to the sheet's edges, as in the library. */
 	.pick {
+		max-height: 60dvh;
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		margin-inline: calc(-1 * var(--s-5));
 	}
 	@media (max-width: 639px) {

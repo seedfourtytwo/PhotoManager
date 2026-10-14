@@ -83,6 +83,7 @@ describe('style guard', () => {
 	// §11) take their files off this list; it must be empty when the redesign is done.
 	const LINES_PENDING = new Set([
 		'/src/lib/components/Devices.svelte', // (a) You, after the phone-sync PR
+		'/src/lib/components/KeepOnPhone.svelte', // (b) restyles it; arrived with #70 on main
 		'/src/lib/components/PhotoBar.svelte', // (c) photo view
 		'/src/lib/components/PhotoInfo.svelte', // (c)
 		'/src/lib/components/Editor.svelte', // (c)
@@ -94,8 +95,6 @@ describe('style guard', () => {
 		'/src/lib/components/admin/Sources.svelte', // (d), after the folder-pause PR
 		'/src/lib/components/admin/Users.svelte', // (d)
 		'/src/routes/admin/+page.svelte', // (d)
-		'/src/routes/albums/[id]/print/+page.svelte', // (d)
-		'/src/routes/map/+page.svelte', // (d)
 		'/src/routes/review/+page.svelte', // (d)
 		'/src/routes/settings/+page.svelte' // (a)
 	]);
