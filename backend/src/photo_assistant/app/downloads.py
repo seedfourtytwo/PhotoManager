@@ -9,10 +9,11 @@
 
 import shutil
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from photo_assistant.app.photo_names import PhotoName
 from photo_assistant.domain.access import Level
 from photo_assistant.domain.export_naming import (
     ExportOptions,
@@ -69,15 +70,19 @@ class Downloads:
         return total
 
     def plan(
-        self, views: Sequence[AssetView], names: Sequence[str], options: ExportOptions
+        self, views: Sequence[AssetView], names: Mapping[int, PhotoName], options: ExportOptions
     ) -> list[Entry]:
-        """``names``: each photo's original file name (from its first source)."""
+        """``names``: each photo's names (``photo_names``)."""
         paths = []
-        for view, original in zip(views, names, strict=True):
+        for view in views:
+            name, taken_at = names[view.id], view.asset.taken_at
             city = view.place.city if view.place else None
-            stem = export_stem(original, view.asset.taken_at, options.naming, city)
-            ext = export_extension(self.output_format(view, options), original)
-            paths.append(f"{folder_for(view.asset.taken_at, options.folders)}{stem}{ext}")
+            stem = export_stem(name.shown, name.original, taken_at, options.naming, city)
+            # the original's own extension (.JPG stays .JPG); the library file's when hidden
+            ext = export_extension(
+                self.output_format(view, options), name.original or view.asset.library_path
+            )
+            paths.append(f"{folder_for(taken_at, options.folders)}{stem}{ext}")
         return [Entry(v, n) for v, n in zip(views, unique_names(paths), strict=True)]
 
     @staticmethod
