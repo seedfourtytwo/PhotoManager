@@ -42,6 +42,7 @@
 	dialog {
 		background: var(--raised);
 		color: var(--ink);
+		border: 0; /* the browser's own dialog border would show */
 		border-radius: var(--r-2);
 		padding: var(--s-5);
 		width: min(28rem, calc(100vw - 2 * var(--s-4)));

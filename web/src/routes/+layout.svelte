@@ -202,6 +202,7 @@
 		gap: var(--s-3);
 		background: var(--raised);
 		color: var(--ink);
+		border: 0; /* a popover's own border would show */
 		border-radius: var(--r-2);
 		box-shadow: var(--lift);
 		padding: var(--s-2) var(--s-4);
