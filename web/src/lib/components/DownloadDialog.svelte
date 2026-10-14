@@ -55,7 +55,7 @@
 
 <script lang="ts">
 	import type { AssetOut, DownloadEstimate, DownloadOptions, DownloadScope } from '$lib/api';
-	import { api, notice, viewport } from '$lib/app.svelte';
+	import { api, notice, photoShare, SHARE_AGAIN, viewport } from '$lib/app.svelte';
 	import {
 		DEFAULT_OPTIONS,
 		EDGE_PRESETS,
@@ -63,10 +63,10 @@
 		buildDownloadRequest,
 		scopeLabel,
 		simpleChoices,
-		simpleOf,
-		singleFileName
+		simpleOf
 	} from '$lib/download';
 	import { errorMessage, formatBytes } from '$lib/format';
+	import { canShare } from '$lib/share';
 	import Dialog from './Dialog.svelte';
 
 	type Props = {
@@ -114,29 +114,16 @@
 		return api.singleDownloadUrl(asset.id, options);
 	}
 
-	function canShareFiles(): boolean {
-		try {
-			const probe = new File([''], 'probe.jpg', { type: 'image/jpeg' });
-			return viewport.phone && !!navigator.canShare?.({ files: [probe] });
-		} catch {
-			return false;
-		}
-	}
+	const canShareFiles = () => viewport.phone && canShare();
 
 	async function share(asset: AssetOut) {
 		busy = true;
 		try {
-			const response = await fetch(singleUrl(asset), { credentials: 'same-origin' });
-			if (response.status === 401) await api.me(); // signs out and goes to the sign-in page
-			if (!response.ok) throw new Error(`The library server answered ${response.status}.`);
-			const blob = await response.blob();
-			const file = new File([blob], singleFileName(asset.id, asset.taken_at, options.format), {
-				type: blob.type
-			});
-			await navigator.share({ files: [file] });
-			onclose();
+			const outcome = await photoShare.share(asset, options);
+			if (outcome === 'shared') onclose();
+			else if (outcome === 'ready') notice.show(SHARE_AGAIN);
 		} catch (e) {
-			if (!(e instanceof DOMException && e.name === 'AbortError')) notice.error(e);
+			notice.error(e);
 		} finally {
 			busy = false;
 		}

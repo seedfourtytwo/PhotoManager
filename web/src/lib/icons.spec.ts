@@ -16,6 +16,7 @@ describe('icons', () => {
 			'more',
 			'restore',
 			'search',
+			'share',
 			'trash'
 		]);
 	});

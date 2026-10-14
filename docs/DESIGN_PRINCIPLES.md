@@ -224,7 +224,9 @@ not a token):
 - **The photo view** (the loupe) gives the photo the whole screen. Its chrome floats over it as
   glass: Close, Info and Zoom as pills at the top, one bar at the bottom with a two-line readout in
   the data face (date · time · place / camera · size · file name) and at most five actions,
-  each an icon over its word: Favourite, Download, Album, Edit, More. The details are the
+  each an icon over its word: Favourite, Download, Album, Edit, More. On a device with a share
+  sheet (a phone over HTTPS) Share takes Download's place and Download is under More; where
+  there is none, Share is not shown. The details are the
   sidenote in the right margin on a laptop and a bottom sheet on a phone. Chrome fades when
   idle. The photo follows the finger; every gesture (swipe sideways, pull down, swipe up,
   double-tap) has a button that does the same. A double tap zooms in on the spot tapped and

@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { AssetDetail, AssetOut } from '$lib/api';
-	import { library, session } from '$lib/app.svelte';
+	import { library, notice, photoShare, session, SHARE_AGAIN } from '$lib/app.svelte';
 	import type { MenuItem } from '$lib/menu';
 	import { readout, readoutSpoken } from '$lib/readout';
+	import { canShare, shareOptions } from '$lib/share';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 	import type { PhotoDialog } from './PhotoDialogs.svelte';
@@ -35,6 +36,10 @@
 	}: Props = $props();
 
 	let similarReady = $state(false);
+	/** The photo is being fetched for the share sheet, or the sheet is open. */
+	let sharing = $state(false);
+	/** This device has a share sheet: Share takes Download's place on the bar. */
+	const shareable = canShare();
 
 	const canEdit = $derived(session.canEdit && detail?.level === 'edit');
 	const viewOnly = $derived(detail?.level === 'view');
@@ -45,6 +50,9 @@
 	const spoken = $derived(readoutSpoken(detail));
 	/** What does not fit among the bar's five actions. */
 	const moreItems = $derived<MenuItem[]>([
+		...(shareable && detail && !viewOnly
+			? [{ label: 'Download', run: () => onopen('download') }]
+			: []),
 		...(canPrivate
 			? [{ label: 'Private', pressed: asset.private, run: () => ontoggle('private') }]
 			: []),
@@ -58,6 +66,25 @@
 			.then((status) => (similarReady = !!status?.clip.ready))
 			.catch(() => undefined);
 	});
+
+	// A file kept for a second tap belongs to the photo it was fetched for.
+	$effect(() => {
+		void asset.id;
+		return () => photoShare.forget();
+	});
+
+	async function share() {
+		if (!detail || sharing) return;
+		sharing = true;
+		try {
+			const outcome = await photoShare.share(asset, shareOptions(detail));
+			if (outcome === 'ready') notice.show(SHARE_AGAIN);
+		} catch (e) {
+			notice.error(e);
+		} finally {
+			sharing = false;
+		}
+	}
 
 	function moreLikeThis() {
 		void goto(`/search?like=${asset.id}`);
@@ -89,6 +116,10 @@
 				>
 				<span class="why" id="loupe-why" title="Downloading needs access to the photo's folder"
 					>view only</span
+				>
+			{:else if shareable}
+				<button type="button" class="action" disabled={!detail} aria-busy={sharing} onclick={share}
+					><Icon name="share" />{sharing ? 'Wait…' : 'Share'}</button
 				>
 			{:else}
 				<button type="button" class="action" disabled={!detail} onclick={() => onopen('download')}

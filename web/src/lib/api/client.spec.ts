@@ -202,6 +202,46 @@ describe('createApi', () => {
 		);
 	});
 
+	it('fetches one photo as a file: its bytes, and the name the server gives the download', async () => {
+		const { calls, fetcher } = fakeServer([
+			new Response('jpeg bytes', {
+				headers: {
+					'content-type': 'image/jpeg',
+					'content-disposition': `attachment; filename="beach day _.jpg"; filename*=UTF-8''beach%20day%20%F0%9F%8C%8A.jpg`
+				}
+			})
+		]);
+		const api = createApi({ fetch: fetcher });
+		const got = await api.singleDownload(5, { format: 'jpeg', quality: 90, max_edge: null });
+		expect(calls).toEqual([
+			{
+				url: '/api/assets/5/download?format=jpeg&quality=90',
+				method: 'GET',
+				body: undefined,
+				credentials: 'same-origin'
+			}
+		]);
+		expect(got.filename).toBe('beach day 🌊.jpg');
+		expect(got.blob.type).toBe('image/jpeg');
+		expect(await got.blob.text()).toBe('jpeg bytes');
+	});
+
+	it('a refused photo file fails with the server’s sentence, and a 401 signs out', async () => {
+		const { fetcher } = fakeServer([
+			json({ detail: 'downloading needs access to the folder' }, 403),
+			json({ detail: 'not signed in' }, 401)
+		]);
+		let signedOut = 0;
+		const api = createApi({ fetch: fetcher, onUnauthorized: () => signedOut++ });
+		const options = { format: 'original', quality: 90, max_edge: null } as const;
+		await expect(api.singleDownload(5, options)).rejects.toThrow(
+			'Downloading needs access to the folder'
+		);
+		expect(signedOut).toBe(0);
+		await expect(api.singleDownload(5, options)).rejects.toBeInstanceOf(ApiError);
+		expect(signedOut).toBe(1);
+	});
+
 	it('covers every contract route with the right method and path', async () => {
 		const routes: [string, string][] = [];
 		const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
