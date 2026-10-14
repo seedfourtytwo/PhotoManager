@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ImportRun, Recheck, Source } from '$lib/api';
+	import type { ImportRun, Recheck, Source, SourceRemoved } from '$lib/api';
 	import { api, library, notice } from '$lib/app.svelte';
 	import { formatCount, formatWhen, nextCheckText, photos } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
@@ -8,6 +8,7 @@
 	import AddFolder from './AddFolder.svelte';
 	import ProtonSource from './ProtonSource.svelte';
 	import ReportDialog from './ReportDialog.svelte';
+	import StopWatchingDialog from './StopWatchingDialog.svelte';
 
 	type Props = { busy: boolean; onscan: () => void; refresh: number };
 	let { busy, onscan, refresh }: Props = $props();
@@ -19,6 +20,10 @@
 	let proton = $state(false);
 	let accessFor = $state<Source | null>(null);
 	let reportFor = $state<{ run: ImportRun; label: string } | null>(null);
+	let stopping = $state<Source | null>(null);
+
+	const PAUSED_HINT =
+		'Photos already in the library stay; new photos in this folder aren’t picked up until you resume.';
 
 	async function load() {
 		try {
@@ -101,10 +106,38 @@
 	async function toggle(source: Source) {
 		try {
 			await api.updateSource(source.id, { enabled: !source.enabled });
+			notice.show(
+				source.enabled
+					? `Paused “${source.label}”. ${PAUSED_HINT}`
+					: `Checking “${source.label}” again.`
+			);
 			await load();
 		} catch (e) {
 			notice.error(e);
 		}
+	}
+
+	// A folder no longer watched ("Stop watching", keep) still gives access to its photos.
+	const watched = $derived(sources.filter((s) => s.kind !== 'kept'));
+	const unwatched = $derived(sources.filter((s) => s.kind === 'kept'));
+
+	function removedText(source: Source, removed: SourceRemoved): string {
+		if (removed.detached)
+			return `Stopped watching “${source.label}”. Its photos stay, seen by the same people.`;
+		const kept = removed.only_here - removed.trashed;
+		const verb = source.kind === 'kept' ? 'Removed' : 'Stopped watching';
+		return (
+			`${verb} “${source.label}”.` +
+			(removed.trashed ? ` ${photos(removed.trashed)} moved to the trash.` : '') +
+			(kept ? ` ${photos(kept)} found only there stay; only admins see them.` : '')
+		);
+	}
+
+	async function stopped(source: Source, removed: SourceRemoved) {
+		stopping = null;
+		notice.show(removedText(source, removed));
+		library.forget(); // filter labels and the photos members see changed
+		await load();
 	}
 </script>
 
@@ -117,7 +150,7 @@
 		<button type="button" disabled={busy} onclick={() => scan()}>Check all</button>
 	</header>
 	<ul>
-		{#each sources as source (source.id)}
+		{#each watched as source (source.id)}
 			{@const run = lastRun(source.id)}
 			<li class:off={!source.enabled}>
 				<div class="name">
@@ -126,7 +159,7 @@
 					{#if source.problem}<span class="problem small">{source.problem}</span>{/if}
 				</div>
 				<div class="quiet small">
-					{photos(source.asset_count)}{#if !source.enabled}&nbsp;· disabled{/if}
+					{photos(source.asset_count)}{#if !source.enabled}&nbsp;· <span>paused</span>{/if}
 					{#if run?.status === 'running'}
 						&nbsp;· <span class="live"
 							>importing · {formatCount(run.summary.files_seen)} file{run.summary.files_seen === 1
@@ -146,6 +179,7 @@
 						{#if run.message}&nbsp;· <span class="problem">{run.message}</span>{/if}
 					{/if}
 				</div>
+				{#if !source.enabled}<p class="quiet small hint">{PAUSED_HINT}</p>{/if}
 				<div class="auto quiet small">
 					<label
 						>Check automatically
@@ -164,11 +198,17 @@
 				</div>
 				<div class="actions">
 					{#if source.kind === 'rclone'}
-						<button type="button" disabled={busy} onclick={() => pull(source)}>Pull now</button>
+						<button type="button" disabled={busy || !source.enabled} onclick={() => pull(source)}
+							>Pull now</button
+						>
 					{:else if source.kind === 'proton'}
-						<button type="button" disabled={busy} onclick={() => pull(source)}>Check again</button>
+						<button type="button" disabled={busy || !source.enabled} onclick={() => pull(source)}
+							>Check again</button
+						>
 					{:else}
-						<button type="button" disabled={busy} onclick={() => scan(source)}>Check again</button>
+						<button type="button" disabled={busy || !source.enabled} onclick={() => scan(source)}
+							>Check again</button
+						>
 					{/if}
 					<button type="button" onclick={() => (accessFor = source)}>Access</button>
 					{#if run}
@@ -176,14 +216,40 @@
 							>Report</button
 						>
 					{/if}
-					<button type="button" onclick={() => toggle(source)}
-						>{source.enabled ? 'Disable' : 'Enable'}</button
-					>
+					{#if source.kind !== 'inbox'}
+						<button type="button" onclick={() => toggle(source)}
+							>{source.enabled ? 'Pause checking' : 'Resume checking'}</button
+						>
+						<button type="button" onclick={() => (stopping = source)}>Stop watching</button>
+					{/if}
 				</div>
 			</li>
 		{/each}
 	</ul>
 </section>
+
+{#if unwatched.length}
+	<section aria-labelledby="a-unwatched">
+		<h3 id="a-unwatched">No longer watched</h3>
+		<p class="quiet small hint">
+			Their photos stay, seen by the same people. Nothing here is checked again.
+		</p>
+		<ul>
+			{#each unwatched as source (source.id)}
+				<li>
+					<div class="name">
+						<span>{source.label}</span>
+						<span class="quiet small">{photos(source.asset_count)}</span>
+					</div>
+					<div class="actions">
+						<button type="button" onclick={() => (accessFor = source)}>Access</button>
+						<button type="button" onclick={() => (stopping = source)}>Remove</button>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	</section>
+{/if}
 
 {#if adding}
 	<AddFolder onclose={() => (adding = false)} onadded={addedFolder} />
@@ -202,6 +268,13 @@
 		sourceId={accessFor.id}
 		label={accessFor.label}
 		onclose={() => (accessFor = null)}
+	/>
+{:else if stopping}
+	{@const source = stopping}
+	<StopWatchingDialog
+		{source}
+		onclose={() => (stopping = null)}
+		ondone={(removed) => stopped(source, removed)}
 	/>
 {:else if reportFor}
 	<ReportDialog
@@ -263,6 +336,9 @@
 		flex-wrap: wrap;
 		gap: 0 2px;
 		margin: var(--s-1) 0 0 calc(-1 * var(--s-2));
+	}
+	.hint {
+		margin: var(--s-1) 0 0;
 	}
 	.live,
 	.problem {
