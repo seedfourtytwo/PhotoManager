@@ -20,7 +20,8 @@ export function accessHelpers(h: World) {
 		if (user.role === 'admin') return 'edit';
 		const access = h.state().access.get(sourceId);
 		const source = h.state().sources.find((s) => s.id === sourceId);
-		if (!access || !source || !source.enabled) return null;
+		// A paused folder (enabled: false) still grants, as on the server: it only stops checks.
+		if (!access || !source) return null;
 		let level: Level | null = source.owner_id === user.id ? 'edit' : access.everyone;
 		for (const entry of access.users)
 			if (entry.user_id === user.id) level = maxLevel(level, entry.level);
@@ -35,7 +36,8 @@ export function accessHelpers(h: World) {
 
 	function assetLevel(user: MockUser, asset: MockAsset): Level | null {
 		if (asset.private_owner !== null && asset.private_owner !== user.id) return null;
-		let level: Level | null = null;
+		// Admins have edit everywhere, also on a photo no folder holds any more (as the server).
+		let level: Level | null = user.role === 'admin' ? 'edit' : null;
 		for (const s of asset.sources) level = maxLevel(level, sourceLevel(user, s.source_id));
 		for (const album of h.state().albums) {
 			if (!album.items.includes(asset.id)) continue;

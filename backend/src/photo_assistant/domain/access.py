@@ -92,6 +92,9 @@ class SourceAccess:
 
 
 INBOX_KIND = "inbox"
+# A source no longer watched ("Stop watching", keep): it still grants access to its photos,
+# exactly as before, but is never checked again; its root is "kept:<id>", not a folder.
+KEPT_KIND = "kept"
 
 
 def default_source_access(kind: str, owner_id: int | None) -> SourceAccess:

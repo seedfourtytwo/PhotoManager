@@ -163,6 +163,28 @@ least that long ago (a failed check counts, so it is not retried at once), unles
 already waiting or running. `SourceOut.next_check_at` is when that is next due: `null` when
 off or disabled, possibly a moment already past (it runs at the server's next look).
 
+**Stop watching a folder (v1.8).** `GET /api/sources/{id}/removal` (admin) answers
+`{photos, only_here}`: the live photos in the source, and those no other source holds.
+`DELETE /api/sources/{id}` (admin) with `?photos=keep` (the default) or `?photos=trash`
+answers `{only_here, trashed, detached}`. Photos another source also holds are not touched.
+
+- `keep` on a watched source *detaches* it (`detached: true`): `kind` becomes `"kept"`, it is
+  disabled, `recheck` is `off` and `path` is `null`. Its access list and its photos stay, so
+  everyone who sees them still does, at the same level, and the folder is free to be added
+  again. Scanning it, `enabled: true` or a `recheck` other than `off` is `422` ("this folder
+  is no longer watched; add it again to watch it"). It is never in "Check all" or a timed
+  check. Its label, owner and access can still be changed.
+- `keep` on a `"kept"` source, or `trash` on any source, removes it (`detached: false`): the
+  source, its access list and its import history. With `keep` the photos found only there
+  stay with no source, so by the access rule only admins see them, plus members of an album
+  they are in. With `trash` they go to the trash (`trashed_by` is the admin, restorable for
+  30 days).
+
+Either way its checks that have not started are dropped. Nothing in the folder itself is
+changed. A cloud source's own pulled copy (`staging/<id>`) is deleted. An upload inbox is
+`422`. A check of that source running right now, or any import into the library, is `409`
+(try again when it ends).
+
 | GET | `/api/sources/{id}/access` | – | `Access` (admin; v1.2 — members `403`) |
 |---|---|---|---|
 | PUT | `/api/sources/{id}/access` | `Access` | `Access` (admin) |
@@ -527,3 +549,13 @@ Additions only.
 |---|---|---|
 | Devices | `Device` has `last_sync_at`. New: `GET /api/devices/{id}/sync`, `POST /api/devices/{id}/sync/rules`, `DELETE /api/devices/{id}/sync/rules/{rule_id}`, `POST /api/devices/{id}/sync/resend` (see "Keep on my phone" above). | Settings → Phones and devices shows each device's list (what it keeps and leaves off, count, size, last sync) and offers "Leave out screenshots" and "Send everything again"; album, person, library and search screens have "Keep on phone". |
 | Sync | New, device token only: `GET /api/sync/manifest`, `GET /api/sync/assets/{id}/original`, `POST /api/sync/sent`. | None: the Apple Shortcut calls them (`docs/guides/keep-on-my-phone.md`). |
+
+---
+
+# v1.8 changes (stop watching a folder)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Sources | New: `GET /api/sources/{id}/removal` and `DELETE /api/sources/{id}` (see "Sources" above). | Admin → Folders has "Stop watching" with a confirm sheet (`api.sourceRemoval`, `api.removeSource`); the enabled switch reads "Pause checking" / "Resume checking". |
