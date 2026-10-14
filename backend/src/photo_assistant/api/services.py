@@ -25,10 +25,13 @@ from photo_assistant.adapters.passwords import Argon2Hasher
 from photo_assistant.adapters.phash import ImageHashPhash
 from photo_assistant.adapters.proton_mirror import ProtonMirror
 from photo_assistant.adapters.sqlite_database import Database, open_library_database
+from photo_assistant.adapters.sqlite_device_sync import SqliteDeviceSync
+from photo_assistant.adapters.sqlite_integrations import SqliteDevices
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.typst_print import TypstPrintRenderer
 from photo_assistant.adapters.vips_renderer import VipsRenderer
 from photo_assistant.api.integrations import Integrations, build_integrations, with_source_areas
+from photo_assistant.api.library_scopes import LibraryScopes
 from photo_assistant.api.ml_services import MlServices, build_ml_services
 from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.settings import Settings
@@ -36,6 +39,7 @@ from photo_assistant.app.accounts import Accounts
 from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
 from photo_assistant.app.backup import LONG_JOBS
 from photo_assistant.app.derivatives import GeneratePreview
+from photo_assistant.app.device_sync import DeviceSync
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import RENDER_EDIT_JOB, Editor
 from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, GroupSimilar
@@ -79,6 +83,7 @@ class Services:
     printer: AlbumPrinter
     stale_jobs: StaleJobSweep  # queues jobs again whose process died (server only)
     rechecks: ScheduledChecks
+    device_sync: DeviceSync  # Keep on my phone: each device's list (FEATURES 10.6)
 
     def enqueue_enrichment(self) -> None:
         """After an import: places and groups for whatever is new (both are idempotent)."""
@@ -250,4 +255,5 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         printer,
         stale_jobs,
         rechecks,
+        DeviceSync(SqliteDevices(db), SqliteDeviceSync(db), LibraryScopes(repo, ml), repo, clock),
     )
