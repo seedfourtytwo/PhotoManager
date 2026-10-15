@@ -28,6 +28,8 @@ from photo_assistant.app.home import home_page
 from photo_assistant.app.people import People
 from photo_assistant.domain.access import Level, Role, SourceAccess, Viewer
 from photo_assistant.domain.library_filter import AssetFilter
+from photo_assistant.domain.rediscover import rediscover
+from photo_assistant.domain.years import years
 
 NOW = datetime(2026, 10, 14, 12, tzinfo=UTC)
 CITIES = [
@@ -130,6 +132,8 @@ def main() -> None:
         "guest": Viewer(4, Role.GUEST),
     }
 
+    moments = {v: repo.moments(v) for v in viewers.values()}
+
     def median(fn: Callable[[], object]) -> float:
         times = []
         for _ in range(runs):
@@ -142,6 +146,8 @@ def main() -> None:
         "home": lambda v: home_page(repo, people, v, NOW),
         "  moments": repo.moments,
         "  arrivals": lambda v: repo.arrivals(v, NOW - timedelta(days=7), 12),
+        "  rediscover": lambda v: rediscover(moments[v], NOW.date()),
+        "  years": lambda v: years(moments[v], NOW.date()),
         "person_id=1,2": lambda v: repo.list_views(v, AssetFilter(person_ids=(1, 2)), 200),
         "pinned": lambda v: repo.list_views(v, AssetFilter(pinned=True), 200),
         "timeline 200": lambda v: repo.list_views(v, AssetFilter(), 200),

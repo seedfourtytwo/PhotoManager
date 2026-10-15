@@ -1,6 +1,6 @@
 /** What Home says (spec 2026-10-14 §9): its date line, titles and sentences, in plain words. */
 import type { AssetOut, HomeData, Memory, NewArrivals, OnThisDay } from './api/types';
-import { MONTHS } from './dates';
+import { MONTHS, formatLongDay } from './dates';
 import { formatCount, photos } from './format';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -35,10 +35,39 @@ export function dayLine(now: Date): string {
 	return `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 }
 
+/** "A year", "Three years", "21 years". */
+const yearsWord = (years: number) =>
+	years === 1 ? 'A year' : `${NUMBERS[years] ?? formatCount(years)} years`;
+
 /** "Three years ago today", "A year ago this week" (when the days around it count). */
 export function yearsAgo(years: number, exact: boolean): string {
-	const when = years === 1 ? 'A year' : `${NUMBERS[years] ?? formatCount(years)} years`;
-	return `${when} ago ${exact ? 'today' : 'this week'}`;
+	return `${yearsWord(years)} ago ${exact ? 'today' : 'this week'}`;
+}
+
+const guessed = (asset: AssetOut) => asset.date_source === 'file_mtime';
+
+/** The large photo of Rediscover: "Ten years ago"; under a whole year, its month ("March 2026"). */
+export function rediscoverTitle(asset: AssetOut, today: Date): string {
+	if (guessed(asset)) return 'From your library';
+	const [y, m, d] = parts(asset.taken_at.slice(0, 10));
+	const before = today.getMonth() + 1 < m || (today.getMonth() + 1 === m && today.getDate() < d);
+	const years = today.getFullYear() - y - (before ? 1 : 0);
+	return years >= 1 ? `${yearsWord(years)} ago` : `${MONTHS[m - 1]} ${y}`;
+}
+
+/** Under it: the day and the place ("12 March 2016, Lisbon"); a guessed day is not told. */
+export function rediscoverNote(asset: AssetOut): string {
+	const place = asset.place && (asset.place.city || asset.place.region || asset.place.country);
+	const day = guessed(asset) ? '' : formatLongDay(asset.taken_at);
+	return [day, place].filter(Boolean).join(', ');
+}
+
+/** The years a story of single photos spans: "2016", "2012 to 2019"; guessed dates left out. */
+export function storyYears(items: readonly AssetOut[]): string {
+	const years = items.filter((a) => !guessed(a)).map((a) => Number(a.taken_at.slice(0, 4)));
+	if (years.length === 0) return '';
+	const [first, last] = [Math.min(...years), Math.max(...years)];
+	return first === last ? `${first}` : `${first} to ${last}`;
 }
 
 const parts = (day: string) => day.split('-').map(Number) as [number, number, number];
@@ -103,7 +132,9 @@ export function homeIsEmpty(
 ): boolean {
 	return (
 		!home.on_this_day &&
+		home.rediscover.length === 0 &&
 		home.memories.length === 0 &&
+		home.years.length === 0 &&
 		home.new.count === 0 &&
 		pinned.length === 0 &&
 		people.length === 0

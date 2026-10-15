@@ -66,6 +66,18 @@ def test_moments_are_what_the_viewer_sees_with_a_real_date_in_time_order(
     ]
 
 
+def test_photos_dated_from_their_file_are_read_only_when_asked_for(
+    repo: SqliteRepository, member: Viewer
+) -> None:
+    family = repo.add_source("Family", "/family").id
+    real, guessed = (_photo(repo, n, family) for n in (1, 2))
+    repo._write(
+        "UPDATE asset SET date_source = ? WHERE id = ?", (DateSource.FILE_MTIME.value, guessed)
+    )
+    assert [m.asset_id for m in repo.moments(member)] == [real]
+    assert [m.asset_id for m in repo.moments(member, guessed=True)] == [real, guessed]
+
+
 def test_arrivals_are_the_newest_imports_with_the_folders_they_came_from(
     repo: SqliteRepository, member: Viewer
 ) -> None:

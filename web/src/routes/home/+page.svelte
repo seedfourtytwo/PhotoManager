@@ -8,8 +8,12 @@
 		arrivalsSentence,
 		dateRange,
 		dayLine,
+		dayNote,
 		homeIsEmpty,
 		memoryLine,
+		rediscoverNote,
+		rediscoverTitle,
+		storyYears,
 		yearsAgo
 	} from '$lib/home';
 	import {
@@ -26,9 +30,9 @@
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
+	import Hero from '$lib/components/home/Hero.svelte';
 	import HomeSection from '$lib/components/home/HomeSection.svelte';
 	import MemoryRow from '$lib/components/home/MemoryRow.svelte';
-	import OnThisDay from '$lib/components/home/OnThisDay.svelte';
 	import StoryPlayer from '$lib/components/home/StoryPlayer.svelte';
 
 	/** The pinned photos shown: one page of the timeline; a family pins a few. */
@@ -116,13 +120,24 @@
 		play(memory.title, memoryLine(memory), memory.cover, memory.filter);
 	}
 
-	// --- the photo view: from Pinned or New this week, stepping through that block -------------
+	/** Rediscover's story is its dozen, as they are. */
+	function playRediscover(photos: AssetOut[]) {
+		story = { title: 'Rediscover', dates: storyYears(photos), poster: photos[0], photos };
+	}
+
+	// --- the photo view: from Rediscover, Pinned or New this week, stepping through that block --
 	const loupeId = $derived(openPhotoId(page));
-	let openedFrom = $state<'pinned' | 'new'>('pinned');
+	type Block = 'rediscover' | 'pinned' | 'new';
+	let openedFrom = $state<Block>('pinned');
+	const blocks = $derived<Record<Block, AssetOut[]>>({
+		rediscover: home?.rediscover ?? [],
+		pinned: pinned ?? [],
+		new: fresh
+	});
 	const inBlock = $derived.by(() => {
 		if (loupeId === undefined) return null;
-		const lists = [pinned ?? [], fresh];
-		for (const items of openedFrom === 'new' ? lists.reverse() : lists) {
+		const others = (Object.keys(blocks) as Block[]).filter((b) => b !== openedFrom);
+		for (const items of [openedFrom, ...others].map((b) => blocks[b])) {
 			const index = items.findIndex((a) => a.id === loupeId);
 			if (index >= 0) return { items, index };
 		}
@@ -142,7 +157,7 @@
 	});
 	$effect(() => tracker.seen(loupeId));
 
-	function open(from: 'pinned' | 'new', id: Id) {
+	function open(from: Block, id: Id) {
 		openedFrom = from;
 		openPhoto(id);
 	}
@@ -151,7 +166,12 @@
 		const patch = (items: AssetOut[]) =>
 			items.map((a) => (a.id === asset.id ? { ...a, ...asset } : a));
 		if (pinned) pinned = patch(pinned);
-		if (home) home = { ...home, new: { ...home.new, items: patch(home.new.items) } };
+		if (home)
+			home = {
+				...home,
+				rediscover: patch(home.rediscover),
+				new: { ...home.new, items: patch(home.new.items) }
+			};
 		linked.patch(asset);
 	}
 </script>
@@ -181,21 +201,53 @@
 	{:else}
 		{@const day = home.on_this_day}
 		{#if day}
-			<OnThisDay
-				{day}
-				onplay={() =>
-					play(
-						yearsAgo(day.years_ago, day.exact),
-						dateRange(day.filter.from, day.filter.to),
-						day.cover,
-						day.filter
-					)}
-			/>
+			<section aria-label="On this day">
+				<Hero
+					cover={day.cover}
+					title={yearsAgo(day.years_ago, day.exact)}
+					note={dayNote(day)}
+					onplay={() =>
+						play(
+							yearsAgo(day.years_ago, day.exact),
+							dateRange(day.filter.from, day.filter.to),
+							day.cover,
+							day.filter
+						)}
+				/>
+			</section>
+		{/if}
+
+		{#if home.rediscover.length}
+			{@const picks = home.rediscover}
+			{@const [lead, ...others] = picks}
+			<HomeSection title="Rediscover">
+				<Hero
+					cover={lead}
+					title={rediscoverTitle(lead, new Date())}
+					note={rediscoverNote(lead)}
+					onplay={() => playRediscover(picks)}
+				/>
+				{#if others.length}
+					<div class="others">
+						<JustifiedGrid
+							items={others}
+							onopen={(id) => open('rediscover', id)}
+							label="Photos to rediscover"
+						/>
+					</div>
+				{/if}
+			</HomeSection>
 		{/if}
 
 		{#if home.memories.length}
 			<HomeSection title="Memories">
 				<MemoryRow memories={home.memories} onplay={playMemory} />
+			</HomeSection>
+		{/if}
+
+		{#if home.years.length}
+			<HomeSection title="Years" href="/">
+				<MemoryRow memories={home.years} onplay={playMemory} small />
 			</HomeSection>
 		{/if}
 
@@ -287,6 +339,9 @@
 	.arrived {
 		margin: 0 0 var(--s-3);
 		color: var(--ink-2);
+	}
+	.others {
+		margin-top: var(--s-4);
 	}
 	.faces {
 		display: flex;

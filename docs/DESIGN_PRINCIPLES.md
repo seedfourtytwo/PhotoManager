@@ -332,9 +332,13 @@ not a token):
 - **Home** reads top to bottom like a story, and a block shows only when it has photos: the
   date ("Wednesday 14 October") with the avatar; On this day, its cover full width at its own
   shape (a tall one stops short of the screen, whole), a display title in plain words ("Three
-  years ago today", "A year ago this week") and one line of where and with whom; Memories, a
-  sideways row of 3:4 covers with title and dates; Pinned, the account's own photos as a
-  justified block ("Choose" opens the Library, where a photo's More and the selection's More
+  years ago today", "A year ago this week") and one line of where and with whom; Rediscover, a
+  dozen photos from across the years, the first large like On this day ("Ten years ago", the
+  day and the place) and playing the dozen, the rest a justified block (so with no On this day
+  Home still opens on a large photo); Memories, a sideways row of 3:4 covers with title and
+  dates; Years, a row of square covers of one size (small multiples) with the year and its
+  count, each playing its year, the heading opening the Library; Pinned, the account's own
+  photos as a justified block ("Choose" opens the Library, where a photo's More and the selection's More
   pin and unpin); People, faces with names; New this week, one sentence ("42 photos arrived
   from Léa's iPhone") over the newest photos. A cover or a memory plays (a round play mark on
   it); a photo opens the photo view and steps through its block. While Home is asked for, the

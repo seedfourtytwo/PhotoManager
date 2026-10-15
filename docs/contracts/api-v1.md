@@ -280,7 +280,7 @@ or control characters → `_`; blank titles → `album.zip`) and at most 100 cha
 `filename` drops accents and turns other non-ASCII characters into `_`. Single-photo downloads
 use the same header shape.
 
-## Home (v1.9, issue 54)
+## Home (v1.9, issue 54; Rediscover and Years v1.10)
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -290,10 +290,13 @@ use the same header shape.
 Home = {
   on_this_day: null | {day: "YYYY-MM-DD", years_ago, exact: bool, count, cover: AssetOut,
                        place: str|null, people: [{id, name}], filter: HomeFilter},
-  memories: [{key, title, from: "YYYY-MM-DD", to: "YYYY-MM-DD", count, cover: AssetOut,
-              filter: HomeFilter}],                                   # at most 8
+  rediscover: AssetOut[],                                             # at most 12 (v1.10)
+  memories: [Memory],                                                 # at most 8
+  years: [Memory],                                                    # v1.10
   new: {count, days: 7, sources: [{id, label, count}], items: AssetOut[]}  # items: ≤ 12
 }
+Memory = {key, title, from: "YYYY-MM-DD", to: "YYYY-MM-DD", count, cover: AssetOut,
+          filter: HomeFilter}
 HomeFilter = {from, to, guessed_date: false}   # /api/assets filters listing exactly `count`
 ```
 Everything is what the timeline shows you: photos you may see, not in the trash, not held
@@ -323,6 +326,17 @@ the day it was taken; each `filter` carries `guessed_date: false` for that reaso
   `key` = `"<from>_<to>"`, stable while the memory is. Newest `to` first: the two newest
   come first; the others take turns, six a day, so the list changes each day and stays the
   same all day. `cover` as for on_this_day.
+- **rediscover** (v1.10): a dozen photos from across the years, a new dozen each day and
+  the same all day. The years take turns: one photo of each year before a second of any, each
+  from a month of its year not picked yet; within a month a favourite of yours wins. Photos
+  taken in the last 30 days are left out unless nothing is older. The first is a favourite
+  when one was picked (the web shows it large and plays all of them); the others follow
+  oldest first. When none of your photos has a real date, photos dated from their file
+  (`date_source: "file_mtime"`) are used instead; they make no memory, year or day.
+- **years** (v1.10): each calendar year with at least 10 photos with a real date, newest
+  first, as a memory of the whole year: `title` `"2016"`, `from`/`to` 1 January and
+  31 December, `count` its photos (what `filter` lists). `cover` is a favourite of yours from
+  that year when there is one, else one of its photos that changes each day.
 - **new**: photos imported (not taken) in the last `days` days, newest arrival first;
   `items` the newest 12; `sources` the folders they came from (each photo counts once, for
   the folder that brought it, when you may see that folder), most first.
@@ -623,3 +637,13 @@ Additions only.
 | Assets | `AssetOut.pinned` (per account); `pinned` in `PATCH /api/assets/{id}/state` and `POST /api/assets/state`; filter `pinned=true\|false`. Migration `0032` (`user_asset.pinned_at`). | `AssetOut.pinned`, `StatePatch`/`BulkState` `pinned`, `AssetFilters.pinned`; Home's Pinned block lists `api.assets({pinned: true})`. |
 | Downloads | ZIP words `1-person`/`<n>-people` and `pinned`. | None. |
 | Home | New: `GET /api/home` (see "Home" above). | `api.home()` → `HomeData` (`OnThisDay`, `Memory`, `NewArrivals`, `HomeFilter`); a block's `filter` goes straight into `api.assets()` to list its photos. |
+
+---
+
+# v1.10 changes (a Home that always has something, issue 54)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Home | `GET /api/home` answers `rediscover` (up to 12 `AssetOut`) and `years` (a `Memory` per year with 10 dated photos), see "Home" above. | `HomeData.rediscover`, `HomeData.years`; Home shows Rediscover (its first photo large, playing the dozen) and Years (square covers that play the year). |
