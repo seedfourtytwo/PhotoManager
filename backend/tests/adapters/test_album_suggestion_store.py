@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
-from photo_assistant.domain.access import Role, SourceAccess, Viewer
+from photo_assistant.domain.access import AlbumRole, Role, SourceAccess, Viewer
 from photo_assistant.domain.capture_time import DateSource
 from photo_assistant.domain.events import EventPhoto
 from photo_assistant.domain.places import Place
@@ -78,6 +78,10 @@ def test_photos_in_albums_are_those_in_albums_the_viewer_sees(
     repo.add_album_items(other, [theirs], None, NOW)
 
     assert repo.photos_in_albums(member) == {mine}
+    repo.set_album_members(other, [(member.user_id, AlbumRole.VIEWER)], NOW)
+    assert repo.photos_in_albums(member) == {mine, theirs}
+    admin = Viewer(1, Role.ADMIN)
+    assert repo.photos_in_albums(admin) == {theirs}, "an admin's own albums, not every album"
 
 
 def test_keeping_makes_the_album_with_its_photos_once(

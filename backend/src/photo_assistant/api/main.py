@@ -17,6 +17,7 @@ from photo_assistant import __version__
 from photo_assistant.api.deps import path_ids_in_range
 from photo_assistant.api.logging_setup import configure_logging, shutdown_logging
 from photo_assistant.api.routes import (
+    album_suggestions,
     albums,
     assets,
     auth,
@@ -146,6 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         library,
         home,
         albums,
+        album_suggestions,
         downloads,
         trash,
         review,

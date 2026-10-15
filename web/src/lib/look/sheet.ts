@@ -24,6 +24,7 @@ export const HOME_SECTIONS = [
 	'on_this_day',
 	'rediscover',
 	'memories',
+	'suggested',
 	'years',
 	'pinned',
 	'people',

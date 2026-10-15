@@ -158,11 +158,11 @@ test('You → Home: the account turns blocks off and moves them; its Home follow
 }) => {
 	await signIn(page, '/settings');
 	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
-	await expect(editor.getByRole('switch')).toHaveCount(7);
+	await expect(editor.getByRole('switch')).toHaveCount(8);
 	await editor.getByRole('switch', { name: 'Rediscover' }).click();
-	await editor.getByRole('button', { name: 'Move Years up' }).click();
-	await editor.getByRole('button', { name: 'Move Years up' }).click();
-	const order = ['years', 'on_this_day', 'memories', 'pinned', 'people', 'new'];
+	for (let step = 0; step < 3; step++)
+		await editor.getByRole('button', { name: 'Move Years up' }).click();
+	const order = ['years', 'on_this_day', 'memories', 'suggested', 'pinned', 'people', 'new'];
 	await expect
 		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections)
 		.toEqual(order);

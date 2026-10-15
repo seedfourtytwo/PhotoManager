@@ -61,6 +61,7 @@ class HomeSection(StrEnum):
     ON_THIS_DAY = "on_this_day"
     REDISCOVER = "rediscover"
     MEMORIES = "memories"
+    SUGGESTED = "suggested"  # suggested albums (FEATURES 5.6)
     YEARS = "years"
     PINNED = "pinned"
     PEOPLE = "people"

@@ -52,7 +52,16 @@ describe('parseLook (a sheet someone sends)', () => {
 			startPage: 'today',
 			collectionsRows: ['people', 'places', 'albums'],
 			dockLabels: true,
-			homeSections: ['on_this_day', 'rediscover', 'memories', 'years', 'pinned', 'people', 'new']
+			homeSections: [
+				'on_this_day',
+				'rediscover',
+				'memories',
+				'suggested',
+				'years',
+				'pinned',
+				'people',
+				'new'
+			]
 		});
 	});
 

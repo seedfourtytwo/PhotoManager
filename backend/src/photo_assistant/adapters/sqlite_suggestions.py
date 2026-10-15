@@ -10,7 +10,7 @@ from datetime import datetime
 from photo_assistant.adapters.sqlite_accounts import utc_text
 from photo_assistant.adapters.sqlite_albums import AlbumsMixin
 from photo_assistant.adapters.sqlite_home import MEMORABLE
-from photo_assistant.adapters.sqlite_library import ALBUM_VISIBLE, filter_sql, visibility
+from photo_assistant.adapters.sqlite_library import filter_sql, visibility
 from photo_assistant.domain.access import Viewer
 from photo_assistant.domain.events import EventPhoto
 from photo_assistant.domain.places import Place
@@ -45,11 +45,14 @@ class SuggestionsMixin(AlbumsMixin):
         ]
 
     def photos_in_albums(self, viewer: Viewer) -> set[int]:
-        """The photos this viewer sees in any album it sees."""
+        """The photos this viewer sees in an album it owns or is a member of: an admin may open
+        every album, but someone else's album does not sort the admin's own photos."""
         visible, _, params = visibility(viewer)
         rows = self._all(
             f"""SELECT DISTINCT ai.asset_id FROM album_item ai JOIN album al ON al.id = ai.album_id
-                JOIN asset a ON a.id = ai.asset_id WHERE {ALBUM_VISIBLE} AND {visible}""",
+                JOIN asset a ON a.id = ai.asset_id
+                WHERE (al.owner_id = :vis_uid OR EXISTS (SELECT 1 FROM album_member m
+                       WHERE m.album_id = al.id AND m.user_id = :vis_uid)) AND {visible}""",
             params,
         )
         return {int(r[0]) for r in rows}

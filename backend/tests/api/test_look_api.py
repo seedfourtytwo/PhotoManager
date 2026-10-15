@@ -19,7 +19,9 @@ DEFAULTS = {
     "startPage": "today",
     "collectionsRows": ["people", "places", "albums"],
     "dockLabels": True,
-    "homeSections": ["on_this_day", "rediscover", "memories", "years", "pinned", "people", "new"],
+    "homeSections": [
+        "on_this_day", "rediscover", "memories", "suggested", "years", "pinned", "people", "new"
+    ],
 }
 WARM = {
     "theme": "album",
@@ -86,7 +88,7 @@ def test_a_home_with_nothing_on_it_is_refused(admin: TestClient) -> None:
         422,
         {
             "detail": "'homeSections' must list at least one of on_this_day, rediscover, "
-            "memories, years, pinned, people, new, each once, in the order to show them"
+            "memories, suggested, years, pinned, people, new, each once, in the order to show them"
         },
     )
 
