@@ -87,6 +87,7 @@ class AlbumInfo:
     description: str
     cover_asset_id: int | None  # the chosen cover if you may see it, else the first photo
     cover_version: int  # edit version of the cover (for its thumbnail URL)
+    cover_size: tuple[int, int] | None  # the cover's width and height as shown (after edits)
     count: int  # photos you can see
     role: AlbumRole
     updated_at: datetime
