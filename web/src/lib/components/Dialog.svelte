@@ -80,7 +80,9 @@
 		margin-top: var(--s-5);
 	}
 	/* Phone: a bottom sheet, in thumb reach. It rises on the sheet curve and follows the
-	   finger down from its handle or title (lib/sheet-drag.ts). */
+	   finger down from its handle or title (lib/sheet-drag.ts). Its surface runs under the
+	   home bar, what it holds scrolls above it: the home bar's room is a clear border, which
+	   lies outside what scrolls while the sheet's background still shows through it. */
 	@media (max-width: 639px) {
 		dialog,
 		dialog.wide {
@@ -89,7 +91,8 @@
 			max-width: 100vw;
 			max-height: 90dvh;
 			border-radius: var(--r-2) var(--r-2) 0 0;
-			padding: 0 var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom));
+			border-bottom: env(safe-area-inset-bottom) solid transparent;
+			padding: 0 var(--s-4) var(--s-4);
 			transition:
 				opacity var(--motion) var(--ease),
 				translate var(--motion-sheet) var(--ease-sheet);
