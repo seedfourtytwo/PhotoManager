@@ -200,7 +200,7 @@ describe('LookForm', () => {
 		await button('Save for Donna').click();
 		await vi.waitFor(() =>
 			expect(calls.at(-1)?.body).toMatchObject({
-				homeSections: ['on_this_day', 'memories', 'pinned', 'years', 'people', 'new']
+				homeSections: ['on_this_day', 'memories', 'suggested', 'pinned', 'years', 'people', 'new']
 			})
 		);
 	});

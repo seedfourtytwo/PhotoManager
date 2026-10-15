@@ -122,8 +122,6 @@
 		font-weight: 600;
 		font-size: var(--fs-12);
 		font-variant-numeric: tabular-nums;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
 	}
 	.title {
 		font-weight: 650;
