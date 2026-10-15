@@ -137,7 +137,7 @@ test.describe('photo view', () => {
 		await takesInput(page);
 		const cdp = await page.context().newCDPSession(page);
 		const start = Date.now() / 1000;
-		const touch = (type: string, dx: number | null, ms: number) =>
+		const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', dx: number | null, ms: number) =>
 			cdp.send('Input.dispatchTouchEvent', {
 				type,
 				touchPoints: dx === null ? [] : [{ x: from.x + dx, y: from.y }],
