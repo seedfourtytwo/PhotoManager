@@ -30,3 +30,6 @@ data/
 
 # Test fixtures are committed as-is, even files the rules above would ignore
 !backend/tests/fixtures/photos/**
+
+# Superdesign working state (canvas context, review screenshots); the specs live in docs/
+.superdesign/
