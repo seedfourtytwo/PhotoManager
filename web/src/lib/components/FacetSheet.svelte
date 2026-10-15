@@ -105,12 +105,12 @@
 	dialog::backdrop {
 		background: var(--scrim);
 	}
-	/* Under its chip: the page stays in sight, so no scrim. */
+	/* Under its chip: the page stays in sight, so no scrim. It ends above a phone's home bar. */
 	dialog.anchored {
 		position: fixed;
 		inset: var(--ay) auto auto var(--ax);
 		margin: 0;
-		max-height: calc(100dvh - var(--ay) - var(--s-4));
+		max-height: calc(100dvh - var(--ay) - max(var(--s-4), env(safe-area-inset-bottom)));
 	}
 	dialog.anchored::backdrop {
 		background: transparent;
@@ -164,13 +164,15 @@
 	}
 
 	/* Phone: a bottom sheet in thumb reach. It rises on the sheet curve and follows the finger
-	   down from its handle or title (lib/sheet-drag.ts). */
+	   down from its handle or title (lib/sheet-drag.ts). Its surface runs under the home bar,
+	   what it holds scrolls above it. */
 	@media (max-width: 639px) {
 		dialog {
 			margin: auto 0 0;
 			width: 100vw;
 			max-width: 100vw;
 			max-height: 88dvh;
+			padding-bottom: env(safe-area-inset-bottom);
 			border-radius: var(--r-2) var(--r-2) 0 0;
 			transition:
 				opacity var(--motion) var(--ease),
@@ -204,7 +206,7 @@
 			touch-action: none;
 		}
 		.body {
-			padding: 0 var(--s-4) calc(var(--s-6) + env(safe-area-inset-bottom));
+			padding: 0 var(--s-4) var(--s-6);
 		}
 	}
 </style>
