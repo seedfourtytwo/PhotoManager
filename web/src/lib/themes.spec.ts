@@ -29,6 +29,7 @@ const COLOURS = [
 	'--on-accent',
 	'--scrim',
 	'--lift',
+	'--glass-edge',
 	'--ok',
 	'--fail',
 	'--check'
@@ -76,3 +77,27 @@ describe.each(Object.entries(VARIANTS))('%s', (name, selectors) => {
 it('contains nothing but theme blocks', () => {
 	expect([...blocks.keys()].sort()).toEqual(Object.values(VARIANTS).flat().sort());
 });
+
+// Words set on a photo (an eyebrow, a hero title) stand on --scrim-photo. At its darkest stop
+// over the brightest photo there is (white) the white words must still read.
+it('keeps words on a photo readable over the darkest stop of its scrim, on a white photo', () => {
+	const first = blocks.get(':root') ?? {};
+	expect(first['--on-photo']).toBe('#fff');
+	const stop = /rgb\(0 0 0 \/ ([\d.]+)\)/.exec(first['--scrim-photo'] ?? '');
+	expect(stop).not.toBeNull();
+	const shade = Number(stop![1]);
+	// Black at that strength over white, in sRGB, then to luminance.
+	const channel = Math.round(255 * (1 - shade))
+		.toString(16)
+		.padStart(2, '0');
+	const scrimmed = hexLuminance(`#${channel.repeat(3)}`);
+	expect(contrast(hexLuminance('#ffffff'), scrimmed)).toBeGreaterThanOrEqual(4.5);
+});
+
+// The 0.5 px edge exists in every theme and mode, and is only ever a hairline.
+it.each(Object.values(VARIANTS).map((selectors) => selectors[0]))(
+	'%s draws glass with a 0.5 px inset edge',
+	(selector) => {
+		expect(blocks.get(selector)?.['--glass-edge']).toMatch(/^inset 0 0 0 0\.5px rgb\(/);
+	}
+);

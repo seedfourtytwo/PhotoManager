@@ -5,7 +5,17 @@
 }
 
 .small {
-	font-size: var(--fs-12);
+	font-size: var(--fs-13);
+}
+
+/* The tiny capital label above a hero title ("ON THIS DAY · 2019"): the only capitals and the
+   only open tracking in the app, used sparingly. In rem, so the text dial scales it. */
+.eyebrow {
+	font-size: var(--fs-11);
+	font-weight: 600;
+	letter-spacing: var(--track-eyebrow);
+	text-transform: uppercase;
+	line-height: var(--lh-tight);
 }
 
 /* Prose: explanations, in the reading measure. */
@@ -25,7 +35,7 @@
 .empty-state > :first-child {
 	font-family: var(--font-title);
 	font-weight: 400;
-	font-size: var(--fs-20);
+	font-size: var(--fs-22);
 	color: var(--ink);
 	margin: 0 0 var(--s-2);
 	line-height: var(--lh-tight);
@@ -43,7 +53,7 @@
 	white-space: nowrap;
 }
 
-/* Floating bars over photos. Solid when blur is unavailable or the device asks for less.
+/* What floats over photos: one glass recipe with a 0.5 px edge. Solid when blur is unavailable or the device asks for less.
    The device is asked straight, never as "not (…)": Safari does not know the question, and a
    question a browser does not know is false even when negated. */
 .glass {
@@ -54,6 +64,7 @@
 		background: var(--glass);
 		-webkit-backdrop-filter: var(--blur);
 		backdrop-filter: var(--blur);
+		box-shadow: var(--glass-edge);
 	}
 	@media (prefers-reduced-transparency: reduce) {
 		.glass {

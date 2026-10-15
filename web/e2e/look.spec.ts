@@ -2,7 +2,7 @@
  * The per-account look (spec 2026-10-08 §5): an account chooses its mode on You; an
  * admin sets any account's look in Admin → People, trying it on their own screen first.
  */
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, Locator, Page } from '@playwright/test';
 import {
 	ADMIN,
 	MEMBER,
@@ -10,6 +10,7 @@ import {
 	expectAccessible,
 	isPhone,
 	follow,
+	loupe,
 	resetMock,
 	signIn,
 	test,
@@ -101,9 +102,9 @@ test('following the device: light on a light device, dark on a dark one', async 
 	await mode(page, 'Like the device').click();
 	await expect(root(page)).not.toHaveAttribute('data-theme');
 	const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-	await expect.poll(background).toBe('rgb(242, 243, 245)'); // --bg, light (themes.css)
+	await expect.poll(background).toBe('rgb(245, 245, 247)'); // --bg, light (themes.css)
 	await page.emulateMedia({ colorScheme: 'dark' });
-	await expect.poll(background).toBe('rgb(13, 15, 18)');
+	await expect.poll(background).toBe('rgb(0, 0, 0)');
 });
 
 test('an admin tries a look for Partner on their own screen, stops, then saves it; Partner gets it', async ({
@@ -257,6 +258,33 @@ test('text size and corners reach the page', async ({ page }) => {
 		.getByRole('button', { name: 'Change PIN' })
 		.evaluate((el) => getComputedStyle(el).borderRadius);
 	expect(radius).toBe('0px');
+});
+
+// DESIGN_PRINCIPLES §1.1: the corners dial rounds controls and surfaces, never a photo.
+test('photos stay square-cornered with the corners dial at its most', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	await setMyLook(page, { corners: 22 });
+	await page.goto('/');
+	const radius = (target: Locator) => target.evaluate((el) => getComputedStyle(el).borderRadius);
+
+	const tile = page.locator('.tile').first();
+	await expect(tile).toBeVisible();
+	expect(await radius(tile)).toBe('0px');
+	expect(await radius(tile.locator('img').first())).toBe('0px');
+
+	await tile.click();
+	const photo = loupe(page).locator('img.photo').first();
+	await expect(photo).toBeVisible();
+	expect(await radius(photo)).toBe('0px');
+
+	await page.goto('/albums');
+	const cover = page.locator('.cover').first();
+	await expect(cover).toBeVisible();
+	expect(await radius(cover)).toBe('0px');
+	expect(await radius(cover.locator('img'))).toBe('0px');
+	// …while a control does take the dial.
+	expect(await radius(page.getByRole('button', { name: 'New album' }))).not.toBe('0px');
 });
 
 test('the old per-browser theme setting moves to the account once, then is gone', async ({

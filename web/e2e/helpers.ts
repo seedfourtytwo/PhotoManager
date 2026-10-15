@@ -114,6 +114,9 @@ export async function withDetail(
 /** The app's one-line notice (toast). Other status texts exist: loading lines, "3 selected". */
 export const toast = (page: Page) => page.locator('[role="status"][aria-live="polite"]');
 
+/** The interface face (tokens.css --font-ui), as computed: what reads and what shows data. */
+export const UI_FACE = /^"?Inter\b/;
+
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640;
 
 /** Touch pointer events, dispatched directly (Playwright has tap but no long-press). */

@@ -23,7 +23,8 @@ import {
 	toast,
 	touchSwipe,
 	viewOnlyPhoto,
-	withDetail
+	withDetail,
+	UI_FACE
 } from './helpers.ts';
 
 test.describe('as admin', () => {
@@ -296,7 +297,7 @@ test.describe('photo view', () => {
 		await expect(how).toHaveText(['Test Camera']);
 		await expect(readout).not.toContainText('·');
 		await expect(readout).not.toContainText('Beach day');
-		await expect(readout).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
+		await expect(readout).toHaveCSS('font-family', UI_FACE);
 	});
 
 	test('the bar holds Favourite, Download, Add to album, Edit and More; More holds the rest', async ({

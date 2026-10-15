@@ -13,7 +13,8 @@ import {
 	resetMock,
 	signIn,
 	test,
-	withDetail
+	withDetail,
+	UI_FACE
 } from './helpers.ts';
 
 const SHOT = { f_number: 2.8, exposure_time: 0.004, iso: 400, focal_length: 35 };
@@ -43,7 +44,7 @@ test('line two reads the camera, then aperture, shutter, ISO and focal length, a
 	await expect(line.locator('[aria-hidden="true"] .item')).toHaveText([CAMERA, ...WRITTEN]);
 	await expect(line).not.toContainText('·');
 	await expect(line).not.toContainText('Beach day');
-	await expect(line).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
+	await expect(line).toHaveCSS('font-family', UI_FACE);
 	await expect(line).toHaveCSS('font-variant-numeric', /tabular-nums/);
 	await expectAccessible(page);
 });
@@ -128,7 +129,7 @@ test('the details list the settings apart by space, and say them in words', asyn
 	const settings = about.locator('.settings');
 	await expect(settings.locator('[aria-hidden="true"] > span')).toHaveText(WRITTEN);
 	await expect(settings).not.toContainText('·');
-	await expect(settings).toHaveCSS('font-family', /Atkinson Hyperlegible Next/);
+	await expect(settings).toHaveCSS('font-family', UI_FACE);
 	await expect(settings.locator('.visually-hidden')).toHaveText(
 		'f 2.8, 1/250 second, ISO 400, 35 millimetres'
 	);
