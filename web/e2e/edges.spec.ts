@@ -4,7 +4,7 @@
  * a phone with a notch reports them.
  */
 import type { Locator, Page } from '@playwright/test';
-import { expect, isPhone, loupe, resetMock, signIn, test } from './helpers.ts';
+import { expect, follow, isPhone, loupe, resetMock, signIn, test } from './helpers.ts';
 
 type Insets = { top: number; right: number; bottom: number; left: number };
 const UPRIGHT: Insets = { top: 47, right: 0, bottom: 34, left: 0 };
@@ -37,6 +37,27 @@ test('edges: the page asks for the whole screen', async ({ page }) => {
 		'content',
 		/viewport-fit=cover/
 	);
+});
+
+// prettier-ignore
+const PAGES = ['/home', '/', '/collections', '/search', '/settings', '/admin', '/albums', '/people', '/map', '/calendar', '/trash', '/review'];
+
+// A page even a little wider than the screen slides sideways under the finger, and on a phone
+// that is the whole app wobbling; Chrome shrinks it instead and the dock sinks into the home bar.
+test('edges: no page is wider than the screen', async ({ page }) => {
+	await withInsets(page, UPRIGHT);
+	await signIn(page);
+	const screen = page.viewportSize()!.width;
+	const tooWide: string[] = [];
+	for (const path of PAGES) {
+		await follow(page, path);
+		await expect(page).toHaveURL(new RegExp(`${path}$`));
+		await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+		await page.waitForLoadState('networkidle');
+		const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+		if (wide > screen) tooWide.push(`${path}: ${wide} px`);
+	}
+	expect(tooWide).toEqual([]);
 });
 
 for (const [name, insets, size] of [

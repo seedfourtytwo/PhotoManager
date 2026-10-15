@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
+	import InstallTip from '$lib/components/InstallTip.svelte';
 	import LookTrial from '$lib/components/LookTrial.svelte';
 	import {
 		backupWatch,
@@ -138,7 +139,6 @@
 	<link rel="icon" href={favicon} />
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<meta name="theme-color" content="#0d0f12" />
-	<link rel="apple-touch-icon" href="/icon-192.png" />
 	<title>Photos</title>
 </svelte:head>
 
@@ -153,6 +153,7 @@
 			<LookTrial />
 			{#if !holding}{@render children()}{/if}
 		</main>
+		<InstallTip />
 	</div>
 {:else if session.error}
 	<main id="main" class="bare">
