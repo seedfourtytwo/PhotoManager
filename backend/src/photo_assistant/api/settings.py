@@ -100,15 +100,26 @@ class IntegrationSettings(BaseModel):
     )
     ollama_base_url: str = Field(
         default="http://127.0.0.1:11434",
-        description="Where Ollama runs: the only address AI requests are sent to.",
+        description=(
+            "Where Ollama runs: the only address AI requests are sent to. It must be this "
+            "machine or the private network (127.0.0.1, ::1, localhost, 10/8, 172.16/12, "
+            "192.168/16, Tailscale's 100.64/10 and fd7a:115c:a1e0::/48), or the app does not "
+            "start; a name counts by every address it resolves to."
+        ),
     )
     ollama_caption_model: str | None = Field(
         default=None,
-        description="Ollama model that describes photos; not set = no captions.",
+        description=(
+            "Ollama model that describes photos; not set = no captions. Cloud models "
+            "(`:cloud`, `-cloud`) are refused."
+        ),
     )
     ollama_plan_model: str | None = Field(
         default=None,
-        description="Ollama model that proposes albums; not set = no album proposals.",
+        description=(
+            "Ollama model that proposes albums; not set = no album proposals. Cloud models "
+            "are refused."
+        ),
     )
     ollama_timeout_seconds: float = Field(
         default=120.0,
