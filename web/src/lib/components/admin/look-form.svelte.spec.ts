@@ -180,13 +180,28 @@ describe('LookForm', () => {
 	it('Collections rows can be hidden and moved, never all hidden', async () => {
 		const calls = serve(hers, echo);
 		render(LookForm, { user: donna, onclose: () => {} });
-		await form().getByRole('checkbox', { name: 'Places' }).click();
-		await form().getByRole('button', { name: 'Move Albums up' }).click();
-		await form().getByRole('checkbox', { name: 'People' }).click();
-		await expect.element(form().getByRole('checkbox', { name: 'Albums' })).toBeDisabled();
+		const rows = form().getByRole('group', { name: 'Collections shows, in this order' });
+		await rows.getByRole('switch', { name: 'Places' }).click();
+		await rows.getByRole('button', { name: 'Move Albums up' }).click();
+		await rows.getByRole('switch', { name: 'People' }).click();
+		await expect.element(rows.getByRole('switch', { name: 'Albums' })).toBeDisabled();
 		await button('Save for Donna').click();
 		await vi.waitFor(() =>
 			expect(calls.at(-1)?.body).toMatchObject({ collectionsRows: ['albums'] })
+		);
+	});
+
+	it('Home sections can be turned off and moved, like the Collections rows', async () => {
+		const calls = serve(hers, echo);
+		render(LookForm, { user: donna, onclose: () => {} });
+		const sections = form().getByRole('group', { name: 'Home shows, in this order' });
+		await sections.getByRole('switch', { name: 'Rediscover' }).click();
+		await sections.getByRole('button', { name: 'Move Pinned up' }).click();
+		await button('Save for Donna').click();
+		await vi.waitFor(() =>
+			expect(calls.at(-1)?.body).toMatchObject({
+				homeSections: ['on_this_day', 'memories', 'pinned', 'years', 'people', 'new']
+			})
 		);
 	});
 

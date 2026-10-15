@@ -33,7 +33,8 @@ const EVERYTHING: Look = {
 	showToday: true,
 	startPage: 'library',
 	collectionsRows: ['albums', 'people'],
-	dockLabels: false
+	dockLabels: false,
+	homeSections: ['people', 'pinned']
 };
 
 describe('parseLook (a sheet someone sends)', () => {
@@ -50,7 +51,8 @@ describe('parseLook (a sheet someone sends)', () => {
 			showToday: true,
 			startPage: 'today',
 			collectionsRows: ['people', 'places', 'albums'],
-			dockLabels: true
+			dockLabels: true,
+			homeSections: ['on_this_day', 'rediscover', 'memories', 'years', 'pinned', 'people', 'new']
 		});
 	});
 
@@ -125,7 +127,11 @@ describe('parseLook (a sheet someone sends)', () => {
 		['collectionsRows', ['people', 'people']],
 		['collectionsRows', ['people', 'calendar']],
 		['collectionsRows', []],
-		['collectionsRows', [1]]
+		['collectionsRows', [1]],
+		['homeSections', 'people'],
+		['homeSections', ['pinned', 'pinned']],
+		['homeSections', ['pinned', 'weather']],
+		['homeSections', []]
 	])('rejects %s = %j', (field, value) => {
 		expect(() => parseLook({ [field]: value })).toThrow(new RegExp(`'${field}'`));
 	});
@@ -134,6 +140,13 @@ describe('parseLook (a sheet someone sends)', () => {
 		expect(parseLook({ collectionsRows: ['albums', 'people'] }).collectionsRows).toEqual([
 			'albums',
 			'people'
+		]);
+	});
+
+	it('keeps the order of the Home sections', () => {
+		expect(parseLook({ homeSections: ['pinned', 'on_this_day'] }).homeSections).toEqual([
+			'pinned',
+			'on_this_day'
 		]);
 	});
 

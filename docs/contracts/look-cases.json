@@ -31,6 +31,8 @@
     { "sheet": { "corners": 2.5, "photoGap": true }, "reads": { "corners": 3 } },
     { "sheet": { "collectionsRows": ["people", "calendar"], "dockLabels": false }, "reads": { "dockLabels": false } },
     { "sheet": { "collectionsRows": ["albums"], "dockLabels": 1 }, "reads": { "collectionsRows": ["albums"] } },
+    { "sheet": { "homeSections": ["pinned", "weather"], "mode": "light" }, "reads": { "mode": "light" } },
+    { "sheet": { "homeSections": ["years", "pinned"], "dockLabels": "no" }, "reads": { "homeSections": ["years", "pinned"] } },
     { "sheet": { "showToday": false, "startPage": "today" }, "reads": { "showToday": false, "startPage": "library" } },
     { "sheet": { "showToday": false, "startPage": "nowhere" }, "reads": { "showToday": false, "startPage": "library" } },
     { "sheet": { "showToday": "no", "startPage": "library" }, "reads": { "startPage": "library" } },

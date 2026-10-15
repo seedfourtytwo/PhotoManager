@@ -148,8 +148,44 @@ test('home: with nothing to show it says so in one sentence, and what to do', as
 	libraryEmpty = false;
 	await page.reload();
 	await expect(empty).toContainText('Your story starts here.');
+	await expect(empty.getByRole('link', { name: 'You' })).toHaveAttribute('href', '/settings');
 	await expect(main.getByRole('heading', { level: 2 })).toHaveCount(0);
 	await expectAccessible(page);
+});
+
+test('You → Home: the account turns blocks off and moves them; its Home follows, a reload too', async ({
+	page
+}) => {
+	await signIn(page, '/settings');
+	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
+	await expect(editor.getByRole('switch')).toHaveCount(7);
+	await editor.getByRole('switch', { name: 'Rediscover' }).click();
+	await editor.getByRole('button', { name: 'Move Years up' }).click();
+	await editor.getByRole('button', { name: 'Move Years up' }).click();
+	const order = ['years', 'on_this_day', 'memories', 'pinned', 'people', 'new'];
+	await expect
+		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections)
+		.toEqual(order);
+	await expectAccessible(page);
+
+	await page
+		.getByRole('navigation', { name: 'Main' })
+		.getByRole('link', { name: 'Home', exact: true })
+		.click();
+	const titles = page.getByRole('main').getByRole('heading', { level: 2 });
+	for (const reloaded of [false, true]) {
+		if (reloaded) await page.reload();
+		await expect(titles.first()).toHaveText('Years');
+		await expect(block(page, 'Rediscover')).toHaveCount(0);
+		// On this day, when there is one, now comes after Years
+		const day = page.getByRole('main').getByRole('region', { name: 'On this day' });
+		if (await day.count()) {
+			const [years, otd] = await Promise.all(
+				[block(page, 'Years'), day].map(async (b) => (await b.boundingBox())!.y)
+			);
+			expect(otd).toBeGreaterThan(years);
+		}
+	}
 });
 
 test('home: a memory plays full screen, steps on a tap, and closes with ×, Escape or Back', async ({
