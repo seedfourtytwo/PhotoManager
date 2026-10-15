@@ -101,3 +101,29 @@ for (const [name, insets, size] of [
 		expect(stage.width).toBe(size.width);
 	});
 }
+
+// Opened from the Home Screen an iPhone 15 gives the page all of its 852 px, the home bar's
+// 34 included; Safari's own toolbar no longer covers that strip.
+test('edges, from the Home Screen: a filter sheet shows nothing under the home bar', async ({
+	page
+}) => {
+	const insets: Insets = { top: 59, right: 0, bottom: 34, left: 0 };
+	await page.setViewportSize({ width: 393, height: 852 });
+	await withInsets(page, insets);
+	await page.addInitScript(() =>
+		Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true })
+	);
+	await signIn(page);
+	await page
+		.getByRole('group', { name: 'Filters' })
+		.getByRole('button', { name: 'When', exact: true })
+		.click();
+	const sheet = page.getByRole('dialog', { name: 'When' });
+	await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
+	// What scrolls in the sheet stops above the home bar…
+	await expectClear(page, sheet.locator('.body'), insets);
+	// …and its last fields scroll up clear of it.
+	const to = sheet.getByLabel('To', { exact: true });
+	await to.scrollIntoViewIfNeeded();
+	await expectClear(page, to, insets);
+});
