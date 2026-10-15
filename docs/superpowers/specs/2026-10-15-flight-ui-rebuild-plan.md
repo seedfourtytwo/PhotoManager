@@ -70,8 +70,9 @@ phone, real and mock). Slices 4–8 and 10 own separate files and can run in par
 | 10 | Home: full-bleed hero with the title on the photo, rails to the screen edge, year tiles with a big numeral, full-screen story player, drag-to-reorder sections | `routes/home`, `components/home/*`, `InstallTip`, `ui/OrderList`, the status-bar plate in `+layout` | medium; after 1, 2, 3, 6 |
 | 9 | Cleanup: drop the old size aliases | `tokens.css` | low; last |
 
-The laptop shell (capsule on top or Mac-style sidebar) is chosen on the Superdesign canvas
-before slice 3.
+**Laptop shell: the floating glass capsule** (canvas variation "Flight A"), chosen over the
+Mac-style sidebar: it is the phone dock's language on a wider screen, so both devices feel like
+one app; photos keep the full width; and the capsule hides on scroll, which a sidebar cannot.
 
 ## Bugs found on the way (fix in the slice that owns the file)
 
@@ -82,16 +83,18 @@ before slice 3.
 - Search on laptop shows two search fields (slice 7).
 - The grid's default gap is 3 px in the look's `apply.ts` and 2 px in CSS (slice 1).
 
-## Waiting on C (hard stops: schema, API contract or new dependency)
+## Backend and contract changes (decided 2026-10-15)
 
-None block slices 0–9; each has a fallback that is in the specs.
+C asked to go with the best option on each. They run as slices 11–15, backend first with the
+client fallback kept until each lands; none blocks slices 0–10.
 
-| Want | Needs | Fallback |
-| --- | --- | --- |
-| Atkinson as a "Larger text" choice per account | a look-sheet field (backend + contract) | Atkinson leaves the default look; text dial still works |
-| Blur-up placeholders in grids | a thumbhash or colour per asset (schema) | flat fill + fade-in |
-| Sharp album and person heroes | album cover at preview size in `AlbumSummary` | 640 px thumb |
-| Places grid without 17 requests | `GET /api/places` with covers | current requests |
-| Plain-language backup errors | an `error_kind` from the server | a generic headline + raw text behind "Details" |
-| One Settings for You and Admin | product call (and the Home-sections work lives in You today) | keep two pages, both restyled |
-| Street-level map | MapLibre + self-hosted tiles (new dependency) | offline outline map |
+| # | Decision | Change | Until it lands |
+| --- | --- | --- | --- |
+| 11 | **Yes**: Atkinson Hyperlegible as a per-account "Larger text" face | a `face` field in the look sheet (`domain/look.py`, schema, contract doc, LookForm) | Atkinson leaves the default look; the text dial still works |
+| 12 | **Yes**: sharp heroes | album cover at preview size with its asset id and size in `AlbumSummary` | 640 px thumb |
+| 13 | **Yes**: one places endpoint | `GET /api/places` with name, kind, count, cover, centroid | current 1 + 16 requests |
+| 14 | **Yes**: plain-language backup errors | an `error_kind` enum on backup problems and runs | generic headline, raw text behind "Details" |
+| 15 | **Yes, the small version**: placeholders | a dominant colour per asset computed with the thumbnail (no thumbhash) | flat fill + fade-in |
+| — | **Yes**: one Settings | You and Admin become one Settings page; admin sections appear only for admins (slice 8) | — |
+| — | **No**: street-level map | MapLibre and self-hosted tiles add a dependency and gigabytes of tiles for little gain | offline outline map, dark |
+| — | **No**: photos or faces on sign-in | anyone on the home network can open it | initials |
