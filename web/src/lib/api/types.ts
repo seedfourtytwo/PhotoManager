@@ -223,6 +223,20 @@ export type Facets = {
 
 export type CalendarDay = { day: string; count: number };
 export type MapPoint = { id: Id; lat: number; lon: number };
+export type PlaceKind = 'country' | 'city';
+/** One country or city of `GET /api/places` (v1.14). */
+export type PlaceSummary = {
+	name: string;
+	kind: PlaceKind;
+	/** The country itself, or the city's country. */
+	country: string;
+	count: number;
+	/** Its newest photo: `url` the thumbnail, the size as shown. */
+	cover: { asset_id: Id; url: string; width: number | null; height: number | null } | null;
+	/** The centre of its photos with GPS; null when none has GPS. */
+	lat: number | null;
+	lon: number | null;
+};
 
 export type StatePatch = Partial<{
 	favourite: boolean;

@@ -233,6 +233,7 @@ New sources default to `{everyone: "download", users: []}`.
 | GET | `/api/assets/facets` | same filters | `{years:[{year,count}], sources:[{id,label,count}], cameras:[{name,count}], places:[{name,count}], guessed_dates:int, total:int}` |
 | GET | `/api/calendar` | same filters | `[{day:"YYYY-MM-DD", count}]` |
 | GET | `/api/map` | same filters | `[{id, lat, lon}]` |
+| GET | `/api/places` | – | `[{name, kind:"country"\|"city", country, count, cover:{asset_id, url, width, height}\|null, lat, lon}]` (v1.14): every country and every city with photos you may see, counted like the `places` facet with no filter (your hidden photos left out), most photos first, then countries before cities, then by name. `country` is the country itself, or the city's. Photos with a country but no city count towards the country only; two cities of the same name in two countries are two entries. `cover` is the newest photo with a thumbnail (`url`), its size as shown; null while none has one. `lat`/`lon` the centre of its photos with GPS, null when none has GPS. Link to a place's photos with the `place` filter |
 | GET | `/api/assets/{id}` | – | `AssetDetail` = AssetOut + `{name, byte_size, mime_type, camera_make, camera_model, latitude, longitude, f_number, exposure_time, iso, focal_length, imported_at, origins:[{source_id, source_label, relative_path}], albums:[{id,title}], level}`. The four exposure values (v1.6) are each a number or `null`: `f_number` 2.8 for f/2.8, `exposure_time` in seconds (0.004 for 1/250), `iso` a whole number, `focal_length` in millimetres (the lens's own, not the 35 mm equivalent) |
 | GET | `/api/assets/{id}/thumb` · `/preview` | – | WebP, edit applied |
 | GET | `/api/assets/{id}/original` | – | untouched original (needs `download`) |
@@ -712,3 +713,13 @@ Additions only.
 |---|---|---|
 | Albums | `GET /api/album-suggestions`, `POST /api/album-suggestions/{key}/keep` and `/discard` (see "Suggested albums" above). | `api.albumSuggestions`, `keepSuggestion`, `discardSuggestion`; Home has a "Suggested albums" block with Keep and Discard. |
 | Look | `homeSections` may also hold `"suggested"` (eight blocks). A new account shows it after Memories; an account that already chose its blocks finds it off until it switches it on in You. | `HOME_SECTIONS` gains `suggested`. |
+
+---
+
+# v1.14 changes (Places in one request, Flight UI)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Assets | New: `GET /api/places` (see "Assets" above): countries and cities with their count, cover and centre. | `api.places()` → `PlaceSummary[]`; Collections and a Places grid need one request instead of one per place. |

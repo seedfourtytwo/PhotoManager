@@ -151,6 +151,31 @@ def test_facets_calendar_and_map(shared_lib: Lib) -> None:
     assert abs(points[0]["lat"]) > 0
 
 
+def test_places_list_countries_and_cities_with_cover_and_centre(lib: Lib) -> None:
+    c, ids = lib.admin, lib.ids
+    places = c.get("/api/places").json()
+    assert [(p["name"], p["kind"], p["country"], p["count"]) for p in places] == [
+        ("France", "country", "France", 3),
+        ("Paris", "city", "France", 2),
+        ("Quimper", "city", "France", 1),
+    ]
+    france, paris, _ = places
+    assert france["cover"] == {
+        "asset_id": ids["quimper"],
+        "url": f"/api/assets/{ids['quimper']}/thumb?v=0",
+        "width": 120,
+        "height": 80,
+    }, "the newest photo of the place"
+    assert paris["cover"]["asset_id"] == ids["paris2"]
+    assert (paris["lat"], paris["lon"]) == pytest.approx(PARIS)
+    expected = ((2 * PARIS[0] + QUIMPER[0]) / 3, (2 * PARIS[1] + QUIMPER[1]) / 3)
+    assert (france["lat"], france["lon"]) == pytest.approx(expected, abs=0.01)
+    c.patch(f"/api/assets/{ids['quimper']}/state", json={"hidden": True})
+    after = c.get("/api/places").json()
+    assert [(p["name"], p["count"]) for p in after] == [("France", 2), ("Paris", 2)], "as facets"
+    assert after[0]["cover"]["asset_id"] == ids["paris2"]
+
+
 def test_bursts_share_a_group(shared_lib: Lib) -> None:
     c, ids = shared_lib.admin, shared_lib.ids
     first = c.get(f"/api/assets/{ids['paris1']}").json()

@@ -54,6 +54,7 @@ import type {
 	LoginBody,
 	ManagedUser,
 	MapPoint,
+	PlaceSummary,
 	MlStatus,
 	NewDevice,
 	SyncRule,
@@ -307,6 +308,7 @@ export function createApi(options: ApiOptions = {}) {
 		facets: (filters: AssetFilters) => get<Facets>(filtered('/api/assets/facets', filters)),
 		calendar: (filters: AssetFilters) => get<CalendarDay[]>(filtered('/api/calendar', filters)),
 		map: (filters: AssetFilters) => get<MapPoint[]>(filtered('/api/map', filters)),
+		places: () => get<PlaceSummary[]>('/api/places'),
 		asset: (id: Id) => get<AssetDetail>(`/api/assets/${id}`),
 		setState: (id: Id, body: StatePatch) =>
 			request<AssetOut>('PATCH', `/api/assets/${id}/state`, body),

@@ -351,6 +351,28 @@ class MapPoint(BaseModel):
     lon: float
 
 
+class PlaceCover(ImageRef):
+    """A place's newest photo: ``url`` its thumbnail, the size as shown (after edits)."""
+
+    asset_id: int
+
+    @classmethod
+    def of(cls, v: AssetView) -> "PlaceCover":
+        width, height = v.display_size or (None, None)
+        url = image_url(v.id, "thumb", v.edit_version)
+        return cls(asset_id=v.id, url=url, width=width, height=height)
+
+
+class PlaceSummary(BaseModel):
+    name: str
+    kind: Literal["country", "city"]
+    country: str  # the country itself, or the city's country
+    count: int
+    cover: PlaceCover | None
+    lat: float | None  # the centre of its photos with GPS; None when none has GPS
+    lon: float | None
+
+
 class CropIn(BaseModel):
     x: float
     y: float

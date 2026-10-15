@@ -163,6 +163,29 @@ describe('the person filter and pinned photos', () => {
 	});
 });
 
+describe('places', () => {
+	it('lists each country and city once, with the counts of the facets and the newest cover', async () => {
+		const api = await h.signedIn();
+		const places = await api.places();
+		const facets = await api.facets({});
+		for (const place of places) {
+			const listed = facets.places.find((f) => f.name === place.name);
+			expect(listed?.count, place.name).toBe(place.count);
+			const [newest] = (await api.assets({ place: place.name }, null, 1)).items;
+			expect(place.cover?.asset_id, place.name).toBe(newest.id);
+			expect(place.cover?.url).toBe(newest.thumb?.url);
+			expect([place.cover?.width, place.cover?.height]).toEqual([newest.width, newest.height]);
+			expect(place.lat).toEqual(expect.any(Number));
+		}
+		expect(places.map((p) => p.count)).toEqual(places.map((p) => p.count).sort((a, b) => b - a));
+		expect(places.find((p) => p.name === 'Paris')).toMatchObject({
+			kind: 'city',
+			country: 'France'
+		});
+		expect(places.find((p) => p.name === 'France')).toMatchObject({ kind: 'country' });
+	});
+});
+
 describe('search and people', () => {
 	it('falls back to word search and says why when models are missing', async () => {
 		const api = await h.signedIn();
