@@ -1,10 +1,11 @@
 /** The photo view under the finger: double tap, drag, pinch, and touches that land mid-transition. */
-import type { Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
 	centre,
 	expect,
 	isPhone,
 	loupe,
+	NOTHING_HAPPENS_MS,
 	resetMock,
 	signIn,
 	takesInput,
@@ -14,6 +15,38 @@ import {
 } from './helpers.ts';
 
 const alt = (viewer: Locator) => viewer.locator('img.photo').getAttribute('alt');
+
+type Frame = { shown: number; next: number; url: string };
+/**
+ * Records every frame from now on: how many photos are in sight on the stage (more than a
+ * tenth of their width each), where the Next button is, and the address. `stop` returns them.
+ */
+async function frames(page: Page) {
+	await page.evaluate(() => {
+		const w = window as unknown as { frames$: Frame[]; recording: boolean };
+		w.frames$ = [];
+		w.recording = true;
+		const record = () => {
+			if (!w.recording) return;
+			const stage = document.querySelector('.stage')!.getBoundingClientRect();
+			const shown = [...document.querySelectorAll('.slot .picture')].filter((el) => {
+				const r = el.getBoundingClientRect();
+				const seen = Math.min(r.right, stage.right) - Math.max(r.left, stage.left);
+				return seen > r.width / 10;
+			}).length;
+			const next = document.querySelector('[aria-label="Next photo"]')!.getBoundingClientRect();
+			w.frames$.push({ shown, next: next.x, url: location.href });
+			requestAnimationFrame(record);
+		};
+		requestAnimationFrame(record);
+	});
+	return () =>
+		page.evaluate(() => {
+			const w = window as unknown as { frames$: Frame[]; recording: boolean };
+			w.recording = false;
+			return w.frames$;
+		});
+}
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
@@ -327,5 +360,64 @@ test.describe('photo view', () => {
 		expect(await opening()).toBe(true);
 		await touchSwipe(page, photo, { x: photo.x - 200, y: photo.y });
 		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
+	});
+
+	test('laptop: an arrow key slides the next photo in beside the open one; the buttons stay put and the address follows after', async ({
+		page
+	}) => {
+		test.skip(isPhone(page), 'keyboard and edge buttons on a laptop');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const first = await alt(viewer);
+		const url = page.url();
+		await expect(viewer.locator('.slot img:not(.under)').last()).toHaveAttribute('data-ready', '');
+		const stop = await frames(page);
+		await page.keyboard.press('ArrowRight');
+		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
+		const second = await alt(viewer);
+		await expect(page).not.toHaveURL(url);
+		const seen = await stop();
+		// Mid-slide, both photos were in sight together; at rest, only the new one.
+		expect(seen.some((f) => f.shown === 2)).toBe(true);
+		expect(seen.at(-1)!.shown).toBe(1);
+		// The Next button never moved.
+		expect(new Set(seen.map((f) => Math.round(f.next))).size).toBe(1);
+		// The address changed only once the photo had stopped.
+		const moved = seen.findIndex((f) => f.url !== url);
+		const lastSliding = seen.findLastIndex((f) => f.shown === 2);
+		expect(moved).toBeGreaterThan(lastSliding);
+		// The edge button slides back the same way.
+		await viewer.getByRole('button', { name: 'Previous photo' }).click();
+		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', first!);
+		expect(second).not.toBe(first);
+	});
+
+	test('laptop: quick arrow presses land on the photo they count to', async ({ page }) => {
+		test.skip(isPhone(page), 'keyboard on a laptop');
+		const fourth = await page.locator('.tile').nth(3).getAttribute('data-id');
+		await page.locator('.tile').first().click();
+		await expect(loupe(page)).toBeVisible();
+		for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+		await expect(page).toHaveURL(new RegExp(`[?&]photo=${fourth}$`));
+		// And stays there.
+		await page.waitForTimeout(NOTHING_HAPPENS_MS);
+		await expect(page).toHaveURL(new RegExp(`[?&]photo=${fourth}$`));
+	});
+
+	test('laptop: a two-finger swipe on the trackpad turns the photo', async ({ page }) => {
+		test.skip(isPhone(page), 'trackpad on a laptop');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const first = await alt(viewer);
+		const mid = await centre(viewer.locator('.stage'));
+		await page.mouse.move(mid.x, mid.y);
+		const stop = await frames(page);
+		for (let i = 0; i < 12; i++) {
+			await page.mouse.wheel(50, 0);
+			await page.waitForTimeout(16);
+		}
+		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
+		await expect(viewer).toBeVisible();
+		expect((await stop()).some((f) => f.shown === 2)).toBe(true);
 	});
 });

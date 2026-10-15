@@ -164,6 +164,152 @@ describe('Loupe: gestures', () => {
 	});
 });
 
+describe('Loupe: steps slide', () => {
+	const five = [1, 2, 3, 4, 5].map((id) =>
+		makeAsset(id, `2019-07-0${id}T10:00:00`, 400, 300, { thumb: { url: pixel } })
+	);
+	/** The viewer as a page has it: the index follows what it says. */
+	function follow(items = five, index = 0) {
+		const onindex = vi.fn((i: number) => void view.rerender({ index: i }));
+		const view = render(Loupe, { items, index, onindex, onclose: vi.fn(), onchanged: vi.fn() });
+		return { onindex, view };
+	}
+	const track = () => document.querySelector<HTMLElement>('.track')!;
+	/** Where the track is drawn, in px from the open photo at rest. */
+	const shift = () => new DOMMatrix(getComputedStyle(track()).transform).m41;
+	const stage = () => document.querySelector<HTMLElement>('.stage')!;
+	const wheel = (deltaX: number, deltaY = 0, extra: WheelEventInit = {}) => {
+		const event = new WheelEvent('wheel', {
+			deltaX,
+			deltaY,
+			bubbles: true,
+			cancelable: true,
+			...extra
+		});
+		stage().dispatchEvent(event);
+		return event;
+	};
+	/** A two-finger swipe on a trackpad: `n` wheel events of `dx` each, 16 ms apart. */
+	async function swipe(dx: number, n: number) {
+		for (let i = 0; i < n; i++) {
+			wheel(dx);
+			await wait(16);
+		}
+	}
+
+	it('an arrow key slides the next photo in and opens it once it has arrived', async () => {
+		server();
+		const { onindex } = follow();
+		await userEvent.keyboard('{ArrowRight}');
+		expect(onindex).not.toHaveBeenCalled();
+		// On its way: neither photo is where it rests.
+		await expect.poll(shift).toBeLessThan(-5);
+		expect(shift()).toBeGreaterThan(-stage().clientWidth);
+		await expect.poll(() => onindex.mock.calls).toEqual([[1]]);
+		await expect.poll(shift).toBe(0);
+	});
+
+	it('the edge buttons slide the same way', async () => {
+		server();
+		const { onindex } = follow(five, 2);
+		await page.getByRole('button', { name: 'Previous photo' }).click();
+		expect(onindex).not.toHaveBeenCalled();
+		await expect.poll(shift).toBeGreaterThan(5);
+		await expect.poll(() => onindex.mock.calls).toEqual([[1]]);
+	});
+
+	it('quick presses land on the photo they count to, each turn said once', async () => {
+		server();
+		const { onindex } = follow();
+		await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}');
+		await expect.poll(() => onindex.mock.calls.at(-1)).toEqual([3]);
+		await wait(600);
+		expect(onindex.mock.calls).toEqual([[1], [2], [3]]);
+		expect(shift()).toBe(0);
+	});
+
+	it('a press back the other way before it arrives goes home: no step', async () => {
+		server();
+		const { onindex } = follow(five, 2);
+		await userEvent.keyboard('{ArrowRight}{ArrowLeft}');
+		await wait(700);
+		expect(onindex).not.toHaveBeenCalled();
+		expect(shift()).toBe(0);
+	});
+
+	it('presses past the last photo stop on it', async () => {
+		server();
+		const { onindex } = follow(five, 3);
+		await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}');
+		await wait(900);
+		expect(onindex.mock.calls).toEqual([[4]]);
+		expect(shift()).toBe(0);
+	});
+
+	it('under reduced motion a step jumps at once', async () => {
+		server();
+		const real = window.matchMedia.bind(window);
+		vi.stubGlobal('matchMedia', (query: string) =>
+			query.includes('reduced-motion')
+				? ({ matches: true, media: query } as MediaQueryList)
+				: real(query)
+		);
+		const { onindex } = follow();
+		await userEvent.keyboard('{ArrowRight}');
+		expect(onindex.mock.calls).toEqual([[1]]);
+		expect(shift()).toBe(0);
+	});
+
+	it('a two-finger swipe on a trackpad drags the photos and turns past a third of the width', async () => {
+		server();
+		const { onindex } = follow();
+		const step = Math.ceil((stage().clientWidth * 0.4) / 10);
+		await swipe(step, 10);
+		// Dragged, not yet turned: the trackpad is still down.
+		expect(shift()).toBeLessThan(-step * 5);
+		expect(onindex).not.toHaveBeenCalled();
+		await expect.poll(() => onindex.mock.calls).toEqual([[1]]);
+		await expect.poll(shift).toBe(0);
+	});
+
+	it('a short trackpad swipe springs back', async () => {
+		server();
+		const { onindex } = follow(five, 1);
+		await swipe(-4, 5);
+		await expect.poll(shift).toBe(0);
+		await wait(300);
+		expect(onindex).not.toHaveBeenCalled();
+	});
+
+	it('the momentum after a swipe that turned does not turn again', async () => {
+		server();
+		const { onindex } = follow();
+		await swipe(Math.ceil((stage().clientWidth * 0.4) / 10), 10);
+		await wait(150);
+		// The trackpad's own momentum, dying away, still coming in.
+		for (let dx = 30; dx > 0; dx -= 2) {
+			wheel(dx);
+			await wait(16);
+		}
+		await wait(700);
+		expect(onindex.mock.calls).toEqual([[1]]);
+	});
+
+	it("a vertical scroll and a pinch (ctrl + wheel) are not the stage's", async () => {
+		server();
+		const { onindex } = follow();
+		for (let i = 0; i < 10; i++) {
+			expect(wheel(2, 40).defaultPrevented).toBe(false);
+			expect(wheel(40, 0, { ctrlKey: true }).defaultPrevented).toBe(false);
+		}
+		await wait(300);
+		expect(onindex).not.toHaveBeenCalled();
+		expect(shift()).toBe(0);
+		// A sideways one is: the browser does not go Back under it.
+		expect(wheel(40).defaultPrevented).toBe(true);
+	});
+});
+
 describe('Loupe: zoom', () => {
 	const favourites = (calls: Call[]) =>
 		calls.filter((c) => c.method !== 'GET' && c.path.endsWith('/state')).length;
@@ -336,7 +482,7 @@ describe('Loupe: chrome', () => {
 		expect(onindex).not.toHaveBeenCalled();
 		await expect.element(page.getByRole('button', { name: 'Fix date' })).toBeInTheDocument();
 		await userEvent.keyboard('{Escape}{ArrowRight}');
-		expect(onindex.mock.calls).toEqual([[1]]);
+		await expect.poll(() => onindex.mock.calls).toEqual([[1]]);
 	});
 });
 

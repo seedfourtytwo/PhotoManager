@@ -104,3 +104,29 @@ export function turn(dx: number, vx: number, width: number, ends: Ends): -1 | 0 
 	if (!goes) return 0;
 	return (way === 1 ? ends.next : ends.previous) ? way : 0;
 }
+
+/**
+ * The photo track on its way: where it is from the open photo (px), how fast (px/ms), and the
+ * turn it makes when it arrives (0: back home).
+ */
+export type Slide = { x: number; v: number; by: -1 | 0 | 1 };
+
+/**
+ * A step asked for (an arrow key, an edge button) while the track still slides. The same way
+ * as it goes, the turn on its way is made now: its photo becomes the open one, the track is put
+ * a photo back under it (nothing on screen moves), and it goes on to the next one at the speed
+ * it had. The other way, it goes back home and no turn is made. It never runs more than a photo
+ * behind: steps asked faster than that skip the photos in between, and it slides on from rest.
+ */
+export function restep(
+	slide: Slide,
+	step: -1 | 1,
+	width: number
+): { made: -1 | 0 | 1; slide: Slide } {
+	const { x, v, by } = slide;
+	if (by === -step) return { made: 0, slide: { x, v, by: 0 } };
+	if (by === 0) return { made: 0, slide: { x, v, by: step } };
+	const behind = x + by * width;
+	if (Math.abs(behind) < width) return { made: by, slide: { x: behind, v, by } };
+	return { made: by, slide: { x: by * width, v: 0, by } };
+}

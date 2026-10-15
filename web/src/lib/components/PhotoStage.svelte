@@ -7,6 +7,7 @@
 		lockAxis,
 		pull,
 		recognise,
+		restep,
 		turn,
 		velocity,
 		type Axis,
@@ -102,8 +103,22 @@
 	/** From one photo to the next: the stage's width and the gap, measured once per press. */
 	let distance = 0;
 	let drawing = 0;
-	/** The track sliding home or to a neighbour; `by` is the turn it says when it arrives. */
-	let settling: { frame: number; by: -1 | 0 | 1; distance: number } | null = null;
+	/**
+	 * The track sliding home or to a neighbour: `by` is the turn it says when it arrives, `v`
+	 * and `vy` its speed, `last` when its spring last moved.
+	 */
+	let settling: {
+		frame: number;
+		by: -1 | 0 | 1;
+		distance: number;
+		v: number;
+		vy: number;
+		last: number;
+	} | null = null;
+
+	const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const turnOf = (by: -1 | 1): Gesture => (by === 1 ? 'next' : 'previous');
+	const has = (by: -1 | 1) => (by === 1 ? ends.next : ends.previous);
 
 	function draw() {
 		if (track) track.style.transform = `translate3d(${offset.x}px, ${offset.y}px, 0)`;
@@ -117,31 +132,36 @@
 
 	/** Slide to the neighbour `by` steps away (0: back home), carried on at the finger's speed. */
 	function slide(by: -1 | 0 | 1, vx: number) {
-		const travel = distance;
-		const to = -by * travel;
-		if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-			offset = { x: to, y: 0 };
-			arrive(by, travel);
+		if (reduced()) {
+			offset = { x: -by * distance, y: 0 };
+			arrive(by, distance);
 			return;
 		}
-		let x: Motion = { x: offset.x, v: vx };
-		let y: Motion = { x: offset.y, v: 0 };
-		let last = performance.now();
-		const frame = (now: number) => {
-			const dt = Math.max(0, now - last);
-			last = now;
-			x = step(x, to, dt);
-			y = step(y, 0, dt);
-			if (atRest(x, to) && atRest(y, 0)) {
-				offset = { x: to, y: 0 };
-				arrive(by, travel);
-			} else {
-				offset = { x: x.x, y: y.x };
-				draw();
-				if (settling) settling.frame = requestAnimationFrame(frame);
-			}
-		};
-		settling = { frame: requestAnimationFrame(frame), by, distance: travel };
+		const last = performance.now();
+		settling = { frame: requestAnimationFrame(frame), by, distance, v: vx, vy: 0, last };
+	}
+
+	/** One frame of the spring that carries the track. */
+	function frame(now: number) {
+		const s = settling;
+		if (!s) return;
+		const dt = Math.max(0, now - s.last);
+		s.last = now;
+		// A step made on the way reached the first or the last photo: nothing further to go to.
+		if (s.by && !has(s.by)) s.by = 0;
+		const to = -s.by * s.distance;
+		const x: Motion = step({ x: offset.x, v: s.v }, to, dt);
+		const y: Motion = step({ x: offset.y, v: s.vy }, 0, dt);
+		if (atRest(x, to) && atRest(y, 0)) {
+			offset = { x: to, y: 0 };
+			arrive(s.by, s.distance);
+			return;
+		}
+		offset = { x: x.x, y: y.x };
+		s.v = x.v;
+		s.vy = y.v;
+		draw();
+		s.frame = requestAnimationFrame(frame);
 	}
 
 	/**
@@ -152,7 +172,32 @@
 		settling = null;
 		offset = { x: offset.x + by * travelled, y: offset.y };
 		draw();
-		if (by) ongesture(by === 1 ? 'next' : 'previous');
+		if (by) ongesture(turnOf(by));
+	}
+
+	/**
+	 * A step from a key or an edge button: the photos slide as for a swipe, from rest, and the
+	 * index changes when they arrive. A step asked while they slide retargets them (`restep`).
+	 * Under a finger or a trackpad, the step waits for nobody: it is dropped.
+	 */
+	export function go(by: -1 | 1) {
+		if (press || wheel) return;
+		if (!settling) {
+			if (!has(by)) return;
+			if (reduced()) return void ongesture(turnOf(by));
+			distance = (stage?.clientWidth ?? 0) + GAP;
+			slide(by, 0);
+			return;
+		}
+		const s = settling;
+		const { made, slide: next } = restep({ x: offset.x, v: s.v, by: s.by }, by, s.distance);
+		s.by = next.by;
+		s.v = next.v;
+		offset = { x: next.x, y: offset.y };
+		if (!made) return;
+		// Drawn now, in the same frame as the slots move round under it.
+		draw();
+		ongesture(turnOf(made));
 	}
 
 	/** A finger landed on the moving track: it holds it where it is, a turn on its way made. */
@@ -301,6 +346,72 @@
 		if (gesture === 'double-tap') view = toggle(view, spot(e), ...sizes());
 		ongesture(gesture);
 	}
+
+	// --- two fingers on a trackpad: wheel events, dragging the track as one finger does -------
+	/** No wheel event for this long: the fingers have lifted (and the momentum died down). */
+	const WHEEL_END_MS = 120;
+	/** The swipe going on: where the fingers have taken the track so far, from 0 at its start. */
+	let wheel: { at: Point; axis: Axis | null; samples: Point[]; timer: number } | null = null;
+	/** A swipe turned the page: the rest of its stream (the trackpad's momentum) is ignored. */
+	let coasting: number | undefined;
+
+	function onwheel(e: WheelEvent) {
+		// Ctrl + wheel, and a pinch on a trackpad, are the browser's zoom.
+		if (e.ctrlKey) return;
+		const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+		// Nothing behind the photo scrolls sideways; the browser would go Back instead.
+		if (sideways || wheel?.axis === 'x') e.preventDefault();
+		if (coasting !== undefined) {
+			clearTimeout(coasting);
+			coasting = window.setTimeout(() => (coasting = undefined), WHEEL_END_MS);
+			return;
+		}
+		if (!wheel) {
+			if (!sideways || press || zoomed(view)) return;
+			grab();
+			base = offset;
+			distance = (stage?.clientWidth ?? 0) + GAP;
+			const at = { x: 0, y: 0, t: e.timeStamp };
+			wheel = { at, axis: null, samples: [at], timer: 0 };
+		}
+		const w = wheel;
+		clearTimeout(w.timer);
+		w.timer = window.setTimeout(endWheel, WHEEL_END_MS);
+		const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : e.deltaMode ? distance : 1;
+		// The content moves against the scroll: fingers going left scroll right, to the next.
+		w.at = { x: w.at.x - e.deltaX * unit, y: w.at.y - e.deltaY * unit, t: e.timeStamp };
+		w.samples.push(w.at);
+		w.axis ??= lockAxis({ x: 0, y: 0, t: 0 }, w.at);
+		if (w.axis !== 'x') return;
+		// No further than the next photo: there is nothing beyond it on the track.
+		const x = edge(base.x + w.at.x, ends);
+		offset = { x: Math.max(-distance, Math.min(distance, x)), y: base.y };
+		drawSoon();
+	}
+
+	/** The fingers have lifted: a turn, as for a finger let go, or back home. */
+	function endWheel() {
+		const w = wheel;
+		wheel = null;
+		if (w?.axis !== 'x') return;
+		const vx = velocity(w.samples);
+		const by = turn(base.x + w.at.x, vx, distance, ends);
+		if (by) coasting = window.setTimeout(() => (coasting = undefined), WHEEL_END_MS);
+		if (by || offset.x || offset.y) slide(by, vx);
+	}
+
+	// Not passive: a sideways swipe is the photos', not the browser's Back.
+	$effect(() => {
+		const el = stage;
+		if (!el) return;
+		el.addEventListener('wheel', onwheel, { passive: false });
+		return () => {
+			el.removeEventListener('wheel', onwheel);
+			clearTimeout(wheel?.timer);
+			clearTimeout(coasting);
+			wheel = null;
+		};
+	});
 </script>
 
 <div

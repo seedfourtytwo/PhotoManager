@@ -10,7 +10,7 @@
 		/** The details are open: beside the photo on a laptop (Next stands at the photo's edge,
 		    not the screen's), over its lower half on a phone (both rise above them). */
 		inset: boolean;
-		onstep: (step: number) => void;
+		onstep: (step: -1 | 1) => void;
 	};
 	let { index, count, faded, inset, onstep }: Props = $props();
 </script>
