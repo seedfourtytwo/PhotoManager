@@ -102,28 +102,33 @@ for (const [name, insets, size] of [
 	});
 }
 
-// Opened from the Home Screen an iPhone 15 gives the page all of its 852 px, the home bar's
-// 34 included; Safari's own toolbar no longer covers that strip.
-test('edges, from the Home Screen: a filter sheet shows nothing under the home bar', async ({
-	page
-}) => {
-	const insets: Insets = { top: 59, right: 0, bottom: 34, left: 0 };
-	await page.setViewportSize({ width: 393, height: 852 });
-	await withInsets(page, insets);
-	await page.addInitScript(() =>
-		Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true })
-	);
-	await signIn(page);
-	await page
-		.getByRole('group', { name: 'Filters' })
-		.getByRole('button', { name: 'When', exact: true })
-		.click();
-	const sheet = page.getByRole('dialog', { name: 'When' });
-	await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
-	// What scrolls in the sheet stops above the home bar…
-	await expectClear(page, sheet.locator('.body'), insets);
-	// …and its last fields scroll up clear of it.
-	const to = sheet.getByLabel('To', { exact: true });
-	await to.scrollIntoViewIfNeeded();
-	await expectClear(page, to, insets);
-});
+// Opened from the Home Screen an iPhone 15 gives the page all of its screen, the home bar
+// included; Safari's own toolbar no longer covers that strip. Upright the filter is a bottom
+// sheet, on its side a sheet hanging under its chip.
+for (const [name, insets, size] of [
+	['upright', { top: 59, right: 0, bottom: 34, left: 0 }, { width: 393, height: 852 }],
+	['on its side', { top: 0, right: 59, bottom: 21, left: 59 }, { width: 852, height: 393 }]
+] as const) {
+	test(`edges, from the Home Screen, ${name}: a filter sheet shows nothing under the home bar`, async ({
+		page
+	}) => {
+		await page.setViewportSize(size);
+		await withInsets(page, insets);
+		await page.addInitScript(() =>
+			Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true })
+		);
+		await signIn(page);
+		await page
+			.getByRole('group', { name: 'Filters' })
+			.getByRole('button', { name: 'When', exact: true })
+			.click();
+		const sheet = page.getByRole('dialog', { name: 'When' });
+		await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
+		// What scrolls in the sheet stops above the home bar…
+		await expectClear(page, sheet.locator('.body'), insets);
+		// …and its last fields scroll up clear of it.
+		const to = sheet.getByLabel('To', { exact: true });
+		await to.scrollIntoViewIfNeeded();
+		await expectClear(page, to, insets);
+	});
+}
