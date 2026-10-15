@@ -1,9 +1,10 @@
 /**
- * Home (issue 54): on this day, memories (trips away from home, months at home) and what is
- * new, as the server works them out (backend domain/memories.py, domain/on_this_day.py,
- * app/home.py). "Today" is the mock clock's UTC date.
+ * Home (issue 54): on this day, photos to rediscover, memories (trips away from home, months at
+ * home), the years and what is new, as the server works them out (backend domain/memories.py,
+ * domain/on_this_day.py, domain/rediscover.py, domain/years.py, app/home.py). "Today" is the
+ * mock clock's UTC date.
  */
-import type { HomeData, HomeFilter, Memory, OnThisDay } from '../../src/lib/api/types.ts';
+import type { AssetOut, HomeData, HomeFilter, Memory, OnThisDay } from '../../src/lib/api/types.ts';
 import { setFor } from '../access.ts';
 import { me, ok, type Route } from '../http.ts';
 import type { Helpers } from '../helpers.ts';
@@ -19,6 +20,8 @@ const NEWEST_FIRST = 2;
 const AROUND = 3;
 const NEW_DAYS = 7;
 const NEW_SHOWN = 12;
+const RECENT = 30 * DAY;
+const REDISCOVER_SHOWN = 12;
 const MONTHS = [
 	'January',
 	'February',
@@ -123,6 +126,22 @@ function turn<T>(items: T[], today: number, size: number): T[] {
 	return Array.from({ length: Math.min(size, n) }, (_, i) => items[(start + i) % n]);
 }
 
+/** `items` starting at a different one each day. */
+function turned<T>(items: T[], day: number): T[] {
+	const k = day % items.length;
+	return [...items.slice(k), ...items.slice(0, k)];
+}
+
+/** `photos` grouped by a slice of `taken_at` (its year, its month), in the order first seen. */
+function groupBy(photos: MockAsset[], length: number): Map<string, MockAsset[]> {
+	const groups = new Map<string, MockAsset[]>();
+	for (const a of photos) {
+		const key = a.taken_at.slice(0, length);
+		groups.set(key, [...(groups.get(key) ?? []), a]);
+	}
+	return groups;
+}
+
 /** Today's month and day in `year`; 29 February is 28 February in a common year. */
 function anniversary(today: string, year: number): string {
 	const monthDay = today.slice(5);
@@ -133,6 +152,60 @@ function anniversary(today: string, year: number): string {
 export function homeRoutes(h: Helpers): Route[] {
 	const cover = (user: MockUser, photos: MockAsset[]) =>
 		photos.find((a) => setFor(h.state().favourites, user.id).has(a.id)) ?? photos[0];
+
+	const loved = (user: MockUser, photos: MockAsset[]) => {
+		const favourites = setFor(h.state().favourites, user.id);
+		return photos.filter((a) => favourites.has(a.id));
+	};
+
+	/**
+	 * A dozen from across the years: one photo of each year before a second of any, each from
+	 * another month of it, a favourite winning its month; the last 30 days left out unless
+	 * nothing is older. A favourite leads, the rest oldest first.
+	 */
+	function rediscover(user: MockUser, byTime: MockAsset[], today: number): AssetOut[] {
+		const cutoff = `${isoDay(today - RECENT)}T00:00:00`;
+		const older = byTime.filter((a) => a.taken_at < cutoff);
+		const pool = older.length ? older : byTime;
+		const day = Math.floor(today / DAY);
+		const years = groupBy(pool, 4);
+		const turns = turned([...years.keys()].sort(), day).map((year) =>
+			turned([...groupBy(years.get(year)!, 7).values()], day)
+		);
+		const picked: MockAsset[] = [];
+		for (let round = 0; turns.some((months) => round < months.length); round++)
+			for (const months of turns)
+				if (round < months.length && picked.length < REDISCOVER_SHOWN) {
+					const month = months[round];
+					const from = loved(user, month).length ? loved(user, month) : month;
+					picked.push(from[day % from.length]);
+				}
+		const lead = loved(user, picked)[0] ?? picked[0];
+		if (!lead) return [];
+		const rest = picked.filter((a) => a !== lead).sort((a, b) => time(a) - time(b) || a.id - b.id);
+		return [lead, ...rest].map((a) => h.toOut(user, a));
+	}
+
+	/** Each year with ten dated photos, newest first, as a memory of the whole year. */
+	function years(user: MockUser, byTime: MockAsset[], today: number): Memory[] {
+		const day = Math.floor(today / DAY);
+		return [...groupBy(byTime, 4)]
+			.filter(([, photos]) => photos.length >= MIN_PHOTOS)
+			.sort(([a], [b]) => b.localeCompare(a))
+			.map(([year, photos]) => {
+				const from = loved(user, photos).length ? loved(user, photos) : photos;
+				const [first, last] = [`${year}-01-01`, `${year}-12-31`];
+				return {
+					key: `${first}_${last}`,
+					title: year,
+					from: first,
+					to: last,
+					count: photos.length,
+					cover: h.toOut(user, from[day % from.length]),
+					filter: filterOf(first, last)
+				};
+			});
+	}
 
 	function memories(user: MockUser, byTime: MockAsset[], today: number): Memory[] {
 		const places = awayPlaces(byTime);
@@ -267,9 +340,15 @@ export function homeRoutes(h: Helpers): Route[] {
 				const byTime = h
 					.filtered(user, { guessed_date: false })
 					.sort((a, b) => time(a) - time(b) || a.id - b.id);
+				// a library dated only from its files: its photos are still worth seeing
+				const all = byTime.length
+					? byTime
+					: h.filtered(user, {}).sort((a, b) => time(a) - time(b) || a.id - b.id);
 				const home: HomeData = {
 					on_this_day: onThisDay(user, byTime, today),
+					rediscover: rediscover(user, all, today),
 					memories: memories(user, byTime, today),
+					years: years(user, byTime, today),
 					new: arrivals(user, today)
 				};
 				return ok(home);

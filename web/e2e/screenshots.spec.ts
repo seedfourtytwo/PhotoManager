@@ -84,6 +84,7 @@ test('every screen', async ({ page }, info) => {
 	await signIn(page, '/home');
 	const memory = page
 		.getByRole('main')
+		.getByRole('region', { name: 'Memories' })
 		.getByRole('button', { name: /^Play: / })
 		.first();
 	await expect(memory.locator('img')).toBeVisible();

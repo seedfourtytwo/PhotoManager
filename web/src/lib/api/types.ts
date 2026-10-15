@@ -302,8 +302,19 @@ export type NewArrivals = {
 	/** The newest arrivals (at most 12), newest first. */
 	items: AssetOut[];
 };
-/** GET /api/home: the two newest memories come first, the others change every day. */
-export type HomeData = { on_this_day: OnThisDay | null; memories: Memory[]; new: NewArrivals };
+/**
+ * GET /api/home. `rediscover`: at most 12 photos from across the years, a favourite first when
+ * one was picked, the rest oldest first; a new dozen each day. `memories`: the two newest come
+ * first, the others change every day. `years`: each year with ten dated photos, newest first,
+ * as a memory of the whole year (titled "2016").
+ */
+export type HomeData = {
+	on_this_day: OnThisDay | null;
+	rediscover: AssetOut[];
+	memories: Memory[];
+	years: Memory[];
+	new: NewArrivals;
+};
 
 // --- downloads -----------------------------------------------------------------------------
 

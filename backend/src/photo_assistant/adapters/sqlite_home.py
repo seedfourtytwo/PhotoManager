@@ -24,11 +24,12 @@ _JOINS = """LEFT JOIN user_asset ua ON ua.asset_id = a.id AND ua.user_id = :vis_
 
 
 class HomeMixin(SqliteBase):
-    def moments(self, viewer: Viewer) -> list[Moment]:
+    def moments(self, viewer: Viewer, *, guessed: bool = False) -> list[Moment]:
         """The photos with a real date this viewer sees on the timeline, in time order: one
-        pass over the library, the columns memories and "on this day" need and no more."""
+        pass over the library, the columns memories and "on this day" need and no more.
+        ``guessed``: those dated from their file too (for a library with no real date)."""
         visible, _, params = visibility(viewer)
-        where, fparams = filter_sql(MEMORABLE)
+        where, fparams = filter_sql(AssetFilter() if guessed else MEMORABLE)
         rows = self._all(
             f"""SELECT a.id, a.taken_at, COALESCE(ua.favourite, 0) AS favourite,
                     COALESCE(NULLIF(p.city, ''), NULLIF(p.region, ''), NULLIF(p.country, ''))

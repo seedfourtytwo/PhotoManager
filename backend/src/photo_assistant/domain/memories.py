@@ -9,6 +9,7 @@ shows the two newest, then a few others that change every day, so it reads diffe
 morning while staying the same all day.
 """
 
+from bisect import bisect_left
 from calendar import monthrange
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
@@ -61,10 +62,17 @@ class Memory:
 
 
 _BY_TIME = attrgetter("taken_at", "asset_id")
+_TAKEN_AT = attrgetter("taken_at")
 
 
 def by_time(moments: Iterable[Moment]) -> list[Moment]:
     return sorted(moments, key=_BY_TIME)
+
+
+def index_at(moments: Sequence[Moment], at: datetime, lo: int = 0) -> int:
+    """Where the first photo taken at ``at`` or later is, in ``moments`` in time order: a
+    bisection, so finding a month or a year in 100,000 photos costs a few look-ups."""
+    return bisect_left(moments, at, lo=lo, key=_TAKEN_AT)
 
 
 def home_place(moments: Sequence[Moment]) -> str | None:
