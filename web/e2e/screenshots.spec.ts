@@ -3,10 +3,12 @@
  * docs/screenshots/integrated/ (or SHOT_DIR). Run with `pnpm screenshots`; skipped otherwise.
  * THEME=light writes the key screens in the light theme to docs/screenshots/integrated/light/.
  */
-import type { Page } from '@playwright/test';
+import { devices, type Page } from '@playwright/test';
 import {
+	MANY,
 	expect,
 	isPhone,
+	longLists,
 	loupe,
 	loupeAction,
 	resetMock,
@@ -278,4 +280,50 @@ test('every screen', async ({ page }, info) => {
 	await signIn(page, '/search?q=beach%20at%20sunset');
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await shot(page, '18b-search-meaning', p);
+});
+
+test.describe('a long list', () => {
+	// The cameras are added on their way to the page (`longLists`); a request the service
+	// worker takes over would pass by that, once it controls the page.
+	test.use({ serviceWorkers: 'block' });
+
+	test('a filter list longer than the screen, scrolled to its end', async ({ page }, info) => {
+		await resetMock();
+		await signIn(page);
+		await longLists(page);
+		await page
+			.getByRole('group', { name: 'Filters' })
+			.getByRole('button', { name: 'Camera', exact: true })
+			.click();
+		const camera = page.getByRole('dialog', { name: 'Camera' });
+		await camera
+			.getByRole('button', { name: new RegExp(`^Camera ${MANY}\\b`) })
+			.scrollIntoViewIfNeeded();
+		await shot(page, '05b-filters-long', info.project.name);
+	});
+});
+
+test.describe('on an iPhone', () => {
+	test.use({ userAgent: devices['iPhone 15'].userAgent });
+
+	test('the Home Screen tip, and the app opened from the Home Screen', async ({ page }, info) => {
+		test.skip(!isPhone(page), 'the tip is a phone’s');
+		const p = info.project.name;
+		await resetMock();
+		await signIn(page, '/home');
+		await expect(page.getByRole('complementary', { name: 'Make Photos an app' })).toBeVisible();
+		await shot(page, '24-home-screen-tip', p);
+		// Opened from its icon: no tip, and the page runs under the status bar and the home bar.
+		const cdp = await page.context().newCDPSession(page);
+		await cdp.send('Emulation.setSafeAreaInsetsOverride', {
+			insets: { top: 59, right: 0, bottom: 34, left: 0 }
+		});
+		await page.addInitScript(() =>
+			Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true })
+		);
+		await page.reload();
+		const memory = page.getByRole('main').getByRole('button', { name: /^Play: / });
+		await expect(memory.first()).toBeVisible();
+		await shot(page, '24b-home-screen-app', p);
+	});
 });

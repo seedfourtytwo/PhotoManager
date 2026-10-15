@@ -218,6 +218,12 @@ not a token):
   steps over the selection pill and a phone's lying ruler. In the photo view the bottom is the
   bar's, so it sits under Close and Info; it is always on top of an open dialog and inside it,
   where a screen reader still hears it.
+- **The Home Screen tip** (`InstallTip`): once per phone, and only in a browser tab, a glass
+  card rises over the photos above the dock: the app's icon, "Make Photos an app" and how. An
+  iPhone is told ⋯, then Share, then Add to Home Screen; an Android phone gets Install, the
+  browser's own prompt, which comes over HTTPS only. × puts it away for good on that device.
+  It steps over the selection pill and the lying ruler as the toast does. Never on a laptop or
+  a tablet, never in the app opened from the Home Screen (`lib/install-tip.ts` decides).
 - **Selection**: the circle that chooses a photo is a 2 px white ring round a shade, so it
   reads on any photo; chosen, it is a filled accent circle with a check and the photo takes a
   3 px accent frame inside its edge. The actions come to the photos as a floating glass pill at
@@ -284,6 +290,8 @@ not a token):
   under the clock, the notch and the home bar, and nothing to read or press does. Every fixed
   or sticky piece adds the device's own inset (`env(safe-area-inset-*)`) on the side it
   touches, on both sides when the phone lies on its side; `--top` is that inset on a phone.
+  Opened from an iPhone's Home Screen the page runs under the status bar too, the clock written
+  over it in white (`black-translucent` in `app.html`).
 - **Words for whoever is reading**: a terminal command and a folder path are for an admin, on
   the Admin page. Anyone else reads what it means for them ("New faces are not being found
   yet"); an admin reading the same note is also told where to set it up. A photo's details

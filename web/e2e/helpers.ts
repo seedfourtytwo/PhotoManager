@@ -2,7 +2,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test as base, type Locator, type Page } from '@playwright/test';
 import { MOCK_URL } from '../playwright.config.ts';
-import type { AssetDetail } from '../src/lib/api/types.ts';
+import type { AssetDetail, Facets, Person } from '../src/lib/api/types.ts';
 
 export const ADMIN = {
 	username: process.env.E2E_USER ?? 'admin',
@@ -282,6 +282,46 @@ export async function firstMonthWithPhotos(months: Locator) {
  */
 export async function sheetStepGone(page: Page) {
 	await page.waitForFunction(() => !JSON.stringify(history.state ?? {}).includes('"sheet"'));
+}
+
+/** How many rows `longLists` adds to each list, so it is longer than any screen. */
+export const MANY = 40;
+const many = <T>(make: (i: number) => T) => Array.from({ length: MANY }, (_, i) => make(i));
+
+/**
+ * Long lists in the filter sheets: forty more years (1940 down to 1901), places (Town 1…40),
+ * cameras (Camera 1…40) and named people (Person 1…40) added to what the server answers, the
+ * mock and the real backend alike. The last one added is the last row of its list. A page a
+ * service worker controls sends its requests past this: use it with `serviceWorkers: 'block'`.
+ */
+export async function longLists(page: Page) {
+	await page.route(/\/api\/assets\/facets\b/, async (route) => {
+		const response = await route.fetch();
+		const answer = (await response.json()) as Facets;
+		await route.fulfill({
+			response,
+			json: {
+				...answer,
+				years: [...answer.years, ...many((i) => ({ year: 1900 + MANY - i, count: MANY - i }))],
+				places: [...answer.places, ...many((i) => ({ name: `Town ${i + 1}`, count: MANY - i }))],
+				cameras: [...answer.cameras, ...many((i) => ({ name: `Camera ${i + 1}`, count: MANY - i }))]
+			}
+		});
+	});
+	await page.route(/\/api\/people(\?.*)?$/, async (route) => {
+		const response = await route.fetch();
+		const answer = (await response.json()) as Person[];
+		const named = many<Person>((i) => ({
+			id: 10_000 + i,
+			name: `Person ${i + 1}`,
+			face_count: 1,
+			hidden: false,
+			asset_count: 1,
+			cover: null,
+			portrait: null
+		}));
+		await route.fulfill({ response, json: [...answer, ...named] });
+	});
 }
 
 /** The open photo: the photo view (the loupe), a modal dialog. */
