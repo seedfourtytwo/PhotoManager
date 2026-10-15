@@ -421,5 +421,9 @@
 			flex-basis: 100%;
 			margin: 0 0 0 calc(-1 * var(--s-2));
 		}
+		/* To the screen's edges and not past them: the page is wider than the screen otherwise. */
+		.chips-room {
+			margin: 0 calc(-1 * var(--gutter));
+		}
 	}
 </style>
