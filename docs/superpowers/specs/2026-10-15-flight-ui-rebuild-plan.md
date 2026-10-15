@@ -14,12 +14,13 @@ reviews, each with what is wrong (file:line) and the Flight spec for laptop and 
   one album, print, People, one person, Places/Map.
 - [flight/admin-settings-auth.md](flight/admin-settings-auth.md): You, Admin, sign-in, setup,
   To review, Trash.
+- [flight/home.md](flight/home.md): Home (Rediscover, Memories, Years, Pinned, People, New this
+  week), the story player, the Home sections order list, the install tip, the iOS status bar.
 - [flight/foundations.md](flight/foundations.md): tokens, font, guards and tests that must change
   on purpose, the spring helper, the shell, and the slice table this plan follows.
 
 Reviews were made on the synthetic library at 1440×900 and 390×844; the screenshots stay on the
-laptop. Home is out of these reviews: another session is building per-person Home sections, and
-Home takes the Flight tokens after slice 1.
+laptop. Home was reviewed after the per-person Home sections merged (#81, #83).
 
 ## Why it does not look slick today
 
@@ -53,7 +54,7 @@ Six root causes explain most of what every screen shows:
 ## Build order
 
 Each slice is one PR, test first, `just check` plus the e2e specs that cover it (desktop and
-phone, real and mock). Slices 4–8 own separate files and can run in parallel after 3.
+phone, real and mock). Slices 4–8 and 10 own separate files and can run in parallel after 3 (10 also after 6).
 
 | # | Slice | Owns | Risk |
 | --- | --- | --- | --- |
@@ -66,7 +67,8 @@ phone, real and mock). Slices 4–8 own separate files and can run in parallel a
 | 6 | Sheets and controls: dialogs as glass sheets, menus as glass, switches and segmented controls | `Dialog`, `Menu`, `ui/*`, `buttons.css`, `fields.css` | medium; before 7–8 |
 | 7 | Collections family: full-width card grids, on-photo heroes for album and person, People grid, dark map | collections, albums, people, map, search routes | medium |
 | 8 | You / Admin / sign-in / To review / Trash: two-pane settings on laptop, iOS lists on phone, plain-language errors, one PIN keypad | those routes, `components/admin`, `PinPad` | low–medium |
-| 9 | Cleanup: drop the old size aliases | `tokens.css` | low |
+| 10 | Home: full-bleed hero with the title on the photo, rails to the screen edge, year tiles with a big numeral, full-screen story player, drag-to-reorder sections | `routes/home`, `components/home/*`, `InstallTip`, `ui/OrderList`, the status-bar plate in `+layout` | medium; after 1, 2, 3, 6 |
+| 9 | Cleanup: drop the old size aliases | `tokens.css` | low; last |
 
 The laptop shell (capsule on top or Mac-style sidebar) is chosen on the Superdesign canvas
 before slice 3.
