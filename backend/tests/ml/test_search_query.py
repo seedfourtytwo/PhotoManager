@@ -87,3 +87,70 @@ def test_an_impossible_date_facet_is_an_error() -> None:
         with_facets(AssetFilter(), parse_query("date:2021-13"))
     with pytest.raises(InvalidFacetError):
         with_facets(AssetFilter(), parse_query("date:2021-02-30"))
+
+
+# --- names spotted in the words -----------------------------------------------------------------
+
+
+def test_a_known_name_is_spotted_whatever_its_case_and_accents() -> None:
+    from photo_assistant.domain.search_query import Spotted, spot_names
+
+    spotted = spot_names("LEA at the beach", {"person": ["Léa"]}, take={"person"})
+    assert spotted == Spotted("at the beach", (("person", "Léa"),))
+
+
+def test_a_name_of_several_words_matches_only_as_a_whole_phrase() -> None:
+    from photo_assistant.domain.search_query import spot_names
+
+    known = {"person": ["Lea Martin"]}
+    assert spot_names("lea beach", known, take={"person"}).names == ()
+    assert spot_names("martin lea", known, take={"person"}).names == ()
+    spotted = spot_names("beach with lea martin", known, take={"person"})
+    assert (spotted.text, spotted.names) == ("beach with", (("person", "Lea Martin"),))
+
+
+def test_part_of_a_word_is_never_a_name() -> None:
+    from photo_assistant.domain.search_query import spot_names
+
+    known = {"place": ["Nice", "Catalonia"], "tag": ["cat"]}
+    assert spot_names("nicely done cats in catalan", known, take={"place"}).names == ()
+
+
+def test_punctuation_around_a_word_does_not_hide_a_name() -> None:
+    from photo_assistant.domain.search_query import spot_names
+
+    spotted = spot_names("Lea, at the beach!", {"person": ["Lea"], "tag": ["beach"]})
+    assert spotted.names == (("person", "Lea"), ("tag", "beach"))
+
+
+def test_the_longest_name_wins_then_the_kind_listed_first() -> None:
+    from photo_assistant.domain.search_query import spot_names
+
+    known = {"person": ["Paris"], "place": ["Paris", "Paris Plage"]}
+    assert spot_names("paris plage sunset", known).names == (("place", "Paris Plage"),)
+    assert spot_names("paris sunset", known).names == (("person", "Paris"),)
+
+
+def test_kinds_not_taken_stay_in_the_words() -> None:
+    from photo_assistant.domain.search_query import Spotted, spot_names
+
+    known = {"person": ["Tom"], "album": ["Christmas 2023"]}
+    spotted = spot_names("tom christmas 2023 tree", known, take={"person"})
+    assert spotted == Spotted("christmas 2023 tree", (("person", "Tom"), ("album", "Christmas 2023")))
+
+
+def test_a_name_said_twice_is_spotted_once_and_blank_names_never() -> None:
+    from photo_assistant.domain.search_query import spot_names
+
+    spotted = spot_names("lea and lea", {"person": ["Lea", "", " ! "]}, take={"person"})
+    assert (spotted.text, spotted.names) == ("and", (("person", "Lea"),))
+
+
+@given(st.text(max_size=60), st.lists(st.text(max_size=12), max_size=4))
+def test_spotting_never_crashes_and_leaves_words_in_their_order(q: str, names: list[str]) -> None:
+    from photo_assistant.domain.search_query import spot_names
+
+    spotted = spot_names(q, {"person": names}, take={"person"})
+    left = spotted.text.split()
+    words = iter(q.split())
+    assert all(word in words for word in left), "a subsequence of the words typed"
