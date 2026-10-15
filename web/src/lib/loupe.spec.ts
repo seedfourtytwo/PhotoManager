@@ -66,6 +66,8 @@ describe('closing the loupe', () => {
 		follow(replaceState);
 	});
 	afterEach(() => {
+		// A step still waiting to be written is written here, not in the next test.
+		vi.runOnlyPendingTimers();
 		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
@@ -74,6 +76,7 @@ describe('closing the loupe', () => {
 		openPhoto(5);
 		expect(pushState).toHaveBeenCalledWith('/?year=2019&photo=5', { photo: 5, pushed: true });
 		showPhoto(6);
+		vi.advanceTimersByTime(400);
 		expect(replaceState).toHaveBeenCalledWith('/?year=2019&photo=6', { photo: 6, pushed: true });
 		closePhoto();
 		expect(back).toHaveBeenCalledOnce();
@@ -86,16 +89,13 @@ describe('closing the loupe', () => {
 			showPhoto(id);
 			expect(shown()).toBe(id);
 		}
-		// The first step went into the URL; the rest wait (Safari allows 100 writes in 30 s).
-		expect(vi.mocked(replaceState).mock.calls).toEqual([
-			['/?year=2019&photo=6', { photo: 6, pushed: true }]
-		]);
+		// Nothing goes into the URL as the photo turns: the history waits a moment, so the
+		// frame the next photo arrives on stays light (Safari allows 100 writes in 30 s, too).
+		expect(replaceState).not.toHaveBeenCalled();
 		vi.advanceTimersByTime(400);
-		expect(vi.mocked(replaceState).mock.calls.at(-1)).toEqual([
-			'/?year=2019&photo=9',
-			{ photo: 9, pushed: true }
+		expect(vi.mocked(replaceState).mock.calls).toEqual([
+			['/?year=2019&photo=9', { photo: 9, pushed: true }]
 		]);
-		expect(replaceState).toHaveBeenCalledTimes(2);
 		expect(shown()).toBe(9);
 		// A held key for half a minute stays far below the browser's ration.
 		for (let i = 0; i < 900; i++) {
@@ -127,7 +127,7 @@ describe('closing the loupe', () => {
 		vi.stubGlobal('location', { href: 'http://x/albums/3' });
 		expect(openPhotoId(page)).toBeUndefined();
 		vi.advanceTimersByTime(400);
-		expect(replaceState).toHaveBeenCalledTimes(1);
+		expect(replaceState).not.toHaveBeenCalled();
 		page.url = new URL('http://x/') as typeof page.url;
 	});
 

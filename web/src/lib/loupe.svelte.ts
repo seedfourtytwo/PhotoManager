@@ -51,13 +51,13 @@ export function withPhoto(href: string, id: Id | null): string {
 /**
  * Stepping writes the open photo into the URL, and browsers ration that (Safari throws after
  * 100 history changes in 30 s; a held arrow key steps faster). The photo changes at once; the
- * URL follows at most every STEP_MS.
+ * URL follows STEP_MS later, once for all the steps made meanwhile, and never on the frame a
+ * swiped photo arrives on (writing the history wakes the whole page).
  */
 const STEP_MS = 350;
 /** The photo stepped to whose URL is still to be written, and the page it was stepped on. */
 let stepped = $state.raw<{ id: Id; path: string } | null>(null);
 let stepTimer: ReturnType<typeof setTimeout> | undefined;
-let lastStep = -Infinity;
 
 const pathname = () => new URL(location.href).pathname;
 
@@ -73,7 +73,6 @@ function writeStep() {
 	stepped = null;
 	// Left by a link meanwhile: that page's URL is not this one's to write.
 	if (!step || step.path !== pathname()) return;
-	lastStep = Date.now();
 	// What the entry is stays: the one `openPhoto` made, and the Info sheet's over it.
 	const { pushed, info } = page.state;
 	replaceState(withPhoto(location.href, step.id), {
@@ -146,9 +145,7 @@ export function openPhoto(id: Id) {
 export function showPhoto(id: Id) {
 	stepped = { id, path: pathname() };
 	if (onScreen) onScreen = stepped;
-	const wait = lastStep + STEP_MS - Date.now();
-	if (wait <= 0) writeStep();
-	else stepTimer ??= setTimeout(writeStep, wait);
+	stepTimer ??= setTimeout(writeStep, STEP_MS);
 }
 
 let closing = false;
