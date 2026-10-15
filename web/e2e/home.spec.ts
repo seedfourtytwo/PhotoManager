@@ -282,6 +282,10 @@ test('home: without On this day, Rediscover opens Home on a large photo that pla
 test('home: a suggested album is made only on Keep, and an answered one does not come back', async ({
 	page
 }) => {
+	test.skip(
+		REAL_BACKEND,
+		'the E2E library has about three photos per event, under the eight an album needs'
+	);
 	await signIn(page, '/home');
 	const suggested = page.getByRole('main').getByRole('region', { name: 'Suggested albums' });
 	const cards = suggested.getByRole('listitem');
