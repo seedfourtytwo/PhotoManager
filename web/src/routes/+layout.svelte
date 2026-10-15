@@ -18,6 +18,7 @@
 	import { look } from '$lib/look';
 	import { cachedOwner } from '$lib/look/cache';
 	import { dropBadPhotoParam } from '$lib/loupe.svelte';
+	import { onModalChange } from '$lib/modal';
 	import { movePage } from '$lib/motion';
 	import { pageMove } from '$lib/nav';
 	import { arrival, landing, mayLand } from '$lib/start-page.svelte';
@@ -123,9 +124,7 @@
 		const text = notice.text;
 		if (!text) return;
 		place(text);
-		const watch = new MutationObserver(() => place(text));
-		watch.observe(document.body, { childList: true, subtree: true });
-		return () => watch.disconnect();
+		return onModalChange(() => place(text));
 	});
 
 	// An admin's avatar carries a dot while a backup needs them: ask again on each navigation,

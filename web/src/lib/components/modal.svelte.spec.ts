@@ -2,6 +2,7 @@ import { page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { createRawSnippet } from 'svelte';
+import { onModalChange } from '$lib/modal';
 import { makeAsset } from '$lib/testing/fixtures';
 // The sizes under test are tokens: without them a dialog has no width of its own.
 import '$lib/tokens.css';
@@ -48,6 +49,18 @@ describe.each(cases)('$name as a modal', ({ open, find }) => {
 		const dialog = find().element() as HTMLDialogElement;
 		expect(dialog.matches(':modal')).toBe(true);
 		expect(dialog.contains(document.activeElement)).toBe(true);
+	});
+
+	it('tells whoever listens when it opens and when it closes, and nothing else does', async () => {
+		const modals: number[] = [];
+		const stop = onModalChange(() => modals.push(document.querySelectorAll('dialog:modal').length));
+		const shown = open(() => {});
+		await expect.element(find()).toBeVisible();
+		document.body.append(document.createElement('div')); // the page changing under it
+		expect(modals).toEqual([1]);
+		shown.unmount();
+		expect(modals).toEqual([1, 0]);
+		stop();
 	});
 
 	it('Escape asks the owner to close it, once, and does not close it by itself', async () => {
