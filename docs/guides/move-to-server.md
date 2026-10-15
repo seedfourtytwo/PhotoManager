@@ -93,9 +93,10 @@ Set `PA_DATA_ROOT=/srv/photo-assistant/data` in `.env`, then `just install-servi
 
 ### If the service is killed for using too much memory
 
-The memory limits (systemd: `MemoryHigh=1536M`, `MemoryMax=2G` in
-`deploy/photo-assistant.service`; Docker: `mem_limit: 4g` in `deploy/compose.yml`) have not
-been measured with the ML models loaded. If the app dies during `just ml-backfill` and
+The memory limits (systemd: `MemoryHigh=3G`, `MemoryMax=4G` in
+`deploy/photo-assistant.service`; Docker: `mem_limit: 4g` in `deploy/compose.yml`) leave about
+1 GB above the search model's measured 2.8 GB peak; they have not been measured during a full
+backfill with faces and previews running too. If the app dies during `just ml-backfill` and
 `systemctl --user status photo-assistant` shows `oom-kill` (Docker: `docker inspect` shows
 `OOMKilled`), raise the limit: `systemctl --user edit photo-assistant` and set `MemoryHigh=`
 and `MemoryMax=` under `[Service]`, or change `mem_limit` in compose. To use less memory

@@ -6,6 +6,7 @@ import pytest
 
 from photo_assistant.adapters.ml_store import SqliteMlStore
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
+from photo_assistant.api.settings import MlSettings
 from photo_assistant.app.people import FaceNotFoundError, People, PersonNotFoundError
 from photo_assistant.app.search import (
     NotIndexedError,
@@ -55,6 +56,19 @@ def test_search_min_score_and_blank_text(repo: SqliteRepository, store: SqliteMl
     search = SemanticSearch(clip, store, min_score=0.5)
     assert [h.asset_id for h in search("x", {a, b}, 10)] == [a]
     assert search("   ", {a, b}, 10) == []
+
+
+def test_default_cutoff_keeps_hits_on_the_boundary_and_drops_weaker_ones(
+    repo: SqliteRepository, store: SqliteMlStore
+) -> None:
+    cutoff = MlSettings(_env_file=None).search_cutoff()  # type: ignore[call-arg]
+    assert cutoff == 0.08
+    degrees = [math.degrees(math.acos(score)) for score in (0.0801, 0.0799, 0.12)]
+    above, below, strong = library(repo, store, degrees)
+    clip = FakeClip()
+    clip.texts["zebra"] = angle(0)
+    hits = SemanticSearch(clip, store, min_score=cutoff)("zebra", {above, below, strong}, 10)
+    assert [h.asset_id for h in hits] == [strong, above]
 
 
 def test_search_without_model_says_so(store: SqliteMlStore) -> None:

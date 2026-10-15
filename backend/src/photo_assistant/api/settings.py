@@ -147,6 +147,19 @@ _FACE_DEFAULTS: dict[str, tuple[float, float]] = {  # (min detection score, clus
 }
 
 
+# Per search model: (search cutoff, tag margin). SigLIP2 cosines sit around 0 to 0.13 and
+# nearly separate things a photo shows from things it does not; CLIP's sit in a 0.15 to 0.35
+# band where they do not, so CLIP keeps every hit. Laptop study: docs/TECH_DECISIONS.md.
+_CLIP_DEFAULTS: dict[str, tuple[float | None, float]] = {
+    "ViT-B-16-SigLIP2__webli": (0.08, 0.0),
+}
+_OTHER_CLIP_DEFAULTS: tuple[float | None, float] = (None, 0.03)
+
+
+def _clip_defaults(model: str) -> tuple[float | None, float]:
+    return _CLIP_DEFAULTS.get(model, _OTHER_CLIP_DEFAULTS)
+
+
 def _per_face_model(index: int) -> str:
     """The tuned default of every face model, for a setting's description."""
     return ", ".join(f"{tuned[index]} for {model}" for model, tuned in _FACE_DEFAULTS.items())
@@ -172,13 +185,14 @@ class MlSettings(BaseModel):
             "else processor), `cpu`, or `cuda` (an error if it is missing)."
         ),
     )
-    # Immich Hugging Face repo name (immich-app/<name>). For French + English queries use
-    # "XLM-Roberta-Large-Vit-B-32" (same 512-d image space as ViT-B-32__openai).
+    # Immich Hugging Face repo name (immich-app/<name>). Changing it means re-embedding the
+    # library (docs/wiring/ml.md); vectors are stored per model name.
     clip_model: str = Field(
-        default="ViT-B-32__openai",
+        default="ViT-B-16-SigLIP2__webli",
         description=(
-            "The search model, by its Immich name on Hugging Face. `XLM-Roberta-Large-"
-            "Vit-B-32` understands French and English queries."
+            "The search model, by its Immich name on Hugging Face. After changing it, `just "
+            "ml-backfill` re-analyses every photo. `XLM-Roberta-Large-Vit-B-32` understands "
+            "French and English queries."
         ),
     )
     clip_batch_size: int = Field(
@@ -222,10 +236,11 @@ class MlSettings(BaseModel):
         ge=1,
         description="Faces needed before a new person is suggested.",
     )
-    tag_margin: float = Field(
-        default=0.03,
+    tag_margin: float | None = Field(
+        default=None,
         description=(
-            "How clearly a tag must beat the neutral baseline: higher = fewer, surer tags."
+            "How clearly a tag must beat the neutral baseline: higher = fewer, surer tags; "
+            "not set = 0 for ViT-B-16-SigLIP2__webli, 0.03 for other models."
         ),
     )
     tag_max_tags: int = Field(
@@ -235,7 +250,10 @@ class MlSettings(BaseModel):
     )
     search_min_score: float | None = Field(
         default=None,
-        description="Search hits scoring below this are dropped; not set = keep all.",
+        description=(
+            "Search hits scoring below this are dropped; not set = 0.08 for "
+            "ViT-B-16-SigLIP2__webli, keep all for other models. -1 keeps all."
+        ),
     )
 
     def models_root(self, data_root: Path) -> Path:
@@ -256,8 +274,16 @@ class MlSettings(BaseModel):
         distance = self.face_max_distance or _FACE_DEFAULTS[self.face_model][1]
         return ClusterParams(max_distance=distance, min_faces=self.face_min_faces)
 
+    def search_cutoff(self) -> float | None:
+        if self.search_min_score is not None:
+            return self.search_min_score
+        return _clip_defaults(self.clip_model)[0]
+
     def tag_params(self) -> TagParams:
-        return TagParams(margin=self.tag_margin, max_tags=self.tag_max_tags)
+        margin = self.tag_margin
+        if margin is None:
+            margin = _clip_defaults(self.clip_model)[1]
+        return TagParams(margin=margin, max_tags=self.tag_max_tags)
 
 
 class OpsSettings(BaseModel):

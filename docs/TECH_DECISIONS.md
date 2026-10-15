@@ -70,10 +70,39 @@ in this codebase, and plain SQL keeps the schema readable.
 
 | Task                        | Model                                                                                                          | Notes                                                                                                                                                                                                                                                   |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Semantic search / auto-tags | CLIP-family ONNX export (e.g. Immich's ViT-B-32 or a multilingual M-CLIP variant for French + English queries) | Choose by benchmark on our own photos in M3                                                                                                                                                                                                             |
+| Semantic search / auto-tags | **Immich `ViT-B-16-SigLIP2__webli`** (chosen 2026-10-15, see below) | Only model of four whose scores separate things a photo shows from things it does not; search drops hits below 0.08 |
 | Face detect + embed         | **InsightFace `buffalo_l`** (chosen 2026-09-29 for accuracy)                                                   | Weights are **non-commercial research only**: fine for a private family library, never for anything we distribute. Downloaded on first run, never committed or bundled. YuNet + SFace (Apache-2.0) stays as a switchable fallback behind the same port. |
 | Clustering                  | DBSCAN-style incremental clustering (as Immich does)                                                           | Pure-Python domain logic, unit tested                                                                                                                                                                                                                   |
 | Geocoding                   | `reverse_geocoder` / GeoNames offline dump                                                                     | No network                                                                                                                                                                                                                                              |
+
+Search model study (2026-10-15, on the laptop, 183 real photos, CPU onnxruntime; only
+aggregate numbers left the machine). Score = cosine between the plain-word query and each
+photo; "present" = 7 queries for things in the library (people, beach, food, snow, sunset,
+car, birthday cake), "absent" = 5 that are not (zebra, submarine, giraffe, astronaut, a
+gibberish word).
+
+| Model | Best score, present | Best score, absent | Separates? | Embed s/photo | Query ms | Peak RAM |
+| --- | --- | --- | --- | --- | --- | --- |
+| ViT-B-32__openai (previous default) | 0.239–0.276 | 0.236–0.245 | no | 0.149 | 32 | not measured |
+| ViT-L-14__openai | 0.180–0.212 | 0.167–0.203 | no | 0.557 | 34 | 2.7 GB |
+| ViT-L-14-quickgelu__dfn2b | 0.167–0.278 | 0.158–0.243 | no | 0.569 | 43 | 2.8 GB |
+| **ViT-B-16-SigLIP2__webli** | 0.089–0.126 | 0.061–0.091 | nearly | 0.173 | 43 | 2.8 GB |
+
+With SigLIP2 and a cutoff of 0.08, zebra, giraffe and astronaut find 0 photos, submarine and
+the gibberish word 1 each; people 171, snow 12, beach 9, sunset 7, food 5, car 3, birthday
+cake 2. "a photo of X" prompts made it worse, so queries go in as typed. Ranking how far a
+top score stands out from the rest (z-score) separated nothing for any model. The cutoff was
+tuned on the same 12 queries and recall was not checked photo by photo, so it is a starting
+point: `PA_ML_SEARCH_MIN_SCORE` overrides it.
+
+Auto-tags score a photo's similarity to each tag minus its similarity to a neutral "a photo"
+baseline. SigLIP2's margins are smaller than CLIP's (99th percentile 0.012 against 0.027), so
+the CLIP margin of 0.03 tagged 7 of the 183 photos; a margin of 0 tags 49 and gives per-tag
+counts close to the 0.08 search results (beach 9, snow 11, sunset 7, car 5, food 3), so a tag
+and a search for the same word agree. Other models keep 0.03.
+
+Memory: the service unit allows `MemoryHigh=3G` / `MemoryMax=4G` (was 1.5G / 2G), about 1 GB
+above SigLIP2's peak, for the face model and preview rendering in the same process.
 
 Python dependencies for local ML (added 2026-09-30, branch `feat/ml`): `onnxruntime` (runs
 CLIP, SCRFD and ArcFace directly — no `insightface` package, which pulls in a large build

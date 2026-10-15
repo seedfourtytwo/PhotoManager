@@ -105,7 +105,7 @@ def build_ml_services(
         clip=clip,
         faces=faces,
         planner=planner,
-        search=SemanticSearch(clip, store, min_score=ml.search_min_score),
+        search=SemanticSearch(clip, store, min_score=ml.search_cutoff()),
         similar=SimilarPhotos(store, clip.name),
         people=people,
         portraits=Portraits(store, people, library, renderer),
