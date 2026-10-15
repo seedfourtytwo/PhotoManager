@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { SLOP, edge, lockAxis, pull, recognise, turn, velocity, type Point } from './gesture';
+import {
+	SLOP,
+	edge,
+	lockAxis,
+	pull,
+	recognise,
+	restep,
+	turn,
+	velocity,
+	type Point,
+	type Slide
+} from './gesture';
+import { atRest, step } from './spring';
 
 const at = (x: number, y: number, t = 0): Point => ({ x, y, t });
 const down = at(100, 300);
@@ -157,5 +169,91 @@ describe('turn', () => {
 	it('never turns past the first or the last photo', () => {
 		expect(turn(-300, -2, width, { previous: true, next: false })).toBe(0);
 		expect(turn(300, 2, width, { previous: false, next: true })).toBe(0);
+	});
+});
+
+describe('restep', () => {
+	const width = 400;
+
+	it('the same way as the track goes: the turn on its way is made now and it goes on to the next', () => {
+		// A third of the way to the next photo, still moving.
+		const { made, slide } = restep({ x: -130, v: -1, by: 1 }, 1, width);
+		expect(made).toBe(1);
+		// One photo back under the new open photo: nothing on screen moves.
+		expect(slide).toEqual({ x: 270, v: -1, by: 1 });
+	});
+
+	it('against the way it goes: no turn, back home', () => {
+		expect(restep({ x: -300, v: -1, by: 1 }, -1, width)).toEqual({
+			made: 0,
+			slide: { x: -300, v: -1, by: 0 }
+		});
+		expect(restep({ x: 300, v: 1, by: -1 }, 1, width).slide.by).toBe(0);
+	});
+
+	it('sliding home (a short drag let go): no turn, it goes the way asked instead', () => {
+		expect(restep({ x: -40, v: 0.2, by: 0 }, -1, width)).toEqual({
+			made: 0,
+			slide: { x: -40, v: 0.2, by: -1 }
+		});
+	});
+
+	it('far ahead, it is never more than a photo behind: the photos between are skipped', () => {
+		// Asked again before the track has moved at all.
+		const { made, slide } = restep({ x: 0, v: -3, by: 1 }, 1, width);
+		expect(made).toBe(1);
+		expect(slide).toEqual({ x: width, v: 0, by: 1 });
+		expect(restep({ x: 0, v: 3, by: -1 }, -1, width).slide).toEqual({ x: -width, v: 0, by: -1 });
+	});
+
+	/** Steps at the given times (ms), 16 ms frames, until it rests; turns made and the worst frame. */
+	function hold(presses: number[], way: -1 | 1) {
+		let slide: Slide = { x: 0, v: 0, by: 0 };
+		let moving = false;
+		let turns = 0;
+		let behind = 0;
+		let past = 0;
+		const queue = [...presses];
+		for (let t = 0; t < 5000; t += 16) {
+			while (queue.length && queue[0] <= t) {
+				queue.shift();
+				if (!moving) slide = { x: 0, v: 0, by: way };
+				else {
+					const next = restep(slide, way, width);
+					turns += next.made;
+					slide = next.slide;
+				}
+				moving = true;
+			}
+			if (!moving) continue;
+			const to = -slide.by * width;
+			const now = step({ x: slide.x, v: slide.v }, to, 16);
+			slide = { ...slide, ...now };
+			behind = Math.max(behind, Math.abs(slide.x - to));
+			past = Math.max(past, (slide.x - to) * way * -1);
+			if (atRest(now, to)) {
+				turns += slide.by;
+				slide = { x: 0, v: 0, by: 0 };
+				moving = false;
+			}
+		}
+		return { turns, behind, past, moving };
+	}
+
+	it('an arrow key held down lands on the photo of its last repeat, never runs two photos behind, never overshoots', () => {
+		const repeats = Array.from({ length: 20 }, (_, i) => i * 33);
+		for (const way of [1, -1] as const) {
+			const { turns, behind, past, moving } = hold(repeats, way);
+			expect(turns).toBe(20 * way);
+			expect(moving).toBe(false);
+			expect(behind).toBeLessThanOrEqual(2 * width);
+			expect(past).toBeLessThan(1);
+		}
+	});
+
+	it('presses a little apart each slide on from where the last one is, and land on the right photo', () => {
+		const { turns, past } = hold([0, 120, 240], 1);
+		expect(turns).toBe(3);
+		expect(past).toBeLessThan(1);
 	});
 });
