@@ -134,7 +134,7 @@ needs its own golden-image tests. Park them for M5 and decide then.
 | 5.3 | Album **theme**: typography, colour palette, paper tone (a small curated set)                                                                              | Should | M4          |
 | 5.4 | Album **layout engine**: pages built from layout templates (full-bleed, 2-up, 3-grid, hero+2, text page) with automatic best-fit by aspect ratio           | Should | M4          |
 | 5.5 | Page editor: swap photo, change layout, pan/zoom crop inside a frame, captions                                                                             | Should | M4          |
-| 5.6 | "Suggest an album" without AI: by event (time + place clustering)                                                                                          | Should | M4          |
+| 5.6 | "Suggest an album" without AI: by event (time + place clustering)                                                                                          | Should | M4 ✅       |
 | 5.7 | **Describe an album in words** → LLM returns a structured album plan (selection query, order, sections, layouts, captions) that the user reviews and edits | Should | M5          |
 | 5.8 | AI-generated decorative graphics (title pages, ornaments) through the socket                                                                               | Later  | M6+         |
 | 5.9 | **Comment threads** on an album or a single photo, like the side comments in Google Docs; members only (#66)                                               | Later  | —           |

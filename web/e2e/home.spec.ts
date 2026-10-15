@@ -89,6 +89,7 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 	await expect(titles).toHaveText([
 		'Rediscover',
 		'Memories',
+		'Suggested albums',
 		'Years',
 		'Pinned',
 		'People',
@@ -130,6 +131,7 @@ test('home: with nothing to show it says so in one sentence, and what to do', as
 	};
 	await page.route('**/api/home', (route) => route.fulfill({ json: nothing }));
 	await page.route('**/api/people', (route) => route.fulfill({ json: [] }));
+	await page.route('**/api/album-suggestions', (route) => route.fulfill({ json: [] }));
 	let libraryEmpty = true;
 	await page.route(/\/api\/assets\?/, (route) =>
 		libraryEmpty || route.request().url().includes('pinned=true')
@@ -274,6 +276,45 @@ test('home: without On this day, Rediscover opens Home on a large photo that pla
 	await expect(loupe(page)).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(loupe(page)).toBeHidden();
+});
+
+test('home: a suggested album is made only on Keep, and an answered one does not come back', async ({
+	page
+}) => {
+	await signIn(page, '/home');
+	const suggested = page.getByRole('main').getByRole('region', { name: 'Suggested albums' });
+	const cards = suggested.getByRole('listitem');
+	await expect(cards.first()).toBeVisible();
+	const [first, second] = (await (await page.request.get('/api/album-suggestions')).json()) as {
+		key: string;
+		title: string;
+		from: string;
+		to: string;
+	}[];
+	const card = (title: string) => cards.filter({ has: page.getByText(title, { exact: true }) });
+	await expect(card(first.title).getByRole('link')).toHaveAttribute(
+		'href',
+		`/?from=${first.from}&to=${first.to}&guessed_date=false`
+	);
+	await expectAccessible(page);
+	const albumsBefore = ((await (await page.request.get('/api/albums')).json()) as unknown[]).length;
+
+	await card(second.title).getByRole('button', { name: 'Discard' }).click();
+	await expect(card(second.title)).toHaveCount(0);
+	expect(((await (await page.request.get('/api/albums')).json()) as unknown[]).length).toBe(
+		albumsBefore
+	);
+
+	await card(first.title).getByRole('button', { name: 'Keep' }).click();
+	await expect(toast(page)).toContainText(`Album “${first.title}” made.`);
+	await expect(card(first.title)).toHaveCount(0);
+	await toast(page).getByRole('button', { name: 'Open' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: first.title })).toBeVisible();
+
+	await page.goto('/home');
+	await expect(block(page, 'Memories')).toBeVisible();
+	await expect(card(first.title)).toHaveCount(0);
+	await expect(card(second.title)).toHaveCount(0);
 });
 
 test('home: a year plays its story, and its heading opens the Library', async ({ page }) => {
