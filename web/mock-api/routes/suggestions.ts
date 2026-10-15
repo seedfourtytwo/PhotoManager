@@ -103,7 +103,7 @@ function placeName(photos: MockAsset[]): string | null {
 	const counts = new Map<string, number>();
 	for (const p of places) {
 		const name = p.city || p.region || p.country;
-		counts.set(name, (counts.get(name) ?? 0) + 1);
+		if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
 	}
 	let best: string | null = null;
 	for (const [name, n] of counts) if (best === null || n > counts.get(best)!) best = name;
@@ -149,7 +149,9 @@ export function suggestionRoutes(h: Helpers): Route[] {
 		const inAlbums = new Set(
 			h
 				.state()
-				.albums.filter((al) => al.owner_id === user.id || al.members.some((m) => m.user_id === user.id))
+				.albums.filter(
+					(al) => al.owner_id === user.id || al.members.some((m) => m.user_id === user.id)
+				)
 				.flatMap((al) => al.items)
 		);
 		return events(byTime, (a) => peopleOf.get(a.id) ?? new Set())

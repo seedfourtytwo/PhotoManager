@@ -17,7 +17,9 @@ describe('suggested albums in the mock', () => {
 			expect(s.count).toBeGreaterThanOrEqual(8);
 			expect(s.items.length).toBe(4);
 			expect(s.from <= s.to).toBe(true);
-			expect(s.title).toMatch(/^([^·]+ · )?(\d{1,2} )?[A-Z][a-z]+( \d{4})?( (and|to) [A-Z][a-z]+)? \d{4}$/);
+			expect(s.title).toMatch(
+				/^([^·]+ · )?(\d{1,2} )?[A-Z][a-z]+( \d{4})?( (and|to) [A-Z][a-z]+)? \d{4}$/
+			);
 		}
 		const ends = found.map((s) => s.to);
 		expect(ends).toEqual([...ends].sort().reverse());
