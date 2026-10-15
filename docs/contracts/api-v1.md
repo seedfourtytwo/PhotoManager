@@ -83,11 +83,12 @@ routes carry it: `User` (login, `/api/auth/me`), `/api/auth/accounts` and
 ## Look (v1.5)
 
 Each account has a look: one sheet of named values, never CSS (`docs/adr/0001`). The account
-itself chooses only its `mode`; an admin sets the whole sheet of any account.
+itself chooses its `mode` and what its Home shows (`homeSections`, v1.11); an admin sets the
+whole sheet of any account.
 
 | GET | `/api/me/look` | – | `Look` of the signed-in account (every role) |
 |---|---|---|---|
-| PUT | `/api/me/look` | `{mode}` and nothing else | `Look`; every role, guests included. Any other field, or none, is `422` |
+| PUT | `/api/me/look` | `{mode}`, `{homeSections}` or both, nothing else | `Look`; every role, guests included. Any other field, or none, is `422` |
 | GET | `/api/admin/accounts/{id}/look` | – | `Look` (admin); `404` unknown id |
 | PUT | `/api/admin/accounts/{id}/look` | `Look`, any fields left out | `Look` as stored (admin). A field left out goes back to its default, so `{}` resets the look. `404` unknown id |
 
@@ -106,6 +107,7 @@ itself chooses only its `mode`; an admin sets the whole sheet of any account.
 | `startPage` | `"today"`, `"library"` | `"today"` |
 | `collectionsRows` | one to three of `"people"`, `"places"`, `"albums"`, each once, in the order shown | all three, in that order |
 | `dockLabels` | `true` / `false` | `true` |
+| `homeSections` (v1.11) | one to seven of `"on_this_day"`, `"rediscover"`, `"memories"`, `"years"`, `"pinned"`, `"people"`, `"new"`, each once, in the order Home shows them; the ones left out are off | all seven, in that order |
 
 Rules (`backend/src/photo_assistant/domain/look.py` is the source; `web/src/lib/look/sheet.ts`
 mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases.json`):
@@ -121,8 +123,12 @@ mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases
   its default, the rest of the sheet stays, and the account's next mode change keeps it.
   Something stored that is no sheet at all is the defaults. Nothing a sheet holds can make
   the app unusable.
-- `PUT /api/me/look` changes the mode of the sheet as it is stored at that moment, in one
-  step: an admin's save at the same time is never half undone.
+- `PUT /api/me/look` changes the fields it holds (`mode`, `homeSections`) of the sheet as
+  it is stored at that moment, in one step: an admin's save at the same time is never half
+  undone.
+- `homeSections` orders and turns off Home's blocks; `GET /api/home` still answers all of
+  them (so "Try on my screen" shows another account's choice whole), and the web draws the
+  chosen ones in their order, each only when it has photos.
 - `showToday: false` takes Home out of the dock; `startPage` is where a session opens (Home or
   Library; `web/src/lib/start-page.svelte.ts`).
 
@@ -647,3 +653,13 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Home | `GET /api/home` answers `rediscover` (up to 12 `AssetOut`) and `years` (a `Memory` per year with 10 dated photos), see "Home" above. | `HomeData.rediscover`, `HomeData.years`; Home shows Rediscover (its first photo large, playing the dozen) and Years (square covers that play the year). |
+
+---
+
+# v1.11 changes (each account designs its own Home, issue 54)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Look | New field `homeSections` (see "Look" above). `PUT /api/me/look` takes it as well as `mode`, from every role. | `Look.homeSections`, `api.setMyHome`; You has "Home shows, in this order" (a switch and Move up per block); the admin's look form has the same list; Home draws the chosen blocks in their order. |

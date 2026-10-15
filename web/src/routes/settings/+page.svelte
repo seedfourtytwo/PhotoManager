@@ -6,15 +6,25 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import { isPin, PIN_LENGTH, type Role } from '$lib/api';
-	import { api, backupWatch, chooseMode, isPublicRoute, notice, session } from '$lib/app.svelte';
+	import {
+		api,
+		backupWatch,
+		chooseHome,
+		chooseMode,
+		isPublicRoute,
+		notice,
+		session
+	} from '$lib/app.svelte';
 	import Devices from '$lib/components/Devices.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import PageHead from '$lib/components/PageHead.svelte';
 	import Segmented from '$lib/components/ui/Segmented.svelte';
 	import TileGroup from '$lib/components/ui/TileGroup.svelte';
+	import OrderList from '$lib/components/ui/OrderList.svelte';
 	import TileRow from '$lib/components/ui/TileRow.svelte';
 	import { errorMessage } from '$lib/format';
-	import { look, type Mode } from '$lib/look';
+	import { SECTION_NAMES } from '$lib/home';
+	import { HOME_SECTIONS, look, type Mode } from '$lib/look';
 	import { attentionOf, backLabel, initialOf } from '$lib/nav';
 	import { PIN_FIELD } from '$lib/pin';
 
@@ -113,6 +123,18 @@
 			/>
 		</div>
 	</TileGroup>
+
+	{#if look.saved.showToday}
+		<div id="home">
+			<OrderList
+				label="Home shows, in this order"
+				all={HOME_SECTIONS}
+				chosen={look.saved.homeSections}
+				names={SECTION_NAMES}
+				onchange={(sections) => chooseHome(sections)}
+			/>
+		</div>
+	{/if}
 
 	{#if attention}
 		<TileGroup label="Needs you">

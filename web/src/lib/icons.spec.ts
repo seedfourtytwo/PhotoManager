@@ -51,6 +51,7 @@ describe('icons', () => {
 			'sun',
 			'text',
 			'trash',
+			'up',
 			'upload',
 			'x',
 			'zoom'

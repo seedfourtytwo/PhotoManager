@@ -19,6 +19,18 @@ export const MODES = ['system', 'dark', 'light'] as const;
 export const THUMB_SIZES = ['small', 'medium', 'large'] as const;
 export const START_PAGES = ['today', 'library'] as const;
 export const COLLECTIONS_ROWS = ['people', 'places', 'albums'] as const;
+/** The blocks of Home, in the order a new account sees them. */
+export const HOME_SECTIONS = [
+	'on_this_day',
+	'rediscover',
+	'memories',
+	'years',
+	'pinned',
+	'people',
+	'new'
+] as const;
+/** What an account sets for itself (`PUT /api/me/look`); an admin sets the rest. */
+export const OWN_FIELDS = ['mode', 'homeSections'] as const;
 
 export type Theme = (typeof THEMES)[number];
 /** `system` follows the device. */
@@ -26,6 +38,8 @@ export type Mode = (typeof MODES)[number];
 export type ThumbSize = (typeof THUMB_SIZES)[number];
 export type StartPage = (typeof START_PAGES)[number];
 export type CollectionsRow = (typeof COLLECTIONS_ROWS)[number];
+export type HomeSection = (typeof HOME_SECTIONS)[number];
+export type OwnChoice = Partial<Pick<Look, (typeof OWN_FIELDS)[number]>>;
 
 export type Look = {
 	theme: Theme;
@@ -42,6 +56,8 @@ export type Look = {
 	startPage: StartPage;
 	collectionsRows: CollectionsRow[];
 	dockLabels: boolean;
+	/** The blocks Home shows, in their order. */
+	homeSections: HomeSection[];
 };
 
 /** Dials: the lowest and highest value each may take. */
@@ -63,12 +79,14 @@ const defaults = (): Look => ({
 	showToday: true,
 	startPage: 'today',
 	collectionsRows: [...COLLECTIONS_ROWS],
-	dockLabels: true
+	dockLabels: true,
+	homeSections: [...HOME_SECTIONS]
 });
 
 export const DEFAULT_LOOK: Readonly<Look> = Object.freeze({
 	...defaults(),
-	collectionsRows: Object.freeze([...COLLECTIONS_ROWS]) as unknown as CollectionsRow[]
+	collectionsRows: Object.freeze([...COLLECTIONS_ROWS]) as unknown as CollectionsRow[],
+	homeSections: Object.freeze([...HOME_SECTIONS]) as unknown as HomeSection[]
 });
 
 /** A sheet that cannot be a look; the message names the field and what it may hold. */
@@ -100,18 +118,23 @@ const toggle = (field: string) => (value: unknown) => {
 	throw new LookError(`'${field}' must be true or false`);
 };
 
-function collectionsRows(value: unknown): CollectionsRow[] {
-	const names: unknown[] = Array.isArray(value) ? value : [];
-	const rows = names.filter((name): name is CollectionsRow =>
-		COLLECTIONS_ROWS.includes(name as CollectionsRow)
-	);
-	if (rows.length === 0 || rows.length !== names.length || new Set(rows).size !== rows.length)
-		throw new LookError(
-			`'collectionsRows' must list at least one of ${COLLECTIONS_ROWS.join(', ')}, ` +
-				'each once, in the order to show them'
-		);
-	return rows;
-}
+/** Some of `allowed`, each once, in the order to show them: the ones shown. */
+const ordered =
+	<T extends string>(field: string, allowed: readonly T[]) =>
+	(value: unknown): T[] => {
+		const names: unknown[] = Array.isArray(value) ? value : [];
+		const chosen = names.filter((name): name is T => allowed.includes(name as T));
+		if (
+			chosen.length === 0 ||
+			chosen.length !== names.length ||
+			new Set(chosen).size !== chosen.length
+		)
+			throw new LookError(
+				`'${field}' must list at least one of ${allowed.join(', ')}, ` +
+					'each once, in the order to show them'
+			);
+		return chosen;
+	};
 
 /** Every field of the sheet and how its value is read. */
 const FIELDS: { [K in keyof Look]: (value: unknown) => Look[K] } = {
@@ -124,8 +147,9 @@ const FIELDS: { [K in keyof Look]: (value: unknown) => Look[K] } = {
 	thumbSize: choice('thumbSize', THUMB_SIZES),
 	showToday: toggle('showToday'),
 	startPage: choice('startPage', START_PAGES),
-	collectionsRows,
-	dockLabels: toggle('dockLabels')
+	collectionsRows: ordered('collectionsRows', COLLECTIONS_ROWS),
+	dockLabels: toggle('dockLabels'),
+	homeSections: ordered('homeSections', HOME_SECTIONS)
 };
 
 const isField = (name: string): name is keyof Look => Object.hasOwn(FIELDS, name);

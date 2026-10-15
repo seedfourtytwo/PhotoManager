@@ -13,6 +13,7 @@ from photo_assistant.app.accounts import (
     Accounts,
     AlreadySetUpError,
     InvalidCredentialsError,
+    InvalidLookError,
     LastAdminError,
     TooManyAttemptsError,
     UserPatch,
@@ -20,7 +21,16 @@ from photo_assistant.app.accounts import (
 from photo_assistant.domain import errors
 from photo_assistant.domain.access import FAILED_LOGIN_WINDOW, Role
 from photo_assistant.domain.errors import NotFoundError
-from photo_assistant.domain.look import Look, Mode, dump_look, parse_look, read_look
+from photo_assistant.domain.look import (
+    DEFAULT_LOOK,
+    HomeSection,
+    Look,
+    Mode,
+    Theme,
+    dump_look,
+    parse_look,
+    read_look,
+)
 from tests.fakes import FakeClock
 
 GOOD = "1234"
@@ -574,7 +584,7 @@ def test_a_mode_chosen_while_an_admin_saves_does_not_undo_the_admins_save(
     accounts = Accounts(store, FakeHasher(), clock)  # type: ignore[arg-type]
     user, _ = accounts.setup("c", "C", GOOD)
 
-    accounts.choose_mode(user, {"mode": "light"})
+    accounts.choose_own(user, {"mode": "light"})
 
     assert store.saving is not None
     store.saving.join()
@@ -588,8 +598,41 @@ def test_choosing_a_mode_keeps_the_stored_fields_that_still_pass(
     repo.store_look(user.id, '{"theme": "gone-in-a-later-version", "accentHue": 200, "corners": 4}')
     assert accounts.look_of(user.id) == Look(accent_hue=200, corners=4)
 
-    chosen = accounts.choose_mode(user, {"mode": "light"})
+    chosen = accounts.choose_own(user, {"mode": "light"})
 
     assert chosen == Look(mode=Mode.LIGHT, accent_hue=200, corners=4)
     assert accounts.look_of(user.id) == chosen
     assert repo.stored_look(user.id) == dump_look(chosen), "and the field that failed is gone"
+
+
+def test_an_account_chooses_what_its_home_shows_and_the_rest_stays(
+    accounts: Accounts, repo: SqliteRepository
+) -> None:
+    user, _ = accounts.setup("c", "C", GOOD)
+    repo.store_look(user.id, dump_look(parse_look({"theme": "album", "mode": "light"})))
+
+    chosen = accounts.choose_own(user, {"homeSections": ["pinned", "rediscover"]})
+
+    assert chosen == Look(
+        theme=Theme.ALBUM,
+        mode=Mode.LIGHT,
+        home_sections=(HomeSection.PINNED, HomeSection.REDISCOVER),
+    )
+    both = accounts.choose_own(user, {"mode": "dark", "homeSections": ["years"]})
+    assert (both.mode, both.home_sections, both.theme) == (
+        Mode.DARK,
+        (HomeSection.YEARS,),
+        Theme.ALBUM,
+    )
+
+
+@pytest.mark.parametrize(
+    "sheet", [{}, {"theme": "album"}, {"homeSections": ["years"], "dockLabels": False}, None]
+)
+def test_an_account_sets_nothing_of_its_look_but_its_mode_and_its_home(
+    accounts: Accounts, sheet: object
+) -> None:
+    user, _ = accounts.setup("c", "C", GOOD)
+    with pytest.raises(InvalidLookError, match="mode and what your Home shows"):
+        accounts.choose_own(user, sheet)
+    assert accounts.look_of(user.id) == DEFAULT_LOOK

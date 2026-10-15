@@ -40,6 +40,21 @@ describe('the look in the mock, as the backend serves it (contract v1.5)', () =>
 		expect(await partner.myLook()).toEqual({ ...WARM, mode: 'system' });
 	});
 
+	it('an account chooses what its Home shows, and nothing else of its look moves', async () => {
+		const admin = await mock.signedIn();
+		const partner = await mock.signedIn('partner', '2345');
+		const partnerId = (await admin.users()).find((u) => u.username === 'partner')!.id;
+		await admin.setAccountLook(partnerId, WARM);
+
+		expect(await partner.setMyHome(['pinned', 'years'])).toEqual({
+			...WARM,
+			homeSections: ['pinned', 'years']
+		});
+		await expect(partner.setMyHome([])).rejects.toMatchObject({ status: 422 });
+		expect((await partner.myLook()).homeSections).toEqual(['pinned', 'years']);
+		expect((await admin.myLook()).homeSections).toEqual(DEFAULT_LOOK.homeSections);
+	});
+
 	it('only an admin reads or sets another account’s look', async () => {
 		const admin = await mock.signedIn();
 		const partner = await mock.signedIn('partner', '2345');

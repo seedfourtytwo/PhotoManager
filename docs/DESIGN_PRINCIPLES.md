@@ -45,9 +45,11 @@ colours, corners and the title face, never layout.
 
 **Each account has its own look** (`docs/adr/0001`): a theme, a mode (dark, light, or like
 the device), a few dials and a few switches, kept as a validated sheet of values and never as
-CSS. The account chooses its mode on You; an admin sets the rest in Admin → People → Look.
+CSS. The account chooses its mode and what its Home shows on You; an admin sets the rest in
+Admin → People → Look.
 The dials only move tokens (`--acc-h`, `--r-1`/`--r-2`, `--gutter`, the root text size); the
-switches choose from fixed lists (which Collections rows, words under the dock icons). So the
+switches choose from fixed lists (which Collections rows, which Home blocks, words under the
+dock icons). So the
 rules on this page hold for every look: any accent hue passes contrast because lightness and
 chroma stay the theme's, and "reset look" always works. The tables below give a theme's own
 values, which is what a dial left alone uses.
@@ -252,7 +254,8 @@ not a token):
 - **The look form** (Admin → People → Look): one control per field of the sheet, each with
   its range or its choices, so nothing can be entered that the server would refuse. Home has
   two: Show Home (off takes Home out of the dock) and Opens on (Home or Library; without Home
-  only Library, so the choice is off). "Try on
+  only Library, so the choice is off); its blocks and their order are an order of one's own,
+  as are the Collections rows. "Try on
   my screen" shows the sheet on the admin's own screen and saves nothing; while it runs, one
   quiet line at the top of every page says whose look is being tried and offers Stop trying.
 - **Collections rows** show what is behind them, not a sentence about it: people as round
@@ -300,7 +303,8 @@ not a token):
   plain sentence saying what to do, with a link where there is one.
 - **You** (`/settings`, from the avatar): Back to where it was opened from (the history's, so
   that page keeps its scroll), the initial large with the name and role, then tile groups:
-  Look (Dark · Light · Like the device, a segmented control), Needs you (admins, only when
+  Look (Dark · Light · Like the device, a segmented control), Home shows, in this order (an
+  order of one's own, while Home is in the dock), Needs you (admins, only when
   something does: the dot and its sentence, leading to it), Admin (admins), Phones that send
   photos here (each phone a tile that opens its sheet: what it keeps, Leave out screenshots,
   Send everything again, Revoke; + adds one), Account (Change PIN in a sheet, Sign out).
@@ -329,6 +333,10 @@ not a token):
   times its size. Zoomed in, the chrome is put away, one finger moves the photo as far as its
   edges, and it is not swiped; another photo opens at its fit. It opens from its tile and
   closes back to it as a view transition.
+- **An order of one's own** (`ui/OrderList`: Collections rows, Home blocks): a tile group,
+  each row a switch, the ones shown first in their order with a Move up icon (the first has
+  none), then the ones switched off. The last one shown cannot be switched off. A row moves to
+  its new place (transform only; a jump under reduced motion).
 - **Home** reads top to bottom like a story, and a block shows only when it has photos: the
   date ("Wednesday 14 October") with the avatar; On this day, its cover full width at its own
   shape (a tall one stops short of the screen, whole), a display title in plain words ("Three

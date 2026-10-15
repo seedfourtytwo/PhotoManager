@@ -10,6 +10,7 @@ import pytest
 from photo_assistant.domain.look import (
     DEFAULT_LOOK,
     CollectionsRow,
+    HomeSection,
     Look,
     LookError,
     Mode,
@@ -20,6 +21,7 @@ from photo_assistant.domain.look import (
     look_sheet,
     parse_look,
     read_look,
+    with_sent,
 )
 
 # The table both sides run (web/src/lib/look/sheet.spec.ts reads the same file).
@@ -44,6 +46,7 @@ EVERYTHING = {
     "startPage": "library",
     "collectionsRows": ["albums", "people"],
     "dockLabels": False,
+    "homeSections": ["people", "pinned"],
 }
 
 
@@ -64,6 +67,15 @@ def test_the_defaults_are_the_ones_in_the_spec() -> None:
         "startPage": "today",
         "collectionsRows": ["people", "places", "albums"],
         "dockLabels": True,
+        "homeSections": [
+            "on_this_day",
+            "rediscover",
+            "memories",
+            "years",
+            "pinned",
+            "people",
+            "new",
+        ],
     }
 
 
@@ -80,6 +92,7 @@ def test_every_field_is_read() -> None:
         start_page=StartPage.LIBRARY,
         collections_rows=(CollectionsRow.ALBUMS, CollectionsRow.PEOPLE),
         dock_labels=False,
+        home_sections=(HomeSection.PEOPLE, HomeSection.PINNED),
     )
     assert look_sheet(parse_look(EVERYTHING)) == EVERYTHING
 
@@ -149,6 +162,7 @@ def test_a_dial_left_to_the_theme_stays_null(field: str) -> None:
         ("dockLabels", 1),
         ("theme", 3),
         ("collectionsRows", "people"),
+        ("homeSections", "people"),
     ],
 )
 def test_a_value_of_the_wrong_kind_is_rejected(field: str, value: object) -> None:
@@ -173,6 +187,29 @@ def test_collections_rows_keep_their_order_and_refuse_repeats_strangers_and_none
     for bad in (["people", "people"], ["people", "calendar"], [], [1]):
         with pytest.raises(LookError, match="'collectionsRows'"):
             parse_look({"collectionsRows": bad})
+
+
+def test_home_sections_keep_their_order_and_refuse_repeats_strangers_and_none() -> None:
+    sent = parse_look({"homeSections": ["pinned", "on_this_day"]})
+    assert look_sheet(sent)["homeSections"] == ["pinned", "on_this_day"]
+    for bad in (["pinned", "pinned"], ["pinned", "weather"], [], [1]):
+        with pytest.raises(LookError, match="'homeSections'"):
+            parse_look({"homeSections": bad})
+
+
+def test_what_an_account_sends_lies_over_its_look() -> None:
+    warm = parse_look({"theme": "album", "accentHue": 30, "showToday": False})
+    mine = with_sent(warm, {"homeSections": ["years"], "mode": "light"})
+    assert mine == Look(
+        theme=Theme.ALBUM,
+        mode=Mode.LIGHT,
+        accent_hue=30,
+        show_today=False,
+        start_page=StartPage.LIBRARY,
+        home_sections=(HomeSection.YEARS,),
+    )
+    with pytest.raises(LookError, match="'homeSections'"):
+        with_sent(warm, {"homeSections": []})
 
 
 def test_hiding_today_starts_on_the_library() -> None:
