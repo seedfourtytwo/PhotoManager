@@ -137,8 +137,12 @@
 	.done {
 		font-weight: 750;
 	}
+	/* The sheet scrolls, its parts never shrink: once the sheet is as tall as it may be, a
+	   row sized `auto` would squeeze a list that clips its own corners (`.tiles`) and cut its
+	   last rows off, with nothing left to scroll. */
 	.body {
 		display: grid;
+		grid-auto-rows: max-content;
 		gap: var(--s-4);
 		padding: 0 var(--s-5) var(--s-5);
 		overflow-y: auto;

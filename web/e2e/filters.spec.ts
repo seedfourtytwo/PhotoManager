@@ -3,15 +3,18 @@
  * question in a sheet (a bottom sheet on a phone, a popover under its chip on a laptop), and a
  * set chip shows its answer with an × that clears it. The address keeps every filter.
  */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
+	MANY,
 	expect,
 	expectAccessible,
 	firstMonthWithPhotos,
 	isPhone,
+	longLists,
 	resetMock,
 	signIn,
-	test
+	test,
+	touchSwipe
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -175,6 +178,55 @@ test('a sheet hangs under its chip on a laptop and rises from the bottom on a ph
 			expect(Math.abs(box.x - from.x)).toBeLessThan(2);
 		}
 	}).toPass({ timeout: 3000 });
+});
+
+/** The last row of each question's long list. More holds two switches: it never grows. */
+const LAST_ROW: Record<string, RegExp> = {
+	Who: new RegExp(`^Person ${MANY}$`),
+	When: /^1901\b/,
+	Where: new RegExp(`^Town ${MANY}\\b`),
+	Camera: new RegExp(`^Camera ${MANY}\\b`)
+};
+
+/** One move down the list: a finger swiping up inside the sheet, or the wheel over it. */
+async function scrollDown(page: Page, sheet: Locator) {
+	const box = (await sheet.boundingBox())!;
+	const x = box.x + box.width / 2;
+	const low = { x, y: box.y + box.height - 120 };
+	if (isPhone(page)) await touchSwipe(page, low, { x, y: low.y - 300 }, 12);
+	else {
+		await page.mouse.move(low.x, low.y);
+		await page.mouse.wheel(0, 300);
+	}
+}
+
+test.describe('long lists', () => {
+	// The lists are made long on their way to the page (`longLists`); a request the service
+	// worker takes over would pass by that, once it controls the page.
+	test.use({ serviceWorkers: 'block' });
+
+	for (const [question, last] of Object.entries(LAST_ROW)) {
+		test(`${question}: a list longer than the screen scrolls to its last row, by finger or wheel`, async ({
+			page
+		}) => {
+			await longLists(page);
+			const sheet = await ask(page, question);
+			const row = sheet.getByRole('button', { name: last });
+			await expect(row).toBeAttached();
+			// Settled: a phone's sheet has finished rising.
+			await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
+			await expect(row).not.toBeInViewport();
+			const before = (await row.boundingBox())!.y;
+			await scrollDown(page, sheet);
+			// The list moved under the finger (or the wheel)…
+			await expect.poll(async () => (await row.boundingBox())!.y).toBeLessThan(before - 100);
+			// …and keeps moving until its last row is in sight, whole, to be pressed.
+			await expect(async () => {
+				await scrollDown(page, sheet);
+				await expect(row).toBeInViewport({ ratio: 1, timeout: 300 });
+			}).toPass({ timeout: 15_000 });
+		});
+	}
 });
 
 test('a sheet is modal: focus moves in and stays, Escape closes it and gives it back', async ({
