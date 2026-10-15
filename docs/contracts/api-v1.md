@@ -349,7 +349,7 @@ the day it was taken; each `filter` carries `guessed_date: false` for that reaso
 
 ## Albums
 
-| GET | `/api/albums` | – | `AlbumSummary[]` = `{id, title, description, cover:{url}|null, count, owner_id, role:"owner"|"editor"|"viewer", updated_at}` |
+| GET | `/api/albums` | – | `AlbumSummary[]` = `{id, title, description, cover:AlbumCover|null, count, owner_id, role:"owner"|"editor"|"viewer", updated_at}`. `AlbumCover` (v1.12) = `{asset_id, url, preview_url, width, height}`: `url` the thumbnail, `preview_url` the large picture (the thumbnail stands in until it is made), `width`/`height` the photo as shown, after its edits (null when unknown) |
 |---|---|---|---|
 | POST | `/api/albums` | `{title, description?, asset_ids?}` | `201 AlbumSummary` |
 | GET | `/api/albums/{id}` | – | `AlbumSummary + {items: AssetOut[]}` in album order |
@@ -663,3 +663,13 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Look | New field `homeSections` (see "Look" above). `PUT /api/me/look` takes it as well as `mode`, from every role. | `Look.homeSections`, `api.setMyHome`; You has "Home shows, in this order" (a switch and Move up per block); the admin's look form has the same list; Home draws the chosen blocks in their order. |
+
+---
+
+# v1.12 changes (album cover at preview size, Flight UI)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Albums | `AlbumSummary.cover` gains `asset_id`, `preview_url`, `width`, `height` (see "Albums" above); `url` stays the thumbnail. | `AlbumCover`; a hero uses `cover.preview_url` and the size for its frame instead of rewriting the thumbnail URL. |

@@ -323,6 +323,19 @@ describe('with seeded users', () => {
 		expect((await api.album(album.id)).count).toBe(2);
 	});
 
+	it("names an album's cover photo with its size and preview", async () => {
+		const api = await signedIn();
+		const [a] = (await api.assets({}, null, 1)).items;
+		const album = await api.createAlbum({ title: 'Hero', asset_ids: [a.id] });
+		expect(album.cover).toEqual({
+			asset_id: a.id,
+			url: a.thumb?.url,
+			preview_url: `/api/assets/${a.id}/preview?v=0`,
+			width: a.width,
+			height: a.height
+		});
+	});
+
 	it('estimates and streams a ZIP download', async () => {
 		const api = await signedIn();
 		const ids = (await api.assets({}, null, 2)).items.map((a) => a.id);

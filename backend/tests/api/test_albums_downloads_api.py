@@ -77,6 +77,25 @@ def test_album_lifecycle(admin: TestClient, ids: list[int]) -> None:
     assert admin.get(f"/api/assets/{ids[0]}").status_code == 200, "photos stay"
 
 
+def test_album_cover_names_its_photo_size_and_preview(admin: TestClient, ids: list[int]) -> None:
+    album = admin.post("/api/albums", json={"title": "Hero", "asset_ids": [ids[0]]}).json()
+    assert album["cover"] == {
+        "asset_id": ids[0],
+        "url": f"/api/assets/{ids[0]}/thumb?v=0",
+        "preview_url": f"/api/assets/{ids[0]}/preview?v=0",
+        "width": 400,
+        "height": 300,
+    }
+    crop: dict[str, object] = {"rotate": 90, "flip_horizontal": False, "flip_vertical": False}
+    crop |= {"straighten": 0.0, "crop": {"x": 0, "y": 0, "w": 1, "h": 0.5}}
+    assert admin.put(f"/api/assets/{ids[0]}/edit", json=crop).is_success
+    [listed] = [a for a in admin.get("/api/albums").json() if a["id"] == album["id"]]
+    cover = listed["cover"]
+    assert (cover["width"], cover["height"]) == (300, 200), "the size as shown, after the edit"
+    assert cover["preview_url"] == f"/api/assets/{ids[0]}/preview?v=1"
+    assert admin.get(cover["preview_url"]).status_code == 200
+
+
 def test_members_and_roles(admin: TestClient, ids: list[int]) -> None:
     lea, tom, gus = add_user(admin, "lea"), add_user(admin, "tom"), add_user(admin, "gus", "guest")
     tom_id, gus_id = user_id_of(admin, "tom"), user_id_of(admin, "gus")

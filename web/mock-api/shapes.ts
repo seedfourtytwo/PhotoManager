@@ -1,5 +1,5 @@
 /** Photos and albums as the API sends them to one user. */
-import type { AlbumSummary, AssetDetail, AssetOut } from '../src/lib/api/types.ts';
+import type { AlbumCover, AlbumSummary, AssetDetail, AssetOut } from '../src/lib/api/types.ts';
 import { live, setFor, type AccessHelpers } from './access.ts';
 import { editedSize } from './images.ts';
 import { displayName } from './names.ts';
@@ -57,6 +57,17 @@ export function shapeHelpers(h: World & AccessHelpers) {
 		};
 	}
 
+	function albumCover(a: MockAsset): AlbumCover {
+		const size = editedSize(a);
+		return {
+			asset_id: a.id,
+			url: `/api/assets/${a.id}/thumb?v=${a.edit_version}`,
+			preview_url: `/api/assets/${a.id}/preview?v=${a.edit_version}`,
+			width: size.width,
+			height: size.height
+		};
+	}
+
 	function albumSummary(user: MockUser, album: MockAlbum): AlbumSummary {
 		const items = album.items
 			.map((id) => h.state().assets.find((a) => a.id === id && live(a)))
@@ -66,7 +77,7 @@ export function shapeHelpers(h: World & AccessHelpers) {
 			id: album.id,
 			title: album.title,
 			description: album.description,
-			cover: cover ? { url: `/api/assets/${cover.id}/thumb?v=${cover.edit_version}` } : null,
+			cover: cover ? albumCover(cover) : null,
 			count: items.length,
 			owner_id: album.owner_id,
 			role: h.albumRole(user, album) ?? 'viewer',
