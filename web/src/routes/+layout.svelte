@@ -1,8 +1,8 @@
 <script lang="ts">
 	import '$lib/tokens.css';
 	import { onMount, untrack } from 'svelte';
-	import { afterNavigate, goto, onNavigate } from '$app/navigation';
-	import { page } from '$app/state';
+	import { afterNavigate, beforeNavigate, goto, onNavigate } from '$app/navigation';
+	import { page, updated } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Nav from '$lib/components/Nav.svelte';
 	import InstallTip from '$lib/components/InstallTip.svelte';
@@ -17,6 +17,7 @@
 	} from '$lib/app.svelte';
 	import { look } from '$lib/look';
 	import { cachedOwner } from '$lib/look/cache';
+	import { leaveFor } from '$lib/fresh-build';
 	import { dropBadPhotoParam } from '$lib/loupe.svelte';
 	import { onModalChange } from '$lib/modal';
 	import { movePage } from '$lib/motion';
@@ -27,6 +28,12 @@
 	let { children } = $props();
 
 	const bare = $derived(isPublicRoute(page.url.pathname));
+
+	// A newer build is out (fresh-build.ts): the next page loads in full, in that build.
+	beforeNavigate((navigation) => {
+		const url = leaveFor(updated.current, navigation);
+		if (url) location.href = url.href;
+	});
 
 	afterNavigate(({ to }) => {
 		if (to) dropBadPhotoParam(to.url);

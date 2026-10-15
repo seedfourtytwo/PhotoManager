@@ -11,7 +11,9 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter({ fallback: 'index.html' })
+			adapter: adapter({ fallback: 'index.html' }),
+			// Notice a deploy while a tab is open (src/lib/fresh-build.ts).
+			version: { pollInterval: 5 * 60_000 }
 		})
 	],
 	server: {
