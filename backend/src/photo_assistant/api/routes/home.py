@@ -1,4 +1,5 @@
-"""Home (issue 54): on this day, memories and what is new, for the signed-in account."""
+"""Home (issue 54): on this day, photos to rediscover, memories, the years and what is new, for
+the signed-in account."""
 
 from datetime import date
 from typing import Literal
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep
 from photo_assistant.api.schemas import AssetOut, SourceCount
 from photo_assistant.app.home import HomePage, home_page
+from photo_assistant.domain.memories import Memory
 
 router = APIRouter(prefix="/api", tags=["home"], dependencies=LOGGED_IN)
 
@@ -56,8 +58,22 @@ class NewOut(BaseModel):
 
 class HomeOut(BaseModel):
     on_this_day: OnThisDayOut | None
+    rediscover: list[AssetOut]  # the one to show large first
     memories: list[MemoryOut]
+    years: list[MemoryOut]  # a memory each: the whole year
     new: NewOut
+
+
+def _memory_out(m: Memory, shown: dict[int, AssetOut]) -> MemoryOut:
+    return MemoryOut(
+        key=m.key,
+        title=m.title,
+        from_day=m.first_day,
+        to_day=m.last_day,
+        count=m.count,
+        cover=shown[m.cover_id],
+        filter=HomeFilter(from_day=m.first_day, to_day=m.last_day),
+    )
 
 
 def _home_out(page: HomePage) -> HomeOut:
@@ -76,18 +92,9 @@ def _home_out(page: HomePage) -> HomeOut:
             people=[PersonRef(id=i, name=n) for i, n in page.people],
             filter=HomeFilter(from_day=day.first_day, to_day=day.last_day),
         ),
-        memories=[
-            MemoryOut(
-                key=m.key,
-                title=m.title,
-                from_day=m.first_day,
-                to_day=m.last_day,
-                count=m.count,
-                cover=shown[m.cover_id],
-                filter=HomeFilter(from_day=m.first_day, to_day=m.last_day),
-            )
-            for m in page.memories
-        ],
+        rediscover=[shown[i] for i in page.rediscover if i in shown],
+        memories=[_memory_out(m, shown) for m in page.memories],
+        years=[_memory_out(m, shown) for m in page.years],
         new=NewOut(
             count=page.arrivals.count,
             days=page.days,

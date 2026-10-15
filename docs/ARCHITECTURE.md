@@ -328,8 +328,14 @@ days either side) and `domain/memories.py` (home is the city with the most photo
 away from it split on a gap of more than two days or a change of city, 21 days at most, ten
 photos at least; a calendar month with twenty photos at home is a memory too, so a family
 that takes photos every day does not get one endless trip; the two newest, then a page of
-the others that turns each day). `arrivals` gives the photos imported in the last
-seven days. One `views_by_ids` fetches the covers and newest arrivals as `AssetOut`, and
+the others that turns each day), `domain/rediscover.py` (a dozen photos across the years,
+one month of each year in turn, a favourite winning its month, a new dozen each day, the last
+30 days left out) and `domain/years.py` (each year with ten photos as a memory of the whole
+year). The last two find months and years by bisection over the time-ordered moments, so they
+cost a few hundred look-ups however large the library is. A library with no real date reads
+its moments a second time with the guessed ones (`moments(viewer, guessed=True)`), for
+Rediscover only. `arrivals` gives the photos imported in the last seven days. One
+`views_by_ids` fetches the covers, the picks and the newest arrivals as `AssetOut`, and
 the people on "on this day" come from `People.list_all` over its photos. "Today" is the
 server's local date of the clock passed in, so tests fix it. Each block carries the
 `/api/assets` filters (`from`, `to`, `guessed_date=false`) that list exactly its photos.

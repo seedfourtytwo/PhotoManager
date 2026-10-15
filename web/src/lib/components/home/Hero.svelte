@@ -1,27 +1,28 @@
 <script lang="ts">
-	import type { OnThisDay } from '$lib/api';
-	import { dayNote, previewOf, yearsAgo } from '$lib/home';
+	import type { AssetOut } from '$lib/api';
+	import { previewOf } from '$lib/home';
 	import { aspect } from '$lib/timeline';
 	import Icon from '../Icon.svelte';
 
-	/** Today in an earlier year: its cover whole, a title in plain words, where and with whom. Plays. */
-	type Props = { day: OnThisDay; onplay: () => void };
-	let { day, onplay }: Props = $props();
+	/**
+	 * The large photo of a block (On this day, Rediscover): the cover whole, a title in plain
+	 * words, one line under it. It plays the block's story.
+	 */
+	type Props = { cover: AssetOut; title: string; note: string; onplay: () => void };
+	let { cover, title, note, onplay }: Props = $props();
 </script>
 
-<section class="day" aria-label="On this day">
-	<button type="button" class="hero" onclick={onplay}>
-		<span class="frame" style:--ratio={aspect(day.cover)}>
-			<img src={previewOf(day.cover)} alt="" draggable="false" />
-			<span class="play" aria-hidden="true"><Icon name="play" /></span>
-		</span>
-		<span class="words">
-			<span class="visually-hidden">Play: </span>
-			<span class="title">{yearsAgo(day.years_ago, day.exact)}</span>
-			<span class="note">{dayNote(day)}</span>
-		</span>
-	</button>
-</section>
+<button type="button" class="hero" onclick={onplay}>
+	<span class="frame" style:--ratio={aspect(cover)}>
+		<img src={previewOf(cover)} alt="" draggable="false" />
+		<span class="play" aria-hidden="true"><Icon name="play" /></span>
+	</span>
+	<span class="words">
+		<span class="visually-hidden">Play: </span>
+		<span class="title">{title}</span>
+		{#if note}<span class="note">{note}</span>{/if}
+	</span>
+</button>
 
 <style>
 	.hero {
