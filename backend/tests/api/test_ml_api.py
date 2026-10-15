@@ -194,7 +194,7 @@ def test_a_place_name_in_the_words_narrows_like_the_facet(
     source = import_folder(admin, folder, "Trip")
     paris, home = (asset_id_of(admin, source, f"{n}.jpg") for n in ("paris", "home"))
     clip = _install_fake_clip(admin, {paris: (0.0, 1.0, 0.0), home: (1.0, 0.0, 0.0)})
-    clip.texts["evening"] = (1.0, 0.0, 0.0)
+    clip.texts["evening in"] = (1.0, 0.0, 0.0)
     body = admin.get("/api/search", params={"q": "evening in paris"}).json()
     assert body["facets"] == [{"name": "place", "value": "Paris"}]
     assert (body["text"], _ids(body)) == ("evening in", [paris])
