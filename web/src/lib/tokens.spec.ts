@@ -12,15 +12,16 @@ const album = blocks.get(":root[data-look='album']") ?? {};
 describe('shape and motion tokens', () => {
 	it('uses the Safelight shape by default', () => {
 		expect(root).toMatchObject({
-			'--r-1': '12px',
-			'--r-2': '20px',
+			'--r-1': '14px',
+			'--r-2': '28px',
+			'--r-card': 'max(0px, calc(var(--r-2) - 4px))',
 			'--r-pill': '999px',
 			'--check-radius': '4px',
 			'--gutter': '2px',
 			'--fine': '2px',
 			'--motion': '200ms',
 			'--motion-sheet': '380ms',
-			'--press': '120ms',
+			'--press': '100ms',
 			'--ease-sheet': 'cubic-bezier(0.32, 0.72, 0, 1)'
 		});
 	});
@@ -38,8 +39,33 @@ describe('shape and motion tokens', () => {
 describe('type', () => {
 	// One family for everything (DESIGN_PRINCIPLES §2): figures stay tabular, nothing is mono.
 	it('reads and shows data in the same face', () => {
-		expect(root['--font-ui']).toMatch(/^'Atkinson Hyperlegible Next'/);
+		expect(root['--font-ui']).toMatch(/^'Inter'/);
 		expect(root['--font-data']).toBe('var(--font-ui)');
+	});
+	it('keeps Atkinson Hyperlegible Next as the Larger text face', () => {
+		expect(root['--font-large']).toMatch(/^'Atkinson Hyperlegible Next'/);
+	});
+	// The screens move to the new scale one slice at a time: until then each old name is the
+	// nearest new size, so nothing is left without a value.
+	it.each([
+		['--fs-12', '--fs-13'],
+		['--fs-14', '--fs-15'],
+		['--fs-16', '--fs-17'],
+		['--fs-20', '--fs-22'],
+		['--fs-28', '--fs-34'],
+		['--fs-40', '--fs-display']
+	])('keeps the old size %s as an alias of %s', (old, now) => {
+		expect(root[old]).toBe(`var(${now})`);
+		expect(root[now]).toMatch(/^[\d.]+rem$/);
+	});
+	it('tracks large titles tighter, and not at all in the Album serif', () => {
+		expect(root).toMatchObject({
+			'--track-22': '-0.015em',
+			'--track-34': '-0.022em',
+			'--track-display': '-0.03em',
+			'--track-eyebrow': '0.08em'
+		});
+		expect(album).toMatchObject({ '--track-22': '0', '--track-34': '0', '--track-display': '0' });
 	});
 });
 
@@ -50,8 +76,8 @@ describe('the root text size', () => {
 	// so every rem token renders at the pixels the design table states. A size in px there
 	// would overrule the reader's setting.
 	it("is the browser's size times the look's text dial, never a size in pixels", () => {
-		expect(root['--fs-16']).toBe('1rem');
-		expect(size).toBe('calc(var(--fs-16) * var(--text-scale, 1))');
+		expect(root['--root']).toBe('1rem');
+		expect(size).toBe('calc(var(--root) * var(--text-scale, 1))');
 	});
 	it('keeps the laptop side column at 224 px: 14 rem of a 16 px root', () => {
 		expect(root['--margin']).toBe('14rem');
@@ -81,7 +107,8 @@ describe('glass', () => {
 		expect(rules.get(`${canBlur} | .glass`)).toMatchObject({
 			background: 'var(--glass)',
 			'-webkit-backdrop-filter': 'var(--blur)',
-			'backdrop-filter': 'var(--blur)'
+			'backdrop-filter': 'var(--blur)',
+			'box-shadow': 'var(--glass-edge)'
 		});
 	});
 	it('is solid where the browser cannot blur', () => {

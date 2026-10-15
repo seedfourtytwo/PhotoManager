@@ -77,13 +77,13 @@ test('type and space render at the sizes the design table states', async ({ page
 	const label = page.getByRole('heading', { name: 'Look', level: 3 }).locator('..');
 
 	expect(await px(page.locator('html'), 'fontSize')).toBe(16); // 1rem: the browser's own size
-	expect(await px(line, 'fontSize')).toBe(14); // --fs-14
-	expect(await px(page.getByText(/^Library server/), 'fontSize')).toBe(12); // .small, --fs-12
-	expect(await px(page.getByRole('heading', { name: ADMIN.name, level: 1 }), 'fontSize')).toBe(28);
+	expect(await px(line, 'fontSize')).toBe(15); // --fs-15
+	expect(await px(page.getByText(/^Library server/), 'fontSize')).toBe(13); // .small, --fs-13
+	expect(await px(page.getByRole('heading', { name: ADMIN.name, level: 1 }), 'fontSize')).toBe(34);
 	expect(await px(label, 'marginTop')).toBe(24); // --s-5
 	await page.getByRole('button', { name: 'Change PIN' }).click();
 	const sheetTitle = page.getByRole('heading', { name: 'Change PIN', level: 2 });
-	expect(await px(sheetTitle, 'fontSize')).toBe(20);
+	expect(await px(sheetTitle, 'fontSize')).toBe(22);
 });
 
 test('the text dial multiplies the table: 125 % and 90 % of every size', async ({ page }) => {
@@ -94,9 +94,9 @@ test('the text dial multiplies the table: 125 % and 90 % of every size', async (
 	// After a reload the stylesheet arrives a moment after the page: the sizes are polled.
 	await setTextScale(page, 1.25);
 	await expect.poll(() => px(page.locator('html'), 'fontSize')).toBeCloseTo(20, 1);
-	await expect.poll(() => px(title, 'fontSize')).toBeCloseTo(35, 1);
+	await expect.poll(() => px(title, 'fontSize')).toBeCloseTo(42.5, 1);
 
 	await setTextScale(page, 0.9);
 	await expect.poll(() => px(page.locator('html'), 'fontSize')).toBeCloseTo(14.4, 1);
-	await expect.poll(() => px(title, 'fontSize')).toBeCloseTo(25.2, 1);
+	await expect.poll(() => px(title, 'fontSize')).toBeCloseTo(30.6, 1);
 });

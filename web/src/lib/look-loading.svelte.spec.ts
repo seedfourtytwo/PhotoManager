@@ -298,8 +298,8 @@ describe('the look’s dials that the grid reads', () => {
 		expect(forgetOldDensity).not.toThrow();
 	});
 
-	it('the look’s photo gap is the grid gap; left to the theme it is 3', () => {
-		expect(settings.gap).toBe(3);
+	it('the look’s photo gap is the grid gap; left to Safelight it is 2', () => {
+		expect(settings.gap).toBe(2);
 		look.receive(parseLook({ photoGap: 0 }));
 		expect(settings.gap).toBe(0);
 		look.try(parseLook({ photoGap: 8 }), { id: 2, name: 'Donna' });

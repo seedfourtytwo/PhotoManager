@@ -10,8 +10,10 @@ body {
 	background: var(--bg);
 	color: var(--ink);
 	font-family: var(--font-ui);
-	font-size: var(--fs-14);
+	font-size: var(--fs-15);
 	line-height: var(--lh-ui);
+	/* Inter's optical size follows the type: text from 32 px up takes its Display shapes. */
+	font-optical-sizing: auto;
 	/* Dates and counts line up everywhere. */
 	font-variant-numeric: tabular-nums;
 	font-kerning: normal;
@@ -22,9 +24,9 @@ body {
 /* The root is the browser's own text size (1rem: 16 px unless the reader chose another) times
    the look's text-size dial (lib/look/apply.ts). Sizes and spaces are in rem, so the whole
    page follows it and a token renders at the pixels its name says; --target stays in pixels.
-   The interface text on it is the body's 14. */
+   The interface text on it is the body's 15. */
 html {
-	font-size: calc(var(--fs-16) * var(--text-scale, 1));
+	font-size: calc(var(--root) * var(--text-scale, 1));
 }
 
 ::selection {
@@ -47,20 +49,21 @@ h1,
 h2 {
 	font-family: var(--font-title);
 	font-weight: var(--title-weight);
-	font-optical-sizing: auto;
 }
 h1 {
-	font-size: var(--fs-28);
+	font-size: var(--fs-34);
+	letter-spacing: var(--track-34);
 }
 h2 {
-	font-size: var(--fs-20);
+	font-size: var(--fs-22);
+	letter-spacing: var(--track-22);
 }
 
 /* Group labels above a group of rows or fields: sentence case, secondary value. */
 h3 {
 	font-family: var(--font-ui);
-	font-size: var(--fs-14);
-	font-weight: 650;
+	font-size: var(--fs-13);
+	font-weight: 600;
 	color: var(--ink-2);
 }
 
