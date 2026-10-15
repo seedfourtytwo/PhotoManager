@@ -112,9 +112,14 @@ for (const [name, insets, size] of [
 	});
 }
 
-/** Where what scrolls in an element ends on the screen: the bottom of its scrolling area. */
+/**
+ * Where what scrolls in an element ends on the screen: the bottom of its scrolling area, inside
+ * its bottom border. (`clientHeight` is rounded to whole pixels; the box is not.)
+ */
 const scrollEnd = (scroller: Locator) =>
-	scroller.evaluate((e) => e.getBoundingClientRect().top + e.clientTop + e.clientHeight);
+	scroller.evaluate(
+		(e) => e.getBoundingClientRect().bottom - parseFloat(getComputedStyle(e).borderBottomWidth)
+	);
 
 // Opened from the Home Screen an iPhone 15 gives the page all of its screen, the home bar
 // included; Safari's own toolbar no longer covers that strip. Upright a filter or a dialog is a
