@@ -5,6 +5,9 @@ import themes from './themes.css?raw';
 import layout from '../routes/+layout.svelte?raw';
 import manifest from '../../static/manifest.webmanifest?raw';
 import favicon from './assets/favicon.svg?raw';
+import tokens from './tokens.css?raw';
+import utilities from './utilities.css?raw';
+import { readBlocks } from './testing/css-blocks';
 
 const safelightBg = /^:root\s*\{[^}]*--bg:\s*(#[0-9a-f]{6})/im.exec(themes)?.[1].toLowerCase();
 
@@ -53,7 +56,11 @@ describe('style guard', () => {
 
 	it('every font family ships its licence', () => {
 		const licences = readdirSync('static/fonts').filter((name) => name.endsWith('-OFL.txt'));
-		expect(licences.sort()).toEqual(['AtkinsonHyperlegibleNext-OFL.txt', 'Newsreader-OFL.txt']);
+		expect(licences.sort()).toEqual([
+			'AtkinsonHyperlegibleNext-OFL.txt',
+			'Inter-OFL.txt',
+			'Newsreader-OFL.txt'
+		]);
 	});
 
 	it('every source file is non-empty (a blanked stylesheet would pass the other guards)', () => {
@@ -64,18 +71,43 @@ describe('style guard', () => {
 		expect(empty).toEqual([]);
 	});
 
-	// C, 2026-10-14: no tracked text and no capitals; weight and size make the hierarchy.
-	it('no text is letter-spaced or set in capitals', () => {
+	// Flight (DESIGN_PRINCIPLES §1.3, 2026-10-15): tracking only through the --track-* tokens,
+	// declared in tokens.css alone; capitals only in .eyebrow; small capitals never.
+	it('text is letter-spaced only through a --track-* token', () => {
 		const offenders = Object.entries(sources).flatMap(([path, text]) =>
-			[
-				...text.matchAll(
-					/letter-spacing:\s*([^;}]+)|text-transform:\s*uppercase|font-variant(-caps)?:[^;}]*(small|all)-caps/g
-				)
-			]
-				.filter((m) => !m[1] || !/^(0|normal)\s*$/.test(m[1].trim()))
+			[...text.matchAll(/letter-spacing:\s*([^;}]+)/g)]
+				.filter((m) => !/^(0|normal|var\(--track-[a-z0-9-]+\))\s*$/.test(m[1].trim()))
 				.map((m) => `${path}: ${m[0]}`)
 		);
 		expect(offenders).toEqual([]);
+	});
+
+	it('the --track-* values are declared in tokens.css and nowhere else', () => {
+		const declares = Object.entries(sources)
+			.filter(([, text]) => /--track-[a-z0-9-]+\s*:/.test(text))
+			.map(([path]) => path);
+		expect(declares).toEqual(['/src/lib/tokens.css']);
+	});
+
+	it('capitals come only from .eyebrow, and small capitals never', () => {
+		const offenders = Object.entries(sources).flatMap(([path, text]) =>
+			[...text.matchAll(/text-transform:\s*uppercase|font-variant(-caps)?:[^;}]*(small|all)-caps/g)]
+				.filter((m) => path !== '/src/lib/utilities.css' || !m[0].startsWith('text-transform'))
+				.map((m) => `${path}: ${m[0]}`)
+		);
+		expect(offenders).toEqual([]);
+		const inUtilities = [...utilities.matchAll(/text-transform:\s*uppercase/g)].length;
+		expect(inUtilities).toBe(1);
+		expect(readBlocks(utilities, true).get('.eyebrow')?.['text-transform']).toBe('uppercase');
+	});
+
+	// The eyebrow is tiny: in rem, so the look's text dial still scales it.
+	it('the eyebrow is set at --fs-11, a size in rem', () => {
+		expect(readBlocks(utilities, true).get('.eyebrow')).toMatchObject({
+			'font-size': 'var(--fs-11)',
+			'letter-spacing': 'var(--track-eyebrow)'
+		});
+		expect(readBlocks(tokens).get(':root')?.['--fs-11']).toMatch(/^[\d.]+rem$/);
 	});
 
 	// Groups separate by space or by a seam of --fine (DESIGN_PRINCIPLES §2): no hairlines.
@@ -88,6 +120,19 @@ describe('style guard', () => {
 			].map((m) => `${path}: ${m[0]}`)
 		);
 		expect(lines).toEqual([]);
+	});
+
+	// Glass gets a 0.5 px edge (--glass-edge); no other component may draw one.
+	it('a 0.5 px hairline exists only as --glass-edge', () => {
+		const offenders = Object.entries(sources).flatMap(([path, text]) =>
+			text
+				.replace(/\/\*[\s\S]*?\*\//g, '')
+				.split(/[;{}]/)
+				.filter((declaration) => /(?<![\d.])0?\.5px\b/.test(declaration))
+				.filter((declaration) => !/^\s*--glass-edge\s*:/.test(declaration))
+				.map((declaration) => `${path}: ${declaration.trim()}`)
+		);
+		expect(offenders).toEqual([]);
 	});
 
 	it('the browser chrome colours equal the Safelight dark page colour', () => {

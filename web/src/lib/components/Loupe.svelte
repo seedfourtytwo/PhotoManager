@@ -97,9 +97,16 @@
 		if (focused instanceof HTMLButtonElement && focused.disabled) root?.focus();
 	});
 
-	function go(step: number) {
+	/** The photos have slid into place: the one `step` away is the open one. */
+	function stepped(step: number) {
 		const next = index + step;
 		if (next >= 0 && next < items.length) onindex(next);
+	}
+
+	/** A key or an edge button: the photos slide there, as for a swipe (PhotoStage). */
+	function go(step: -1 | 1) {
+		if (stage) stage.go(step);
+		else stepped(step);
 	}
 
 	// --- chrome: fades when idle, comes back on any touch, key or mouse movement ----------
@@ -188,8 +195,8 @@
 		if (gesture === 'tap') {
 			// It may be the first half of a double tap: the chrome waits to find out.
 			tapTimer = setTimeout(() => (wasIdle ? chrome.wake() : chrome.hide()), DOUBLE_TAP_MS);
-		} else if (gesture === 'next') go(1);
-		else if (gesture === 'previous') go(-1);
+		} else if (gesture === 'next') stepped(1);
+		else if (gesture === 'previous') stepped(-1);
 		else if (gesture === 'details') setInfo(true);
 		else if (gesture === 'close' && info) setInfo(false);
 		else if (gesture === 'close') onclose();

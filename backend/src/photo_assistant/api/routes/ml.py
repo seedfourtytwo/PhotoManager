@@ -22,7 +22,7 @@ from photo_assistant.api.deps import (
     require_view,
 )
 from photo_assistant.api.filters import FilterDep
-from photo_assistant.api.library_scopes import facet_candidates, matching_words
+from photo_assistant.api.library_scopes import facet_candidates, matching_words, named_photos
 from photo_assistant.api.routes.assets import IMMUTABLE
 from photo_assistant.api.schemas import AssetOut, Id
 from photo_assistant.api.services import Services
@@ -215,6 +215,22 @@ def _scored(
     ]
 
 
+def _by_meaning(
+    services: Services, text: str, candidates: list[int], named: list[int], limit: int
+) -> tuple[list[int], dict[int, float]]:
+    """The photos the words name (an album, a tag) first, ranked by meaning, then the closest
+    others. A named photo not analysed yet still comes, after the ranked ones, without a score."""
+    first = services.ml.search(text, named, len(named)) if named else []
+    scores = {h.asset_id: h.score for h in first}
+    order = list(scores) + [i for i in named if i not in scores]
+    shown = set(order)
+    for hit in services.ml.search(text, candidates, limit):
+        if hit.asset_id not in shown:
+            order.append(hit.asset_id)
+            scores[hit.asset_id] = hit.score
+    return order[:limit], scores
+
+
 # --- search ----------------------------------------------------------------------------------
 
 
@@ -226,7 +242,9 @@ def search(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> SearchOut:
     """``q`` as on the timeline, plus facets (``date:2023 person:Lea tag:beach place:… camera:…``).
-    Free text is ranked by CLIP when the model is installed, else matched as words."""
+    People and places named in the words narrow like their facets. Free text is ranked by CLIP
+    when the model is installed, photos in a named album or with a named tag first; else
+    matched as words."""
     parsed, narrowed, candidates = facet_candidates(services.repo, services.ml, viewer, f)
     facets = [FacetOut(name=k, value=v) for k, v in parsed.facets]
     text = parsed.text
@@ -237,13 +255,13 @@ def search(
     if not text:
         return out(_scored(services, viewer, candidates[:limit]), "filter")
     if _clip_ready(services):
+        named = named_photos(services.repo, services.ml, viewer, text, candidates)
         try:
-            hits = services.ml.search(text, candidates, limit)
+            ids, scores = _by_meaning(services, text, candidates, named, limit)
         except SearchUnavailableError as exc:
             detail = f"{MODELS_MISSING} ({exc})"
         else:
-            scores = {h.asset_id: h.score for h in hits}
-            return out(_scored(services, viewer, list(scores), scores), "semantic")
+            return out(_scored(services, viewer, ids, scores), "semantic")
     else:
         detail = MODELS_MISSING
     matching = matching_words(services.repo, viewer, narrowed, text)

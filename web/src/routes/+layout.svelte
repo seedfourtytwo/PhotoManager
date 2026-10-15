@@ -138,7 +138,7 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<link rel="manifest" href="/manifest.webmanifest" />
-	<meta name="theme-color" content="#0d0f12" />
+	<meta name="theme-color" content="#000000" />
 	<title>Photos</title>
 </svelte:head>
 

@@ -8,25 +8,27 @@
  * so any hue stays readable.
  */
 
-/* Safelight, dark: a darkroom; the amber of the safelight marks selection and focus. */
+/* Safelight, dark (Flight): true black, so photos float; the amber of the safelight marks
+   selection and focus. */
 :root {
-	--bg: #0d0f12;
-	--raised: #171a1f;
-	--ink: #f1f2f4;
-	--ink-2: #a3a9b3;
-	--ink-3: #6b717c;
-	--hairline: #262a31;
-	--tint: rgb(241 242 244 / 0.07);
-	--fill: #23272d;
+	--bg: #000000;
+	--raised: #111214;
+	--ink: #f5f5f7;
+	--ink-2: #a1a1a6;
+	--ink-3: #6e6e73;
+	--hairline: #1c1d20;
+	--tint: rgb(245 245 247 / 0.07);
+	--fill: #1c1d20;
 	--acc-l: 0.82;
 	--acc-c: 0.14;
 	--acc-h: 72;
 	--on-accent: #17110a;
-	--scrim: rgb(4 5 7 / 0.66);
-	--lift: 0 10px 30px rgb(0 0 0 / 0.38); /* what floats: menus, toasts, glass bars */
+	--scrim: rgb(0 0 0 / 0.6);
+	--lift: 0 20px 60px rgb(0 0 0 / 0.5); /* what floats: menus, toasts, glass bars */
+	--glass-edge: inset 0 0 0 0.5px rgb(255 255 255 / 0.12); /* the only edge glass gets */
 	--ok: #7bd3a0;
 	--fail: #ff7a6b;
-	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%230d0f12' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23000000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 	color-scheme: dark;
 
 	/* Marks drawn on a photo. A photo is neither theme nor mode, so these are set once, here,
@@ -34,6 +36,11 @@
 	   percent) for the shade that keeps it readable on any picture. */
 	--on-photo: #fff;
 	--on-photo-90: rgb(255 255 255 / 0.9); /* the crop frame */
+	--scrim-photo: linear-gradient(
+		to top,
+		rgb(0 0 0 / 0.72),
+		transparent 55%
+	); /* the one gradient: under words set on a photo */
 	--photo-shade-55: rgb(
 		0 0 0 / 0.55
 	); /* inside the empty selection circle; behind the favourite mark; what a crop cuts away */
@@ -42,44 +49,46 @@
 /* Safelight, light. */
 @media (prefers-color-scheme: light) {
 	:root:not([data-theme='dark']) {
-		--bg: #f2f3f5;
+		--bg: #f5f5f7;
 		--raised: #ffffff;
-		--ink: #14161a;
-		--ink-2: #565d68;
-		--ink-3: #8a909a;
-		--hairline: #dcdfe4;
-		--tint: rgb(20 22 26 / 0.06);
-		--fill: #e4e6ea;
+		--ink: #1d1d1f;
+		--ink-2: #636366; /* not #6e6e73: 4.15:1 on --fill */
+		--ink-3: #8e8e93;
+		--hairline: #e8e8ed;
+		--tint: rgb(29 29 31 / 0.06);
+		--fill: #e8e8ed;
 		--acc-l: 0.5;
 		--acc-c: 0.15;
 		--acc-h: 72;
 		--on-accent: #ffffff;
 		--scrim: rgb(30 34 40 / 0.38);
 		--lift: 0 10px 30px rgb(20 24 30 / 0.14); /* what floats: menus, toasts, glass bars */
+		--glass-edge: inset 0 0 0 0.5px rgb(0 0 0 / 0.06);
 		--ok: #1f7a4a;
 		--fail: #b3261e;
-		--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f2f3f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+		--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f5f7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 		color-scheme: light;
 	}
 }
 :root[data-theme='light'] {
-	--bg: #f2f3f5;
+	--bg: #f5f5f7;
 	--raised: #ffffff;
-	--ink: #14161a;
-	--ink-2: #565d68;
-	--ink-3: #8a909a;
-	--hairline: #dcdfe4;
-	--tint: rgb(20 22 26 / 0.06);
-	--fill: #e4e6ea;
+	--ink: #1d1d1f;
+	--ink-2: #636366; /* not #6e6e73: 4.15:1 on --fill */
+	--ink-3: #8e8e93;
+	--hairline: #e8e8ed;
+	--tint: rgb(29 29 31 / 0.06);
+	--fill: #e8e8ed;
 	--acc-l: 0.5;
 	--acc-c: 0.15;
 	--acc-h: 72;
 	--on-accent: #ffffff;
 	--scrim: rgb(30 34 40 / 0.38);
 	--lift: 0 10px 30px rgb(20 24 30 / 0.14); /* what floats: menus, toasts, glass bars */
+	--glass-edge: inset 0 0 0 0.5px rgb(0 0 0 / 0.06);
 	--ok: #1f7a4a;
 	--fail: #b3261e;
-	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f2f3f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f5f7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 	color-scheme: light;
 }
 
@@ -99,6 +108,7 @@
 	--on-accent: #181817;
 	--scrim: rgb(10 10 9 / 0.66);
 	--lift: 0 10px 30px rgb(0 0 0 / 0.38); /* what floats: menus, toasts, glass bars */
+	--glass-edge: inset 0 0 0 0.5px rgb(255 255 255 / 0.12);
 	--ok: #7bd3a0;
 	--fail: #ff7a6b;
 	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23181817' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -122,6 +132,7 @@
 		--on-accent: #ffffff;
 		--scrim: rgb(40 38 34 / 0.38);
 		--lift: 0 10px 30px rgb(20 24 30 / 0.14); /* what floats: menus, toasts, glass bars */
+		--glass-edge: inset 0 0 0 0.5px rgb(0 0 0 / 0.06);
 		--ok: #1f7a4a;
 		--fail: #b3261e;
 		--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f4f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -143,6 +154,7 @@
 	--on-accent: #ffffff;
 	--scrim: rgb(40 38 34 / 0.38);
 	--lift: 0 10px 30px rgb(20 24 30 / 0.14); /* what floats: menus, toasts, glass bars */
+	--glass-edge: inset 0 0 0 0.5px rgb(0 0 0 / 0.06);
 	--ok: #1f7a4a;
 	--fail: #b3261e;
 	--check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23f5f4f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");

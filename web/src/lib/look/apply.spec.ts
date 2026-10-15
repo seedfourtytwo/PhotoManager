@@ -57,16 +57,16 @@ describe('rootLook', () => {
 		expect(rootLook(look).variables).toEqual({
 			'--acc-h': '200',
 			'--r-1': '6px',
-			'--r-2': '10px',
+			'--r-2': '12px',
 			'--gutter': '4px',
 			'--text-scale': '1.15'
 		});
 	});
 
-	it('corners move both radii, 12 gives the Safelight pair and zero is square', () => {
-		expect(rootLook(parseLook({ corners: 12 })).variables).toMatchObject({
-			'--r-1': '12px',
-			'--r-2': '20px'
+	it('corners move both radii, 14 gives the Safelight pair and zero is square', () => {
+		expect(rootLook(parseLook({ corners: 14 })).variables).toMatchObject({
+			'--r-1': '14px',
+			'--r-2': '28px'
 		});
 		expect(rootLook(parseLook({ corners: 0 })).variables).toMatchObject({
 			'--r-1': '0px',
@@ -97,15 +97,16 @@ describe('themeDials (where a dial stands while it is left to the theme)', () =>
 		['safelight', 'light', ":root[data-theme='light']", ':root'],
 		['album', 'dark', ":root[data-look='album']", ":root[data-look='album']"],
 		['album', 'light', ":root[data-look='album'][data-theme='light']", ":root[data-look='album']"]
-	])('%s %s has the accent and corners of the stylesheets', (theme, mode, colour, shape) => {
-		expect(themeDials(theme, mode)).toMatchObject({
+	])('%s %s has the accent, corners and gap of the stylesheets', (theme, mode, colour, shape) => {
+		expect(themeDials(theme, mode)).toEqual({
 			accentHue: Number(colours.get(colour)?.['--acc-h']),
-			corners: parseInt(shapes.get(shape)?.['--r-1'] ?? '')
+			corners: parseInt(shapes.get(shape)?.['--r-1'] ?? ''),
+			photoGap: parseInt(shapes.get(shape)?.['--gutter'] ?? shapes.get(':root')?.['--gutter'] ?? '')
 		});
 	});
 
 	it('differs between the themes, so one theme’s values cannot stand in for the other’s', () => {
-		expect(themeDials('safelight', 'dark')).toEqual({ accentHue: 72, corners: 12, photoGap: 3 });
+		expect(themeDials('safelight', 'dark')).toEqual({ accentHue: 72, corners: 14, photoGap: 2 });
 		expect(themeDials('album', 'dark')).toEqual({ accentHue: 281, corners: 3, photoGap: 3 });
 		expect(themeDials('album', 'light').accentHue).toBe(275);
 	});

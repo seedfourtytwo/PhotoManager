@@ -3,9 +3,14 @@
 Facets become SQL filters on the candidate set; the free text goes to the CLIP text encoder
 (ARCHITECTURE §4 Search). Anything that isn't a well-formed known facet stays in the text, so
 "dinner at 19:30" is never mangled.
+
+Names the library knows (people, places, albums, tags) are also spotted in the plain words, so
+"Lea at the beach" needs no ``person:``.
 """
 
 import re
+import unicodedata
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date
 
@@ -48,6 +53,54 @@ def parse_query(q: str) -> ParsedQuery:
         else:
             facets.append(facet)
     return ParsedQuery(" ".join(words), tuple(facets))
+
+
+@dataclass(frozen=True, slots=True)
+class Spotted:
+    text: str  # the words no name used
+    names: tuple[tuple[str, str], ...]  # (kind, the name as the library spells it), as typed
+
+
+_EDGES = re.compile(r"^[\W_]+|[\W_]+$")
+
+
+def _key(word: str) -> str:
+    plain = "".join(c for c in unicodedata.normalize("NFKD", word) if not unicodedata.combining(c))
+    return _EDGES.sub("", plain.casefold())
+
+
+def name_key(name: str) -> tuple[str, ...]:
+    """A name as names are compared: whole words, no case, no accents, no punctuation round them."""
+    return tuple(k for k in map(_key, name.split()) if k)
+
+
+def spot_names(text: str, known: Mapping[str, Iterable[str]]) -> Spotted:
+    """The known names that appear as whole words in ``text``, and the words left without them.
+    The longest name wins; between kinds with the same name, the kind listed first."""
+    names: dict[tuple[str, ...], tuple[str, str]] = {}
+    for kind, spellings in known.items():
+        for name in spellings:
+            if key := name_key(name):
+                names.setdefault(key, (kind, name))
+    words = text.split()
+    tokens = [(i, k) for i, word in enumerate(words) if (k := _key(word))]
+    longest = max(map(len, names), default=0)
+    found: list[tuple[str, str]] = []
+    used: set[int] = set()
+    t = 0
+    while t < len(tokens):
+        for n in range(min(longest, len(tokens) - t), 0, -1):
+            hit = names.get(tuple(k for _, k in tokens[t : t + n]))
+            if hit is not None:
+                if hit not in found:
+                    found.append(hit)
+                used.update(range(tokens[t][0], tokens[t + n - 1][0] + 1))
+                t += n
+                break
+        else:
+            t += 1
+    left = " ".join(word for i, word in enumerate(words) if i not in used)
+    return Spotted(left, tuple(found))
 
 
 class InvalidFacetError(DomainError):

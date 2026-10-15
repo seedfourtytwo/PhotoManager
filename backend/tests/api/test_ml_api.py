@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from photo_assistant.app.search import SemanticSearch, SimilarPhotos
 from photo_assistant.domain.faces import BoundingBox, Face
+from photo_assistant.domain.tags import TagScore
 from tests.api.conftest import add_user, asset_id_of, import_folder, refusal, services_of
 from tests.ml.fakes import FakeClip
 from tests.ml.test_face_adapters import buffalo
@@ -142,6 +143,107 @@ def test_similar_photos_with_the_model(admin: TestClient, library: dict[str, int
     assert body[0]["id"] == library["snow"]
     garden = admin.get(f"/api/assets/{library['garden']}/similar")
     assert garden.status_code == 409, "not analysed yet"
+
+
+# --- names in the words ---------------------------------------------------------------------
+
+
+def _name_person(admin: TestClient, name: str, *asset_ids: int) -> int:
+    store = services_of(admin).ml.store
+    face = Face(BoundingBox(0.1, 0.1, 0.2, 0.2), 0.9, ((0.5, 0.5),) * 5, (1.0, 0.0, 0.0))
+    first, *others = (store.replace_faces(i, "f", [face])[0] for i in asset_ids)
+    person = store.create_person(first)
+    for face_id in others:
+        store.assign_face(face_id, person)
+    admin.patch(f"/api/people/{person}", json={"name": name})
+    return person
+
+
+def test_a_persons_name_in_the_words_narrows_like_the_facet(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    clip = _install_fake_clip(
+        admin,
+        {library["beach"]: (0.0, 1.0, 0.0), library["garden"]: (1.0, 0.0, 0.0),
+         library["snow"]: (1.0, 0.0, 0.0)},
+    )  # fmt: skip
+    clip.texts["sea"] = (1.0, 0.0, 0.0)
+    _name_person(admin, "Léa", library["beach"], library["garden"])
+    body = admin.get("/api/search", params={"q": "lea sea"}).json()
+    assert body["mode"] == "semantic" and body["text"] == "sea"
+    assert body["facets"] == [{"name": "person", "value": "Léa"}]
+    assert _ids(body) == [library["garden"], library["beach"]], "Léa's photos, sea first"
+
+
+def test_without_models_a_persons_name_alone_lists_their_photos(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    _name_person(admin, "Lea Martin", library["snow"])
+    body = admin.get("/api/search", params={"q": "Lea Martin"}).json()
+    assert (body["mode"], _ids(body)) == ("filter", [library["snow"]])
+    words = admin.get("/api/search", params={"q": "lea martin snow"}).json()
+    assert (words["mode"], words["text"], _ids(words)) == ("text", "snow", [library["snow"]])
+
+
+def test_a_place_name_in_the_words_narrows_like_the_facet(
+    admin: TestClient, tmp_path: Path
+) -> None:
+    folder = tmp_path / "trip"
+    write_photo(folder / "paris.jpg", seed=7, gps=(48.8566, 2.3522))
+    write_photo(folder / "home.jpg", seed=8)
+    source = import_folder(admin, folder, "Trip")
+    paris, home = (asset_id_of(admin, source, f"{n}.jpg") for n in ("paris", "home"))
+    clip = _install_fake_clip(admin, {paris: (0.0, 1.0, 0.0), home: (1.0, 0.0, 0.0)})
+    clip.texts["evening in"] = (1.0, 0.0, 0.0)
+    body = admin.get("/api/search", params={"q": "evening in paris"}).json()
+    assert body["facets"] == [{"name": "place", "value": "Paris"}]
+    assert (body["text"], _ids(body)) == ("evening in", [paris])
+
+
+def test_photos_in_an_album_named_in_the_words_come_first(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    clip = _install_fake_clip(
+        admin,
+        {library["beach"]: (1.0, 0.0, 0.0), library["garden"]: (0.0, 1.0, 0.0),
+         library["snow"]: (0.6, 0.8, 0.0)},
+    )  # fmt: skip
+    clip.texts["summer holidays"] = (1.0, 0.0, 0.0)
+    album = [library["garden"], library["snow"]]
+    admin.post("/api/albums", json={"title": "Summer Holidays", "asset_ids": album})
+    body = admin.get("/api/search", params={"q": "summer holidays"}).json()
+    assert body["mode"] == "semantic" and body["facets"] == []
+    assert _ids(body) == [library["snow"], library["garden"], library["beach"]]
+    first = admin.get("/api/search", params={"q": "summer holidays", "limit": 1}).json()
+    assert _ids(first) == [library["snow"]]
+
+
+def test_photos_with_a_tag_named_in_the_words_come_first(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    clip = _install_fake_clip(
+        admin, {library["beach"]: (1.0, 0.0, 0.0), library["snow"]: (0.0, 1.0, 0.0)}
+    )
+    clip.texts["snow"] = (1.0, 0.0, 0.0)
+    services_of(admin).ml.store.replace_model_tags(
+        library["snow"], clip.name, [TagScore("snow", 0.1)], False
+    )
+    body = admin.get("/api/search", params={"q": "snow"}).json()
+    assert _ids(body) == [library["snow"], library["beach"]]
+
+
+def test_a_named_photo_not_analysed_yet_is_still_found(
+    admin: TestClient, library: dict[str, int]
+) -> None:
+    clip = _install_fake_clip(
+        admin, {library["beach"]: (1.0, 0.0, 0.0), library["snow"]: (0.0, 1.0, 0.0)}
+    )
+    clip.texts["trip"] = (1.0, 0.0, 0.0)
+    trip = [library["garden"], library["snow"]]
+    admin.post("/api/albums", json={"title": "Trip", "asset_ids": trip})
+    body = admin.get("/api/search", params={"q": "trip"}).json()
+    assert _ids(body) == [library["snow"], library["garden"], library["beach"]]
+    assert [i["score"] is None for i in body["items"]] == [False, True, False]
 
 
 def test_people_rename_merge_split_and_their_photos(

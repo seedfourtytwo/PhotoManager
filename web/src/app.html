@@ -47,7 +47,7 @@
 				if (hue !== null) root.style.setProperty('--acc-h', String(hue));
 				if (corners !== null) {
 					root.style.setProperty('--r-1', corners + 'px');
-					root.style.setProperty('--r-2', Math.round((corners * 5) / 3) + 'px');
+					root.style.setProperty('--r-2', corners * 2 + 'px');
 				}
 				if (gap !== null) root.style.setProperty('--gutter', gap + 'px');
 				if (scale !== null) scale = whole(scale * 100) / 100; // two decimals

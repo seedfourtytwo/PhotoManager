@@ -322,7 +322,7 @@ describe('LookForm', () => {
 		render(LookForm, { user: donna, onclose: () => {} });
 		await form().getByRole('combobox', { name: 'Theme', exact: true }).selectOptions('safelight');
 		await expect.element(form().getByRole('slider', { name: 'Accent hue' })).toHaveValue('72');
-		await expect.element(form().getByRole('slider', { name: 'Corners' })).toHaveValue('12');
+		await expect.element(form().getByRole('slider', { name: 'Corners' })).toHaveValue('14');
 	});
 });
 

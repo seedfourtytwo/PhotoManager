@@ -93,7 +93,7 @@ describe('the first-paint script', () => {
 		const storage = storageOf(raw({ theme: 'album', mode: 'sepia', corners: 6, accentHue: 720 }));
 		expect(firstPaint(storage)).toEqual({
 			attributes: { 'data-look': 'album', 'data-theme': 'dark' },
-			variables: { '--acc-h': '360', '--r-1': '6px', '--r-2': '10px' }
+			variables: { '--acc-h': '360', '--r-1': '6px', '--r-2': '12px' }
 		});
 	});
 
