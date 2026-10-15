@@ -4,7 +4,17 @@
  * a phone with a notch reports them.
  */
 import type { Locator, Page } from '@playwright/test';
-import { expect, follow, isPhone, loupe, resetMock, signIn, test } from './helpers.ts';
+import {
+	expect,
+	follow,
+	isPhone,
+	loupe,
+	resetMock,
+	selectTiles,
+	selectionAction,
+	signIn,
+	test
+} from './helpers.ts';
 
 type Insets = { top: number; right: number; bottom: number; left: number };
 const UPRIGHT: Insets = { top: 47, right: 0, bottom: 34, left: 0 };
@@ -102,22 +112,35 @@ for (const [name, insets, size] of [
 	});
 }
 
+/**
+ * Where what scrolls in an element ends on the screen: the bottom of its scrolling area, inside
+ * its bottom border. (`clientHeight` is rounded to whole pixels; the box is not.)
+ */
+const scrollEnd = (scroller: Locator) =>
+	scroller.evaluate(
+		(e) => e.getBoundingClientRect().bottom - parseFloat(getComputedStyle(e).borderBottomWidth)
+	);
+
 // Opened from the Home Screen an iPhone 15 gives the page all of its screen, the home bar
-// included; Safari's own toolbar no longer covers that strip. Upright the filter is a bottom
-// sheet, on its side a sheet hanging under its chip.
+// included; Safari's own toolbar no longer covers that strip. Upright a filter or a dialog is a
+// bottom sheet; on its side a filter hangs under its chip and a dialog sits in the middle.
 for (const [name, insets, size] of [
 	['upright', { top: 59, right: 0, bottom: 34, left: 0 }, { width: 393, height: 852 }],
 	['on its side', { top: 0, right: 59, bottom: 21, left: 59 }, { width: 852, height: 393 }]
 ] as const) {
-	test(`edges, from the Home Screen, ${name}: a filter sheet shows nothing under the home bar`, async ({
-		page
-	}) => {
+	async function fromHomeScreen(page: Page) {
 		await page.setViewportSize(size);
 		await withInsets(page, insets);
 		await page.addInitScript(() =>
 			Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true })
 		);
 		await signIn(page);
+	}
+
+	test(`edges, from the Home Screen, ${name}: a filter sheet shows nothing under the home bar`, async ({
+		page
+	}) => {
+		await fromHomeScreen(page);
 		await page
 			.getByRole('group', { name: 'Filters' })
 			.getByRole('button', { name: 'When', exact: true })
@@ -130,5 +153,24 @@ for (const [name, insets, size] of [
 		const to = sheet.getByLabel('To', { exact: true });
 		await to.scrollIntoViewIfNeeded();
 		await expectClear(page, to, insets);
+	});
+
+	test(`edges, from the Home Screen, ${name}: a dialog taller than the screen shows nothing under the home bar`, async ({
+		page
+	}) => {
+		await fromHomeScreen(page);
+		await selectTiles(page, [1, 2]);
+		await selectionAction(page, 'Download');
+		const dialog = page.getByRole('dialog', { name: 'Download' });
+		await dialog.getByRole('button', { name: 'More options' }).click();
+		await expect.poll(() => dialog.evaluate((d) => d.getAnimations().length)).toBe(0);
+		// It is taller than the screen leaves it, so it scrolls…
+		expect(await dialog.evaluate((d) => d.scrollHeight > d.clientHeight)).toBe(true);
+		// …and what scrolls stops above the home bar…
+		expect(await scrollEnd(dialog)).toBeLessThanOrEqual(size.height - insets.bottom);
+		// …and its actions scroll up clear of it.
+		const download = dialog.getByRole('button', { name: 'Download', exact: true });
+		await download.scrollIntoViewIfNeeded();
+		await expectClear(page, download, insets);
 	});
 }
