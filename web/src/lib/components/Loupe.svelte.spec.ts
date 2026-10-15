@@ -125,8 +125,8 @@ describe('Loupe: gestures', () => {
 		// Both fingers drift the same way, far past every swipe threshold: no nearer, no further.
 		finger('pointermove', -150);
 		finger('pointermove', -110, { pointerId: 2 });
-		// A pinch does not pull the photo along either.
-		expect(document.querySelector('.stage')!.classList.contains('held')).toBe(false);
+		// A pinch does not pull the photos along either.
+		expect(document.querySelector<HTMLElement>('.track')!.style.transform).toBe('');
 		finger('pointerup', -110, { pointerId: 2 });
 		// One finger of the pinch is still down: a third touch is no tap and no swipe.
 		finger('pointerdown', -110, { pointerId: 3 });
@@ -139,7 +139,19 @@ describe('Loupe: gestures', () => {
 		// With every finger up, one finger swipes again.
 		finger('pointerdown');
 		finger('pointerup', -150);
-		expect(onindex.mock.calls).toEqual([[1]]);
+		// Said once the next photo has slid into place.
+		expect(onindex).not.toHaveBeenCalled();
+		await expect.poll(() => onindex.mock.calls).toEqual([[1]]);
+	});
+
+	it('a viewer closed while the next photo slides in does not step to it', async () => {
+		server();
+		const { finger, onindex, view } = open();
+		finger('pointerdown');
+		finger('pointerup', -150);
+		view.unmount();
+		await wait(800);
+		expect(onindex).not.toHaveBeenCalled();
 	});
 
 	it('only the main button is a press: a right click leaves the chrome alone', async () => {

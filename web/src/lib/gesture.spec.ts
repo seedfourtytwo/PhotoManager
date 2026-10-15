@@ -112,10 +112,23 @@ describe('velocity', () => {
 		expect(velocity([move(100, 10), move(160, 10)])).toBe(0);
 	});
 
-	it('is pixels per millisecond over the last 80 ms only', () => {
+	it('is pixels per millisecond over about the last 80 ms only', () => {
 		expect(velocity([move(100, 0), move(60, 40)])).toBe(-1);
 		// The slow start long before does not drag the flick down.
 		expect(velocity([move(300, 0), move(298, 200), move(258, 240), move(218, 280)])).toBe(-1);
+	});
+
+	it('reaches back to the last sample 80 ms old, when the moves in that time are few', () => {
+		expect(velocity([move(300, 0), move(220, 60), move(220, 96)])).toBeCloseTo(-80 / 96);
+	});
+
+	it('is zero for a finger that stopped before it lifted', () => {
+		expect(velocity([move(300, 0), move(200, 100), move(200, 400)])).toBe(0);
+	});
+
+	it('is capped at 4 px/ms: two samples a hair apart are no rocket', () => {
+		expect(velocity([move(300, 0), move(150, 0.1)])).toBe(-4);
+		expect(velocity([move(0, 0), move(150, 0.1)])).toBe(4);
 	});
 });
 

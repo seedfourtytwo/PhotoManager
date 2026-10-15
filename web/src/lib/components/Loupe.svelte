@@ -33,8 +33,11 @@
 		$props();
 
 	const IDLE_MS = 2500;
-	/** The photos around the open one whose previews are fetched ahead, as steps from it. */
-	const PRELOAD_STEPS = [-1, 1, 2];
+	/**
+	 * The photos around the open one whose previews are fetched ahead, as steps from it. The
+	 * ones either side are already on the stage (PhotoStage), decoded and ready to slide in.
+	 */
+	const PRELOAD_STEPS = [-2, 2];
 	/** This close to the end of the loaded list, the next page is asked for. */
 	const NEED_MORE_WITHIN = 3;
 	const trash = $derived(onrestore !== undefined);
@@ -77,7 +80,7 @@
 		return () => (stale = true);
 	});
 
-	// Preload neighbours so stepping is instant.
+	// Fetch a step further ahead, so the next neighbour is in the cache when it is needed.
 	$effect(() => {
 		for (const step of PRELOAD_STEPS) {
 			const next = items[index + step];
@@ -238,7 +241,9 @@
 		<PhotoStage
 			bind:this={stage}
 			{asset}
-			src={previewOf(asset)}
+			previous={items[index - 1]}
+			next={items[index + 1]}
+			preview={previewOf}
 			onpress={() => (pressedIdle = chrome.idle)}
 			{ongesture}
 			{onzoom}

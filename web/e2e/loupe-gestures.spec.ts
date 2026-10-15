@@ -99,6 +99,78 @@ test.describe('photo view', () => {
 		expect(await alt(loupe(page))).toBe(was);
 	});
 
+	test('phone: the next photo slides in beside the open one, decoded before it is needed; the address follows after', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'touch only');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const first = await alt(viewer);
+		const url = page.url();
+		// The neighbour is on the stage before any swipe, its picture decoded and waiting.
+		const nextSlot = viewer.locator('.slot[aria-hidden="true"]').last();
+		await expect(nextSlot.locator('img:not(.under)')).toHaveAttribute('data-ready', '');
+		const screen = page.viewportSize()!.width;
+		const from = await centre(viewer.locator('.stage'));
+		const lift = await touchDown(page, from, { x: from.x - 150, y: from.y + 60 });
+		// Mid-drag: the next photo is in sight at the right edge, and a diagonal finger did not
+		// snap the photo back (the drag locked sideways).
+		await expect.poll(async () => (await nextSlot.boundingBox())!.x).toBeLessThan(screen);
+		await expect
+			.poll(async () => Math.round((await nextSlot.boundingBox())!.x))
+			.toBeCloseTo(screen - 150 + 16, -1);
+		expect(page.url()).toBe(url);
+		await lift();
+		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
+		await expect(page).not.toHaveURL(url);
+	});
+
+	test('phone: a quick flick turns the photo, though it went only a little way', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'touch only');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		const first = await alt(viewer);
+		const from = await centre(viewer.locator('.stage'));
+		// 60 px in 32 ms, timed as a phone sends it: far short of a third of the screen, but fast.
+		await takesInput(page);
+		const cdp = await page.context().newCDPSession(page);
+		const start = Date.now() / 1000;
+		const touch = (type: string, dx: number | null, ms: number) =>
+			cdp.send('Input.dispatchTouchEvent', {
+				type,
+				touchPoints: dx === null ? [] : [{ x: from.x + dx, y: from.y }],
+				timestamp: start + ms / 1000
+			});
+		await touch('touchStart', 0, 0);
+		await touch('touchMove', -30, 16);
+		await touch('touchMove', -60, 32);
+		await touch('touchEnd', null, 40);
+		await cdp.detach();
+		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
+	});
+
+	test('phone: before the first photo the drag resists, and springs back', async ({ page }) => {
+		test.skip(!isPhone(page), 'touch only');
+		await page.locator('.tile').first().click();
+		const viewer = loupe(page);
+		// The first tile opens the first photo: nothing before it.
+		await expect(viewer.locator('.slot')).toHaveCount(2);
+		const frame = viewer.locator('.frame');
+		const first = await alt(viewer);
+		const rest = (await frame.boundingBox())!.x;
+		const from = await centre(frame);
+		const lift = await touchDown(page, from, { x: from.x + 150, y: from.y });
+		// A third of the finger's way.
+		await expect.poll(async () => Math.round((await frame.boundingBox())!.x - rest)).toBe(50);
+		await lift();
+		await expect
+			.poll(async () => Math.round((await frame.boundingBox())!.x))
+			.toBe(Math.round(rest));
+		expect(await alt(viewer)).toBe(first);
+	});
+
 	test('phone: each gesture and its button reach the same state', async ({ page }) => {
 		test.skip(!isPhone(page), 'touch only');
 		await page.locator('.tile').first().click();
