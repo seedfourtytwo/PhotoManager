@@ -200,28 +200,34 @@ async function scrollDown(page: Page, sheet: Locator) {
 	}
 }
 
-for (const [question, last] of Object.entries(LAST_ROW)) {
-	test(`${question}: a list longer than the screen scrolls to its last row, by finger or wheel`, async ({
-		page
-	}) => {
-		await longLists(page);
-		const sheet = await ask(page, question);
-		const row = sheet.getByRole('button', { name: last });
-		await expect(row).toBeAttached();
-		// Settled: a phone's sheet has finished rising.
-		await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
-		await expect(row).not.toBeInViewport();
-		const before = (await row.boundingBox())!.y;
-		await scrollDown(page, sheet);
-		// The list moved under the finger (or the wheel)…
-		await expect.poll(async () => (await row.boundingBox())!.y).toBeLessThan(before - 100);
-		// …and keeps moving until its last row is in sight, whole, to be pressed.
-		await expect(async () => {
+test.describe('long lists', () => {
+	// The lists are made long on their way to the page (`longLists`); a request the service
+	// worker takes over would pass by that, once it controls the page.
+	test.use({ serviceWorkers: 'block' });
+
+	for (const [question, last] of Object.entries(LAST_ROW)) {
+		test(`${question}: a list longer than the screen scrolls to its last row, by finger or wheel`, async ({
+			page
+		}) => {
+			await longLists(page);
+			const sheet = await ask(page, question);
+			const row = sheet.getByRole('button', { name: last });
+			await expect(row).toBeAttached();
+			// Settled: a phone's sheet has finished rising.
+			await expect.poll(() => sheet.evaluate((d) => d.getAnimations().length)).toBe(0);
+			await expect(row).not.toBeInViewport();
+			const before = (await row.boundingBox())!.y;
 			await scrollDown(page, sheet);
-			await expect(row).toBeInViewport({ ratio: 1, timeout: 300 });
-		}).toPass({ timeout: 15_000 });
-	});
-}
+			// The list moved under the finger (or the wheel)…
+			await expect.poll(async () => (await row.boundingBox())!.y).toBeLessThan(before - 100);
+			// …and keeps moving until its last row is in sight, whole, to be pressed.
+			await expect(async () => {
+				await scrollDown(page, sheet);
+				await expect(row).toBeInViewport({ ratio: 1, timeout: 300 });
+			}).toPass({ timeout: 15_000 });
+		});
+	}
+});
 
 test('a sheet is modal: focus moves in and stays, Escape closes it and gives it back', async ({
 	page

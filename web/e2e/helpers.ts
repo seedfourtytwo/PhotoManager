@@ -291,13 +291,11 @@ const many = <T>(make: (i: number) => T) => Array.from({ length: MANY }, (_, i) 
 /**
  * Long lists in the filter sheets: forty more years (1940 down to 1901), places (Town 1…40),
  * cameras (Camera 1…40) and named people (Person 1…40) added to what the server answers, the
- * mock and the real backend alike. The last one added is the last row of its list. Returns
- * what takes them away again.
+ * mock and the real backend alike. The last one added is the last row of its list. A page a
+ * service worker controls sends its requests past this: use it with `serviceWorkers: 'block'`.
  */
-export async function longLists(page: Page): Promise<() => Promise<void>> {
-	const facets = /\/api\/assets\/facets\b/;
-	const people = /\/api\/people(\?.*)?$/;
-	await page.route(facets, async (route) => {
+export async function longLists(page: Page) {
+	await page.route(/\/api\/assets\/facets\b/, async (route) => {
 		const response = await route.fetch();
 		const answer = (await response.json()) as Facets;
 		await route.fulfill({
@@ -310,7 +308,7 @@ export async function longLists(page: Page): Promise<() => Promise<void>> {
 			}
 		});
 	});
-	await page.route(people, async (route) => {
+	await page.route(/\/api\/people(\?.*)?$/, async (route) => {
 		const response = await route.fetch();
 		const answer = (await response.json()) as Person[];
 		const named = many<Person>((i) => ({
@@ -324,10 +322,6 @@ export async function longLists(page: Page): Promise<() => Promise<void>> {
 		}));
 		await route.fulfill({ response, json: [...answer, ...named] });
 	});
-	return async () => {
-		await page.unroute(facets);
-		await page.unroute(people);
-	};
 }
 
 /** The open photo: the photo view (the loupe), a modal dialog. */

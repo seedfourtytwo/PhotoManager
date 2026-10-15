@@ -148,20 +148,6 @@ test('every screen', async ({ page }, info) => {
 	await when.getByRole('button', { name: /^2019/ }).click();
 	await shot(page, '05-filters', p);
 	await when.getByRole('button', { name: 'Done' }).click();
-	// A list longer than the screen, scrolled down: forty more cameras, the last one in sight.
-	const shorten = await longLists(page);
-	await page
-		.getByRole('group', { name: 'Filters' })
-		.getByRole('button', { name: 'Camera', exact: true })
-		.click();
-	const camera = page.getByRole('dialog', { name: 'Camera' });
-	await camera
-		.getByRole('button', { name: new RegExp(`^Camera ${MANY}\\b`) })
-		.scrollIntoViewIfNeeded();
-	await shot(page, '05b-filters-long', p);
-	await camera.getByRole('button', { name: 'Done' }).click();
-	await sheetStepGone(page);
-	await shorten();
 
 	await page.goto('/');
 	await selectTiles(page, [1, 2, 4]);
@@ -293,4 +279,25 @@ test('every screen', async ({ page }, info) => {
 	await signIn(page, '/search?q=beach%20at%20sunset');
 	await expect(page.locator('.tile').first()).toBeVisible();
 	await shot(page, '18b-search-meaning', p);
+});
+
+test.describe('a long list', () => {
+	// The cameras are added on their way to the page (`longLists`); a request the service
+	// worker takes over would pass by that, once it controls the page.
+	test.use({ serviceWorkers: 'block' });
+
+	test('a filter list longer than the screen, scrolled to its end', async ({ page }, info) => {
+		await resetMock();
+		await signIn(page);
+		await longLists(page);
+		await page
+			.getByRole('group', { name: 'Filters' })
+			.getByRole('button', { name: 'Camera', exact: true })
+			.click();
+		const camera = page.getByRole('dialog', { name: 'Camera' });
+		await camera
+			.getByRole('button', { name: new RegExp(`^Camera ${MANY}\\b`) })
+			.scrollIntoViewIfNeeded();
+		await shot(page, '05b-filters-long', info.project.name);
+	});
 });
