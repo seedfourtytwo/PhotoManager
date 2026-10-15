@@ -143,6 +143,8 @@ export type MockState = {
 	pinned: Map<number, Set<number>>;
 	hidden: Map<number, Set<number>>;
 	albums: MockAlbum[];
+	/** Each account's answered album suggestions, by key (v1.12). */
+	suggestionAnswers: Map<number, Set<string>>;
 	reports: MockReport[];
 	jobs: (Job & { run_at: number })[];
 	nextId: { asset: number; user: number; album: number; source: number; job: number; run: number };

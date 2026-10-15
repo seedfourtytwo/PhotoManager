@@ -9,6 +9,7 @@ import { makeState } from './data.ts';
 import { createHelpers } from './helpers.ts';
 import { HttpError, noContent, readBody, send, type Result, type Route } from './http.ts';
 import { albumRoutes } from './routes/albums.ts';
+import { suggestionRoutes } from './routes/suggestions.ts';
 import { assetRoutes } from './routes/assets.ts';
 import { authRoutes } from './routes/auth.ts';
 import { backupRoutes } from './routes/backups.ts';
@@ -53,6 +54,7 @@ export function createMockApi(initial: MockState, options: MockOptions = {}) {
 		...homeRoutes(h),
 		...downloadRoutes(h),
 		...albumRoutes(h),
+		...suggestionRoutes(h),
 		...reviewRoutes(h),
 		...trashRoutes(h),
 		...searchRoutes(h),
