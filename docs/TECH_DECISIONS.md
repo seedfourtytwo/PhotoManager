@@ -206,15 +206,25 @@ No new dependency. Decisions, with the measurements in `PERFORMANCE.md`:
 | CI                       | GitHub Actions (`.github/workflows/ci.yml`), on every pull request and on main: backend lint → layer contracts → types → tests → import smoke run; web lint → types → tests → build; gitleaks. No E2E step: `just e2e` and `just e2e-mock` run locally                            |
 | Versioning               | Conventional Commits. No release tooling yet                                                                                                                                                                                                                                      |
 
-## Typefaces (decided 2026-10-14)
+## Typefaces (decided 2026-10-15)
 
-Atkinson Hyperlegible Next (variable weight 200–800, Braille Institute) for everything you read
-or operate, titles and data included (tabular figures). Chosen by C for the redesign of
-2026-10-14: drawn for readers with low vision, so a later Larger text mode for C's parents
-starts from a legible face. Newsreader (serif, optical sizes) stays as the title face of the
-Album theme. A command or path an admin reads uses the system monospace. All SIL Open Font
-License; the woff2 files (from Fontsource 5.3.0) and licences are vendored in
-`web/static/fonts/`, served by the app itself — no font CDN, nothing fetched at runtime.
+**Inter** (Fontsource 5.3.0, upstream Inter v20, SIL OFL 1.1, "Copyright 2016 The Inter
+Project Authors") for everything you read or operate, titles and data included (tabular
+figures), for the Flight look. C delegated the choice. A variable font with a weight axis
+(100–900) and an optical-size axis (14–32), so large titles get Inter's Display shapes without
+a second family. Two upright woff2 files are vendored, latin and latin-ext
+(`inter-latin-opsz-normal.woff2`, `inter-latin-ext-opsz-normal.woff2`), with the licence as
+`Inter-OFL.txt`; no italic (only the Album theme's voice is italic, in Newsreader).
+
+**Atkinson Hyperlegible Next** (variable weight 200–800, Braille Institute) becomes the Larger
+text face: drawn for readers with low vision, it was the interface face from 2026-10-14 and
+stays vendored for a per-account choice the look sheet does not have yet. Newsreader (serif,
+optical sizes) stays as the title face of the Album theme. A command or path an admin reads
+uses the system monospace.
+
+All SIL Open Font License; the woff2 files (from Fontsource 5.3.0) and licences are vendored in
+`web/static/fonts/`, served by the app itself — no font CDN, nothing fetched at runtime, and no
+package: the fonts are static files, so "no runtime dependencies" still holds.
 Fallbacks: the system sans, Iowan/Charter/Georgia.
-Replaced Hanken Grotesk and Martian Mono (2026-10-08), which had replaced Instrument Sans
-(2026-10-02).
+Replaced Atkinson as the interface face (2026-10-15), which had replaced Hanken Grotesk and
+Martian Mono (2026-10-08), which had replaced Instrument Sans (2026-10-02).
