@@ -129,7 +129,8 @@
 		const ms = event.timeStamp - press.t;
 		const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y) > SLOP;
 		swallow = event.type === 'pointercancel' || moved || ms >= HOLD_MS;
-		const closing = press.pulling && event.type === 'pointerup' && shouldClose(pulled, ms);
+		const speed = ms > 0 ? pulled / ms : 0;
+		const closing = press.pulling && event.type === 'pointerup' && shouldClose(pulled, speed);
 		press = null;
 		if (closing) return onclose();
 		pulled = 0;
