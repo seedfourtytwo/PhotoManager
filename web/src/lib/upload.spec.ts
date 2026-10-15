@@ -85,6 +85,13 @@ describe('uploadFiles', () => {
 		await expect(done).rejects.toThrow('Guests can view and download, not upload');
 	});
 
+	it("reads FastAPI's list-form validation errors like every other request", async () => {
+		const xhr = new FakeXhr();
+		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
+		xhr.respond(422, { detail: [{ loc: ['body', 'file'], msg: 'field required' }] });
+		await expect(done).rejects.toThrow('Field required');
+	});
+
 	it('reports a dropped connection', async () => {
 		const xhr = new FakeXhr();
 		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });

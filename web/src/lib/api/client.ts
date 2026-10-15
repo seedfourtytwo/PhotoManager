@@ -143,18 +143,24 @@ export function fileNameFrom(header: string | null, fallback: string): string {
 	return /filename="([^"]+)"/i.exec(header)?.[1] ?? fallback;
 }
 
+/** The server's `detail` in an error answer's JSON body, as a sentence; null when it has none. */
+export function errorDetail(body: unknown): string | null {
+	const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
+	if (typeof detail === 'string') return sentence(detail);
+	// FastAPI validation errors: detail is a list of {loc, msg}.
+	if (Array.isArray(detail)) {
+		const messages = detail
+			.map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
+			.filter(Boolean);
+		if (messages.length) return sentence(messages.join(' '));
+	}
+	return null;
+}
+
 async function readDetail(response: Response): Promise<string> {
 	try {
-		const body: unknown = await response.json();
-		const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
-		if (typeof detail === 'string') return sentence(detail);
-		// FastAPI validation errors: detail is a list of {loc, msg}.
-		if (Array.isArray(detail)) {
-			const messages = detail
-				.map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
-				.filter(Boolean);
-			if (messages.length) return sentence(messages.join(' '));
-		}
+		const detail = errorDetail(await response.json());
+		if (detail) return detail;
 	} catch {
 		// Not JSON (a proxy error page, say): fall through to a generic sentence.
 	}

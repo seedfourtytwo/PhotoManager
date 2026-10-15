@@ -2,7 +2,7 @@
  * Hand-picked upload (FEATURES 10.2): POST /api/upload as multipart, with upload progress.
  * fetch() can't report upload progress yet, so this one request uses XMLHttpRequest.
  */
-import { ApiError, unreachable, type UploadResult } from './api';
+import { ApiError, errorDetail, unreachable, type UploadResult } from './api';
 import { photos } from './format';
 
 /** The parts of XMLHttpRequest we use (a fake in tests). */
@@ -30,9 +30,8 @@ export type UploadOptions = {
 
 function detailOf(text: string, status: number): string {
 	try {
-		const body: unknown = JSON.parse(text);
-		if (body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string')
-			return body.detail.charAt(0).toUpperCase() + body.detail.slice(1);
+		const detail = errorDetail(JSON.parse(text));
+		if (detail) return detail;
 	} catch {
 		/* not JSON: fall through */
 	}
