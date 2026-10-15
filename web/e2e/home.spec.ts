@@ -107,6 +107,7 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 
 	// Nothing on this day, to rediscover, no memories or years, nothing new: not there at all.
 	await page.unrouteAll();
+	await page.route('**/api/album-suggestions', (route) => route.fulfill({ json: [] }));
 	await homeWith(page, (home) => ({
 		on_this_day: null,
 		rediscover: [],
