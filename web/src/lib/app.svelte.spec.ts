@@ -120,6 +120,22 @@ describe('session.signedIn', () => {
 	});
 });
 
+describe('session.lost', () => {
+	it('goes to sign-in once, however many requests answer 401, until signed in again', () => {
+		session.signedIn(user(1, 'c'), null);
+		vi.mocked(goto).mockClear();
+		session.lost();
+		session.lost();
+		session.lost();
+		expect(vi.mocked(goto)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(goto).mock.calls[0][0]).toMatch(/^\/login/);
+		session.signedIn(user(1, 'c'), null);
+		vi.mocked(goto).mockClear();
+		session.lost();
+		expect(vi.mocked(goto)).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('signInPath: where a lost session sends someone', () => {
 	it.each([
 		['/albums/3?photo=5', '/login?next=%2Falbums%2F3%3Fphoto%3D5'],
