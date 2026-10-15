@@ -3,8 +3,10 @@
 	import type { ManagedUser } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import { errorMessage } from '$lib/format';
+	import { SECTION_NAMES } from '$lib/home';
 	import {
 		COLLECTIONS_ROWS,
+		HOME_SECTIONS,
 		LOOK_RANGES,
 		look,
 		parseLook,
@@ -14,6 +16,7 @@
 		type Look
 	} from '$lib/look';
 	import Dialog from '../Dialog.svelte';
+	import OrderList from '../ui/OrderList.svelte';
 
 	/**
 	 * One account's look, set by an admin (spec 2026-10-08 §5): every field of the sheet is a
@@ -69,22 +72,6 @@
 		places: 'Places',
 		albums: 'Albums'
 	};
-	/** The rows shown, in their order, then the hidden ones. */
-	const rows = $derived(sheet ? [...new Set([...sheet.collectionsRows, ...COLLECTIONS_ROWS])] : []);
-
-	function toggleRow(row: CollectionsRow, shown: boolean) {
-		if (!sheet) return;
-		const kept = sheet.collectionsRows.filter((r) => r !== row);
-		set({ collectionsRows: shown ? [...kept, row] : kept });
-	}
-
-	function moveUp(row: CollectionsRow) {
-		if (!sheet) return;
-		const order = [...sheet.collectionsRows];
-		const at = order.indexOf(row);
-		[order[at - 1], order[at]] = [order[at], order[at - 1]];
-		set({ collectionsRows: order });
-	}
 
 	async function save() {
 		if (!sheet || saving) return;
@@ -199,33 +186,13 @@
 			</select>
 		</label>
 
-		<fieldset>
-			<legend>Collections shows, in this order</legend>
-			<ul>
-				{#each rows as row (row)}
-					{@const at = current.collectionsRows.indexOf(row)}
-					<li>
-						<label class="choice">
-							<input
-								type="checkbox"
-								checked={at >= 0}
-								disabled={at >= 0 && current.collectionsRows.length === 1}
-								onchange={(e) => toggleRow(row, e.currentTarget.checked)}
-							/>
-							{ROW_LABELS[row]}
-						</label>
-						{#if at > 0}
-							<button
-								type="button"
-								class="up"
-								aria-label={`Move ${ROW_LABELS[row]} up`}
-								onclick={() => moveUp(row)}>Move up</button
-							>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		</fieldset>
+		<OrderList
+			label="Collections shows, in this order"
+			all={COLLECTIONS_ROWS}
+			chosen={current.collectionsRows}
+			names={ROW_LABELS}
+			onchange={(collectionsRows) => set({ collectionsRows })}
+		/>
 
 		<fieldset>
 			<legend>Home</legend>
@@ -250,6 +217,14 @@
 				</select>
 			</label>
 		</fieldset>
+
+		<OrderList
+			label="Home shows, in this order"
+			all={HOME_SECTIONS}
+			chosen={current.homeSections}
+			names={SECTION_NAMES}
+			onchange={(homeSections) => set({ homeSections })}
+		/>
 
 		<fieldset>
 			<legend>Phone</legend>
@@ -314,19 +289,6 @@
 	}
 	.opens {
 		margin-top: var(--s-2);
-	}
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	li {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.up {
-		color: var(--ink-2);
 	}
 	.aside {
 		display: flex;

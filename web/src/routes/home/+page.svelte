@@ -9,10 +9,11 @@
 		dateRange,
 		dayLine,
 		dayNote,
-		homeIsEmpty,
+		homeBlocks,
 		memoryLine,
 		rediscoverNote,
 		rediscoverTitle,
+		SECTION_NAMES,
 		storyYears,
 		yearsAgo
 	} from '$lib/home';
@@ -25,6 +26,7 @@
 		openPhotoId,
 		showPhoto
 	} from '$lib/loupe.svelte';
+	import { look } from '$lib/look';
 	import { collect, spread } from '$lib/story';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
@@ -79,8 +81,9 @@
 	}
 
 	const fresh = $derived(home?.new.items ?? []);
+	const blocks = $derived(home ? homeBlocks(home, pinned, people, look.shown.homeSections) : []);
 	const nothing = $derived(
-		home !== null && pinned !== null && people !== null && homeIsEmpty(home, pinned, people)
+		home !== null && pinned !== null && people !== null && blocks.length === 0
 	);
 	$effect(() => {
 		if (!nothing) return;
@@ -127,17 +130,17 @@
 
 	// --- the photo view: from Rediscover, Pinned or New this week, stepping through that block --
 	const loupeId = $derived(openPhotoId(page));
-	type Block = 'rediscover' | 'pinned' | 'new';
-	let openedFrom = $state<Block>('pinned');
-	const blocks = $derived<Record<Block, AssetOut[]>>({
+	type Stepped = 'rediscover' | 'pinned' | 'new';
+	let openedFrom = $state<Stepped>('pinned');
+	const stepped = $derived<Record<Stepped, AssetOut[]>>({
 		rediscover: home?.rediscover ?? [],
 		pinned: pinned ?? [],
 		new: fresh
 	});
 	const inBlock = $derived.by(() => {
 		if (loupeId === undefined) return null;
-		const others = (Object.keys(blocks) as Block[]).filter((b) => b !== openedFrom);
-		for (const items of [openedFrom, ...others].map((b) => blocks[b])) {
+		const others = (Object.keys(stepped) as Stepped[]).filter((b) => b !== openedFrom);
+		for (const items of [openedFrom, ...others].map((b) => stepped[b])) {
 			const index = items.findIndex((a) => a.id === loupeId);
 			if (index >= 0) return { items, index };
 		}
@@ -157,7 +160,7 @@
 	});
 	$effect(() => tracker.seen(loupeId));
 
-	function open(from: Block, id: Id) {
+	function open(from: Stepped, id: Id) {
 		openedFrom = from;
 		openPhoto(id);
 	}
@@ -199,88 +202,79 @@
 			<span class="rail-wait"><span></span><span></span><span></span></span>
 		</div>
 	{:else}
-		{@const day = home.on_this_day}
-		{#if day}
-			<section aria-label="On this day">
-				<Hero
-					cover={day.cover}
-					title={yearsAgo(day.years_ago, day.exact)}
-					note={dayNote(day)}
-					onplay={() =>
-						play(
-							yearsAgo(day.years_ago, day.exact),
-							dateRange(day.filter.from, day.filter.to),
-							day.cover,
-							day.filter
-						)}
-				/>
-			</section>
-		{/if}
-
-		{#if home.rediscover.length}
-			{@const picks = home.rediscover}
-			{@const [lead, ...others] = picks}
-			<HomeSection title="Rediscover">
-				<Hero
-					cover={lead}
-					title={rediscoverTitle(lead, new Date())}
-					note={rediscoverNote(lead)}
-					onplay={() => playRediscover(picks)}
-				/>
-				{#if others.length}
-					<div class="others">
-						<JustifiedGrid
-							items={others}
-							onopen={(id) => open('rediscover', id)}
-							label="Photos to rediscover"
-						/>
-					</div>
-				{/if}
-			</HomeSection>
-		{/if}
-
-		{#if home.memories.length}
-			<HomeSection title="Memories">
-				<MemoryRow memories={home.memories} onplay={playMemory} />
-			</HomeSection>
-		{/if}
-
-		{#if home.years.length}
-			<HomeSection title="Years" href="/">
-				<MemoryRow memories={home.years} onplay={playMemory} small />
-			</HomeSection>
-		{/if}
-
-		{#if pinned?.length}
-			<HomeSection
-				title="Pinned"
-				more={{ href: '/', label: 'Choose', hint: 'what to pin, in the Library' }}
-			>
-				<JustifiedGrid items={pinned} onopen={(id) => open('pinned', id)} label="Pinned photos" />
-			</HomeSection>
-		{/if}
-
-		{#if people?.length}
-			<HomeSection title="People" href="/people">
-				<ul class="faces">
-					{#each people as person (person.id)}
-						<li>
-							<a href={`/people/${person.id}`}>
-								<Portrait portrait={person.portrait} size={76} />
-								<span>{personName(person)}</span>
-							</a>
-						</li>
-					{/each}
-				</ul>
-			</HomeSection>
-		{/if}
-
-		{#if home.new.count}
-			<HomeSection title="New this week" more={{ href: '/', label: 'All photos' }}>
-				<p class="arrived">{arrivalsSentence(home.new)}</p>
-				<JustifiedGrid items={fresh} onopen={(id) => open('new', id)} label="New photos" />
-			</HomeSection>
-		{/if}
+		<!-- The blocks the account chose (You → Home), in its order, each when it has photos. -->
+		{#each blocks as block (block)}
+			{#if block === 'on_this_day' && home.on_this_day}
+				{@const day = home.on_this_day}
+				<section aria-label={SECTION_NAMES.on_this_day}>
+					<Hero
+						cover={day.cover}
+						title={yearsAgo(day.years_ago, day.exact)}
+						note={dayNote(day)}
+						onplay={() =>
+							play(
+								yearsAgo(day.years_ago, day.exact),
+								dateRange(day.filter.from, day.filter.to),
+								day.cover,
+								day.filter
+							)}
+					/>
+				</section>
+			{:else if block === 'rediscover'}
+				{@const picks = home.rediscover}
+				{@const [lead, ...others] = picks}
+				<HomeSection title={SECTION_NAMES.rediscover}>
+					<Hero
+						cover={lead}
+						title={rediscoverTitle(lead, new Date())}
+						note={rediscoverNote(lead)}
+						onplay={() => playRediscover(picks)}
+					/>
+					{#if others.length}
+						<div class="others">
+							<JustifiedGrid
+								items={others}
+								onopen={(id) => open('rediscover', id)}
+								label="Photos to rediscover"
+							/>
+						</div>
+					{/if}
+				</HomeSection>
+			{:else if block === 'memories'}
+				<HomeSection title={SECTION_NAMES.memories}>
+					<MemoryRow memories={home.memories} onplay={playMemory} />
+				</HomeSection>
+			{:else if block === 'years'}
+				<HomeSection title={SECTION_NAMES.years} href="/">
+					<MemoryRow memories={home.years} onplay={playMemory} small />
+				</HomeSection>
+			{:else if block === 'pinned' && pinned}
+				<HomeSection
+					title={SECTION_NAMES.pinned}
+					more={{ href: '/', label: 'Choose', hint: 'what to pin, in the Library' }}
+				>
+					<JustifiedGrid items={pinned} onopen={(id) => open('pinned', id)} label="Pinned photos" />
+				</HomeSection>
+			{:else if block === 'people' && people}
+				<HomeSection title={SECTION_NAMES.people} href="/people">
+					<ul class="faces">
+						{#each people as person (person.id)}
+							<li>
+								<a href={`/people/${person.id}`}>
+									<Portrait portrait={person.portrait} size={76} />
+									<span>{personName(person)}</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				</HomeSection>
+			{:else if block === 'new'}
+				<HomeSection title={SECTION_NAMES.new} more={{ href: '/', label: 'All photos' }}>
+					<p class="arrived">{arrivalsSentence(home.new)}</p>
+					<JustifiedGrid items={fresh} onopen={(id) => open('new', id)} label="New photos" />
+				</HomeSection>
+			{/if}
+		{/each}
 
 		{#if nothing && libraryEmpty !== null}
 			<div class="empty-state words">
@@ -293,8 +287,8 @@
 				{:else}
 					<p>Your story starts here.</p>
 					<p>
-						Pin photos in the <a href="/">Library</a> to keep them on Home. Trips and this day in earlier
-						years appear by themselves.
+						Pin photos in the <a href="/">Library</a> to keep them on Home, or choose what Home
+						shows under <a href="/settings">You</a>.
 					</p>
 				{/if}
 			</div>

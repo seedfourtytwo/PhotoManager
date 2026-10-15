@@ -1,4 +1,5 @@
-"""An account's look (docs/adr/0001): each account chooses its mode, an admin sets the rest.
+"""An account's look (docs/adr/0001): each account chooses its mode and what its Home shows,
+an admin sets the rest.
 
 The bodies are taken as plain JSON and checked by ``domain/look.py``, the one place that
 knows the sheet: a refusal is its sentence (422), not a framework's list of errors.
@@ -23,9 +24,10 @@ def my_look(services: ServicesDep, user: CurrentUser) -> LookOut:
 
 
 @router.put("/me/look")
-def choose_my_mode(services: ServicesDep, user: CurrentUser, body: Sheet = None) -> LookOut:
-    """``{"mode": …}`` and nothing else, for every role: it is how their own screen looks."""
-    return LookOut.of(services.accounts.choose_mode(user, body))
+def choose_my_own(services: ServicesDep, user: CurrentUser, body: Sheet = None) -> LookOut:
+    """``mode`` and ``homeSections``, either or both, for every role: how their own screen
+    looks and what their own Home shows."""
+    return LookOut.of(services.accounts.choose_own(user, body))
 
 
 @router.get("/admin/accounts/{user_id}/look", dependencies=ADMIN_ONLY)

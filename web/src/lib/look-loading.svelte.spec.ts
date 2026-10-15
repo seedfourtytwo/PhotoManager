@@ -3,6 +3,7 @@ import { ApiError, type User } from '$lib/api';
 import { DEFAULT_LOOK, look, parseLook, type Look } from '$lib/look';
 import {
 	api,
+	chooseHome,
 	chooseMode,
 	forgetOldDensity,
 	loadLook,
@@ -170,6 +171,26 @@ describe('the old per-browser pa.theme setting', () => {
 		await loadLook();
 		expect(send).not.toHaveBeenCalled();
 		expect(localStorage.getItem('pa.theme')).toBe('light');
+	});
+});
+
+describe('chooseHome', () => {
+	it('shows the choice at once and saves it on the account', async () => {
+		const saving = deferred<Look>();
+		const send = vi.spyOn(api, 'setMyHome').mockReturnValue(saving.promise);
+		const choosing = chooseHome(['pinned', 'years']);
+		expect(look.saved.homeSections).toEqual(['pinned', 'years']);
+		expect(send).toHaveBeenCalledExactlyOnceWith(['pinned', 'years']);
+		saving.resolve({ ...WARM, homeSections: ['pinned', 'years'] });
+		await choosing;
+		expect(look.saved).toEqual({ ...WARM, homeSections: ['pinned', 'years'] });
+	});
+
+	it('goes back and says why when the server refuses', async () => {
+		vi.spyOn(api, 'setMyHome').mockRejectedValue(new ApiError(503, 'The library is busy'));
+		await chooseHome(['years']);
+		expect(look.saved.homeSections).toEqual(DEFAULT_LOOK.homeSections);
+		expect(notice.text).toBe('The library is busy');
 	});
 });
 

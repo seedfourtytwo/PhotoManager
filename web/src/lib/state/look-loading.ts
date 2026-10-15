@@ -1,4 +1,4 @@
-/** The account's look: fetching it, and the one part an account sets itself. */
+/** The account's look: fetching it, and the parts an account sets itself. */
 import {
 	DEFAULT_LOOK,
 	forgetOldMode,
@@ -6,7 +6,10 @@ import {
 	oldMode,
 	readLook,
 	sameLook,
-	type Mode
+	type HomeSection,
+	type Look,
+	type Mode,
+	type OwnChoice
 } from '$lib/look';
 import { api } from './api';
 import { notice } from './notice.svelte';
@@ -43,16 +46,26 @@ export async function loadLook(): Promise<void> {
 }
 
 /**
- * The one part of its look an account sets itself. Shown at once; if it is refused, the
- * screen goes back to what the server last answered, not to an earlier choice still unsaved.
+ * A part of its look an account sets itself. Shown at once; if it is refused, the screen
+ * goes back to what the server last answered, not to an earlier choice still unsaved.
  */
-export async function chooseMode(mode: Mode): Promise<void> {
-	forgetOldMode(); // a choice made here outranks one made before the look moved to the account
-	const asked = look.changing({ ...look.saved, mode });
+async function chooseOwn(change: OwnChoice, send: () => Promise<Look>): Promise<void> {
+	const asked = look.changing({ ...look.saved, ...change });
 	try {
-		asked.answer(await api.setMyMode(mode));
+		asked.answer(await send());
 	} catch (error) {
 		asked.fail();
 		notice.error(error);
 	}
+}
+
+/** The account's mode: dark, light or like the device. */
+export function chooseMode(mode: Mode): Promise<void> {
+	forgetOldMode(); // a choice made here outranks one made before the look moved to the account
+	return chooseOwn({ mode }, () => api.setMyMode(mode));
+}
+
+/** What the account's Home shows, in order. */
+export function chooseHome(sections: HomeSection[]): Promise<void> {
+	return chooseOwn({ homeSections: sections }, () => api.setMyHome(sections));
 }

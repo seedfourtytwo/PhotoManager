@@ -12,6 +12,7 @@ from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folder
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.look import (
     CollectionsRow,
+    HomeSection,
     Look,
     Mode,
     StartPage,
@@ -79,6 +80,7 @@ class LookOut(BaseModel):
     start_page: StartPage
     collections_rows: list[CollectionsRow]
     dock_labels: bool
+    home_sections: list[HomeSection]
 
     @classmethod
     def of(cls, look: Look) -> "LookOut":

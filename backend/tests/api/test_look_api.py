@@ -19,6 +19,7 @@ DEFAULTS = {
     "startPage": "today",
     "collectionsRows": ["people", "places", "albums"],
     "dockLabels": True,
+    "homeSections": ["on_this_day", "rediscover", "memories", "years", "pinned", "people", "new"],
 }
 WARM = {
     "theme": "album",
@@ -32,6 +33,7 @@ WARM = {
     "startPage": "library",
     "collectionsRows": ["albums", "people"],
     "dockLabels": False,
+    "homeSections": ["rediscover", "people"],
 }
 
 
@@ -63,6 +65,32 @@ def test_a_guest_may_choose_their_mode_too(admin: TestClient) -> None:
     assert guest.put("/api/me/look", json={"mode": "light"}).json()["mode"] == "light"
 
 
+@pytest.mark.parametrize("role", ["member", "guest"])
+def test_an_account_chooses_what_its_home_shows_and_nothing_else_moves(
+    admin: TestClient, role: str
+) -> None:
+    lea = add_user(admin, "lea", role=role)
+    assert admin.put(_look_url(admin, "lea"), json=WARM).status_code == 200
+
+    changed = lea.put("/api/me/look", json={"homeSections": ["pinned", "years"]})
+
+    assert changed.status_code == 200
+    assert changed.json() == {**WARM, "homeSections": ["pinned", "years"]}
+    assert lea.get("/api/me/look").json() == changed.json()
+    assert admin.get("/api/me/look").json() == DEFAULTS, "only her own account"
+
+
+def test_a_home_with_nothing_on_it_is_refused(admin: TestClient) -> None:
+    lea = add_user(admin, "lea")
+    assert refusal(lea.put("/api/me/look", json={"homeSections": []})) == (
+        422,
+        {
+            "detail": "'homeSections' must list at least one of on_this_day, rediscover, "
+            "memories, years, pinned, people, new, each once, in the order to show them"
+        },
+    )
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -79,7 +107,8 @@ def test_a_member_cannot_send_any_other_field(admin: TestClient, body: object) -
     status, answer = refusal(lea.put("/api/me/look", json=body))
     assert status == 422
     assert answer == {
-        "detail": 'you can change only your mode: send {"mode": "dark"}, "light" or "system"; '
+        "detail": "you can change only your mode and what your Home shows: send "
+        '{"mode": "dark"}, "light" or "system", and or {"homeSections": [...]}; '
         "an admin sets the rest of your look"
     }
     assert lea.get("/api/me/look").json() == DEFAULTS

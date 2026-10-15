@@ -1,5 +1,5 @@
-/** The look sheet (v1.5): each account's own mode, and the rest set by an admin. */
-import { LookError, parseLook, readLook, type Look } from '../../src/lib/look/sheet.ts';
+/** The look sheet (v1.5): each account's own mode and Home (v1.11), the rest set by an admin. */
+import { LookError, OWN_FIELDS, parseLook, readLook, type Look } from '../../src/lib/look/sheet.ts';
 import { admin, HttpError, me, ok, type Route } from '../http.ts';
 import type { Helpers } from '../helpers.ts';
 
@@ -22,13 +22,21 @@ export function lookRoutes(h: Helpers): Route[] {
 			(ctx) => {
 				const user = me(ctx);
 				const sheet = ctx.body as Record<string, unknown> | null;
-				if (typeof sheet !== 'object' || sheet === null || Object.keys(sheet).join() !== 'mode')
+				const fields = typeof sheet === 'object' && sheet !== null ? Object.keys(sheet) : [];
+				if (
+					Array.isArray(sheet) ||
+					fields.length === 0 ||
+					!fields.every((f) => (OWN_FIELDS as readonly string[]).includes(f))
+				)
 					throw new HttpError(
 						422,
-						'you can change only your mode: send {"mode": "dark"}, "light" or "system"; ' +
+						'you can change only your mode and what your Home shows: send ' +
+							'{"mode": "dark"}, "light" or "system", and or {"homeSections": [...]}; ' +
 							'an admin sets the rest of your look'
 					);
-				user.look = { ...readLook(user.look), mode: sentLook(sheet).mode };
+				const sent = sentLook(sheet);
+				const own = Object.fromEntries(fields.map((f) => [f, sent[f as keyof Look]]));
+				user.look = { ...readLook(user.look), ...own };
 				return ok(user.look);
 			}
 		],

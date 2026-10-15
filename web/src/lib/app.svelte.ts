@@ -6,7 +6,7 @@
 export { api } from './state/api';
 export { backupWatch } from './state/backup-watch.svelte';
 export { library } from './state/library.svelte';
-export { chooseMode, loadLook } from './state/look-loading';
+export { chooseHome, chooseMode, loadLook } from './state/look-loading';
 export { notice, type NoticeAction } from './state/notice.svelte';
 export { isPublicRoute, session } from './state/session.svelte';
 export { formFromDetails, gettingPhotos, photoShare, shareAgain } from './state/share';

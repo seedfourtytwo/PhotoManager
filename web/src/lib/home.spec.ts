@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { AssetOut, HomeData, Memory, NewArrivals, OnThisDay } from './api/types';
+import type { AssetOut, HomeData, HomeSection, Memory, NewArrivals, OnThisDay } from './api/types';
 import {
 	arrivalsSentence,
 	dateRange,
 	dayLine,
 	dayNote,
-	homeIsEmpty,
+	homeBlocks,
 	inWords,
 	memoryLine,
 	previewOf,
@@ -14,6 +14,7 @@ import {
 	storyYears,
 	yearsAgo
 } from './home';
+import { DEFAULT_LOOK } from './look';
 import { makeAsset } from './testing/fixtures';
 
 describe('dayLine: the date at the top of Home', () => {
@@ -201,7 +202,7 @@ describe('storyYears: the years a story of single photos spans', () => {
 	});
 });
 
-describe('homeIsEmpty: nothing to tell yet', () => {
+describe('homeBlocks: the blocks Home draws, in the account’s order', () => {
 	const nothing: HomeData = {
 		on_this_day: null,
 		rediscover: [],
@@ -209,19 +210,47 @@ describe('homeIsEmpty: nothing to tell yet', () => {
 		years: [],
 		new: fresh(0, [])
 	};
-	it('is empty with no block to show', () => {
-		expect(homeIsEmpty(nothing, [], [])).toBe(true);
+	const all: HomeData = {
+		on_this_day: day(),
+		rediscover: [cover],
+		memories: [memory('2024-07-12', '2024-07-19')],
+		years: [memory('2016-01-01', '2016-12-31')],
+		new: fresh(3, [])
+	};
+	const everyBlock = [...DEFAULT_LOOK.homeSections];
+
+	it('draws every block that has photos, in the order chosen', () => {
+		expect(homeBlocks(all, [cover], [{ id: 1 }], everyBlock)).toEqual(everyBlock);
+		expect(homeBlocks(all, [cover], [{ id: 1 }], ['pinned', 'years', 'on_this_day'])).toEqual([
+			'pinned',
+			'years',
+			'on_this_day'
+		]);
 	});
-	it.each([
-		['on this day', { ...nothing, on_this_day: day() }, [], []],
-		['a memory', { ...nothing, memories: [memory('2024-07-12', '2024-07-19')] }, [], []],
-		['new photos', { ...nothing, new: fresh(3, []) }, [], []],
-		['a photo to rediscover', { ...nothing, rediscover: [cover] }, [], []],
-		['a year', { ...nothing, years: [memory('2016-01-01', '2016-12-31')] }, [], []],
-		['a pinned photo', nothing, [cover], []],
-		['a person', nothing, [], [{ id: 1 }]]
-	])('is not empty with %s', (_, home, pinned, people) => {
-		expect(homeIsEmpty(home, pinned, people)).toBe(false);
+	it.each<[string, HomeData, AssetOut[], unknown[], HomeSection]>([
+		['on this day', { ...nothing, on_this_day: day() }, [], [], 'on_this_day'],
+		['a photo to rediscover', { ...nothing, rediscover: [cover] }, [], [], 'rediscover'],
+		[
+			'a memory',
+			{ ...nothing, memories: [memory('2024-07-12', '2024-07-19')] },
+			[],
+			[],
+			'memories'
+		],
+		['a year', { ...nothing, years: [memory('2016-01-01', '2016-12-31')] }, [], [], 'years'],
+		['a pinned photo', nothing, [cover], [], 'pinned'],
+		['a person', nothing, [], [{ id: 1 }], 'people'],
+		['new photos', { ...nothing, new: fresh(3, []) }, [], [], 'new']
+	])('with only %s, draws only that', (_, home, pinned, people, block) => {
+		expect(homeBlocks(home, pinned, people, everyBlock)).toEqual([block]);
+	});
+	it('leaves out a block turned off, though it has photos', () => {
+		expect(homeBlocks(all, [cover], [{ id: 1 }], ['people', 'new'])).toEqual(['people', 'new']);
+	});
+	it('draws nothing when no chosen block has photos, nor one not answered yet', () => {
+		expect(homeBlocks(nothing, [], [], everyBlock)).toEqual([]);
+		expect(homeBlocks(nothing, null, null, everyBlock)).toEqual([]);
+		expect(homeBlocks(all, [], [], ['pinned', 'people'])).toEqual([]);
 	});
 });
 

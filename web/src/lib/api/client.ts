@@ -41,6 +41,7 @@ import type {
 	Id,
 	ImportReport,
 	ImportReportPage,
+	HomeSection,
 	Look,
 	Mode,
 	UploadImportJob,
@@ -254,6 +255,9 @@ export function createApi(options: ApiOptions = {}) {
 		// look (v1.5): an account chooses its mode, an admin sets any account's whole sheet
 		myLook: () => get<Look>('/api/me/look'),
 		setMyMode: (mode: Mode) => request<Look>('PUT', '/api/me/look', { mode }),
+		/** What the account's own Home shows, in order (v1.11). */
+		setMyHome: (sections: HomeSection[]) =>
+			request<Look>('PUT', '/api/me/look', { homeSections: sections }),
 		accountLook: (id: Id) => get<Look>(`/api/admin/accounts/${id}/look`),
 		/** Fields left out go back to their default: `{}` resets the look. */
 		setAccountLook: (id: Id, sheet: Partial<Look>) =>
