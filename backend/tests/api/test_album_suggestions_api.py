@@ -36,7 +36,13 @@ def library(admin: TestClient) -> dict[str, list[int]]:
             made.append(asset_id)
         return made
 
-    home = [i for w in range(40) for i in photos(2, datetime(2024, 1, 1, 18) + w * timedelta(7), timedelta(minutes=5), RENNES)]
+    home = [
+        i
+        for w in range(40)
+        for i in photos(
+            2, datetime(2024, 1, 1, 18) + w * timedelta(7), timedelta(minutes=5), RENNES
+        )
+    ]
     trip = photos(9, datetime(2025, 7, 12, 10), timedelta(hours=1), MALO)
     trip += photos(1, datetime(2025, 7, 12, 20), timedelta(0), MALO, secret)
     repo.set_places([(i, Place("France", "Brittany", "Saint-Malo")) for i in trip])

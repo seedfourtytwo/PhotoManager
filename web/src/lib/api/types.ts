@@ -351,6 +351,16 @@ export type AlbumSummary = {
 	updated_at: string;
 };
 export type AlbumDetail = AlbumSummary & { items: AssetOut[] };
+/** An event proposed as an album (v1.12): made only when kept. `items`: its first four photos. */
+export type AlbumSuggestion = {
+	key: string;
+	title: string;
+	from: string;
+	to: string;
+	count: number;
+	cover: AssetOut;
+	items: AssetOut[];
+};
 /** The longest title an album may have (the server refuses a longer one). */
 export const ALBUM_TITLE_MAX = 200;
 export type AlbumIn = { title: string; description?: string; asset_ids?: Id[] };

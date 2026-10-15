@@ -9,6 +9,7 @@ import type {
 	AlbumIn,
 	AlbumMember,
 	AlbumPatch,
+	AlbumSuggestion,
 	AlbumSummary,
 	AssetDetail,
 	AssetFilters,
@@ -352,6 +353,12 @@ export function createApi(options: ApiOptions = {}) {
 		albumMembers: (id: Id) => get<AlbumMember[]>(`/api/albums/${id}/members`),
 		setAlbumMembers: (id: Id, members: AlbumMember[]) =>
 			request<AlbumMember[]>('PUT', `/api/albums/${id}/members`, members),
+		// suggested albums (v1.12)
+		albumSuggestions: () => get<AlbumSuggestion[]>('/api/album-suggestions'),
+		keepSuggestion: (key: string) =>
+			request<AlbumSummary>('POST', `/api/album-suggestions/${encodeURIComponent(key)}/keep`),
+		discardSuggestion: (key: string) =>
+			request<void>('POST', `/api/album-suggestions/${encodeURIComponent(key)}/discard`),
 
 		// to review: photos held out of the library until someone decides
 		review: () => get<ReviewList>('/api/review'),

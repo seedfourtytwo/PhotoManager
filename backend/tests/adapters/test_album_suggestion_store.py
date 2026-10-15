@@ -110,7 +110,9 @@ def test_discarding_is_remembered_per_account(repo: SqliteRepository, member: Vi
     assert repo.keep_suggestion(member.user_id, "7", "Late", [], NOW) is None
 
 
-def test_a_kept_album_deleted_later_leaves_the_answer(repo: SqliteRepository, member: Viewer) -> None:
+def test_a_kept_album_deleted_later_leaves_the_answer(
+    repo: SqliteRepository, member: Viewer
+) -> None:
     family = repo.add_source("Family", "/family").id
     album_id = repo.keep_suggestion(member.user_id, "1", "T", [_photo(repo, 1, family)], NOW)
     assert album_id is not None

@@ -20,7 +20,14 @@ DEFAULTS = {
     "collectionsRows": ["people", "places", "albums"],
     "dockLabels": True,
     "homeSections": [
-        "on_this_day", "rediscover", "memories", "suggested", "years", "pinned", "people", "new"
+        "on_this_day",
+        "rediscover",
+        "memories",
+        "suggested",
+        "years",
+        "pinned",
+        "people",
+        "new",
     ],
 }
 WARM = {

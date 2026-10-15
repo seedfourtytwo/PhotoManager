@@ -59,9 +59,7 @@ def _open(store: SuggestionStore, viewer: Viewer, namer: Namer) -> list[Suggesti
     found = []
     for event in reversed(album_events(store.event_photos(viewer))):
         ids = tuple(p.asset_id for p in event.photos)
-        if event.key in answered or sum(i in in_albums for i in ids) >= MOSTLY_IN_ALBUMS * len(
-            ids
-        ):
+        if event.key in answered or sum(i in in_albums for i in ids) >= MOSTLY_IN_ALBUMS * len(ids):
             continue
         found.append(
             Suggestion(

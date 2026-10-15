@@ -113,9 +113,13 @@ def _goes_on(run: _Run, p: EventPhoto, home: LatLon | None) -> bool:
         return where is not None and home is not None and distance_km(home, where) > AWAY_KM
 
     travelling = away(run.position) and away(p.position)
-    if run.position is not None and p.position is not None and not travelling:
-        if distance_km(run.position, p.position) > MOVED_KM:
-            return False
+    if (
+        run.position is not None
+        and p.position is not None
+        and not travelling
+        and distance_km(run.position, p.position) > MOVED_KM
+    ):
+        return False
     gap = _at(p) - _at(run.photos[-1])
     return (
         gap <= SAME_EVENT_GAP
@@ -126,7 +130,9 @@ def _goes_on(run: _Run, p: EventPhoto, home: LatLon | None) -> bool:
 
 def split_events(photos: Sequence[EventPhoto]) -> list[Event]:
     """Every event, oldest first; photos without a real date are left out."""
-    ordered = sorted((p for p in photos if p.taken_at is not None), key=lambda p: (_at(p), p.asset_id))
+    ordered = sorted(
+        (p for p in photos if p.taken_at is not None), key=lambda p: (_at(p), p.asset_id)
+    )
     home = _home(ordered)
     runs: list[_Run] = []
     for p in ordered:
@@ -146,8 +152,11 @@ def _place_name(event: Event) -> str | None:
     """The one city all its named photos share, else the one region, else the one country,
     else the city with the most of them (a tie: the first seen)."""
     places = [p.place for p in event.photos if p.place is not None]
-    for part in ("city", "region", "country"):
-        names = {getattr(place, part) for place in places}
+    for names in (
+        {place.city for place in places},
+        {place.region for place in places},
+        {place.country for place in places},
+    ):
         if len(names) == 1 and "" not in names:
             return names.pop()
     cities = Counter(place.city or place.region or place.country for place in places)
