@@ -1,4 +1,6 @@
+import type { Locator } from '@playwright/test';
 import {
+	centre,
 	expect,
 	expectAccessible,
 	isPhone,
@@ -7,7 +9,9 @@ import {
 	selectTiles,
 	signIn,
 	test,
-	toast
+	toast,
+	touchDown,
+	touchSwipe
 } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
@@ -194,4 +198,42 @@ test('Add photos: pick from the library in a sheet; what the album holds is not 
 	await expect(toast(page)).toContainText('Added 2 photos');
 	await expect(sheet).toBeHidden();
 	await expect(tiles).toHaveCount(before + 2);
+});
+
+// DESIGN_PRINCIPLES §1.9: a sheet follows the finger down by its title and, let go, either
+// closes or springs back from the speed it was let go at (lib/spring.ts).
+test('phone: a sheet pulled a little springs back; pulled far or flicked, it closes', async ({
+	page
+}) => {
+	test.skip(!isPhone(page), 'sheets are dragged on a phone only');
+	await page.goto('/albums');
+	const open = async () => {
+		await page.getByRole('button', { name: 'New album' }).click();
+		const sheet = page.getByRole('dialog', { name: 'New album' });
+		await expect(sheet).toBeVisible();
+		// Measured once it has risen, not on its way up.
+		await sheet.evaluate((el) =>
+			Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished))
+		);
+		return { sheet, title: await centre(sheet.getByRole('heading', { name: 'New album' })) };
+	};
+	const offset = (sheet: Locator) => sheet.evaluate((el) => (el as HTMLElement).style.translate);
+
+	// A slow short pull, held still before letting go: it stays and comes home.
+	let { sheet, title } = await open();
+	const lift = await touchDown(page, title, { x: title.x, y: title.y + 40 }, { steps: 8 });
+	await expect.poll(() => offset(sheet)).toBe('0px 40px');
+	await page.waitForTimeout(150);
+	await lift();
+	await expect.poll(() => offset(sheet)).toBe('');
+	await expect(sheet).toBeVisible();
+
+	// A short fast flick closes it.
+	await touchSwipe(page, title, { x: title.x, y: title.y + 50 }, 2);
+	await expect(sheet).toBeHidden();
+
+	// Pulled far, however slowly, it closes.
+	({ sheet, title } = await open());
+	await touchSwipe(page, title, { x: title.x, y: title.y + 160 }, 20);
+	await expect(sheet).toBeHidden();
 });
