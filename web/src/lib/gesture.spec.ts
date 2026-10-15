@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SLOP, pull, recognise, type Point } from './gesture';
+import { SLOP, edge, lockAxis, pull, recognise, turn, velocity, type Point } from './gesture';
 
 const at = (x: number, y: number, t = 0): Point => ({ x, y, t });
 const down = at(100, 300);
@@ -32,9 +32,9 @@ describe('recognise', () => {
 		expect(second(130, 1200)).toBe('tap');
 	});
 
-	it('more than 50 px sideways is next (leftwards) or previous (rightwards)', () => {
-		expect(swipe(-51, 0)).toBe('next');
-		expect(swipe(51, 0)).toBe('previous');
+	it('a sideways drag is not recognised here: the track decides whether it turns (turn)', () => {
+		expect(swipe(-200, 0)).toBeNull();
+		expect(swipe(200, 0)).toBeNull();
 	});
 
 	it('more than 60 px up is details; more than 80 px down is close', () => {
@@ -43,20 +43,20 @@ describe('recognise', () => {
 	});
 
 	it.each([
-		['left', -50, 0],
-		['right', 50, 0],
 		['up', 0, -60],
 		['down', 0, 80]
 	])('a drag %s released short of its threshold is cancelled: no gesture', (_, dx, dy) => {
 		expect(swipe(dx, dy)).toBeNull();
 	});
 
-	it('a diagonal drag goes to its longer axis', () => {
-		expect(swipe(-90, 70)).toBe('next');
+	it('a diagonal drag goes to its longer axis, or to the axis it locked to first', () => {
 		expect(swipe(70, -90)).toBe('details');
 		expect(swipe(-70, 90)).toBe('close');
-		// Sideways by a hair, but not far enough to step: nothing, not a vertical gesture.
-		expect(swipe(45, -44)).toBeNull();
+		expect(swipe(-90, 70)).toBeNull();
+		// Locked sideways, then dragged far down: still sideways, so it does not close.
+		expect(recognise(down, at(80, 400, 120), null, true, 'x')).toBeNull();
+		// Locked downwards, then drifted sideways: it still closes.
+		expect(recognise(down, at(-20, 390, 120), null, true, 'y')).toBe('close');
 	});
 
 	it('a mouse can tap and double tap but not swipe', () => {
@@ -66,16 +66,83 @@ describe('recognise', () => {
 	});
 });
 
+describe('lockAxis', () => {
+	it('no axis inside the slop, then the longer one', () => {
+		expect(lockAxis(down, at(106, 304))).toBeNull();
+		expect(lockAxis(down, at(100 + SLOP, 300))).toBeNull();
+		expect(lockAxis(down, at(100 + SLOP + 1, 300))).toBe('x');
+		expect(lockAxis(down, at(120, 330))).toBe('y');
+		expect(lockAxis(down, at(60, 280))).toBe('x');
+	});
+});
+
 describe('pull', () => {
-	it('nothing inside the slop, then only the longer axis, and never upwards', () => {
-		expect(pull(down, at(106, 304))).toEqual({ x: 0, y: 0 });
-		expect(pull(down, at(40, 320))).toEqual({ x: -60, y: 0 });
-		expect(pull(down, at(120, 390))).toEqual({ x: 0, y: 90 });
-		expect(pull(down, at(110, 200))).toEqual({ x: 0, y: 0 });
+	it('sideways follows x only, however far the finger drifts up or down', () => {
+		expect(pull(down, at(40, 320), 'x')).toEqual({ x: -60, y: 0 });
+		// A drag that became diagonal keeps its x: it does not snap back to the middle.
+		expect(pull(down, at(70, 400), 'x')).toEqual({ x: -30, y: 0 });
 	});
 
-	it('starts a pixel past the slop, the same edge as a tap and the grid’s long press', () => {
-		expect(pull(down, at(100 + SLOP, 300))).toEqual({ x: 0, y: 0 });
-		expect(pull(down, at(100 + SLOP + 1, 300))).toEqual({ x: SLOP + 1, y: 0 });
+	it('downwards follows y only, and never upwards', () => {
+		expect(pull(down, at(160, 390), 'y')).toEqual({ x: 0, y: 90 });
+		expect(pull(down, at(110, 200), 'y')).toEqual({ x: 0, y: 0 });
+	});
+});
+
+describe('edge', () => {
+	it('follows the finger where there is a photo to pull in', () => {
+		expect(edge(-90, { previous: true, next: true })).toBe(-90);
+		expect(edge(90, { previous: true, next: false })).toBe(90);
+	});
+
+	it('gives a third of the pull past the first or the last photo', () => {
+		expect(edge(90, { previous: false, next: true })).toBe(30);
+		expect(edge(-90, { previous: true, next: false })).toBe(-30);
+	});
+});
+
+describe('velocity', () => {
+	const move = (x: number, t: number) => at(x, 300, t);
+
+	it('is zero for a finger that has not moved, or a single sample', () => {
+		expect(velocity([])).toBe(0);
+		expect(velocity([move(100, 0)])).toBe(0);
+		expect(velocity([move(100, 0), move(100, 50)])).toBe(0);
+		// Two samples at the same instant say nothing about speed.
+		expect(velocity([move(100, 10), move(160, 10)])).toBe(0);
+	});
+
+	it('is pixels per millisecond over the last 80 ms only', () => {
+		expect(velocity([move(100, 0), move(60, 40)])).toBe(-1);
+		// The slow start long before does not drag the flick down.
+		expect(velocity([move(300, 0), move(298, 200), move(258, 240), move(218, 280)])).toBe(-1);
+	});
+});
+
+describe('turn', () => {
+	const width = 400;
+	const both = { previous: true, next: true };
+
+	it('past 35 % of the width turns to the next (leftwards) or previous (rightwards) photo', () => {
+		expect(turn(-141, 0, width, both)).toBe(1);
+		expect(turn(141, 0, width, both)).toBe(-1);
+		expect(turn(-139, 0, width, both)).toBe(0);
+		expect(turn(139, 0, width, both)).toBe(0);
+	});
+
+	it('a flick faster than 0.4 px/ms turns, however short', () => {
+		expect(turn(-30, -0.41, width, both)).toBe(1);
+		expect(turn(30, 0.41, width, both)).toBe(-1);
+		expect(turn(-30, -0.39, width, both)).toBe(0);
+	});
+
+	it('a flick back against the drag cancels it, however far it went', () => {
+		expect(turn(-300, 0.5, width, both)).toBe(0);
+		expect(turn(300, -0.5, width, both)).toBe(0);
+	});
+
+	it('never turns past the first or the last photo', () => {
+		expect(turn(-300, -2, width, { previous: true, next: false })).toBe(0);
+		expect(turn(300, 2, width, { previous: false, next: true })).toBe(0);
 	});
 });
