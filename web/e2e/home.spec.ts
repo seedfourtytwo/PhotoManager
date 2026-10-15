@@ -156,9 +156,10 @@ test('home: a memory plays full screen, steps on a tap, and closes with ×, Esca
 	page
 }) => {
 	await signIn(page, '/home');
+	// a trip or a month at home, else a year (the real backend's small library has no trip)
 	const first = page
 		.getByRole('main')
-		.getByRole('region', { name: 'Memories' })
+		.getByRole('region', { name: /^(Memories|Years)$/ })
 		.getByRole('button', { name: /^Play: / })
 		.first();
 	const title = (await first.locator('.title').textContent())!;
