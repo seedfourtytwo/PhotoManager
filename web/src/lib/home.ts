@@ -1,5 +1,5 @@
 /** What Home says (spec 2026-10-14 §9): its date line, titles and sentences, in plain words. */
-import type { AssetOut, HomeData, Memory, NewArrivals, OnThisDay } from './api/types';
+import type { AssetOut, HomeData, HomeSection, Memory, NewArrivals, OnThisDay } from './api/types';
 import { MONTHS, formatLongDay } from './dates';
 import { formatCount, photos } from './format';
 
@@ -124,21 +124,37 @@ export function arrivalsSentence(arrivals: NewArrivals): string {
 	return from ? `${what} from ${from}.` : `${what} this week.`;
 }
 
-/** No block of Home has anything to show. */
-export function homeIsEmpty(
+/** Each block of Home by its name, as its heading says it. */
+export const SECTION_NAMES: Record<HomeSection, string> = {
+	on_this_day: 'On this day',
+	rediscover: 'Rediscover',
+	memories: 'Memories',
+	years: 'Years',
+	pinned: 'Pinned',
+	people: 'People',
+	new: 'New this week'
+};
+
+/**
+ * The blocks Home draws: of the `sections` the account chose, in its order, those with
+ * something to show. `pinned` and `people` are null until they are answered.
+ */
+export function homeBlocks(
 	home: HomeData,
-	pinned: readonly AssetOut[],
-	people: readonly unknown[]
-): boolean {
-	return (
-		!home.on_this_day &&
-		home.rediscover.length === 0 &&
-		home.memories.length === 0 &&
-		home.years.length === 0 &&
-		home.new.count === 0 &&
-		pinned.length === 0 &&
-		people.length === 0
-	);
+	pinned: readonly AssetOut[] | null,
+	people: readonly unknown[] | null,
+	sections: readonly HomeSection[]
+): HomeSection[] {
+	const has: Record<HomeSection, boolean> = {
+		on_this_day: home.on_this_day !== null,
+		rediscover: home.rediscover.length > 0,
+		memories: home.memories.length > 0,
+		years: home.years.length > 0,
+		pinned: Boolean(pinned?.length),
+		people: Boolean(people?.length),
+		new: home.new.count > 0
+	};
+	return sections.filter((section) => has[section]);
 }
 
 /** The large picture of a photo (the On this day cover, a story's photos), its edits applied. */

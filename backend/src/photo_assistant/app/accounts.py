@@ -21,7 +21,15 @@ from photo_assistant.domain.access import (
     username_problem,
 )
 from photo_assistant.domain.errors import ConflictError, InvalidError, NotFoundError
-from photo_assistant.domain.look import Look, LookError, dump_look, parse_look, read_look
+from photo_assistant.domain.look import (
+    OWN_FIELDS,
+    Look,
+    LookError,
+    dump_look,
+    parse_look,
+    read_look,
+    with_sent,
+)
 from photo_assistant.ports import Clock
 from photo_assistant.ports.accounts import (
     AccountStore,
@@ -261,19 +269,21 @@ class Accounts:
         self._store.store_look(user_id, dump_look(look))
         return look
 
-    def choose_mode(self, user: User, sheet: object) -> Look:
-        """The one thing an account sets for itself: a sheet holding ``mode`` and nothing
-        else. The rest of its look stays, and so does an admin's save that arrives at the same
-        moment: the stored sheet is read and written as one step. Raises InvalidLookError."""
-        if not isinstance(sheet, dict) or sheet.keys() != {"mode"}:
+    def choose_own(self, user: User, sheet: object) -> Look:
+        """What an account sets for itself: its mode and what its Home shows (``mode``,
+        ``homeSections``, either or both). The rest of its look stays, and so does an admin's
+        save that arrives at the same moment: the stored sheet is read and written as one
+        step. Raises InvalidLookError."""
+        if not isinstance(sheet, dict) or not sheet or not sheet.keys() <= OWN_FIELDS:
             raise InvalidLookError(
-                'you can change only your mode: send {"mode": "dark"}, "light" or "system"; '
+                "you can change only your mode and what your Home shows: send "
+                '{"mode": "dark"}, "light" or "system", and or {"homeSections": [...]}; '
                 "an admin sets the rest of your look"
             )
-        mode = _parsed_look(sheet).mode
+        _parsed_look(sheet)  # refused here, before anything is stored
         return read_look(
             self._store.change_look(
-                user.id, lambda stored: dump_look(replace(read_look(stored), mode=mode))
+                user.id, lambda stored: dump_look(with_sent(read_look(stored), sheet))
             )
         )
 

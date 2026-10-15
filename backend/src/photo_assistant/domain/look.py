@@ -55,6 +55,18 @@ class CollectionsRow(StrEnum):
     ALBUMS = "albums"
 
 
+class HomeSection(StrEnum):
+    """The blocks of Home, in the order a new account sees them (issue 54)."""
+
+    ON_THIS_DAY = "on_this_day"
+    REDISCOVER = "rediscover"
+    MEMORIES = "memories"
+    YEARS = "years"
+    PINNED = "pinned"
+    PEOPLE = "people"
+    NEW = "new"
+
+
 # Dials: the lowest and highest value each may take; anything beyond is pulled back in.
 ACCENT_HUE = (0, 360)  # degrees
 CORNERS = (0, 22)  # px
@@ -76,9 +88,13 @@ class Look:
     start_page: StartPage = StartPage.TODAY
     collections_rows: tuple[CollectionsRow, ...] = tuple(CollectionsRow)
     dock_labels: bool = True
+    home_sections: tuple[HomeSection, ...] = tuple(HomeSection)
 
 
 DEFAULT_LOOK = Look()
+
+# What an account sets for itself; an admin sets the rest (FEATURES 8.9).
+OWN_FIELDS = frozenset({"mode", "homeSections"})
 
 
 class LookError(ValueError):
@@ -133,15 +149,20 @@ def _switch(field: str) -> Callable[[object], bool]:
     return read
 
 
-def _collections_rows(value: object) -> tuple[CollectionsRow, ...]:
-    names = value if isinstance(value, list) else []
-    rows = tuple(CollectionsRow(v) for v in names if isinstance(v, str) and v in CollectionsRow)
-    if not rows or len(rows) != len(names) or len(set(rows)) != len(rows):
-        raise LookError(
-            "'collectionsRows' must list at least one of "
-            f"{', '.join(CollectionsRow)}, each once, in the order to show them"
-        )
-    return rows
+def _ordered[E: StrEnum](field: str, kind: type[E]) -> Callable[[object], tuple[E, ...]]:
+    """Some of ``kind``'s choices, each once, in the order to show them: the ones shown."""
+
+    def read(value: object) -> tuple[E, ...]:
+        names = value if isinstance(value, list) else []
+        chosen = tuple(kind(v) for v in names if isinstance(v, str) and v in kind)
+        if not chosen or len(chosen) != len(names) or len(set(chosen)) != len(chosen):
+            raise LookError(
+                f"'{field}' must list at least one of "
+                f"{', '.join(kind)}, each once, in the order to show them"
+            )
+        return chosen
+
+    return read
 
 
 # Sheet field → (attribute of Look, how to read its value). The whole list of fields.
@@ -155,8 +176,9 @@ _FIELDS: dict[str, tuple[str, Callable[[object], object]]] = {
     "thumbSize": ("thumb_size", _choice("thumbSize", ThumbSize)),
     "showToday": ("show_today", _switch("showToday")),
     "startPage": ("start_page", _choice("startPage", StartPage)),
-    "collectionsRows": ("collections_rows", _collections_rows),
+    "collectionsRows": ("collections_rows", _ordered("collectionsRows", CollectionsRow)),
     "dockLabels": ("dock_labels", _switch("dockLabels")),
+    "homeSections": ("home_sections", _ordered("homeSections", HomeSection)),
 }
 
 
@@ -180,6 +202,16 @@ def _look(values: dict[str, object]) -> Look:
     return look if look.show_today else replace(look, start_page=StartPage.LIBRARY)
 
 
+def with_sent(look: Look, sheet: dict[str, object]) -> Look:
+    """``look`` with the fields ``sheet`` holds, read as ``parse_look`` reads them; the rest
+    stays. Raises LookError."""
+    sent = parse_look(sheet)
+    return _look(
+        {attribute: getattr(look, attribute) for attribute, _ in _FIELDS.values()}
+        | {_FIELDS[name][0]: getattr(sent, _FIELDS[name][0]) for name in sheet}
+    )
+
+
 def read_look(stored: str | None) -> Look:
     """The look a stored sheet describes: each field that still passes, the default for each
     that does not, and the defaults for no sheet or for something that is not one."""
@@ -200,8 +232,7 @@ def read_look(stored: str | None) -> Look:
 def look_sheet(look: Look) -> dict[str, object]:
     """The look as the sheet the API sends and the store keeps."""
     sheet = {name: getattr(look, attribute) for name, (attribute, _) in _FIELDS.items()}
-    sheet["collectionsRows"] = list(look.collections_rows)
-    return sheet
+    return {name: list(v) if isinstance(v, tuple) else v for name, v in sheet.items()}
 
 
 def dump_look(look: Look) -> str:
