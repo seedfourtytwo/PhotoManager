@@ -9,6 +9,7 @@ import { photos } from './format';
 export type UploadRequest = {
 	upload: { onprogress: ((event: ProgressEvent) => void) | null };
 	onload: (() => void) | null;
+	onloadend: (() => void) | null;
 	onerror: (() => void) | null;
 	onabort: (() => void) | null;
 	ontimeout: (() => void) | null;
@@ -17,7 +18,15 @@ export type UploadRequest = {
 	withCredentials: boolean;
 	open(method: string, url: string): void;
 	send(body: FormData): void;
+	abort(): void;
 };
+
+/**
+ * An upload may take as long as its files do, so there is no overall timeout. It is given up
+ * once nothing has moved for this long: no bytes went out and no answer came (a connection that
+ * dropped without a word). The server answers within seconds of the last byte.
+ */
+const STALLED_MS = 60_000;
 
 export type UploadOptions = {
 	url: string;
@@ -43,10 +52,14 @@ export function uploadFiles(files: File[], options: UploadOptions): Promise<Uplo
 	for (const file of files) form.append('file', file, file.name);
 	const xhr = options.request?.() ?? (new XMLHttpRequest() as UploadRequest);
 	return new Promise((resolve, reject) => {
+		let stalled = setTimeout(() => xhr.abort(), STALLED_MS);
 		xhr.upload.onprogress = (event) => {
+			clearTimeout(stalled);
+			stalled = setTimeout(() => xhr.abort(), STALLED_MS);
 			if (event.lengthComputable && event.total > 0)
 				options.onprogress?.(event.loaded / event.total);
 		};
+		xhr.onloadend = () => clearTimeout(stalled);
 		xhr.onload = () => {
 			if (xhr.status >= 200 && xhr.status < 300) {
 				try {

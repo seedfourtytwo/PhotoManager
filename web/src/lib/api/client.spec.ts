@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError, createApi } from './client';
-import { isPin, type AssetOut } from './types';
+import { isPin, type AssetOut, type PrintRequest } from './types';
 
 type Call = { url: string; method: string; body: unknown; credentials?: RequestCredentials };
 
@@ -412,6 +412,59 @@ describe('contract v1.1', () => {
 	it('asks for the un-edited preview as the editor base', () => {
 		const api = createApi({ fetch: fakeServer([]).fetcher });
 		expect(api.previewUrl(4, { edit: 'none' })).toBe('/api/assets/4/preview?edit=none');
+	});
+});
+
+describe('a request that gets no answer (a VPN that dropped without a word)', () => {
+	/** Answers after `after` ms, unless the request gave up first (its signal aborted). */
+	function slowServer(after: number, body: () => Response = () => json({ id: 1 })) {
+		const signals: (AbortSignal | null | undefined)[] = [];
+		const fetcher = ((_input: RequestInfo | URL, init?: RequestInit) => {
+			signals.push(init?.signal);
+			return new Promise<Response>((resolve, reject) => {
+				const answer = setTimeout(() => resolve(body()), after);
+				init?.signal?.addEventListener('abort', () => {
+					clearTimeout(answer);
+					reject(init.signal?.reason);
+				});
+			});
+		}) as typeof fetch;
+		return { fetcher, signals };
+	}
+
+	it('gives up after the timeout and says the server could not be reached', async () => {
+		const { fetcher } = slowServer(10_000);
+		const api = createApi({ fetch: fetcher, timeout: 20 });
+		const asking = api.me();
+		await expect(asking).rejects.toThrow('The library server could not be reached');
+		await expect(asking).rejects.toMatchObject({ status: 0 });
+	});
+
+	it('an answer within the timeout arrives', async () => {
+		const { fetcher } = slowServer(5);
+		const api = createApi({ fetch: fetcher, timeout: 200 });
+		await expect(api.me()).resolves.toEqual({ id: 1 });
+	});
+
+	it('waits longer for the calls the server itself may take a while over', async () => {
+		const { fetcher } = slowServer(50, () => json({ items: [] }));
+		const api = createApi({ fetch: fetcher, timeout: 20 });
+		await expect(api.search('beach')).resolves.toEqual({ items: [] });
+		await expect(api.protonFolders('/')).resolves.toEqual({ items: [] });
+		await expect(api.me()).rejects.toThrow('could not be reached');
+	});
+
+	it('never cuts a download or a PDF short: those take as long as the file does', async () => {
+		const file = () => new Response('bytes');
+		const { fetcher, signals } = slowServer(50, file);
+		const api = createApi({ fetch: fetcher, timeout: 20 });
+		await expect(
+			api.singleDownload(1, { format: 'original', quality: 90, max_edge: null })
+		).resolves.toMatchObject({ filename: 'photo-1' });
+		await expect(api.printPdf(1, {} as PrintRequest)).resolves.toMatchObject({
+			filename: 'album.pdf'
+		});
+		expect(signals).toEqual([undefined, undefined]);
 	});
 });
 
