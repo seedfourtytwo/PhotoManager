@@ -315,7 +315,9 @@ from a signed-in browser. The free iPhone client is an Apple Shortcut
 
 ### Search
 Query → parser splits facets (`date:2023`, `person:Lea`, `place:France`) from free text →
-SQL filters narrow candidates → free text is embedded by the CLIP text encoder → sqlite-vec
+names the library knows are spotted as whole words in the free text (`domain/search_query.
+spot_names`): people and places become facets, since CLIP cannot see who or where →
+SQL filters narrow candidates → photos in a named album or with a named tag are ranked first → free text is embedded by the CLIP text encoder → sqlite-vec
 KNN within candidates → results ranked, paginated with a cursor.
 
 ### Home (issue 54)

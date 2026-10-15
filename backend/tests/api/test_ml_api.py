@@ -239,7 +239,8 @@ def test_a_named_photo_not_analysed_yet_is_still_found(
         admin, {library["beach"]: (1.0, 0.0, 0.0), library["snow"]: (0.0, 1.0, 0.0)}
     )
     clip.texts["trip"] = (1.0, 0.0, 0.0)
-    admin.post("/api/albums", json={"title": "Trip", "asset_ids": [library["garden"], library["snow"]]})
+    trip = [library["garden"], library["snow"]]
+    admin.post("/api/albums", json={"title": "Trip", "asset_ids": trip})
     body = admin.get("/api/search", params={"q": "trip"}).json()
     assert _ids(body) == [library["snow"], library["garden"], library["beach"]]
     assert [i["score"] is None for i in body["items"]] == [False, True, False]
