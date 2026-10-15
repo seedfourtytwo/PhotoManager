@@ -84,16 +84,6 @@ export function buildDownloadRequest(
 	return { ...scope, ...normaliseOptions(options) };
 }
 
-/** True when the server can stream untouched originals (no rendering needed). */
-export function isUntouched(options: DownloadOptions): boolean {
-	return (
-		options.format === 'original' &&
-		options.max_edge === null &&
-		!options.strip_location &&
-		!options.strip_all_metadata
-	);
-}
-
 export function scopeLabel(scope: DownloadScope, count?: number): string {
 	if ('ids' in scope) return plural(scope.ids.length, 'selected photo');
 	if ('album_id' in scope) return 'this album';

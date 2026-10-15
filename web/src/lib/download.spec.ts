@@ -5,7 +5,6 @@ import {
 	applySimple,
 	buildDownloadRequest,
 	frameError,
-	isUntouched,
 	scopeLabel,
 	simpleChoices,
 	simpleOf
@@ -42,12 +41,6 @@ describe('download model', () => {
 		expect(buildDownloadRequest({ ids: [1] }, { ...DEFAULT_OPTIONS, quality: 0 }).quality).toBe(1);
 	});
 
-	it('knows when originals stream untouched', () => {
-		expect(isUntouched(DEFAULT_OPTIONS)).toBe(true);
-		expect(isUntouched({ ...DEFAULT_OPTIONS, max_edge: 2048 })).toBe(false);
-		expect(isUntouched({ ...DEFAULT_OPTIONS, strip_location: true })).toBe(false);
-	});
-
 	it('describes the scope in words', () => {
 		expect(scopeLabel({ ids: [1] })).toBe('1 selected photo');
 		expect(scopeLabel({ ids: [1, 2] })).toBe('2 selected photos');
@@ -78,7 +71,12 @@ describe('the plain choices the dialog opens on', () => {
 
 	it('the default is full size: the file as it was taken', () => {
 		expect(simpleOf(DEFAULT_OPTIONS, false)).toBe('full');
-		expect(isUntouched(applySimple({ ...DEFAULT_OPTIONS, max_edge: 1080 }, 'full'))).toBe(true);
+		expect(applySimple({ ...DEFAULT_OPTIONS, max_edge: 1080 }, 'full')).toMatchObject({
+			format: 'original',
+			max_edge: null,
+			strip_location: false,
+			strip_all_metadata: false
+		});
 	});
 
 	it('smaller is a 2048 JPEG, with edits a full-size one', () => {
