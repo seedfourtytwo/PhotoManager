@@ -16,18 +16,18 @@ def _marks(ids: Sequence[int]) -> str:
 
 
 class AIMixin(SqliteBase):
-    def photos_to_caption(self, model: str, after_id: int, limit: int) -> list[tuple[int, str]]:
+    def photos_to_caption(self, model: str, limit: int) -> list[tuple[int, str]]:
         """Photos in the library (not held, not trashed) with no caption that ``model`` has not
-        failed on, by id after ``after_id``; with the best rendition to read."""
+        failed on, oldest first; with the best rendition to read."""
         rows = self._all(
             """SELECT a.id, coalesce(a.preview_path, a.thumb_path, a.library_path) AS path
                FROM asset a
-               WHERE a.id > ? AND a.kind = ? AND a.trashed_at IS NULL AND a.held_reason IS NULL
+               WHERE a.kind = ? AND a.trashed_at IS NULL AND a.held_reason IS NULL
                  AND NOT EXISTS (SELECT 1 FROM asset_caption c WHERE c.asset_id = a.id)
                  AND NOT EXISTS (SELECT 1 FROM ml_task t
                                  WHERE t.asset_id = a.id AND t.task = ? AND t.model = ?)
                ORDER BY a.id LIMIT ?""",
-            (after_id, MediaKind.PHOTO.value, CAPTION_TASK, model, limit),
+            (MediaKind.PHOTO.value, CAPTION_TASK, model, limit),
         )
         return [(int(r["id"]), str(r["path"])) for r in rows]
 

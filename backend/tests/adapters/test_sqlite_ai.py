@@ -9,7 +9,7 @@ MODEL = "qwen3.5:4b"
 PLAN = AlbumPlan("Beach day", (PlanSection("Morning", (1, 2), "two-side", {1: "Waves"}),))
 
 
-def test_photos_to_caption_are_live_photos_without_one_by_id_after_a_cursor(
+def test_photos_to_caption_are_live_photos_without_one_oldest_first(
     repo: SqliteRepository,
 ) -> None:
     first, second, third = (repo.add_asset(new_asset(n), NOW) for n in (1, 2, 3))
@@ -18,18 +18,17 @@ def test_photos_to_caption_are_live_photos_without_one_by_id_after_a_cursor(
     assert repo.trash_superseded(trashed, NOW)
     repo.save_caption(second, "Two dogs.", MODEL, "en")
 
-    assert repo.photos_to_caption(MODEL, 0, 10) == [
+    assert repo.photos_to_caption(MODEL, 10) == [
         (first, f"originals/2020/01/{1:064x}.jpg"),
         (third, f"originals/2020/01/{3:064x}.jpg"),
     ]
-    assert repo.photos_to_caption(MODEL, first, 10) == [(third, f"originals/2020/01/{3:064x}.jpg")]
-    assert len(repo.photos_to_caption(MODEL, 0, 1)) == 1
+    assert len(repo.photos_to_caption(MODEL, 1)) == 1
 
 
 def test_the_preview_is_read_rather_than_the_original(repo: SqliteRepository) -> None:
     asset_id = repo.add_asset(new_asset(1), NOW)
     repo._write("UPDATE asset SET preview_path = 'previews/1.jpg' WHERE id = ?", (asset_id,))
-    assert repo.photos_to_caption(MODEL, 0, 10) == [(asset_id, "previews/1.jpg")]
+    assert repo.photos_to_caption(MODEL, 10) == [(asset_id, "previews/1.jpg")]
 
 
 def test_a_photo_the_model_could_not_describe_is_not_asked_again_by_that_model(
@@ -37,8 +36,8 @@ def test_a_photo_the_model_could_not_describe_is_not_asked_again_by_that_model(
 ) -> None:
     asset_id = repo.add_asset(new_asset(1), NOW)
     repo.caption_failed(asset_id, MODEL, "the answer was not usable twice")
-    assert repo.photos_to_caption(MODEL, 0, 10) == []
-    assert [i for i, _ in repo.photos_to_caption("other:7b", 0, 10)] == [asset_id]
+    assert repo.photos_to_caption(MODEL, 10) == []
+    assert [i for i, _ in repo.photos_to_caption("other:7b", 10)] == [asset_id]
 
 
 def test_captions_and_tags_are_read_for_the_named_photos(repo: SqliteRepository) -> None:

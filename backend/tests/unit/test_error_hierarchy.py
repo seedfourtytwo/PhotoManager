@@ -31,6 +31,7 @@ NOT_DOMAIN_ERRORS = {
     "ports.backup.MirrorError": "a BackupError: the copy to Proton Drive failed this time",
     "ports.backup.MirrorSignInError": "a MirrorError, recorded on the run until the user signs in",
     "ports.ai.AIUnavailableError": MAY_PASS + " (the AI server is slow or down)",
+    "ports.ai.AIUnreachableError": MAY_PASS + " (an AIUnavailableError: no answer at all)",
     "ports.ImportBusyError": "another import holds the library: the worker puts the job back",
     # --- never reach a route or a job ----------------------------------------------------------
     "adapters.tool_runner.ToolTimeoutError": SIGNAL + " (adapters raise their own 'too slow')",

@@ -26,7 +26,14 @@ from photo_assistant.domain.album_plan import (
     summary_lines,
     validate,
 )
-from photo_assistant.ports.ai import AICall, AILog, AIProvider, AIUnavailableError, Capability
+from photo_assistant.ports.ai import (
+    AICall,
+    AILog,
+    AIProvider,
+    AIUnavailableError,
+    AIUnreachableError,
+    Capability,
+)
 
 T = TypeVar("T")
 Downscale = Callable[[bytes, int], bytes]
@@ -301,15 +308,15 @@ class OllamaProvider:
             response = self._client.post("/api/chat", json=body)
         except httpx.TimeoutException as exc:
             self._log.record(call.done("", ok=False, error="timeout"))
-            raise AIUnavailableError("the AI server did not answer in time") from exc
+            raise AIUnreachableError("the AI server did not answer in time") from exc
         except httpx.HTTPError as exc:
             self._log.record(call.done("", ok=False, error=f"connection: {exc}"))
-            raise AIUnavailableError(f"cannot reach the AI server: {exc}") from exc
+            raise AIUnreachableError(f"cannot reach the AI server: {exc}") from exc
         call.status = response.status_code
         if response.is_error:
             detail = response.text[:500]
             self._log.record(call.done(detail, ok=False, error=f"HTTP {response.status_code}"))
-            raise AIUnavailableError(f"the AI server refused the request: {detail}")
+            raise AIUnreachableError(f"the AI server refused the request: {detail}")
         return _message_content(response)
 
 

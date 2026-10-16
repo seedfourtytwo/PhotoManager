@@ -11,7 +11,7 @@ import pyvips  # type: ignore[import-untyped]
 from photo_assistant.adapters.null_ai import NullAIProvider
 from photo_assistant.adapters.ollama_ai import OllamaProvider, OllamaSettings, build_ai_provider
 from photo_assistant.domain.album_plan import AlbumPlan, AssetSummary, LibrarySummary, PlanSection
-from photo_assistant.ports.ai import AICall, AIUnavailableError, Capability
+from photo_assistant.ports.ai import AICall, AIUnavailableError, AIUnreachableError, Capability
 
 Handler = Callable[[httpx.Request], httpx.Response]
 SETTINGS = OllamaSettings(caption_model="vision:4b", plan_model="planner:8b")
@@ -204,8 +204,9 @@ def test_invalid_caption_json_is_retried_once() -> None:
 def test_captions_failing_twice_raise_a_clear_error() -> None:
     fake = FakeOllama([json.dumps({"caption": ""}), json.dumps({"caption": "x" * 500})])
     provider, log = _provider(fake)
-    with pytest.raises(AIUnavailableError, match="not usable"):
+    with pytest.raises(AIUnavailableError, match="not usable") as raised:
         provider.caption(_synthetic_jpeg(200, 100), "en")
+    assert not isinstance(raised.value, AIUnreachableError), "this photo failed, not the server"
     assert len(log.calls) == 2
 
 
@@ -262,7 +263,7 @@ def test_schema_violating_plans_are_rejected_after_one_retry() -> None:
 def test_timeouts_are_not_retried_and_say_so() -> None:
     fake = FakeOllama([httpx.ReadTimeout("slow")])
     provider, log = _provider(fake)
-    with pytest.raises(AIUnavailableError, match="did not answer in time"):
+    with pytest.raises(AIUnreachableError, match="did not answer in time"):
         provider.plan_album("summer", CONTEXT)
     assert len(log.calls) == 1
     assert not log.calls[0].ok
@@ -273,7 +274,7 @@ def test_http_errors_become_ai_unavailable() -> None:
         return httpx.Response(404, json={"error": "model 'planner:8b' not found"})
 
     provider, log = _provider(missing_model)
-    with pytest.raises(AIUnavailableError, match="not found"):
+    with pytest.raises(AIUnreachableError, match="not found"):
         provider.plan_album("summer", CONTEXT)
     assert log.calls[0].response["status"] == 404
 
@@ -281,7 +282,7 @@ def test_http_errors_become_ai_unavailable() -> None:
 def test_connection_errors_become_ai_unavailable() -> None:
     fake = FakeOllama([httpx.ConnectError("refused")])
     provider, _ = _provider(fake)
-    with pytest.raises(AIUnavailableError, match="cannot reach"):
+    with pytest.raises(AIUnreachableError, match="cannot reach"):
         provider.plan_album("summer", CONTEXT)
 
 
