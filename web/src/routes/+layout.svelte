@@ -189,15 +189,18 @@
 </p>
 
 <style>
+	/* The bars float (Nav.svelte): the page has the whole window, and the first of it starts
+	   under the laptop's capsule. */
 	.app {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: auto 1fr;
+		grid-template-rows: 1fr;
 		min-height: 100dvh;
 	}
 	main {
 		min-width: 0;
 		outline: none;
+		padding-top: var(--top);
 	}
 	.bare {
 		max-width: 24rem;
@@ -267,10 +270,6 @@
 		bottom: calc(var(--s-5) + var(--pill) + var(--s-2));
 	}
 	@media (max-width: 1023px) {
-		.app {
-			grid-template-columns: minmax(0, 1fr);
-			grid-template-rows: 1fr;
-		}
 		/* The page has the whole screen (viewport-fit=cover): what is read and pressed keeps
 		   clear of the clock, the notch on either side, and the home bar. */
 		main {
