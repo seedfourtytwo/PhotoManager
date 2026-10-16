@@ -18,6 +18,7 @@ const run = (over: Partial<BackupRun> = {}): BackupRun => ({
 	files_new: 1,
 	repo_bytes: 5000,
 	error: null,
+	error_kind: null,
 	details: null,
 	...over
 });

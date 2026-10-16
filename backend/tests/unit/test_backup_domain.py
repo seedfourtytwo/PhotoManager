@@ -32,6 +32,7 @@ from photo_assistant.domain.backup import (
     size_text,
     target_kind,
 )
+from photo_assistant.domain.backup_errors import ErrorKind
 from photo_assistant.domain.schedule import InvalidScheduleError, parse_schedule, parse_window
 
 
@@ -309,10 +310,30 @@ def test_each_fault_takes_one_place_out_of_a_fresh_pair(flag: dict[str, Any]) ->
 def test_a_failed_backup_alerts_with_its_reason() -> None:
     failing = status("A", last_run=_failed_run("disk full"))
     result = protection([failing, status("B")])
+    expected = "A: the last backup failed: disk full"
     assert (
-        Problem(Severity.ALERT, "A: the last backup failed: disk full", failing.target.id)
-        in result.problems
+        Problem(Severity.ALERT, expected, failing.target.id, ErrorKind.DISK_FULL) in result.problems
     )
+
+
+def test_each_problem_names_the_kind_of_its_error_and_others_have_none() -> None:
+    base = status("A")
+    copy = replace(base, target=replace(base.target, mirror_path="/proton/a"), last_mirror_at=NOON)
+    cases = [
+        (status("A", last_run=_failed_run("the backup at /r is locked by another run")), "locked"),
+        (status("A", last_run=_failed_run(None)), "unknown"),
+        (replace(copy, mirror_error="Proton Drive is not signed in: run 'x'"), "auth"),
+        (status("A", overdue=True, skipped_since=NOON), "unreachable"),
+        (status("A", overdue=True), None),
+        (replace(base, target=replace(base.target, key_saved_at=None)), None),
+        (status("A", restore_failing=True), None),
+    ]
+    for target, kind in cases:
+        problems = protection([target, status("B")]).problems
+        [problem] = [p for p in problems if p.target_id == target.target.id]
+        assert (problem.error_kind and problem.error_kind.value) == kind, problem.message
+    [library] = protection([]).problems
+    assert library.error_kind is None
 
 
 def test_a_failed_backup_without_a_reason_says_so() -> None:
@@ -351,6 +372,7 @@ def test_a_place_not_connected_for_a_while_names_the_day_it_was_last_tried() -> 
             "Disk has not been connected since 03 Oct 2026: "
             "connect it and the backup starts by itself.",
             away.target.id,
+            ErrorKind.UNREACHABLE,
         )
         in result.problems
     )
@@ -427,6 +449,7 @@ def test_a_manual_place_that_was_skipped_is_not_a_healthy_place() -> None:
             Severity.WARNING,
             "Disk was not connected at its last backup: connect it and run the backup again.",
             away.target.id,
+            ErrorKind.UNREACHABLE,
         )
         in result.problems
     )

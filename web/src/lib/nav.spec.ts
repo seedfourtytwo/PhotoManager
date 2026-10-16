@@ -88,7 +88,8 @@ describe('attentionOf', () => {
 	const problem = {
 		message: 'The last backup failed 3 days ago.',
 		severity: 'alert',
-		target_id: null
+		target_id: null,
+		error_kind: 'unknown'
 	} as const;
 	const health = (problems: (typeof problem)[]) => ({
 		protected: problems.length === 0,

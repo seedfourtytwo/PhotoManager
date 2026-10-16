@@ -106,40 +106,46 @@ export function backupHelpers(h: World) {
 			problems.push({
 				severity: 'warning',
 				message: 'No backup is set up: the photos exist only on this computer. Add two backup places.',
-				target_id: null
+				target_id: null,
+				error_kind: null
 			}); // prettier-ignore
 		else if (flags.length === 1)
 			problems.push({
 				severity: 'warning',
 				message: 'Only one backup place is set up: add a second, so one lost disk is not the end of the photos.',
-				target_id: null
+				target_id: null,
+				error_kind: null
 			}); // prettier-ignore
 		else if (ok < 2)
 			problems.push({
 				severity: 'alert',
 				message: `Only ${ok} of ${flags.length} backup places is up to date.`,
-				target_id: null
+				target_id: null,
+				error_kind: null
 			});
 		for (const t of places) {
 			if (t.last_run?.status === 'failed')
 				problems.push({
 					severity: 'alert',
 					message: `${t.label}: the last backup failed: ${t.last_run.error ?? 'no reason given'}`,
-					target_id: t.id
+					target_id: t.id,
+					error_kind: t.last_run.error_kind ?? 'unknown'
 				});
 			if (t.restore_failing)
 				problems.push({
 					severity: 'alert',
 					message: `${t.label}: the last restore test failed. Open Backups and run it again.`,
-					target_id: t.id
+					target_id: t.id,
+					error_kind: null
 				});
 			if (t.overdue && t.last_run?.status !== 'failed')
-				problems.push({ severity: 'warning', message: `${t.label}: the backup is overdue.`, target_id: t.id }); // prettier-ignore
+				problems.push({ severity: 'warning', message: `${t.label}: the backup is overdue.`, target_id: t.id, error_kind: null }); // prettier-ignore
 			if (!t.key_saved)
 				problems.push({
 					severity: 'warning',
 					message: `${t.label}: the recovery key is not saved yet. Without it this backup cannot be read.`,
-					target_id: t.id
+					target_id: t.id,
+					error_kind: null
 				});
 		}
 		problems.sort((a, b) => Number(a.severity === 'warning') - Number(b.severity === 'warning'));
@@ -167,6 +173,7 @@ export function backupHelpers(h: World) {
 			files_new: null,
 			repo_bytes: null,
 			error: null,
+			error_kind: null,
 			details: null,
 			ends_at: h.now() + 3000
 		});

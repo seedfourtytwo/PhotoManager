@@ -553,7 +553,7 @@ Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop mar
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/backups` | – | `[Target]` with `last_run`, `next_run_at`, `overdue`, `last_proven_at` (last restore test that matched every hash), `restore_failing`, `key_saved`, `needs_attention` (drives the banner: overdue, a failed backup or restore test, or an unconfirmed recovery key), `skipped_since` (the latest run was skipped because the disk was not connected: when it started; else null), `mirror_overdue` (the Proton copy has no fresh success) |
-| GET | `/api/backups/health` | – | `{protected, places_ok, places_total, problems: [{severity: "alert"\|"warning", message, target_id?}]}`. Read-only, admin only. `protected` = at least two healthy backup places (a repository, or its Proton copy, each count); `target_id` null = about the library as a whole |
+| GET | `/api/backups/health` | – | `{protected, places_ok, places_total, problems: [{severity: "alert"\|"warning", message, target_id?, error_kind}]}`. `error_kind` (v1.15): see `ErrorKind` below; null for a problem that is not a failure (overdue, key not saved, a restore test that did not match, the library as a whole). Read-only, admin only. `protected` = at least two healthy backup places (a repository, or its Proton copy, each count); `target_id` null = about the library as a whole |
 | GET | `/api/backups/places` | – | `{library_bytes, disks: [{path, label, free_bytes}], remotes: [name]}`: plugged-in disks and rclone remotes |
 | POST | `/api/backups/plan` | `{place}` (a folder path, or `rclone:<remote>:<folder>`) | `{repository, library_bytes, free_bytes?, ok, problem?, warnings}`. Creates nothing. Refused (`ok: false`): not enough room, not writable, inside the library or a source folder, another backup already there |
 | POST | `/api/backups/setup` | `{label, place, schedule?, retention?}` | `201 {target: Target, recovery: {label, repository, key}}`. Makes the key, queues the first backup (followed by a restore test). `422` with the plan's problem, `409` for a taken name |
@@ -563,6 +563,9 @@ Each sheet is the trim plus 3 mm bleed per side (plus a 10 mm slug with crop mar
 | PATCH | `/api/backups/{id}` | `{enabled?, schedule?, quiet_window?, retention?: {daily?, weekly?, monthly?}}` | `Target`. Only the fields sent change (v1.3); `quiet_window: null` = any time; retention counts merge into the current ones. Bad schedule/window/retention or an unknown field: `422`, nothing changed |
 | POST | `/api/backups/{id}/run` · `/restore-test` | – | `202 {job_id, target_id}` |
 | GET | `/api/backups/{id}/runs` | `limit` | `[Run]` |
+
+`Run` = `{id, kind, status, started_at, finished_at, snapshot_id, bytes_added, files_new, repo_bytes, error, error_kind, details}`.
+`ErrorKind` (v1.15) = `"unreachable"` (the disk is not plugged in, the server or network is away) · `"disk_full"` · `"auth"` (a wrong or unreadable backup password, Proton Drive not signed in) · `"locked"` (another run holds the repository) · `"unknown"`. The server reads it from the error text (the tools' output); `error_kind` is null when `error` is.
 
 ---
 
@@ -723,3 +726,13 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Assets | New: `GET /api/places` (see "Assets" above): countries and cities with their count, cover and centre. | `api.places()` → `PlaceSummary[]`; Collections and a Places grid need one request instead of one per place. |
+
+---
+
+# v1.15 changes (plain-language backup errors, Flight UI)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Backups | `Run.error_kind` and `problems[].error_kind` in `/api/backups/health` (see "Backups" above). | `BackupErrorKind`; a headline in plain words per kind, the raw `error`/`message` behind "Details". |

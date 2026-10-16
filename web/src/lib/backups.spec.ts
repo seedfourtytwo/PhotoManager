@@ -96,8 +96,18 @@ describe('backupSentence: the one plain sentence on the Backups tile', () => {
 	});
 	it('says the first problem in its own words', () => {
 		const problems = [
-			{ severity: 'alert' as const, message: 'Home server: the last backup failed', target_id: 1 },
-			{ severity: 'warning' as const, message: 'USB disk: not connected', target_id: 2 }
+			{
+				severity: 'alert' as const,
+				message: 'Home server: the last backup failed',
+				target_id: 1,
+				error_kind: 'unknown' as const
+			},
+			{
+				severity: 'warning' as const,
+				message: 'USB disk: not connected',
+				target_id: 2,
+				error_kind: 'unreachable' as const
+			}
 		];
 		expect(backupSentence(health({ protected: false, places_ok: 0, problems }))).toBe(
 			'Home server: the last backup failed'

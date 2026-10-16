@@ -239,6 +239,7 @@ export function makeState(options: {
 						files_new: null,
 						repo_bytes: 48_200_000_000,
 						error: 'repository not reachable: connection refused (is the server on?)',
+						error_kind: 'unreachable',
 						details: null,
 						ends_at: 0
 					}

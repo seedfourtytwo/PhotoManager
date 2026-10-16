@@ -22,6 +22,7 @@ from photo_assistant.domain.backup import (
     TargetSettings,
     TargetStatus,
 )
+from photo_assistant.domain.backup_errors import ErrorKind, error_kind
 from photo_assistant.domain.schedule import InvalidScheduleError
 from photo_assistant.ports.backup import Disk
 
@@ -95,6 +96,7 @@ class RunOut(BaseModel):
     files_new: int | None
     repo_bytes: int | None
     error: str | None
+    error_kind: ErrorKind | None  # what kind of failure ``error`` is, for a plain headline
     details: str | None
 
     @classmethod
@@ -110,6 +112,7 @@ class RunOut(BaseModel):
             files_new=run.files_new,
             repo_bytes=run.repo_bytes,
             error=run.error,
+            error_kind=error_kind(run.error),
             details=run.details,
         )
 
@@ -171,6 +174,7 @@ class ProblemOut(BaseModel):
     severity: str  # "alert" or "warning"
     message: str
     target_id: int | None  # None: about the library as a whole
+    error_kind: ErrorKind | None  # the kind of failure it reports; None: not a failure
 
     @classmethod
     def of(cls, problem: Problem) -> "ProblemOut":
@@ -178,6 +182,7 @@ class ProblemOut(BaseModel):
             severity=problem.severity.value,
             message=problem.message,
             target_id=problem.target_id,
+            error_kind=problem.error_kind,
         )
 
 
