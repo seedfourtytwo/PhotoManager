@@ -8,6 +8,7 @@ import {
 	homeBlocks,
 	inWords,
 	memoryLine,
+	nothingToday,
 	previewOf,
 	rediscoverNote,
 	rediscoverTitle,
@@ -263,6 +264,31 @@ describe('homeBlocks: the blocks Home draws, in the account’s order', () => {
 		expect(
 			homeBlocks(all, { pinned: [], people: [], suggested: [] }, ['pinned', 'people', 'suggested'])
 		).toEqual([]);
+	});
+});
+
+describe('nothingToday: the blocks Home answers empty, for a hint in Settings', () => {
+	const empty: HomeData = {
+		on_this_day: null,
+		rediscover: [],
+		memories: [],
+		years: [],
+		new: fresh(0, [])
+	};
+
+	it('names each block of Home’s own answer that has nothing', () => {
+		expect(nothingToday(empty)).toEqual(['on_this_day', 'rediscover', 'memories', 'years', 'new']);
+		expect(nothingToday({ ...empty, on_this_day: day(), new: fresh(3, []) })).toEqual([
+			'rediscover',
+			'memories',
+			'years'
+		]);
+	});
+
+	it('never names the blocks Home asks for elsewhere (pinned, people, suggested)', () => {
+		const named = nothingToday(empty);
+		for (const other of ['pinned', 'people', 'suggested'] as const)
+			expect(named).not.toContain(other);
 	});
 });
 

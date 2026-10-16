@@ -2,6 +2,7 @@
 import type { AssetOut, HomeData, HomeSection, Memory, NewArrivals, OnThisDay } from './api/types';
 import { MONTHS, formatLongDay } from './dates';
 import { formatCount, photos } from './format';
+import type { IconName } from './icons';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const NUMBERS = [
@@ -135,6 +136,30 @@ export const SECTION_NAMES: Record<HomeSection, string> = {
 	people: 'People',
 	new: 'New this week'
 };
+
+/** The small picture of each block, in Settings' list of them. */
+export const SECTION_ICONS: Record<HomeSection, IconName> = {
+	on_this_day: 'calendar',
+	rediscover: 'sun',
+	memories: 'album',
+	suggested: 'plus',
+	years: 'grid',
+	pinned: 'pin',
+	people: 'person',
+	new: 'sparkle'
+};
+
+/** The blocks of Home's own answer that have nothing today (the others are asked for apart). */
+export function nothingToday(home: HomeData): HomeSection[] {
+	const empty: [HomeSection, boolean][] = [
+		['on_this_day', home.on_this_day === null],
+		['rediscover', home.rediscover.length === 0],
+		['memories', home.memories.length === 0],
+		['years', home.years.length === 0],
+		['new', home.new.count === 0]
+	];
+	return empty.filter(([, none]) => none).map(([section]) => section);
+}
 
 /** What Home asks for besides `HomeData`; null until it is answered. */
 export type HomeExtras = {

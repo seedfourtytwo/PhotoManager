@@ -166,8 +166,12 @@ test('You → Home: the account turns blocks off and moves them; its Home follow
 	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
 	await expect(editor.getByRole('switch')).toHaveCount(8);
 	await editor.getByRole('switch', { name: 'Rediscover' }).click();
-	for (let step = 0; step < 3; step++)
-		await editor.getByRole('button', { name: 'Move Years up' }).click();
+	// moved with the keyboard on its grip: picked up, three places up, dropped
+	await editor.getByRole('button', { name: 'Reorder Years' }).focus();
+	await page.keyboard.press('Space');
+	for (let step = 0; step < 3; step++) await page.keyboard.press('ArrowUp');
+	await page.keyboard.press('Space');
+	await expect(editor.getByRole('status')).toHaveText('Years dropped, 1 of 7');
 	const order = ['years', 'on_this_day', 'memories', 'suggested', 'pinned', 'people', 'new'];
 	await expect
 		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections)
@@ -192,6 +196,33 @@ test('You → Home: the account turns blocks off and moves them; its Home follow
 			expect(otd).toBeGreaterThan(years);
 		}
 	}
+});
+
+test('You → Home: a block dragged by its grip to the top is saved there', async ({ page }) => {
+	await signIn(page, '/settings/appearance');
+	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
+	const shown = editor.getByRole('list', { name: 'Shown', exact: true });
+	const grip = editor.getByRole('button', { name: 'Reorder New this week' });
+	const first = shown.getByRole('listitem').first();
+	await grip.scrollIntoViewIfNeeded();
+	const [from, to] = [(await grip.boundingBox())!, (await first.boundingBox())!];
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+	// in steps, as a hand moves: the rows step aside on the way
+	await page.mouse.move(from.x + from.width / 2, to.y + 4, { steps: 12 });
+	await page.mouse.up();
+	await expect
+		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections[0])
+		.toBe('new');
+	await expect(shown.getByRole('switch').first()).toHaveAccessibleName('New this week');
+	// it comes to rest: no row is left moved
+	await expect
+		.poll(() =>
+			shown
+				.getByRole('listitem')
+				.evaluateAll((rows) => rows.map((r) => (r as HTMLElement).style.transform).join(''))
+		)
+		.toBe('');
 });
 
 test('home: a memory plays full screen, steps on a tap, and closes with ×, Escape or Back', async ({

@@ -3,7 +3,7 @@
 	import type { ManagedUser } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import { errorMessage } from '$lib/format';
-	import { SECTION_NAMES } from '$lib/home';
+	import { SECTION_ICONS, SECTION_NAMES } from '$lib/home';
 	import {
 		COLLECTIONS_ROWS,
 		HOME_SECTIONS,
@@ -16,7 +16,7 @@
 		type Look
 	} from '$lib/look';
 	import Dialog from '../Dialog.svelte';
-	import OrderList from '../ui/OrderList.svelte';
+	import SortableList from '../ui/SortableList.svelte';
 
 	/**
 	 * One account's look, set by an admin (spec 2026-10-08 §5): every field of the sheet is a
@@ -199,7 +199,7 @@
 			</select>
 		</label>
 
-		<OrderList
+		<SortableList
 			label="Collections shows, in this order"
 			all={COLLECTIONS_ROWS}
 			chosen={current.collectionsRows}
@@ -231,11 +231,12 @@
 			</label>
 		</fieldset>
 
-		<OrderList
+		<SortableList
 			label="Home shows, in this order"
 			all={HOME_SECTIONS}
 			chosen={current.homeSections}
 			names={SECTION_NAMES}
+			icons={SECTION_ICONS}
 			onchange={(homeSections) => set({ homeSections })}
 		/>
 
