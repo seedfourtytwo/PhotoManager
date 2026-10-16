@@ -147,6 +147,9 @@
 		padding: 0 var(--s-5) var(--s-5);
 		overflow-y: auto;
 		overscroll-behavior: contain;
+		/* A field scrolled into view (focus, Tab) stops short of the edge, not flush on it: the
+		   browser scrolls in whole pixels, so flush can leave a fraction of it under the edge. */
+		scroll-padding-block: var(--s-3);
 	}
 	/* A list with nothing in it says so in one quiet line, in the place of its rows. */
 	.body :global(.tiles > .none) {
