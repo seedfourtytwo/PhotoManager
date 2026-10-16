@@ -170,6 +170,15 @@ def test_caption_sends_a_downscaled_image_and_returns_the_text() -> None:
     assert max(sent.width, sent.height) == SETTINGS.image_max_edge
 
 
+def test_every_chat_turns_thinking_off() -> None:
+    # qwen3/qwen3.5 think before answering unless told not to: one album took over 10 minutes
+    fake = FakeOllama([json.dumps({"caption": "A blue sky."}), json.dumps(GOOD_PLAN)])
+    provider, _ = _provider(fake)
+    provider.caption(_synthetic_jpeg(200, 100), "en")
+    provider.plan_album("summer", CONTEXT)
+    assert [body["think"] for body in fake.chat_bodies()] == [False, False]
+
+
 def test_caption_logs_a_summary_without_image_bytes() -> None:
     image = _synthetic_jpeg()
     fake = FakeOllama([json.dumps({"caption": "A blue sky."})])

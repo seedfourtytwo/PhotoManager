@@ -284,6 +284,8 @@ class OllamaProvider:
             "messages": messages,
             "format": schema,
             "stream": False,
+            # Thinking models (qwen3, qwen3.5) otherwise reason at length first: minutes per album
+            "think": False,
             "options": {"temperature": 0.2},
         }
         try:
