@@ -289,10 +289,6 @@ test('every screen', async ({ page }, info) => {
 });
 
 test.describe('a long list', () => {
-	// The cameras are added on their way to the page (`longLists`); a request the service
-	// worker takes over would pass by that, once it controls the page.
-	test.use({ serviceWorkers: 'block' });
-
 	test('a filter list longer than the screen, scrolled to its end', async ({ page }, info) => {
 		await resetMock();
 		await signIn(page);

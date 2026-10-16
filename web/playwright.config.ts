@@ -21,7 +21,12 @@ export default defineConfig({
 	use: {
 		baseURL: process.env.E2E_BASE_URL ?? `http://127.0.0.1:${WEB_PORT}`,
 		launchOptions: { executablePath },
-		trace: 'retain-on-failure'
+		trace: 'retain-on-failure',
+		// Tests change answers on their way to the page (`page.route`: withDetail, longLists, …).
+		// Once the app's service worker controls the page, Chromium can send a request through it
+		// and past the route, now and then: the real answer shows instead of the test's, a flake.
+		// No test is about the service worker, so none runs.
+		serviceWorkers: 'block'
 	},
 	projects: [
 		{
