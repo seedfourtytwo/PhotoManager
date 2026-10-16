@@ -261,5 +261,17 @@ def test_justfile_has_the_ops_recipes() -> None:
 def test_the_ci_workflow_is_valid_yaml_with_all_three_jobs() -> None:
     """GitHub rejects a workflow file it cannot parse without running anything."""
     workflow = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
-    assert set(workflow["jobs"]) == {"backend", "web", "secrets"}
-    assert all(job["steps"] for job in workflow["jobs"].values())
+    jobs = workflow["jobs"]
+    assert set(jobs) == {"changes", "backend", "web"}
+    assert all(job["steps"] for job in jobs.values())
+    scan = [s for s in jobs["changes"]["steps"] if "gitleaks" in s.get("uses", "")]
+    assert scan, "the secret scan runs on every change"
+    assert jobs["backend"]["needs"] == jobs["web"]["needs"] == "changes"
+
+
+def test_ci_spends_minutes_on_pull_requests_and_a_weekly_run_only() -> None:
+    """The free plan's 2,000 minutes a month: not again on main after a merge, not on drafts."""
+    workflow = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
+    triggers = workflow[True]  # YAML 1.1 reads the key `on` as true
+    assert set(triggers) == {"pull_request", "schedule", "workflow_dispatch"}
+    assert "draft" in workflow["jobs"]["changes"]["if"]
