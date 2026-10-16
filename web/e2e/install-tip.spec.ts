@@ -70,7 +70,8 @@ test.describe('on an iPhone', () => {
 		await expect(tip(page)).toBeVisible();
 		await expect(tip(page)).toContainText('then Share, then Add to Home Screen');
 		await expect(tip(page).getByRole('button', { name: 'Install' })).toHaveCount(0);
-		// over the photos, clear of the dock (and so of the home bar under it)
+		// over the photos, clear of the dock (and so of the home bar under it), once it has risen
+		await tip(page).evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
 		const card = (await tip(page).boundingBox())!;
 		const capsule = (await dock(page).getByRole('list').boundingBox())!;
 		expect(card.y + card.height).toBeLessThanOrEqual(capsule.y);
