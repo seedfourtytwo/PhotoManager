@@ -24,12 +24,18 @@
 		measure();
 	});
 	$effect(() => {
-		const sizes = new ResizeObserver(measure);
+		// Measured on the next frame, never inside the observer's own delivery.
+		let again = 0;
+		const sizes = new ResizeObserver(() => {
+			cancelAnimationFrame(again);
+			again = requestAnimationFrame(measure);
+		});
 		for (const button of group.querySelectorAll('button')) sizes.observe(button);
 		const frame = requestAnimationFrame(() => (live = true));
 		return () => {
 			sizes.disconnect();
 			cancelAnimationFrame(frame);
+			cancelAnimationFrame(again);
 		};
 	});
 </script>
