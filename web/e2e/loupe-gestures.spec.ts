@@ -385,6 +385,9 @@ test.describe('photo view', () => {
 		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
 		const second = await alt(viewer);
 		await expect(page).not.toHaveURL(url);
+		// One more frame, so the recorder has seen the new address (a slow frame may still be
+		// on its way when the test reads the address).
+		await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
 		const seen = await stop();
 		// Mid-slide, both photos were in sight together; at rest, only the new one.
 		expect(seen.some((f) => f.shown === 2)).toBe(true);
