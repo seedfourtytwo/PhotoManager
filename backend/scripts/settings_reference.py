@@ -65,6 +65,27 @@ OTHERS = [
 ]
 
 FOOTER = """
+## Switching the local AI on
+
+The AI is off until `.env` says otherwise, and it only ever talks to the Ollama address you
+give it. With Ollama running on this machine and `ollama pull qwen3.5:4b` done, add:
+
+```
+PA_AI_PROVIDER=ollama
+PA_OLLAMA_BASE_URL=http://127.0.0.1:11434
+PA_OLLAMA_CAPTION_MODEL=qwen3.5:4b
+PA_OLLAMA_PLAN_MODEL=qwen3.5:4b
+```
+
+and restart. One model does both jobs (why this one: TECH_DECISIONS.md, AI socket). In the
+background the app then describes the photos, newest first, until each has a description
+(and looks for new ones every hour), and names and arranges the suggested albums Home shows.
+A suggestion keeps its plain title until its AI title is ready.
+
+On the home server (no graphics card) also add `PA_OLLAMA_TIMEOUT_SECONDS=300`: one album
+takes one to two minutes there. To switch the AI off, set `PA_AI_PROVIDER=none`; suggestions
+go back to their plain titles.
+
 ## Other `PA_` names you may meet
 
 These are not read by the app's settings.

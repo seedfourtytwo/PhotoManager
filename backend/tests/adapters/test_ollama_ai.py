@@ -11,13 +11,13 @@ import pyvips  # type: ignore[import-untyped]
 from photo_assistant.adapters.null_ai import NullAIProvider
 from photo_assistant.adapters.ollama_ai import OllamaProvider, OllamaSettings, build_ai_provider
 from photo_assistant.domain.album_plan import AlbumPlan, AssetSummary, LibrarySummary, PlanSection
-from photo_assistant.ports.ai import AICall, AIUnavailableError, Capability
+from photo_assistant.ports.ai import AICall, AIUnavailableError, AIUnreachableError, Capability
 
 Handler = Callable[[httpx.Request], httpx.Response]
 SETTINGS = OllamaSettings(caption_model="vision:4b", plan_model="planner:8b")
 CONTEXT = LibrarySummary(
     assets=(AssetSummary(1, "2019-07-04", "Lyon", ("beach",)), AssetSummary(2, "2019-07-05")),
-    layouts=("full", "grid-4"),
+    layouts={"full": 1, "grid-2": 2},
 )
 GOOD_PLAN = {
     "title": "Summer",
@@ -25,7 +25,7 @@ GOOD_PLAN = {
         {
             "title": "Beach",
             "asset_ids": [1, 2],
-            "layout_hint": "grid-4",
+            "layout_hint": "grid-2",
             "captions": [{"asset_id": 1, "text": "Waves"}],
         }
     ],
@@ -189,6 +189,15 @@ def test_caption_sends_a_downscaled_image_and_returns_the_text() -> None:
     assert max(sent.width, sent.height) == SETTINGS.image_max_edge
 
 
+def test_every_chat_turns_thinking_off() -> None:
+    # qwen3/qwen3.5 think before answering unless told not to: one album took over 10 minutes
+    fake = FakeOllama([json.dumps({"caption": "A blue sky."}), json.dumps(GOOD_PLAN)])
+    provider, _ = _provider(fake)
+    provider.caption(_synthetic_jpeg(200, 100), "en")
+    provider.plan_album("summer", CONTEXT)
+    assert [body["think"] for body in fake.chat_bodies()] == [False, False]
+
+
 def test_caption_logs_a_summary_without_image_bytes() -> None:
     image = _synthetic_jpeg()
     fake = FakeOllama([json.dumps({"caption": "A blue sky."})])
@@ -214,8 +223,9 @@ def test_invalid_caption_json_is_retried_once() -> None:
 def test_captions_failing_twice_raise_a_clear_error() -> None:
     fake = FakeOllama([json.dumps({"caption": ""}), json.dumps({"caption": "x" * 500})])
     provider, log = _provider(fake)
-    with pytest.raises(AIUnavailableError, match="not usable"):
+    with pytest.raises(AIUnavailableError, match="not usable") as raised:
         provider.caption(_synthetic_jpeg(200, 100), "en")
+    assert not isinstance(raised.value, AIUnreachableError), "this photo failed, not the server"
     assert len(log.calls) == 2
 
 
@@ -234,15 +244,17 @@ def test_plan_album_returns_a_validated_plan() -> None:
     fake = FakeOllama([json.dumps(GOOD_PLAN)])
     provider, log = _provider(fake)
     plan = provider.plan_album("our summer", CONTEXT)
-    assert plan == AlbumPlan("Summer", (PlanSection("Beach", (1, 2), "grid-4", {1: "Waves"}),))
+    assert plan == AlbumPlan("Summer", (PlanSection("Beach", (1, 2), "grid-2", {1: "Waves"}),))
     (body,) = fake.chat_bodies()
     assert body["model"] == "planner:8b"
     schema = body["format"]
     assert schema["properties"]["sections"]["items"]["properties"]["layout_hint"]["enum"] == [  # type: ignore[index]
         "full",
-        "grid-4",
+        "grid-2",
     ]
-    assert "1|2019-07-04|Lyon|beach" in body["messages"][-1]["content"]  # type: ignore[index]
+    asked = body["messages"][-1]["content"]  # type: ignore[index]
+    assert "1|2019-07-04|Lyon|beach" in asked
+    assert "full (1 photo a page), grid-2 (2 photos a page)" in asked
     assert log.calls[0].capability == "plan_album"
     assert log.calls[0].request["photos"] == 2
 
@@ -270,7 +282,7 @@ def test_schema_violating_plans_are_rejected_after_one_retry() -> None:
 def test_timeouts_are_not_retried_and_say_so() -> None:
     fake = FakeOllama([httpx.ReadTimeout("slow")])
     provider, log = _provider(fake)
-    with pytest.raises(AIUnavailableError, match="did not answer in time"):
+    with pytest.raises(AIUnreachableError, match="did not answer in time"):
         provider.plan_album("summer", CONTEXT)
     assert len(log.calls) == 1
     assert not log.calls[0].ok
@@ -281,7 +293,7 @@ def test_http_errors_become_ai_unavailable() -> None:
         return httpx.Response(404, json={"error": "model 'planner:8b' not found"})
 
     provider, log = _provider(missing_model)
-    with pytest.raises(AIUnavailableError, match="not found"):
+    with pytest.raises(AIUnreachableError, match="not found"):
         provider.plan_album("summer", CONTEXT)
     assert log.calls[0].response["status"] == 404
 
@@ -289,7 +301,7 @@ def test_http_errors_become_ai_unavailable() -> None:
 def test_connection_errors_become_ai_unavailable() -> None:
     fake = FakeOllama([httpx.ConnectError("refused")])
     provider, _ = _provider(fake)
-    with pytest.raises(AIUnavailableError, match="cannot reach"):
+    with pytest.raises(AIUnreachableError, match="cannot reach"):
         provider.plan_album("summer", CONTEXT)
 
 

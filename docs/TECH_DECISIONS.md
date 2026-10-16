@@ -117,9 +117,22 @@ Models are fetched by `just models` into `<data_root>/models/`, never committed.
 
 **Why:** C already plans Ollama on a separate server, reached over Tailscale. Ollama's
 `/api/chat` accepts base64 images and supports JSON-schema structured output.
-**Candidate models (to benchmark in M5, not decided):** Gemma 4 (E4B / 12B) and Qwen-VL
-family for captions; a mid-size text model for album planning. PhotoPrism's Aug 2026
-benchmarks show large quality spreads between models on labelling, so we test on our photos.
+**Model: `qwen3.5:4b` for both captions and album planning (decided 2026-10-16).** Benchmarked
+on the laptop (RTX 2070 8 GB, 15 GB RAM) on real photos, through the app's own
+`OllamaProvider`; only counts and timings left the laptop. It sees images and writes text, so
+one model covers both jobs and stays loaded. GPU: about 3.4 s a caption, 6–11 s to name and
+arrange one event, valid JSON on the first try. CPU only, standing in for the home server (no
+GPU, 32 GB RAM): about 33 s a caption and 1–2 min an album, so both run as background jobs,
+never in a request. Runners-up: `gemma4:e4b-it-qat` (faster, less precise), `qwen3.5:9b` (a
+little better, twice as slow). `qwen3:8b` invented details.
+**Thinking off:** qwen3 and qwen3.5 reason at length before answering unless the request says
+`"think": false`; with it on, one album took over ten minutes. Every chat request sends it.
+**The app picks the photos, the model only names them.** Asked to choose photos from the whole
+library, every model made mistakes (screenshots and receipts in, events mixed up). Given one
+event's photos (FEATURES 5.6) every model gave good titles and sections. So the model gets one
+event, must use each photo exactly once, and each section must fill whole pages of its layout
+(`domain/album_plan.validate`); captions from the vision step are in the prompt, so titles say
+what the photos show rather than guess from tags.
 **Constraint:** the RTX 2070 has 8 GB VRAM — only small vision models fit on the laptop;
 the bigger ones wait for the server GPU (planned RTX 3060 12 GB).
 **Design:** provider-agnostic port; an OpenAI-compatible adapter can be added later (LM Studio,

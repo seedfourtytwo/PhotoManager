@@ -36,14 +36,16 @@ class AssetSummary:
     date: str  # YYYY-MM-DD
     place: str | None = None
     tags: tuple[str, ...] = ()
+    caption: str | None = None  # what a vision model saw in it
 
 
 @dataclass(frozen=True, slots=True)
 class LibrarySummary:
-    """The photos a plan may use (already filtered to what the user can see) and the layouts."""
+    """The photos a plan must arrange, each once (already chosen and filtered to what the user
+    can see: the model never picks photos), and the layouts with how many photos a page holds."""
 
     assets: tuple[AssetSummary, ...]
-    layouts: tuple[str, ...]
+    layouts: Mapping[str, int]
 
     @property
     def asset_ids(self) -> frozenset[int]:
@@ -51,8 +53,16 @@ class LibrarySummary:
 
 
 def summary_lines(summary: LibrarySummary) -> str:
-    """Compact, token-cheap text: ``id|date|place|tag,tag`` per line."""
-    return "\n".join(f"{a.id}|{a.date}|{a.place or ''}|{','.join(a.tags)}" for a in summary.assets)
+    """Compact, token-cheap text: ``id|date|place|tag,tag|caption`` per line."""
+    return "\n".join(
+        f"{a.id}|{a.date}|{a.place or ''}|{','.join(a.tags)}|{_one_field(a.caption or '')}"
+        for a in summary.assets
+    )
+
+
+def _one_field(text: str) -> str:
+    """Model-written text cannot break the line format."""
+    return " ".join(text.replace("|", "/").split())
 
 
 # --- validation ------------------------------------------------------------------------------
@@ -60,11 +70,14 @@ def summary_lines(summary: LibrarySummary) -> str:
 
 def validate(
     plan: AlbumPlan,
-    allowed_asset_ids: Collection[int],
-    known_layouts: Collection[str],
+    asset_ids: Collection[int],
+    layouts: Mapping[str, int],
     max_caption_chars: int = MAX_CAPTION_CHARS,
 ) -> list[str]:
-    """Every problem, in plain words. Empty list = the plan may be shown as a proposal."""
+    """Every problem, in plain words. Empty list = the plan may be shown as a proposal.
+
+    ``asset_ids``: the photos the plan must use, each exactly once. ``layouts``: photos per page
+    of each layout; a section fills whole pages of its layout."""
     problems: list[str] = []
     if not plan.title.strip():
         problems.append("the plan has no title")
@@ -73,16 +86,20 @@ def validate(
     used: set[int] = set()
     for number, section in enumerate(plan.sections, start=1):
         label = f"section {number} ('{section.title.strip()}')"
-        found = _section_problems(section, allowed_asset_ids, known_layouts, used)
+        found = _section_problems(section, asset_ids, layouts, used)
         found += _caption_problems(section, max_caption_chars)
         problems.extend(f"{label}: {p}" for p in found)
+    unused = sorted(set(asset_ids) - used)
+    if unused and plan.sections:
+        listed = ", ".join(str(i) for i in unused)
+        problems.append(f"not used: photo {listed}; put every photo in exactly one section")
     return problems
 
 
 def _section_problems(
     section: PlanSection,
     allowed: Collection[int],
-    layouts: Collection[str],
+    layouts: Mapping[str, int],
     used: set[int],
 ) -> list[str]:
     problems: list[str] = []
@@ -92,6 +109,8 @@ def _section_problems(
         problems.append("has no photos")
     if section.layout_hint not in layouts:
         problems.append(f"unknown layout '{section.layout_hint}'")
+    elif section.asset_ids:
+        problems.extend(_fit_problems(section.layout_hint, layouts[section.layout_hint], section))
     for asset_id in section.asset_ids:
         if asset_id not in allowed:
             problems.append(f"unknown photo id {asset_id}")
@@ -99,6 +118,15 @@ def _section_problems(
             problems.append(f"photo {asset_id} is used more than once")
         used.add(asset_id)
     return problems
+
+
+def _fit_problems(layout: str, per_page: int, section: PlanSection) -> list[str]:
+    count = len(section.asset_ids)
+    if per_page == 0:
+        return [f"layout '{layout}' holds no photos"]
+    if count % per_page:
+        return [f"layout '{layout}' holds {per_page} photos a page, but the section has {count}"]
+    return []
 
 
 def _caption_problems(section: PlanSection, max_chars: int) -> list[str]:
@@ -123,6 +151,21 @@ def plan_from_json(data: object) -> AlbumPlan:
     if not isinstance(sections, list):
         raise PlanFormatError("'sections' must be a list")
     return AlbumPlan(_text(obj, "title"), tuple(_section(s) for s in sections))
+
+
+def plan_to_json(plan: AlbumPlan) -> dict[str, object]:
+    return {
+        "title": plan.title,
+        "sections": [
+            {
+                "title": s.title,
+                "asset_ids": list(s.asset_ids),
+                "layout_hint": s.layout_hint,
+                "captions": [{"asset_id": i, "text": t} for i, t in s.captions.items()],
+            }
+            for s in plan.sections
+        ],
+    }
 
 
 def _section(data: object) -> PlanSection:

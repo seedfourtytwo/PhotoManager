@@ -42,6 +42,7 @@ from photo_assistant.api.ml_services import MlServices, build_ml_services
 from photo_assistant.api.ops_services import OpsServices, RcloneTool, build_ops_services
 from photo_assistant.api.settings import Settings
 from photo_assistant.app.accounts import Accounts
+from photo_assistant.app.ai_captions import CAPTION_JOB
 from photo_assistant.app.album_printer import AlbumPrinter, PrintRenditions
 from photo_assistant.app.backup import LONG_JOBS
 from photo_assistant.app.derivatives import GeneratePreview
@@ -158,6 +159,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         repo=repo,
         importer=importer,
         clock=clock,
+        absolute=store.absolute,
         min_free_bytes=min_free_bytes,
     )
     ml = build_ml_services(
@@ -208,6 +210,11 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         ),
         PeriodicTask("requeue stale jobs", STALE_SWEEP_INTERVAL.total_seconds(), stale_jobs.run),
     ]
+    if CAPTION_JOB in integrations.ai_jobs:
+        # new photos, and those the server was down for: one batch chain at a time
+        housekeeping.append(
+            PeriodicTask("queue AI captions", 3600, lambda: repo.enqueue_once(CAPTION_JOB))
+        )
     ops = build_ops_services(
         root,
         settings.ops,
@@ -245,12 +252,14 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
             RENDER_EDIT_JOB: editor.render_edits,
             **ml.handlers,
             **ops.backup.job_handlers(),
+            **integrations.ai_jobs,
         },
         clock,
         # backups, restore tests and source scans (rclone pulls, whole-folder imports) run on a
         # lane of their own: previews, uploads and the rest never wait behind them (B24)
         long_kinds={SCAN_JOB_KIND, *LONG_JOBS},
-        pooled={PREVIEW_JOB: settings.preview_threads()},
+        # the local AI takes seconds (GPU) to minutes (the home server's CPU) per answer
+        pooled={PREVIEW_JOB: settings.preview_threads(), **dict.fromkeys(integrations.ai_jobs, 1)},
         poll_seconds=settings.worker_poll_seconds,
         owner=new_owner_id(role),
     )

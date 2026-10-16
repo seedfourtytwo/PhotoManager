@@ -20,6 +20,11 @@ class AIUnavailableError(RuntimeError):
     """No provider configured, it can't do what was asked, or it failed twice."""
 
 
+class AIUnreachableError(AIUnavailableError):
+    """The AI server gave no answer (down, too slow, refused): later may work, so a background
+    job tries again instead of giving up on the photo or the album."""
+
+
 class AIProvider(Protocol):
     def capabilities(self) -> frozenset[Capability]: ...
 

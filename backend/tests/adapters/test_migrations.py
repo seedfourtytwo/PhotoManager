@@ -34,6 +34,8 @@ EXPECTED_TABLES = {
     "sync_rule", "sync_sent",
     # suggested albums (0033)
     "album_suggestion_answer",
+    # local AI (0035)
+    "asset_caption", "album_suggestion_plan",
 }  # fmt: skip
 
 
@@ -84,7 +86,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 34
+    assert _latest() == 35
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:

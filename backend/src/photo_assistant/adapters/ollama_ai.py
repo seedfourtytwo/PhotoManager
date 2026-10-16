@@ -13,7 +13,7 @@ import base64
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -36,7 +36,14 @@ from photo_assistant.domain.album_plan import (
     summary_lines,
     validate,
 )
-from photo_assistant.ports.ai import AICall, AILog, AIProvider, AIUnavailableError, Capability
+from photo_assistant.ports.ai import (
+    AICall,
+    AILog,
+    AIProvider,
+    AIUnavailableError,
+    AIUnreachableError,
+    Capability,
+)
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -88,13 +95,15 @@ _CAPTION_SYSTEM = (
     "sentence: what is visible. Do not guess names, ages or places."
 )
 _PLAN_SYSTEM = (
-    "You propose photo albums. Use only photo ids from the list you are given, each at most "
-    "once. Group photos into sections with a short title, pick a layout_hint from the allowed "
-    "values, and optionally add short captions. Answer with JSON only."
+    "You arrange the photos of one event into an album. Use every photo id from the list you "
+    "are given exactly once, and no other. Group them in time order into sections with a short "
+    "title; give each section a layout_hint from the allowed values whose photos per page "
+    "divides the section's photo count. Optionally add short captions. Describe only what the "
+    "photo descriptions and places say; do not guess names. Answer with JSON only."
 )
 
 
-def _plan_schema(layouts: tuple[str, ...], max_caption: int) -> dict[str, object]:
+def _plan_schema(layouts: Collection[str], max_caption: int) -> dict[str, object]:
     caption = {
         "type": "object",
         "properties": {
@@ -121,6 +130,13 @@ def _plan_schema(layouts: tuple[str, ...], max_caption: int) -> dict[str, object
         },
         "required": ["title", "sections"],
     }
+
+
+def _layout_list(layouts: Mapping[str, int]) -> str:
+    def per_page(n: int) -> str:
+        return f"{n} photo a page" if n == 1 else f"{n} photos a page"
+
+    return ", ".join(f"{name} ({per_page(n)})" for name, n in layouts.items())
 
 
 def _same_model(wanted: str, available: str) -> bool:
@@ -249,8 +265,8 @@ class OllamaProvider:
     def plan_album(self, prompt: str, context: LibrarySummary) -> AlbumPlan:
         model = self._model(self._settings.plan_model, Capability.PLAN_ALBUM)
         content = (
-            f"{prompt}\n\nAllowed layout_hint values: {', '.join(context.layouts)}\n"
-            f"Photos (id|date|place|tags):\n{summary_lines(context)}"
+            f"{prompt}\n\nAllowed layout_hint values: {_layout_list(context.layouts)}\n"
+            f"Photos (id|date|place|tags|description):\n{summary_lines(context)}"
         )
         messages: list[dict[str, object]] = [
             {"role": "system", "content": _PLAN_SYSTEM},
@@ -286,7 +302,7 @@ class OllamaProvider:
         if not model:
             raise AIUnavailableError(f"no model configured for {capability.value}")
         if model in self._remote:
-            raise AIUnavailableError(f"the model {model} is a cloud model: only local ones run")
+            raise NotLocalError(f"the model {model} is a cloud model: only local ones run")
         return model
 
     def _converse(
@@ -329,6 +345,8 @@ class OllamaProvider:
             "messages": messages,
             "format": schema,
             "stream": False,
+            # Thinking models (qwen3, qwen3.5) otherwise reason at length first: minutes per album
+            "think": False,
             "options": {"temperature": 0.2},
         }
         try:
@@ -338,24 +356,24 @@ class OllamaProvider:
             raise
         except httpx.TimeoutException as exc:
             self._log.record(call.done("", ok=False, error="timeout"))
-            raise AIUnavailableError("the AI server did not answer in time") from exc
+            raise AIUnreachableError("the AI server did not answer in time") from exc
         except httpx.HTTPError as exc:
             self._log.record(call.done("", ok=False, error=f"connection: {exc}"))
-            raise AIUnavailableError(f"cannot reach the AI server: {exc}") from exc
+            raise AIUnreachableError(f"cannot reach the AI server: {exc}") from exc
         call.status = response.status_code
         if response.is_redirect:
             target = response.headers.get("location", "")
             self._log.record(call.done(target, ok=False, error="redirect not followed"))
-            raise AIUnavailableError(f"the AI server redirected to {target}: not followed")
+            raise NotLocalError(f"the AI server redirected to {target}: not followed")
         if not response.is_success:
             detail = response.text[:500]
             self._log.record(call.done(detail, ok=False, error=f"HTTP {response.status_code}"))
-            raise AIUnavailableError(f"the AI server refused the request: {detail}")
+            raise AIUnreachableError(f"the AI server refused the request: {detail}")
         remote = _remote_host(response)
         if remote:
             self._refuse(model, remote)
             self._log.record(call.done("", ok=False, error=f"answered by {remote}"))
-            raise AIUnavailableError(f"the model {model} is a cloud model (answered by {remote})")
+            raise NotLocalError(f"the model {model} is a cloud model (answered by {remote})")
         return _message_content(response)
 
 

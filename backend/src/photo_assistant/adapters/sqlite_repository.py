@@ -10,6 +10,7 @@ from pathlib import Path
 
 from photo_assistant.adapters.sqlite_access import AccessMixin, UnknownUserError
 from photo_assistant.adapters.sqlite_accounts import AccountsMixin, utc_text
+from photo_assistant.adapters.sqlite_ai import AIMixin
 from photo_assistant.adapters.sqlite_albums import AlbumsMixin
 from photo_assistant.adapters.sqlite_base import (
     SqliteBase,
@@ -92,6 +93,7 @@ class SqliteRepository(
     EnrichMixin,
     TrashMixin,
     ReviewMixin,
+    AIMixin,
     SqliteBase,
 ):
     """Thread-safe: writes share the process's one writer and lock, reads use per-thread

@@ -15,11 +15,16 @@ from photo_assistant.adapters.ollama_guard import (
     is_cloud_model,
     is_local_address,
 )
-from photo_assistant.domain.album_plan import AssetSummary, LibrarySummary
-from photo_assistant.ports.ai import AIUnavailableError, Capability
-from tests.adapters.test_ollama_ai import GOOD_PLAN, FakeOllama, ListLog
+from photo_assistant.ports.ai import AIUnreachableError, Capability
+from tests.adapters.test_ollama_ai import CONTEXT, GOOD_PLAN, FakeOllama, ListLog
 
-CONTEXT = LibrarySummary(assets=(AssetSummary(1, "2019-07-04"),), layouts=("grid-4",))
+
+def test_a_refusal_is_about_the_server_not_the_photo() -> None:
+    """Background jobs give up on a photo or album only for an unusable answer; a server they
+    may not use is the server's fault, so the job is retried and no photo is marked failed."""
+    assert issubclass(NotLocalError, AIUnreachableError)
+
+
 PUBLIC_IP = "34.36.133.15"
 
 
@@ -209,7 +214,7 @@ def test_a_model_the_server_lists_as_remote_is_not_offered(
     with caplog.at_level(logging.WARNING):
         assert provider.capabilities() == frozenset()
     assert "planner:8b" in caplog.text and "ollama.com" in caplog.text
-    with pytest.raises(AIUnavailableError, match="cloud"):
+    with pytest.raises(NotLocalError, match="cloud"):
         provider.plan_album("summer", CONTEXT)
     assert fake.chat_bodies() == []
 
@@ -226,11 +231,11 @@ def test_an_answer_that_came_from_a_remote_host_is_refused_and_not_retried() -> 
     provider, log = _provider(fake, OllamaSettings(plan_model="planner:8b"))
     fake.chat_replies = [json.dumps(GOOD_PLAN), json.dumps(GOOD_PLAN)]
     fake.chat_remote_host = "https://ollama.com:443"
-    with pytest.raises(AIUnavailableError, match="cloud"):
+    with pytest.raises(NotLocalError, match="cloud"):
         provider.plan_album("summer", CONTEXT)
     assert len(fake.chat_bodies()) == 1
     assert [c.ok for c in log.calls] == [False]
-    with pytest.raises(AIUnavailableError, match="cloud"):  # and that model stays refused
+    with pytest.raises(NotLocalError, match="cloud"):  # and that model stays refused
         provider.plan_album("summer", CONTEXT)
     assert len(fake.chat_bodies()) == 1
 
@@ -247,7 +252,7 @@ def _redirecting(paths: set[str]) -> FakeOllama:
 def test_a_redirected_chat_is_not_followed() -> None:
     fake = _redirecting({"/api/chat"})
     provider, log = _provider(fake, OllamaSettings(plan_model="planner:8b"))
-    with pytest.raises(AIUnavailableError, match="redirect"):
+    with pytest.raises(NotLocalError, match="redirect"):
         provider.plan_album("summer", CONTEXT)
     assert [r.url.host for r in fake.requests] == ["127.0.0.1"]
     assert log.calls[0].response["status"] == 307

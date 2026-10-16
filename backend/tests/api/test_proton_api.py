@@ -56,6 +56,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         repo=repo,
         clock=SystemClock(),
         importer=StubImporter(),
+        absolute=lambda rel: tmp_path / "data" / rel,
     )
     app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header

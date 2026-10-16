@@ -10,7 +10,7 @@ import ipaddress
 import socket
 from collections.abc import Callable
 
-from photo_assistant.ports.ai import AIUnavailableError
+from photo_assistant.ports.ai import AIUnreachableError
 
 Resolve = Callable[[str], list[str]]
 
@@ -28,8 +28,9 @@ _LOCAL_NETWORKS = tuple(
 )
 
 
-class NotLocalError(AIUnavailableError):
-    """The AI server or model is not on this machine or the private network."""
+class NotLocalError(AIUnreachableError):
+    """The AI server or model is not on this machine or the private network. A server fault,
+    not a photo's: background jobs retry later instead of giving up on photos or albums."""
 
 
 def system_resolve(host: str) -> list[str]:

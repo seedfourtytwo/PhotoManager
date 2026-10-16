@@ -1,14 +1,20 @@
 """Suggested albums (FEATURES 5.6): events proposed as albums for the signed-in account, made
 only when it keeps one, never shown again once it answered."""
 
+from collections.abc import Iterator
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from photo_assistant.api.main import create_app
+from photo_assistant.api.settings import IntegrationSettings
+from photo_assistant.app.album_plans import PLAN_JOB, photos_key
 from photo_assistant.domain.access import SourceAccess
+from photo_assistant.domain.album_plan import AlbumPlan, PlanSection
 from photo_assistant.domain.places import Place
-from tests.api.conftest import add_user, refusal, services_of
+from tests.api.conftest import BASE, PIN, add_user, make_settings, refusal, services_of
 from tests.factories import NOW, new_asset
 
 MALO = {"latitude": 48.65, "longitude": -2.03}
@@ -17,6 +23,10 @@ RENNES = {"latitude": 48.11, "longitude": -1.68}
 
 @pytest.fixture
 def library(admin: TestClient) -> dict[str, list[int]]:
+    return _library(admin)
+
+
+def _library(admin: TestClient) -> dict[str, list[int]]:
     """A life at home in Rennes, a trip to Saint-Malo in July 2025 (one photo of it in a folder
     only admins see) and a birthday at home in March 2025."""
     repo = services_of(admin).repo
@@ -138,3 +148,73 @@ def test_a_guest_who_cannot_make_albums_gets_no_suggestion(
     key = str(library["trip"][0])
     assert guest.post(f"/api/album-suggestions/{key}/keep").status_code == 403
     assert guest.post(f"/api/album-suggestions/{key}/discard").status_code == 403
+
+
+# --- with the local AI switched on ------------------------------------------------------------
+
+AI_ON = IntegrationSettings(
+    ai_provider="ollama",
+    ollama_base_url="http://127.0.0.1:9",  # nothing answers: no job runs in these tests
+    ollama_caption_model="qwen3.5:4b",
+    ollama_plan_model="qwen3.5:4b",
+)
+
+
+@pytest.fixture
+def ai_admin(tmp_path: Path) -> Iterator[TestClient]:
+    app = create_app(make_settings(tmp_path / "data", integrations=AI_ON))
+    with TestClient(app, base_url=BASE) as client:
+        made = client.post(
+            "/api/setup", json={"username": "admin", "display_name": "C", "pin": PIN}
+        )
+        assert made.status_code == 201, made.text
+        yield client
+
+
+def _plan_jobs(client: TestClient) -> list[object]:
+    return [j["payload"] for j in services_of(client).repo.list_jobs() if j["kind"] == PLAN_JOB]
+
+
+def test_with_the_ai_off_no_plan_is_queued(
+    admin: TestClient, library: dict[str, list[int]]
+) -> None:
+    admin.get("/api/album-suggestions")
+    assert _plan_jobs(admin) == []
+
+
+def test_with_the_ai_on_each_suggestion_gets_a_plan_queued_in_the_background(
+    ai_admin: TestClient,
+) -> None:
+    library = _library(ai_admin)
+    titles = [s["title"] for s in ai_admin.get("/api/album-suggestions").json()]
+    assert titles == ["Saint-Malo · 12 July 2025", "Rennes · 8 March 2025"], "plain until planned"
+    me = services_of(ai_admin).repo.list_users()[0].id
+    assert _plan_jobs(ai_admin) == [
+        {"user_id": me, "key": str(library["trip"][0])},
+        {"user_id": me, "key": str(library["birthday"][0])},
+    ]
+
+
+def test_a_stored_plan_names_the_suggestion_and_the_album_kept_from_it(
+    ai_admin: TestClient,
+) -> None:
+    library = _library(ai_admin)
+    trip, key = library["trip"], str(library["trip"][0])
+    plan = AlbumPlan("Kites over Saint-Malo", (PlanSection("Beach", tuple(trip), "single"),))
+    services_of(ai_admin).repo.save_album_plan(key, photos_key(trip), "qwen3.5:4b", plan)
+
+    shown = ai_admin.get("/api/album-suggestions").json()
+    assert shown[0]["title"] == "Kites over Saint-Malo"
+    kept = ai_admin.post(f"/api/album-suggestions/{key}/keep").json()
+    assert ai_admin.get(f"/api/albums/{kept['id']}").json()["title"] == "Kites over Saint-Malo"
+
+
+def test_a_member_who_sees_fewer_photos_of_the_event_gets_the_plain_title(
+    ai_admin: TestClient,
+) -> None:
+    library = _library(ai_admin)
+    trip, key = library["trip"], str(library["trip"][0])
+    plan = AlbumPlan("Kites over Saint-Malo", (PlanSection("Beach", tuple(trip), "single"),))
+    services_of(ai_admin).repo.save_album_plan(key, photos_key(trip), "qwen3.5:4b", plan)
+    lea = add_user(ai_admin, "lea")
+    assert lea.get("/api/album-suggestions").json()[0]["title"] == "Saint-Malo · 12 July 2025"
