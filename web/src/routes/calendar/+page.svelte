@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import type { CalendarDay } from '$lib/api';
 	import { api, library } from '$lib/app.svelte';
+	import { libraryLine, monthTotals } from '$lib/calendar';
 	import { errorMessage } from '$lib/format';
 	import { filtersFromParams, filtersToQuery } from '$lib/filters';
 	import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
@@ -42,7 +43,7 @@
 
 <svelte:head><title>Calendar · Photos</title></svelte:head>
 
-<LibraryHead view="calendar" {query} {total} />
+<LibraryHead view="calendar" {query} line={libraryLine(total, monthTotals(days ?? []))} />
 
 <div class="page">
 	{#if error}

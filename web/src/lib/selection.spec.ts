@@ -9,6 +9,7 @@ import {
 	selectAll,
 	selectAllLabel,
 	selectMany,
+	selectionTitle,
 	toggle,
 	type Selection
 } from './selection';
@@ -111,5 +112,16 @@ describe('selecting everything, honestly', () => {
 		expect(limitSelection(some)).toBe(some);
 		expect(limitSelection(some, 3)).toBe(some);
 		expect([...limitSelection(some, 2).ids]).toEqual([1, 2]);
+	});
+});
+
+describe('selectionTitle', () => {
+	it('the title counts what is chosen, as an iPhone does', () => {
+		expect(selectionTitle(1)).toBe('1 Selected');
+		expect(selectionTitle(3)).toBe('3 Selected');
+		expect(selectionTitle(1204)).toBe('1,204 Selected');
+	});
+	it('asks for photos while none is chosen yet', () => {
+		expect(selectionTitle(0)).toBe('Select photos');
 	});
 });

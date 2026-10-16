@@ -184,13 +184,17 @@
 {/if}
 
 <style>
-	/* One row, the same on every screen: it scrolls sideways where it does not fit. */
+	/* One row, the same on every screen: it scrolls sideways where it does not fit, snapping
+	   to a chip, and fades out at the right edge so a cut chip reads as "more this way". */
 	.chips {
 		display: flex;
 		gap: var(--s-2);
 		overflow-x: auto;
 		padding: var(--s-1) var(--page-x) var(--s-3);
 		scrollbar-width: none;
+		scroll-snap-type: x proximity;
+		scroll-padding-inline: var(--page-x);
+		mask-image: linear-gradient(to left, transparent, #000 var(--s-5));
 	}
 	.chips::-webkit-scrollbar {
 		display: none;
@@ -201,8 +205,8 @@
 		padding: 0 var(--s-3);
 		border-radius: var(--r-pill);
 		color: var(--ink-2);
-		font-size: var(--fs-16);
-		font-weight: 600;
+		font-size: var(--fs-15);
+		font-weight: 500;
 		white-space: nowrap;
 	}
 </style>

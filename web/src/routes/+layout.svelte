@@ -292,9 +292,8 @@
 		.notice {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
 		}
-		/* The pill and the lying time ruler (`data-ruler`, TimeRuler.svelte) share the strip above
-		   the dock; the toast clears both. The ruler too stays on the page under the photo view. */
-		:global(body:has([role='toolbar'][data-selection-pill], [data-ruler='horizontal']))
+		/* The pill sits in the strip above the dock; the toast clears it. */
+		:global(body:has([role='toolbar'][data-selection-pill]))
 			.notice:not(:global([data-photo-view] > *)) {
 			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--pill) + var(--s-3));
 		}

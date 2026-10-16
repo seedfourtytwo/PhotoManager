@@ -395,7 +395,7 @@ test('library: “select” says how many it takes while more photos are still t
 	expect(n).toBeLessThan(450);
 	await expect(bar.getByRole('button', { name: 'Select all', exact: true })).toHaveCount(0);
 	await bar.getByRole('button', { name: /^Select loaded/ }).click();
-	await expect(page.getByText(`${n} selected`)).toBeVisible();
+	await expect(page.getByText(`${n} selected`, { exact: true })).toBeVisible();
 });
 
 test('selecting a few photos says nothing about the 10,000 limit', async ({ page }) => {

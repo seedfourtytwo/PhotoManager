@@ -216,7 +216,7 @@ export async function centre(target: Locator) {
 	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** Select photos the way each device does it: click the check circle, or long-press then tap. */
+/** Select photos the way each device does it: the keyboard (x), or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');
 	// The presses below skip Playwright's own wait for a target that takes them, and a page
@@ -224,11 +224,31 @@ export async function selectTiles(page: Page, indexes: number[]) {
 	await expect(page.locator('html')).not.toHaveAttribute('data-page-move');
 	for (const [n, i] of indexes.entries()) {
 		const tile = tiles.nth(i);
-		if (!isPhone(page)) await tile.locator('.check').click({ force: true });
-		else if (n === 0) await longPress(tile);
+		// Not by the circle: on a wide touch screen it sits at the photo's bottom right, where
+		// the dock or the pill may be over it.
+		if (!isPhone(page)) {
+			await tile.focus();
+			await page.keyboard.press('x');
+		} else if (n === 0) await longPress(tile);
 		else await tile.tap();
 	}
-	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
+	await expect(selectedCount(page)).toHaveText(`${indexes.length} selected`);
+}
+
+/** The pill's count ("3 selected"); the Library's title says "3 Selected" as well. */
+export const selectedCount = (page: Page) =>
+	page.getByRole('toolbar', { name: 'Selected photos' }).getByRole('status');
+
+/** The time scrubber hides at rest: a mouse at the right edge brings it out, or a fast scroll. */
+export async function scrubberOut(page: Page) {
+	if (isPhone(page))
+		await page.evaluate(async () => {
+			window.scrollBy(0, 10);
+			await new Promise((r) => setTimeout(r, 120));
+			window.scrollBy(0, 3 * innerHeight);
+		});
+	else await page.mouse.move(page.viewportSize()!.width - 8, 400);
+	await expect(page.getByRole('slider', { name: 'Jump to date' })).toHaveClass(/out/);
 }
 
 /**

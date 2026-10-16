@@ -19,10 +19,15 @@ export function measureGridTops(wrapper: HTMLElement): number[] {
 	return [...grids].map((g) => g.offsetTop);
 }
 
-/** Where the sticky month label stops: below the top bar on a laptop, at the edge on a phone. */
-export function stuckAt(wrapper: HTMLElement | undefined): number {
-	const label = wrapper?.querySelector('h2');
-	return (label && parseFloat(getComputedStyle(label).top)) || 0;
+/**
+ * How far under the screen's top a month starts once it is gone to: below the page's top bar
+ * (the root's scroll padding) and the room a month keeps above itself there (its scroll margin:
+ * the phone's compact title).
+ */
+export function clearTop(wrapper: HTMLElement | undefined): number {
+	const bar = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+	const section = wrapper?.querySelector('section');
+	return bar + ((section && parseFloat(getComputedStyle(section).scrollMarginTop)) || 0);
 }
 
 /**

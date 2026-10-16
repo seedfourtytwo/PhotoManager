@@ -3,6 +3,7 @@
  * Ink is zero-based and sequential in one hue: 0 photos is no ink, the busiest day is full ink.
  */
 import type { CalendarDay } from './api/types';
+import { photos } from './format';
 
 export type HeatCell = { day: string; week: number; weekday: number; count: number };
 export type HeatYear = { year: number; total: number; cells: HeatCell[] };
@@ -82,6 +83,15 @@ export function monthStarts(year: number): { label: string; week: number }[] {
 		const dayIndex = (Date.UTC(year, m, 1) - Date.UTC(year, 0, 1)) / MS_DAY;
 		return { label, week: Math.floor((dayIndex + offset) / 7) };
 	});
+}
+
+/** The Library's line under its title: "12,480 photos · 2012–2026" (months newest first). */
+export function libraryLine(total: number | null, months: readonly { key: string }[]): string {
+	if (total === null) return 'Counting…';
+	const newest = months[0]?.key.slice(0, 4);
+	const oldest = months.at(-1)?.key.slice(0, 4);
+	if (!newest || !oldest) return photos(total);
+	return `${photos(total)} · ${oldest === newest ? newest : `${oldest}–${newest}`}`;
 }
 
 /** Photos per month (YYYY-MM), newest first — the date scrubber's track. */

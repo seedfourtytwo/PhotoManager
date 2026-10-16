@@ -3,8 +3,6 @@
  * between the newest and the oldest photo takes the same length, with or without photos, so
  * the ticks are even and a year is always as long as the next.
  */
-import { monthLabel } from './timeline';
-
 export type RulerMonth = { key: string; count: number }; // YYYY-MM, newest first
 export type YearMark = {
 	year: string;
@@ -61,10 +59,4 @@ export function yearMarks(months: readonly RulerMonth[], room: number): YearMark
 		});
 	}
 	return marks;
-}
-
-/** "Dec 2019": the month as the needle's tag writes it, three letters whatever the browser. */
-export function monthTag(key: string): string {
-	const [month, year] = monthLabel(key).split(' ');
-	return `${month.slice(0, 3)} ${year}`;
 }

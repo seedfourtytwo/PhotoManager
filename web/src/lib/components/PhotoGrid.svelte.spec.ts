@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { makeAsset } from '$lib/testing/fixtures';
 import { justify } from '$lib/timeline';
 import PhotoGrid from './PhotoGrid.svelte';
+import '$lib/tokens.css';
 
 // A complete 1 × 1 image: one that does not load would leave its tile without a picture.
 const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -258,5 +259,47 @@ describe('PhotoGrid', () => {
 		finger('pointermove', /18:31/);
 		finger('pointerup', /18:31/);
 		expect(ontoggle).not.toHaveBeenCalled();
+	});
+});
+
+describe('PhotoGrid: how a tile looks', () => {
+	const tiles = () => [...document.querySelectorAll<HTMLElement>('.tile')];
+	const opacities = (selector: string) =>
+		[...document.querySelectorAll(selector)].map((el) => getComputedStyle(el).opacity);
+
+	it('waits in the photo’s own colour, and the photo fades in once it is decoded', async () => {
+		const coloured = [
+			makeAsset(1, '2019-07-04T18:30:00', 400, 300, { thumb: { url: pixel }, colour: '#336699' }),
+			makeAsset(2, '2019-07-04T18:31:00', 400, 300, { thumb: { url: pixel } })
+		];
+		setup({ items: coloured, layout: justify([4 / 3, 4 / 3], 600, 150, 2) });
+		await expect.element(page.getByRole('button', { name: /18:30/ })).toBeInTheDocument();
+		const [painted, plain] = tiles();
+		expect(painted.style.backgroundColor).toBe('rgb(51, 102, 153)');
+		expect(plain.style.backgroundColor).toBe('');
+		await expect
+			.poll(() => tiles().map((tile) => tile.querySelector('img')!.hasAttribute('data-in')))
+			.toEqual([true, true]);
+		await expect.poll(() => opacities('.tile img')).toEqual(['1', '1']);
+	});
+
+	it('at rest, no circle on any photo', async () => {
+		setup();
+		await expect.element(page.getByRole('button', { name: /Paris/ })).toBeInTheDocument();
+		expect(opacities('.tile .check')).toEqual(['0', '0', '0']);
+	});
+
+	it('choosing: an empty ring on every photo; a chosen one gets the filled circle and gives a little, with no frame', async () => {
+		setup({ selecting: true, selected: new Set([2]) });
+		const chosen = page.getByRole('button', { name: /Paris/ });
+		await expect.element(chosen).toHaveAttribute('aria-pressed', 'true');
+		await expect.poll(() => opacities('.tile .check')).toEqual(['1', '1', '1']);
+		const el = chosen.element();
+		await expect.poll(() => getComputedStyle(el).scale).toBe('0.92');
+		expect(getComputedStyle(tiles()[0]).scale).toBe('none');
+		expect(getComputedStyle(el, '::after').boxShadow).toBe('none');
+		// Filled, not ringed; the others keep their ring.
+		expect(getComputedStyle(el.querySelector('.check')!).boxShadow).toBe('none');
+		expect(getComputedStyle(tiles()[0].querySelector('.check')!).boxShadow).not.toBe('none');
 	});
 });
