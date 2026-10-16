@@ -2,7 +2,7 @@
 import type { Page } from '@playwright/test';
 import { countSlow, expect, openAdmin, REAL_BACKEND, test } from './helpers.ts';
 
-test.beforeEach(({ page }) => openAdmin(page));
+test.beforeEach(({ page }) => openAdmin(page, 'folders'));
 
 /** A folder is a tile under Folders; it opens a sheet with where it is and its actions. */
 const folderTile = (page: Page, name: string) =>

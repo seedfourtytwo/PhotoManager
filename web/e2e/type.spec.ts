@@ -72,18 +72,49 @@ const px = (target: Locator, property: 'fontSize' | 'marginTop') =>
 test('type and space render at the sizes the design table states', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/settings'); // You
-	const line = page.getByText('Folders, backups and people'); // a tile's quiet line
 	// a group's label line, and the space above it
-	const label = page.getByRole('heading', { name: 'Look', level: 3 }).locator('..');
+	const label = page.getByRole('heading', { name: 'Account', level: 3 }).locator('..');
 
 	expect(await px(page.locator('html'), 'fontSize')).toBe(16); // 1rem: the browser's own size
-	expect(await px(line, 'fontSize')).toBe(15); // --fs-15
-	expect(await px(page.getByText(/^Library server/), 'fontSize')).toBe(13); // .small, --fs-13
+	expect(await px(page.getByText(/^Photos · server/), 'fontSize')).toBe(13); // .small, --fs-13
 	expect(await px(page.getByRole('heading', { name: ADMIN.name, level: 1 }), 'fontSize')).toBe(34);
 	expect(await px(label, 'marginTop')).toBe(24); // --s-5
 	await page.getByRole('button', { name: 'Change PIN' }).click();
 	const sheetTitle = page.getByRole('heading', { name: 'Change PIN', level: 2 });
-	expect(await px(sheetTitle, 'fontSize')).toBe(22);
+	// a sheet's title: --fs-22 on a laptop, an iPhone sheet's --fs-17 on a phone (slice 6)
+	expect(await px(sheetTitle, 'fontSize')).toBe(isPhone(page) ? 17 : 22);
+	// a row's title is the interface text, --fs-15
+	await page.getByRole('button', { name: 'Cancel' }).click();
+	await expect(sheetTitle).toBeHidden();
+	await sheetStepGone(page); // the sheet's history step is taken back before moving on
+	await page.goto('/settings/overview');
+	expect(await px(page.locator('.tile-title').first(), 'fontSize')).toBe(15);
+});
+
+test('Larger text: the account’s look switches everything to Atkinson Hyperlegible', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	const family = () =>
+		page.evaluate(() => getComputedStyle(document.querySelector('h1')!).fontFamily);
+	await expect.poll(family).toMatch(/^"?Inter/);
+	const status = await page.evaluate(async () => {
+		const me = (await (await fetch('/api/auth/me')).json()) as { id: number };
+		const saved = await fetch(`/api/admin/accounts/${me.id}/look`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ face: 'atkinson' })
+		});
+		return saved.status;
+	});
+	expect(status).toBe(200);
+	await page.reload();
+	await expect(page.locator('html')).toHaveAttribute('data-face', 'atkinson');
+	await expect.poll(family).toMatch(/^"?Atkinson Hyperlegible Next/);
+	await expect
+		.poll(() => page.evaluate(() => getComputedStyle(document.body).fontFamily))
+		.toMatch(/^"?Atkinson Hyperlegible Next/);
 });
 
 test('the text dial multiplies the table: 125 % and 90 % of every size', async ({ page }) => {

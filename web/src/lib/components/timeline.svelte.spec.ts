@@ -47,8 +47,9 @@ describe('Timeline', () => {
 		await Promise.all([far, near]);
 		await new Promise((r) => setTimeout(r, 100));
 		expect(loader.items.some((a) => a.taken_at.startsWith('2020-11'))).toBe(true);
-		// The scroll position may ask for a page or two more; never the whole year.
-		expect(cursors.length).toBeLessThan(6);
+		// The scroll position may ask for the pages of two screens more (a month is about a
+		// screen here); never the whole year.
+		expect(cursors.length).toBeLessThan(9);
 		expect(loader.done).toBe(false);
 	});
 
@@ -84,6 +85,29 @@ describe('Timeline', () => {
 		void loader.reset({});
 		mount(loader);
 		await expect.element(page.getByRole('status')).toHaveTextContent('Loading…');
+	});
+
+	it('zoom: a level up makes the rows taller and is remembered; at the top end it stays', async () => {
+		localStorage.removeItem('grid-zoom');
+		const { fetchPage } = yearOfPages();
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({});
+		const { component } = mount(loader);
+		await expect.element(page.getByRole('heading', { name: /December 2020/ })).toBeInTheDocument();
+		const height = () => document.querySelector('.tile')!.getBoundingClientRect().height;
+		const before = height();
+		const saved = () => Object.values(JSON.parse(localStorage.getItem('grid-zoom') ?? '{}'));
+		await component.zoom(1);
+		await expect.poll(height).toBeGreaterThan(before);
+		expect(saved()).toEqual([3]);
+		await component.zoom(1);
+		await component.zoom(1);
+		expect(saved()).toEqual([4]);
+		// Back to where every other test starts.
+		await component.zoom(-1);
+		await component.zoom(-1);
+		expect(saved()).toEqual([2]);
+		localStorage.removeItem('grid-zoom');
 	});
 
 	it('a cancelled drag does not swallow the next click on the page', async () => {

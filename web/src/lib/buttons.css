@@ -168,7 +168,7 @@ button.primary:active,
 	background: var(--fill);
 	color: var(--ink);
 	font-size: var(--fs-15);
-	font-weight: 600;
+	font-weight: 500;
 	white-space: nowrap;
 }
 .chip::after {

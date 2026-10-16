@@ -45,14 +45,24 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
-/** Where every Admin spec starts: a fresh library, signed in on the Admin page. */
-export async function openAdmin(page: Page) {
+/** An admin section of Settings. */
+export type AdminSection = 'overview' | 'folders' | 'backups' | 'people' | 'search';
+
+/** Where every Admin spec starts: a fresh library, signed in on that section of Settings. */
+export async function openAdmin(page: Page, section: AdminSection = 'overview') {
 	await resetMock();
-	await signIn(page, '/admin');
+	await signIn(page, `/settings/${section}`);
+}
+
+/** Fill a PIN sheet, entry by entry: it asks for the new PIN twice (and the current one first). */
+export async function fillPins(sheet: Locator, pins: Record<string, string>) {
+	for (const [label, pin] of Object.entries(pins))
+		await sheet.getByLabel(label, { exact: true }).fill(pin);
 }
 
 /** The avatar, named "You" (and, for an admin, what needs them): it opens You. */
-export const avatar = (page: Page) => page.getByRole('link', { name: /^You\b/ });
+export const avatar = (page: Page) =>
+	page.getByRole('link', { name: /^You\b/ }).and(page.locator('.avatar'));
 
 /** Follow a link the way a click in the app does (no reload). */
 export async function follow(page: Page, href: string) {
@@ -206,7 +216,18 @@ export async function centre(target: Locator) {
 	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** Select photos the way each device does it: click the check circle, or long-press then tap. */
+/**
+ * To the next photo in the photo view as each device does it: a swipe on a phone (which draws
+ * no edge arrows), the Next arrow on a laptop.
+ */
+export async function stepNext(page: Page) {
+	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	if (!isPhone(page)) return viewer.getByRole('button', { name: 'Next photo' }).click();
+	const at = await centre(viewer.locator('.stage'));
+	await touchSwipe(page, at, { x: at.x - 200, y: at.y });
+}
+
+/** Select photos the way each device does it: the keyboard (x), or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');
 	// The presses below skip Playwright's own wait for a target that takes them, and a page
@@ -214,11 +235,31 @@ export async function selectTiles(page: Page, indexes: number[]) {
 	await expect(page.locator('html')).not.toHaveAttribute('data-page-move');
 	for (const [n, i] of indexes.entries()) {
 		const tile = tiles.nth(i);
-		if (!isPhone(page)) await tile.locator('.check').click({ force: true });
-		else if (n === 0) await longPress(tile);
+		// Not by the circle: on a wide touch screen it sits at the photo's bottom right, where
+		// the dock or the pill may be over it.
+		if (!isPhone(page)) {
+			await tile.focus();
+			await page.keyboard.press('x');
+		} else if (n === 0) await longPress(tile);
 		else await tile.tap();
 	}
-	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
+	await expect(selectedCount(page)).toHaveText(`${indexes.length} selected`);
+}
+
+/** The pill's count ("3 selected"); the Library's title says "3 Selected" as well. */
+export const selectedCount = (page: Page) =>
+	page.getByRole('toolbar', { name: 'Selected photos' }).getByRole('status');
+
+/** The time scrubber hides at rest: a mouse at the right edge brings it out, or a fast scroll. */
+export async function scrubberOut(page: Page) {
+	if (isPhone(page))
+		await page.evaluate(async () => {
+			window.scrollBy(0, 10);
+			await new Promise((r) => setTimeout(r, 120));
+			window.scrollBy(0, 3 * innerHeight);
+		});
+	else await page.mouse.move(page.viewportSize()!.width - 8, 400);
+	await expect(page.getByRole('slider', { name: 'Jump to date' })).toHaveClass(/out/);
 }
 
 /**

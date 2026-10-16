@@ -1,5 +1,6 @@
 /** Where things are: the places of the app, how a page change moves, and who you are. */
 import type { BackupHealth } from './api';
+import { problemWords } from './backups';
 import type { IconName } from './icons';
 import type { CollectionsRow } from './look';
 import type { PageMove } from './motion';
@@ -57,12 +58,12 @@ export function initialOf(name: string | undefined): string {
 }
 
 /**
- * The one sentence an admin's avatar dot stands for (the first backup problem), or null: a
- * member never sees backup state, and all being well shows nothing.
+ * What an admin's avatar dot stands for (the first backup problem's plain headline), or null:
+ * a member never sees backup state, and all being well shows nothing.
  */
 export function attentionOf(isAdmin: boolean, health: BackupHealth | null): string | null {
-	if (!isAdmin || !health) return null;
-	return health.problems[0]?.message ?? null;
+	if (!isAdmin || !health?.problems.length) return null;
+	return problemWords(health.problems[0]).headline;
 }
 
 /** The pages the bar leads to: going from one to another is switching places. */
@@ -78,8 +79,7 @@ export function backLabel(path: string): string {
 /** How far in a page sits: the bar's pages 0, a page opened from one 1, and so on. */
 function depthOf(path: string): number {
 	if (TOPS.has(path)) return 0;
-	const depth = path.split('/').filter(Boolean).length;
-	return under(path, '/admin') ? depth + 1 : depth; // Admin opens from You (/settings)
+	return path.split('/').filter(Boolean).length;
 }
 
 const MOVES: readonly string[] = ['forward', 'back', 'switch'] satisfies PageMove[];

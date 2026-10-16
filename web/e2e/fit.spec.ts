@@ -55,15 +55,15 @@ for (const { width, scale } of SIZES) {
 		await onScreen(nav.locator('ul a, a.search'), width);
 	});
 
-	test(`${size}: the photo bar holds its five actions apart, each a whole target`, async ({
+	test(`${size}: the photo bar holds its six actions apart, each a whole target`, async ({
 		page
 	}) => {
 		test.skip(!isPhone(page), 'the narrow bar is the phone’s');
 		await signIn(page);
 		await page.locator('.tile').first().click();
 		const bar = loupe(page).locator('.bar');
-		const actions = bar.locator('.acts .icon-button');
-		await expect(actions).toHaveCount(5);
+		const actions = bar.locator('.icon-button');
+		await expect(actions).toHaveCount(6);
 		await resize(page, width, scale);
 		await expect(async () => {
 			const glass = await box(bar);

@@ -67,7 +67,9 @@ test('laptop: a glass capsule floats centred at the top, the avatar on its line 
 	await expect(page.getByRole('heading', { name: 'C', level: 1 })).toBeVisible();
 	await expect(me).toHaveAttribute('aria-current', 'page');
 	const main = page.getByRole('main');
-	await expect(main.getByRole('link', { name: /^Admin/ })).toHaveAttribute('href', '/admin');
+	await expect(
+		main.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Overview' })
+	).toHaveAttribute('href', '/settings/overview');
 	await expect(main.getByRole('button', { name: 'Change PIN' })).toBeVisible();
 	await expect(main.getByRole('button', { name: 'Sign out' })).toBeVisible();
 });
@@ -180,14 +182,13 @@ test('shell: nothing on the page hides under the bar', async ({ page }) => {
 	expect(head.y).toBeGreaterThanOrEqual(bar.y + bar.height);
 	await page.mouse.move(600, 500);
 	await page.mouse.wheel(0, 2000);
-	// A month heading sticks where the capsule's room ends (`--top`: 16 + 52 + 8 px), so
-	// nothing is under the capsule when it comes back.
-	const tops = () =>
-		page
-			.getByRole('main')
-			.getByRole('heading', { level: 2 })
-			.evaluateAll((all) => all.map((h) => Math.round(h.getBoundingClientRect().top)));
-	await expect.poll(async () => (await tops()).includes(76)).toBe(true);
+	// Month headings scroll away with their photos (no strip stuck under the capsule); the
+	// month in view rides in the compact title that takes the capsule's place.
+	await expect(page.getByRole('main').getByRole('heading', { level: 2 }).first()).toHaveCSS(
+		'position',
+		'static'
+	);
+	await expect(page.locator('.compact.on .sub')).toHaveText(/^[A-Z][a-z]+ \d{4}$/);
 });
 
 test('laptop: the capsule steps away while the page scrolls down and comes back on the way up', async ({

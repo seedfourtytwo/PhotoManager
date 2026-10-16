@@ -41,6 +41,26 @@ describe('Chip', () => {
 		await userEvent.click(page.getByRole('button', { name: 'Clear When' }));
 		expect(onclear).toHaveBeenCalledOnce();
 	});
+	it('set: one ink pill, its × inside the same shape', async () => {
+		render(Chip, {
+			icon: 'calendar',
+			label: 'When',
+			value: 'July 2019',
+			onclick: () => {},
+			onclear: () => {}
+		});
+		const clear = page.getByRole('button', { name: 'Clear When' }).element();
+		const answer = page.getByRole('button', { name: 'July 2019' }).element();
+		const pill = clear.parentElement!;
+		expect(answer.parentElement).toBe(pill);
+		const transparent = 'rgba(0, 0, 0, 0)';
+		expect(getComputedStyle(pill).backgroundColor).not.toBe(transparent);
+		expect(getComputedStyle(clear).backgroundColor).toBe(transparent);
+		expect(getComputedStyle(answer).backgroundColor).toBe(transparent);
+		const [outer, inner] = [pill.getBoundingClientRect(), clear.getBoundingClientRect()];
+		expect(inner.right).toBeLessThanOrEqual(outer.right);
+		expect(inner.left).toBeGreaterThan(outer.left);
+	});
 	it('is a toggle when it is its own answer', async () => {
 		render(Chip, { icon: 'favourite', label: 'Favourites', pressed: true, onclick: () => {} });
 		await expect

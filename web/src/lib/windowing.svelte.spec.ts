@@ -7,7 +7,7 @@ import {
 	gridBelow,
 	measureGridTops,
 	placeAll,
-	stuckAt,
+	clearTop,
 	windowsChanged,
 	windowsIn
 } from './windowing';
@@ -179,13 +179,13 @@ describe('measuring the page', () => {
 	afterEach(() => document.body.replaceChildren());
 
 	/** A timeline as Timeline.svelte draws it: a label and a grid per month. */
-	function timeline(heights: number[], labelTop = ''): HTMLElement {
+	function timeline(heights: number[]): HTMLElement {
 		const wrapper = document.createElement('div');
 		wrapper.style.cssText = 'position: relative; margin-top: 30px;';
 		for (const height of heights) {
 			const section = document.createElement('section');
 			const label = document.createElement('h2');
-			label.style.cssText = `height: 40px; margin: 0; padding: 0; ${labelTop}`;
+			label.style.cssText = 'height: 40px; margin: 0; padding: 0;';
 			const grid = document.createElement('div');
 			grid.className = 'grid';
 			grid.style.height = `${height}px`;
@@ -212,14 +212,21 @@ describe('measuring the page', () => {
 		expect(measureGridTops(timeline([]))).toEqual([]);
 	});
 
-	it('stuckAt: where the sticky label stops', () => {
-		expect(stuckAt(timeline([200], 'position: sticky; top: 56px;'))).toBe(56);
-		expect(stuckAt(timeline([200], 'position: sticky; top: 0px;'))).toBe(0);
+	it('clearTop: the page’s top bar (the root’s scroll padding) and the room a month keeps above it', () => {
+		document.documentElement.style.scrollPaddingTop = '76px';
+		try {
+			const wrapper = timeline([200]);
+			expect(clearTop(wrapper)).toBe(76);
+			wrapper.querySelector('section')!.style.scrollMarginTop = '52px';
+			expect(clearTop(wrapper)).toBe(128);
+			expect(clearTop(undefined)).toBe(76);
+		} finally {
+			document.documentElement.style.scrollPaddingTop = '';
+		}
 	});
 
-	it('stuckAt: 0 for a label that does not stick, no label, or no timeline', () => {
-		expect(stuckAt(timeline([200]))).toBe(0);
-		expect(stuckAt(timeline([]))).toBe(0);
-		expect(stuckAt(undefined)).toBe(0);
+	it('clearTop: 0 without a top bar or a month', () => {
+		expect(clearTop(timeline([]))).toBe(0);
+		expect(clearTop(undefined)).toBe(0);
 	});
 });

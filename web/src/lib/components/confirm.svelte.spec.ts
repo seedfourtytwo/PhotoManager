@@ -126,7 +126,12 @@ describe('Editor', () => {
 		const onsaved = vi.fn();
 		render(Editor, { asset: edited, onclose: () => {}, onsaved });
 		const deletes = () => calls.filter((c) => c.method === 'DELETE');
-		await page.getByRole('button', { name: 'Revert to original' }).click();
+		// Under ⋯ in the editor's top bar.
+		const revert = async () => {
+			await page.getByRole('button', { name: 'More' }).click();
+			await page.getByRole('button', { name: 'Revert to original' }).click();
+		};
+		await revert();
 		const confirm = page.getByRole('dialog', { name: 'Go back to the original?' });
 		await expect.element(confirm).toBeInTheDocument();
 		expect(deletes()).toHaveLength(0);
@@ -135,7 +140,7 @@ describe('Editor', () => {
 		expect(deletes()).toHaveLength(0);
 		expect(onsaved).not.toHaveBeenCalled();
 
-		await page.getByRole('button', { name: 'Revert to original' }).click();
+		await revert();
 		await confirm.getByRole('button', { name: 'Revert', exact: true }).click();
 		await vi.waitFor(() => expect(onsaved).toHaveBeenCalledOnce());
 		expect(deletes()).toEqual([{ method: 'DELETE', url: '/api/assets/7/edit' }]);
@@ -161,8 +166,9 @@ describe('Editor', () => {
 
 		it('a saved edit that was only opened is not a change', async () => {
 			const { onclose } = await open();
-			await page.getByRole('button', { name: 'Rotate right' }).click();
-			await page.getByRole('button', { name: 'Rotate left' }).click();
+			// Four quarter turns: back where it was.
+			for (let turn = 0; turn < 4; turn++)
+				await page.getByRole('button', { name: 'Rotate right' }).click();
 			await page.getByRole('button', { name: 'Cancel' }).click();
 			expect(onclose).toHaveBeenCalledOnce();
 		});

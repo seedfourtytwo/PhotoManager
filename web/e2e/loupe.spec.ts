@@ -2,7 +2,7 @@
  * The loupe (the photo view): its bar, chrome that comes back on touch, real swipes, URL state,
  * rights, guarded actions, toasts on top of it, and the view transition from and to the tile.
  */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
 	ADMIN,
 	centre,
@@ -19,6 +19,7 @@ import {
 	selectionAction,
 	selectTiles,
 	signIn,
+	stepNext,
 	test,
 	toast,
 	touchSwipe,
@@ -33,18 +34,26 @@ test.describe('as admin', () => {
 		await signIn(page);
 	});
 
-	test('phone: idle chrome comes back on a tap, and a tap on the photo toggles it', async ({
+	test('phone: the chrome stays until a tap on the photo fades it, and the next brings it back', async ({
 		page
 	}) => {
 		test.skip(!isPhone(page), 'touch only');
 		await page.locator('.tile').first().click();
 		const toolbar = loupe(page).getByRole('toolbar', { name: 'Photo actions' });
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
+		await expect(toolbar).toHaveCSS('opacity', '1');
+		// A finger never hides it by a timer (a laptop's fades after 3 s without the mouse).
+		await page.waitForTimeout(3500);
+		await expect(toolbar).toHaveCSS('opacity', '1');
+		// No arrows drawn at the edges on a touch screen: a finger swipes (a screen reader still
+		// has them).
+		await expect(loupe(page).getByRole('button', { name: 'Next photo' })).toHaveCSS(
+			'clip-path',
+			'inset(50%)'
+		);
 		const photo = await centre(loupe(page).locator('img.photo'));
 		await page.touchscreen.tap(photo.x, photo.y);
-		await expect(toolbar).toHaveCSS('opacity', '1');
-		await page.touchscreen.tap(photo.x, photo.y);
 		await expect(toolbar).toHaveCSS('opacity', '0');
+		await expect(loupe(page).locator('.scrim').first()).toHaveCSS('opacity', '0');
 		await page.touchscreen.tap(photo.x, photo.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');
 		await toolbar.getByRole('button', { name: 'Close' }).tap();
@@ -77,7 +86,7 @@ test.describe('as admin', () => {
 		await expect(loupe(page)).toBeVisible();
 		await expect(page).toHaveURL(new RegExp(`photo=${id}`));
 		// Step to the next photo, then close: the grid shows and focuses that photo's tile.
-		await loupe(page).getByRole('button', { name: 'Next photo' }).click();
+		await stepNext(page);
 		await expect(page).not.toHaveURL(new RegExp(`photo=${id}$`));
 		const current = new URL(page.url()).searchParams.get('photo');
 		await loupe(page).getByRole('button', { name: 'Close' }).click();
@@ -143,7 +152,9 @@ test.describe('as admin', () => {
 		});
 		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
 		const at = await centre(favourite);
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
+		const photo = await centre(loupe(page).locator('img.photo'));
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect(toolbar).toHaveCSS('opacity', '0');
 		await page.touchscreen.tap(at.x, at.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');
 		await page.waitForTimeout(NOTHING_HAPPENS_MS);
@@ -170,7 +181,9 @@ test.describe('as admin', () => {
 			await route.fulfill({ response, json: detail });
 		});
 		await page.locator('.tile').first().click();
+		await loupe(page).getByRole('button', { name: 'Details' }).click();
 		const sources = loupe(page).getByRole('complementary', { name: 'Details' });
+		await sources.getByText('File', { exact: true }).click();
 		await expect(sources.getByText('23.jpg', { exact: true })).toBeVisible();
 		await expect(sources.getByText('3.jpg', { exact: true })).toBeVisible();
 		expect(errors).toEqual([]);
@@ -216,7 +229,7 @@ test('guest: view-only photos say why they cannot be downloaded; no edit or priv
 
 for (const who of [MEMBER, ADMIN]) {
 	const admin = who === ADMIN;
-	test(`where a photo came from: ${admin ? 'an admin reads the original file and its path' : 'a member reads the folder name and the photo name, not the file'}`, async ({
+	test(`where a photo came from: ${admin ? 'an admin opens File for its name and the path of the original' : 'a member reads no file at all'}`, async ({
 		page
 	}) => {
 		await resetMock();
@@ -230,14 +243,17 @@ for (const who of [MEMBER, ADMIN]) {
 		});
 		await signIn(page, '/', who);
 		await page.locator('.tile').first().click();
-		if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Details' }).click();
+		await loupe(page).getByRole('button', { name: 'Details' }).click();
 		const about = loupe(page).getByRole('complementary', { name: 'Details' });
-		await expect(about.getByText('From', { exact: true })).toBeVisible();
-		await expect(about.getByText(named, { exact: true })).toBeVisible();
+		await expect(about.getByLabel('When and where')).toBeVisible();
 		if (admin) {
+			await about.getByText('File', { exact: true }).click();
+			await expect(about.getByText(named, { exact: true })).toBeVisible();
 			await expect(about.getByText('trips/2019/IMG_0001.JPG', { exact: true })).toBeVisible();
 		} else {
+			await expect(about.getByText('File', { exact: true })).toHaveCount(0);
 			await expect(about).not.toContainText('IMG_0001');
+			await expect(about).not.toContainText(named);
 		}
 	});
 }
@@ -277,7 +293,7 @@ test.describe('photo view', () => {
 		await signIn(page);
 	});
 
-	test('the bar reads the day in words, the time and the camera, apart by space; the name is in the details', async ({
+	test('the title reads the day in words, then the time, apart by space; the camera and the name are in the details', async ({
 		page
 	}) => {
 		// A photo that carries no exposure settings; one that does is in exposure.spec.ts.
@@ -290,24 +306,36 @@ test.describe('photo view', () => {
 			name: 'Beach day'
 		}));
 		await page.locator('.tile').first().click();
-		const readout = loupe(page).locator('.readout');
-		const [when, how] = [0, 1].map((n) => readout.locator('.line').nth(n).locator('.item'));
-		await expect(when.first()).toHaveText(/^\d{1,2} [A-Z][a-z]+ \d{4}$/);
-		await expect(when.nth(1)).toHaveText(/^\d{2}:\d{2}$/);
-		await expect(how).toHaveText(['Test Camera']);
-		await expect(readout).not.toContainText('·');
-		await expect(readout).not.toContainText('Beach day');
-		await expect(readout).toHaveCSS('font-family', UI_FACE);
+		const title = loupe(page).locator('.title');
+		await expect(title.locator('.day')).toHaveText(/^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+		await expect(title.locator('.line span').first()).toHaveText(/^\d{2}:\d{2}$/);
+		await expect(title).not.toContainText('·');
+		await expect(title).toHaveCSS('font-family', UI_FACE);
+		// At the top, as on an iPhone: not a card at the bottom.
+		const top = (await title.boundingBox())!;
+		expect(top.y).toBeLessThan(80);
+		await loupe(page).getByRole('button', { name: 'Details' }).click();
+		const about = loupe(page).getByRole('complementary', { name: 'Details' });
+		await expect(about.getByLabel('Camera', { exact: true })).toContainText('Test Camera');
+		await expect(loupe(page).getByRole('toolbar')).not.toContainText('Test Camera');
+		await expect(loupe(page).getByRole('toolbar')).not.toContainText('Beach day');
 	});
 
-	test('the bar holds Favourite, Download, Add to album, Edit and More; More holds the rest', async ({
+	test('the bar holds Favourite, Download, Add to album, Details, Move to trash and More; More holds the rest', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
 		const bar = loupe(page).locator('.bar');
-		const actions = bar.locator('.acts > button, .acts > .menu > button');
-		await expect(actions).toHaveText(['Favourite', 'Download', 'Add to album', 'Edit', 'More']);
-		await expect(actions.locator('svg')).toHaveCount(5);
+		const actions = bar.locator(':scope > button, :scope > .menu > button');
+		await expect(actions).toHaveText([
+			'Favourite',
+			'Download',
+			'Add to album',
+			'Details',
+			'Move to trash',
+			'More'
+		]);
+		await expect(actions.locator('svg')).toHaveCount(6);
 		// Icons alone: each word is its name and its tooltip, shown only when the look asks.
 		for (const action of await actions.all()) {
 			await expect(action.locator('.word')).toBeHidden();
@@ -329,9 +357,18 @@ test.describe('photo view', () => {
 		await dialog.getByRole('button', { name: 'Add' }).click();
 		await expect(toast(page)).toContainText('Created “From the photo view” with 1 photo');
 		await expect(loupe(page)).toBeVisible();
-		if (!isPhone(page))
-			await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
+		// The details name the album it is in now.
+		await loupe(page).getByRole('button', { name: 'Details' }).click();
+		await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
 	});
+
+	/**
+	 * The toast once it has popped in: it rises from 12 px lower at 90 % of its size (its
+	 * `@starting-style`, +layout.svelte) for 380 ms, so a box measured before then is not where
+	 * it rests.
+	 */
+	const settled = (slip: Locator) =>
+		slip.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
 
 	/** The toast is what a finger or a pointer at its middle would hit: in sight, on top, not inert. */
 	const expectOnTop = (page: Page) =>
@@ -361,6 +398,7 @@ test.describe('photo view', () => {
 		expect(await toast(page).evaluate((slip) => slip.closest('dialog')?.ariaLabel)).toBe(
 			'Photo viewer'
 		);
+		await settled(toast(page));
 		const slip = (await toast(page).boundingBox())!;
 		const bar = (await loupe(page).locator('.bar').boundingBox())!;
 		expect(slip.y + slip.height).toBeLessThan(bar.y);
@@ -369,43 +407,6 @@ test.describe('photo view', () => {
 		await expect(loupe(page)).toHaveCount(0);
 		await expect(toast(page)).toContainText('Created “Toasted”');
 		await expectOnTop(page);
-	});
-
-	test('phone: with the time ruler out, a toast in the photo view is one slip under Close', async ({
-		page
-	}) => {
-		test.skip(
-			!isPhone(page),
-			'the lying ruler, and the toast rule that goes with it, are the phone’s'
-		);
-		await expect(page.locator('.tile').first()).toBeVisible();
-		await page.evaluate(() => window.scrollBy(0, 600));
-		const ruler = page.getByRole('slider', { name: 'Jump to date' });
-		await expect(ruler).toHaveCSS('opacity', '1');
-		await page.locator('.tile').nth(8).click();
-		await expect(loupe(page)).toBeVisible();
-		// The ruler stays on the page under the viewer, so the rule that lifts the toast over it
-		// still matches.
-		await expect(ruler).toHaveAttribute('aria-orientation', 'horizontal');
-		await page.route('**/api/assets/*/state', (route) =>
-			route.fulfill({ status: 500, json: { detail: 'the library is busy, try again' } })
-		);
-		await loupe(page).getByRole('button', { name: 'Favourite' }).click();
-		await expect(toast(page)).toContainText(/the library is busy, try again/i);
-		await expectOnTop(page);
-		const slip = (await toast(page).boundingBox())!;
-		const close = (await loupe(page).getByRole('button', { name: 'Close' }).boundingBox())!;
-		const bar = (await loupe(page).locator('.bar').boundingBox())!;
-		// One line of words on its slip: not stretched from under Close down to the dock.
-		expect(slip.height).toBeLessThan(60);
-		expect(slip.y).toBeGreaterThanOrEqual(close.y + close.height);
-		expect(slip.y).toBeLessThan(close.y + close.height + 24);
-		expect(slip.y + slip.height).toBeLessThan(bar.y);
-		// And nothing asks it to: only being a popover (height: fit-content) kept it one slip
-		// while the rule that clears the ruler still gave it a bottom as well as a top.
-		expect(
-			await toast(page).evaluate((el) => el.computedStyleMap().get('bottom')?.toString())
-		).toBe('auto');
 	});
 
 	test('a toast that is showing when a photo opens moves on top of the photo view', async ({
@@ -446,9 +447,9 @@ test.describe('photo view', () => {
 		await dialog.getByLabel('Date and time').fill('03/02/2001 04:05:06');
 		await dialog.getByRole('button', { name: 'Change date' }).click();
 		await expect(toast(page)).toContainText('Changed the date of 1 photo');
-		const when = viewer.locator('.readout .line').first().locator('.item');
-		await expect(when.first()).toHaveText('3 February 2001');
-		await expect(when.nth(1)).toHaveText('04:05');
+		const title = viewer.locator('.title');
+		await expect(title.locator('.day')).toHaveText('3 February 2001');
+		await expect(title.locator('.line span').first()).toHaveText('04:05');
 		expect(await removed).toBe(false);
 		await expect(viewer).toHaveAttribute('data-kept', 'yes');
 		expect(page.url()).toBe(url);

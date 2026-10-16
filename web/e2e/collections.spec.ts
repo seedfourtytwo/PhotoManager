@@ -19,7 +19,7 @@ test('collections: albums and places show what is in them, and an album opens', 
 	const album = row(page, 'Albums').getByRole('link', {
 		name: /^Summers at the house \d+ photos$/
 	});
-	const place = row(page, 'Places').locator('.rail a').first();
+	const place = row(page, 'Places').locator('a.card').first();
 	await expect(album).toBeVisible();
 	await expect(place).toHaveAccessibleName(/\S \d[\d,]* photos?$/);
 	// a cover is a real picture, not an empty frame
@@ -37,7 +37,7 @@ test('collections: people show as faces, the named ones first, and a face opens 
 }) => {
 	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await signIn(page, '/collections');
-	const faces = row(page, 'People').locator('.rail a');
+	const faces = row(page, 'People').locator('a.face-link');
 	// a face says who, not how many
 	await expect(faces.first()).toHaveAccessibleName('Sam');
 	const names = await faces.locator('.name').allTextContents();
@@ -54,13 +54,13 @@ test('collections: a library without faces says what the People row will hold', 
 	test.skip(!REAL_BACKEND, 'the mock always has people');
 	await signIn(page, '/collections');
 	await expect(row(page, 'People')).toContainText('No people yet.');
-	await expect(row(page, 'Albums').locator('.grid a').first()).toBeVisible();
+	await expect(row(page, 'Albums').locator('a.card').first()).toBeVisible();
 });
 
 test('collections: a place opens the library filtered by that place', async ({ page }) => {
 	await signIn(page, '/collections');
-	const place = row(page, 'Places').locator('.rail a').first();
-	const name = (await place.locator('.name').textContent()) ?? '';
+	const place = row(page, 'Places').locator('a.card').first();
+	const name = (await place.locator('.title').textContent()) ?? '';
 	const count = /(\d[\d,]*) photos?$/.exec((await place.textContent()) ?? '')?.[1];
 	expect(name).not.toBe('');
 	await place.click();
@@ -73,7 +73,7 @@ test('collections: a name too long for one line takes a second and is read whole
 	page
 }) => {
 	await signIn(page, '/collections');
-	const name = row(page, 'Albums').locator('.name', { hasText: 'Summers at the house' });
+	const name = row(page, 'Albums').locator('.title', { hasText: 'Summers at the house' });
 	await expect(name).toBeVisible();
 	// In lines of text: a descender may reach a pixel past its line, a cut line is a whole one.
 	const cut = await name.evaluate((el) => {
@@ -91,8 +91,8 @@ test('collections: a name too long for one line takes a second and is read whole
 
 test('collections: nothing on the page is wider than the screen', async ({ page }) => {
 	await signIn(page, '/collections');
-	await expect(row(page, 'Places').locator('.rail a').first()).toBeVisible();
-	await expect(row(page, 'Albums').locator('.grid a').first()).toBeVisible();
+	await expect(row(page, 'Places').locator('a.card').first()).toBeVisible();
+	await expect(row(page, 'Albums').locator('a.card').first()).toBeVisible();
 	const overflow = await page.evaluate(
 		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 	);

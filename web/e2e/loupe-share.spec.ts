@@ -19,7 +19,7 @@ import {
 import { attachmentName, shared, withShareSheet } from './share-sheet.ts';
 
 const barActions = (page: Page) =>
-	loupe(page).locator('.bar').locator('.acts > button, .acts > .menu > button');
+	loupe(page).locator('.bar').locator(':scope > button, :scope > .menu > button');
 const DOWNLOAD = /\/api\/assets\/\d+\/download\?/;
 
 /** Count the fetches of a photo's file and keep each answer back until `release()`. */
@@ -37,15 +37,22 @@ test.beforeEach(async () => {
 	await resetMock();
 });
 
-test('with a share sheet the bar holds Favourite, Share, Add to album, Edit and More; Download is under More', async ({
+test('with a share sheet the bar holds Favourite, Share, Add to album, Details, Move to trash and More; Edit and Download are under More', async ({
 	page
 }) => {
 	await withShareSheet(page);
 	await signIn(page);
 	await page.locator('.tile').first().click();
 	const actions = barActions(page);
-	await expect(actions).toHaveText(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
-	await expect(actions.locator('svg')).toHaveCount(5);
+	await expect(actions).toHaveText([
+		'Favourite',
+		'Share',
+		'Add to album',
+		'Details',
+		'Move to trash',
+		'More'
+	]);
+	await expect(actions.locator('svg')).toHaveCount(6);
 	await expect(loupe(page).getByRole('button', { name: 'Share' })).toBeEnabled();
 	if (isPhone(page))
 		for (const action of await actions.all()) {
@@ -154,7 +161,14 @@ test('at 320 px the bar with Share fits, also with the largest text and while it
 			expect(box.x + box.width).toBeLessThanOrEqual(bar.x + bar.width);
 		}
 	};
-	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
+	await expect(barActions(page)).toHaveText([
+		'Favourite',
+		'Share',
+		'Add to album',
+		'Details',
+		'Move to trash',
+		'More'
+	]);
 	await fits();
 	await page.evaluate(() => document.documentElement.style.setProperty('--text-scale', '1.25'));
 	await expect(fits).toPass({ timeout: 3000 });
@@ -183,7 +197,7 @@ test('a guest shares what a guest may download; a view-only photo has no Share',
 	// The phone's photos (source 1) may be downloaded by everyone.
 	const list = await (await page.request.get('/api/assets?source_id=1&limit=1')).json();
 	await page.goto(`/?photo=${list.items[0].id}`);
-	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'More']);
+	await expect(barActions(page)).toHaveText(['Favourite', 'Share', 'Details', 'More']);
 	await loupe(page).getByRole('button', { name: 'Share' }).click();
 	await expect.poll(() => shared(page)).toHaveLength(1);
 });
@@ -197,7 +211,8 @@ test('without a share sheet there is no Share: not on the bar, not under More', 
 		'Favourite',
 		'Download',
 		'Add to album',
-		'Edit',
+		'Details',
+		'Move to trash',
 		'More'
 	]);
 	await loupe(page).getByRole('button', { name: 'More' }).click();

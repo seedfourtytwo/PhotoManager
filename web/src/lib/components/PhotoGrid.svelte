@@ -11,6 +11,7 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { fadeIn } from '$lib/fade-in';
 	import { dropIndex, shownTiles } from '$lib/grid';
 	import { longPress } from '$lib/press';
 	import { photoAt, tileOf } from '$lib/tiles';
@@ -165,6 +166,7 @@
 
 <div
 	class="grid"
+	class:selecting
 	role="group"
 	aria-label={label}
 	bind:this={grid}
@@ -187,6 +189,7 @@
 				style:transform={`translate(${box.x}px, ${box.y}px)`}
 				style:width={`${box.w}px`}
 				style:height={`${box.h}px`}
+				style:background-color={item.colour}
 				draggable={arrange}
 				onclick={(e) => onclick(e, item.id)}
 				onpointerdown={(e) => onpointerdown(e, item.id)}
@@ -215,6 +218,7 @@
 						loading="lazy"
 						decoding="async"
 						onerror={() => failed.set(item.id, item)}
+						{@attach fadeIn}
 					/>
 				{:else if item.thumb}
 					<span class="visually-hidden">{describePhoto(item)} (preview missing)</span>
@@ -226,7 +230,10 @@
 							d="M8 13.6S2.2 10.1 2.2 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.8 1.2c0 4-5.8 7.5-5.8 7.5z"
 						/></svg
 					>{/if}
-				{#if note?.(item)}<span class="note">{note(item)}</span>{/if}
+				{#if note?.(item)}<span class="note">{note(item)}</span>
+				{:else}<span class="when" aria-hidden="true"
+						>{formatShort(item.taken_at).split(',')[0]}</span
+					>{/if}
 				<span class="check" aria-hidden="true"></span>
 			</button>
 		{/if}
@@ -238,6 +245,9 @@
 		position: relative;
 		contain: layout;
 	}
+	/* A tile waits in its photo's own colour (or the fill) and the photo fades in over it. It
+	   gives under the finger and springs back; a chosen photo stays a little smaller. Only
+	   `scale` moves: the tile's place is its transform. */
 	.tile {
 		position: absolute;
 		left: 0;
@@ -245,16 +255,18 @@
 		padding: 0;
 		min-height: 0;
 		border-radius: 0;
-		background: var(--hairline);
+		background: var(--fill);
 		overflow: hidden;
 		-webkit-touch-callout: none;
 		user-select: none;
-		transition: none;
+		transition: scale var(--motion-sheet) var(--ease-spring);
 	}
-	@media (hover: hover) {
-		.tile:hover {
-			background: var(--hairline);
-		}
+	.tile:active {
+		scale: 0.97;
+		transition: scale var(--press) var(--ease);
+	}
+	.tile.selected {
+		scale: 0.92;
 	}
 	.tile:focus-visible {
 		outline: 2px solid var(--accent);
@@ -268,20 +280,21 @@
 		height: 100%;
 		object-fit: fill; /* the box already has the photo's true aspect ratio */
 		pointer-events: none;
+		opacity: 0;
+		transition:
+			opacity 180ms var(--ease),
+			scale 240ms var(--ease);
+	}
+	img:global([data-in]) {
+		opacity: 1;
 	}
 	/* A panorama or a tall strip gets a tile of a sane shape, and sits whole inside it. */
 	img.whole {
 		object-fit: contain;
 	}
-	/* Selection: the accent as a 3 px frame inside the photo; the photo itself stays uncropped
-	   and undimmed. */
-	.tile.selected::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		box-shadow: inset 0 0 0 3px var(--accent);
-	}
-	/* The circle that chooses: a 2 px white ring round a shade, readable on any photo. */
+	/* The circle that chooses: a white ring round a shade, readable on any photo; filled with
+	   the accent and a tick once chosen. At the top left under a mouse, at the bottom right
+	   under a finger (where an iPhone has it). */
 	.check {
 		position: absolute;
 		top: var(--s-2);
@@ -294,20 +307,17 @@
 		opacity: 0;
 		transition: opacity var(--motion) var(--ease);
 	}
-	/* The circle appears where it helps — under the mouse or keyboard focus — and stays on
-	   selected photos; unselected photos stay clean while selecting. */
-	@media (hover: hover) {
-		.tile:hover .check {
-			opacity: 1;
-		}
-	}
-	.tile:focus-visible .check {
+	/* Choosing: every photo shows its circle. */
+	.selecting .check,
+	.tile.selected .check {
 		opacity: 1;
 	}
 	.tile.selected .check {
 		background-color: var(--accent);
 		background-image: var(--check);
 		box-shadow: none;
+	}
+	.tile:focus-visible .check {
 		opacity: 1;
 	}
 	.fav {
@@ -319,7 +329,8 @@
 		fill: var(--on-photo);
 		filter: drop-shadow(0 0 1.5px var(--photo-shade-55));
 	}
-	.note {
+	.note,
+	.when {
 		position: absolute;
 		left: var(--s-1);
 		bottom: var(--s-1);
@@ -327,16 +338,49 @@
 		border-radius: var(--r-pill);
 		background: var(--photo-shade-55);
 		color: var(--on-photo);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		font-weight: 600;
 		line-height: var(--lh-ui);
 		white-space: nowrap;
 	}
+	/* The date, on a laptop's hover only. */
+	.when {
+		opacity: 0;
+		transition: opacity var(--motion) var(--ease);
+	}
+	@media (hover: hover) {
+		.tile:hover img {
+			scale: 1.03;
+		}
+		.tile:hover .check,
+		.tile:hover .when {
+			opacity: 1;
+		}
+	}
 	@media (hover: none) {
 		.check {
+			top: auto;
+			left: auto;
+			right: var(--s-2);
+			bottom: var(--s-2);
 			width: 24px;
 			height: 24px;
 			background-size: 16px;
+		}
+		.fav {
+			right: auto;
+			left: var(--s-1);
+		}
+		.when {
+			display: none;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.tile,
+		.tile:active,
+		.tile.selected,
+		.tile:hover img {
+			scale: none;
 		}
 	}
 </style>

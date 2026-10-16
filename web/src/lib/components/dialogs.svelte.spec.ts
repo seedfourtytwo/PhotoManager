@@ -300,11 +300,18 @@ describe('ShareDialog', () => {
 			throw new Error(`unexpected ${url}`);
 		});
 		render(ShareDialog, { albumId: 9, ownerId: 2, onclose: () => {} });
-		const picker = page.getByRole('combobox', { name: 'Person to add' });
-		await expect.element(picker).toBeInTheDocument();
-		await picker.selectOptions('Tom');
-		await page.getByRole('button', { name: 'Add' }).click();
-		await expect.element(page.getByText('Tom', { exact: true })).toBeInTheDocument();
+		// everyone but the owner and the one sharing, one tap each
+		const offered = page.getByRole('list', { name: 'Add people' });
+		await expect.element(offered.getByRole('button', { name: 'Add Tom' })).toBeInTheDocument();
+		expect(offered.getByRole('button').elements()).toHaveLength(2);
+		await offered.getByRole('button', { name: 'Add Tom' }).click();
+		const shared = page.getByRole('list', { name: 'Shared with' });
+		await expect.element(shared.getByText('Tom', { exact: true })).toBeInTheDocument();
+		// added as a viewer, and it can be made an editor
+		const role = shared.getByRole('group', { name: 'Role for Tom' });
+		await expect
+			.element(role.getByRole('button', { name: 'Viewer' }))
+			.toHaveAttribute('aria-pressed', 'true');
 		expect(sent.some((s) => s.url === '/api/users')).toBe(false);
 		session.user = null;
 	});
@@ -337,13 +344,13 @@ describe('ShareDialog', () => {
 		await expect.element(page.getByRole('status')).toHaveTextContent('Loading…');
 		await expect.element(save).toBeDisabled();
 		await expect.element(page.getByText('Only you, for now.')).not.toBeInTheDocument();
-		await expect
-			.element(page.getByRole('combobox', { name: 'Person to add' }))
-			.not.toBeInTheDocument();
+		await expect.element(page.getByRole('list', { name: 'Add people' })).not.toBeInTheDocument();
 		release();
 		await expect
-			.element(page.getByRole('combobox', { name: 'Role for Tom' }))
-			.toHaveValue('editor');
+			.element(
+				page.getByRole('group', { name: 'Role for Tom' }).getByRole('button', { name: 'Editor' })
+			)
+			.toHaveAttribute('aria-pressed', 'true');
 		await expect.element(save).toBeEnabled();
 		first.unmount();
 
@@ -356,20 +363,34 @@ describe('ShareDialog', () => {
 });
 
 describe('AddToAlbumDialog', () => {
-	it('groups the albums without calling the title field a radio', async () => {
-		const { default: AddToAlbumDialog } = await import('./AddToAlbumDialog.svelte');
-		stubFetch(() => [
-			{ id: 1, title: 'Summers', count: 12, role: 'owner' },
-			{ id: 2, title: 'Trips', count: 3, role: 'editor' }
-		]);
+	const ALBUMS = [
+		{ id: 1, title: 'Summers', count: 12, role: 'owner', updated_at: '2026-01-01', cover: null },
+		{ id: 2, title: 'Trips', count: 3, role: 'editor', updated_at: '2026-02-01', cover: null },
+		{ id: 3, title: 'Theirs', count: 9, role: 'viewer', updated_at: '2026-03-01', cover: null }
+	];
+
+	it('offers the albums one may add to as covers, the latest first, after a new one', async () => {
+		stubFetch(() => ALBUMS);
 		render(AddToAlbumDialog, { ids: [1, 2], onclose: () => {}, ondone: () => {} });
-		await expect.element(page.getByRole('radio', { name: /Summers/ })).toBeInTheDocument();
-		// A radiogroup may hold radios only; the albums are a named group of native radios.
-		expect(page.getByRole('radiogroup').elements()).toHaveLength(0);
-		const group = page.getByRole('group', { name: 'Album' });
-		expect(group.getByRole('radio').elements()).toHaveLength(3);
+		const albums = page.getByRole('list', { name: 'Albums' });
+		await expect.element(albums.getByRole('button', { name: 'Trips 3 photos' })).toBeVisible();
+		expect(
+			albums
+				.getByRole('button')
+				.elements()
+				.map((b) => b.textContent?.trim())
+		).toEqual(['Trips 3 photos', 'Summers 12 photos']);
 		await expect
-			.element(group.getByRole('textbox', { name: 'New album title' }))
+			.element(albums.getByRole('textbox', { name: 'New album title' }))
 			.toBeInTheDocument();
+	});
+
+	it('one tap on a cover adds the photos to it and is done', async () => {
+		const sent = stubFetch((url) => (url === '/api/albums' ? ALBUMS : { count: 2 }));
+		const ondone = vi.fn();
+		render(AddToAlbumDialog, { ids: [1, 2], onclose: () => {}, ondone });
+		await page.getByRole('button', { name: 'Summers 12 photos' }).click();
+		await vi.waitFor(() => expect(ondone).toHaveBeenCalledWith(1));
+		expect(sent.at(-1)).toEqual({ url: '/api/albums/1/items', body: { asset_ids: [1, 2] } });
 	});
 });

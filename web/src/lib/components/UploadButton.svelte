@@ -13,11 +13,18 @@
 		/** Seconds to wait for the import job before reloading anyway. */
 		patience?: number;
 		pollMs?: number;
+		/** Off: no button of its own; the page calls `pick()` (from a menu). */
+		button?: boolean;
 	};
-	let { onuploaded, patience = 60, pollMs = 1000 }: Props = $props();
+	let { onuploaded, patience = 60, pollMs = 1000, button = true }: Props = $props();
 
 	let input: HTMLInputElement | undefined = $state();
 	let progress = $state<number | null>(null);
+
+	/** Opens the device's file chooser. */
+	export function pick() {
+		input?.click();
+	}
 
 	const ACCEPT = 'image/*,.heic,.heif,.dng,.cr2,.cr3,.nef,.arw,.raf,.orf,.rw2';
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -113,11 +120,11 @@
 		onchange={() => send([...(input?.files ?? [])])}
 	/>
 	<!-- Its name says how far an upload has got; the toast says what is happening. -->
-	<IconButton
-		icon="upload"
-		label={progress === null ? 'Upload' : `Uploading ${Math.round(progress * 100)} %`}
-		disabled={progress !== null}
-		aria-busy={progress !== null}
-		onclick={() => input?.click()}
-	/>
+	{#if button}<IconButton
+			icon="upload"
+			label={progress === null ? 'Upload' : `Uploading ${Math.round(progress * 100)} %`}
+			disabled={progress !== null}
+			aria-busy={progress !== null}
+			onclick={pick}
+		/>{/if}
 {/if}

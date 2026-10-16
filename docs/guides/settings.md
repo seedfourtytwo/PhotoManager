@@ -42,9 +42,9 @@ Write lists (`PA_ALLOWED_HOSTS`) comma-separated, without quotes, brackets or sp
 | Uploads, sources, AI | `PA_RCLONE_TIMEOUT_HOURS` | `6` | A pull from a cloud source is stopped after this long; the next run continues. |
 | Uploads, sources, AI | `PA_PROTON_DRIVE_BINARY` | `proton-drive` | Proton's own `proton-drive` program (also looked for in `~/.local/bin`). |
 | Uploads, sources, AI | `PA_AI_PROVIDER` | `none` | `none`, or `ollama` to switch the optional AI features on. |
-| Uploads, sources, AI | `PA_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Where Ollama runs: the only address AI requests are sent to. |
-| Uploads, sources, AI | `PA_OLLAMA_CAPTION_MODEL` | not set | Ollama model that describes photos; not set = no captions. |
-| Uploads, sources, AI | `PA_OLLAMA_PLAN_MODEL` | not set | Ollama model that proposes albums; not set = no album proposals. |
+| Uploads, sources, AI | `PA_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Where Ollama runs: the only address AI requests are sent to. It must be this machine or the private network (127.0.0.1, ::1, localhost, 10/8, 172.16/12, 192.168/16, Tailscale's 100.64/10 and fd7a:115c:a1e0::/48), or the app does not start; a name counts by every address it resolves to. |
+| Uploads, sources, AI | `PA_OLLAMA_CAPTION_MODEL` | not set | Ollama model that describes photos; not set = no captions. Cloud models (`:cloud`, `-cloud`) are refused. |
+| Uploads, sources, AI | `PA_OLLAMA_PLAN_MODEL` | not set | Ollama model that proposes albums; not set = no album proposals. Cloud models are refused. |
 | Uploads, sources, AI | `PA_OLLAMA_TIMEOUT_SECONDS` | `120` | How long to wait for one Ollama answer. |
 | Local ML | `PA_ML_ENABLED` | `true` | `false`: no photo is queued for search, faces or tags. |
 | Local ML | `PA_ML_MODELS_DIR` | not set | Folder with the model files (`just models` fills it); not set = `<data root>/models`. |

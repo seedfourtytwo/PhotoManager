@@ -2,25 +2,23 @@
 	import { onMount, tick } from 'svelte';
 	import type { AssetOut, Id } from '$lib/api';
 	import { settings, viewport } from '$lib/app.svelte';
+	import { flip, snapshot } from '$lib/flip';
+	import { Pinch, wheelStep } from '$lib/grid-zoom';
 	import { createLasso } from '$lib/lasso.svelte';
+	import { gridZoom } from '$lib/state/grid-zoom.svelte';
 	import type { TimelineLoader } from '$lib/loader.svelte';
 	import type { Selection } from '$lib/selection';
 	import { monthLayouts } from '$lib/month-layouts';
+	import { photos } from '$lib/format';
 	import { tileOf } from '$lib/tiles';
-	import {
-		groupByMonth,
-		neighbour,
-		rowHeightFor,
-		type MonthGroup,
-		type NavKey
-	} from '$lib/timeline';
+	import { groupByMonth, justify, neighbour, type MonthGroup, type NavKey } from '$lib/timeline';
 	import {
 		bandAround,
+		clearTop,
 		endOfGrids,
 		gridBelow,
 		measureGridTops,
 		placeAll,
-		stuckAt,
 		windowsChanged,
 		windowsIn,
 		type Band
@@ -39,6 +37,10 @@
 		onmonth?: (key: string) => void;
 		/** How the photos are grouped under headings: by month, or by year (a person). */
 		grouping?: (assets: AssetOut[]) => MonthGroup[];
+		/** Photos per heading (YYYY-MM), all of them, loaded or not: a phone writes it beside. */
+		counts?: ReadonlyMap<string, number>;
+		/** Two fingers (or a trackpad pinch) zoom the grid: the Library while it is on screen. */
+		zooms?: boolean;
 	};
 	let {
 		loader,
@@ -48,17 +50,25 @@
 		ontoggle,
 		onselect,
 		onmonth,
-		grouping = groupByMonth
+		grouping = groupByMonth,
+		counts,
+		zooms = false
 	}: Props = $props();
 
 	const gap = $derived(settings.gap); // from the account's look
 	/**
-	 * Space taken by the sticky month label at the top of the screen. The same 48 px as the
-	 * `--s-7` token (tokens.css), written here as a number: change the two together.
+	 * The month in view is the one whose photos reach this far (px) below the top bar: past the
+	 * room a heading takes. The same 48 px as the `--s-7` token (tokens.css), written here as a
+	 * number: change the two together.
 	 */
-	const LABEL = 48;
+	const LINE = 48;
+	/** The next page is asked for while this many screens of photos are still below. */
+	const PREFETCH_SCREENS = 2;
+	/** Shapes of the blocks a first load shows (width ÷ height), as photos come: a mix. */
+	const SKELETON_SHAPES = [1.5, 0.75, 1.33, 1, 1.5, 0.67, 1.78, 1.33, 0.75, 1.5, 1, 1.33];
+	const SKELETON_ROWS = 3;
 	let width = $state(0);
-	const rowHeight = $derived(rowHeightFor(viewport.width, settings.thumbSize));
+	const rowHeight = $derived(gridZoom.rowHeight(viewport.width));
 	const groups = $derived(grouping(loader.items));
 	// Earlier months keep their layout when a page arrives (lib/month-layouts.ts).
 	const layoutsFor = monthLayouts();
@@ -93,10 +103,10 @@
 			if (windowsChanged(next, windows)) windows = next;
 		}
 
-		// The month whose grid is under the sticky label.
-		const under = gridBelow(layouts, gridTops, top + LABEL + stuckAt(wrapper));
+		// The month whose photos are just under the top bar.
+		const under = gridBelow(layouts, gridTops, top + LINE + clearTop(wrapper));
 		let month: string | null = under < 0 ? null : groups[under].key;
-		// At the very end of the library the last months are all on screen, and the label can no
+		// At the very end of the library the last months are all on screen, and the line can no
 		// longer reach them: the month in view is the last one.
 		const atEnd = loader.done && window.scrollY + vh >= document.documentElement.scrollHeight - 1;
 		if (atEnd && groups.length) month = groups[groups.length - 1].key;
@@ -105,8 +115,8 @@
 			onmonth?.(month);
 		}
 
-		// Next page when the end of what is loaded is within a screen.
-		const nearEnd = endOfGrids(layouts, gridTops) - (top + vh) < vh;
+		// Next page well before the end of what is loaded is on screen: paging shows nothing.
+		const nearEnd = endOfGrids(layouts, gridTops) - (top + vh) < PREFETCH_SCREENS * vh;
 		if (nearEnd && !loader.loading && !loader.done && !loader.error) void loader.loadMore();
 	}
 
@@ -136,7 +146,7 @@
 	/** Every loaded photo's box in timeline coordinates, for arrow keys and the lasso. */
 	const globalBoxes = () => placeAll(layouts, gridTops);
 
-	/** Scroll so the photo is on screen (below the sticky label), render it, focus it. */
+	/** Scroll so the photo is on screen (below the top bar), render it, focus it. */
 	export async function reveal(id: Id, focus = true) {
 		await tick();
 		measure();
@@ -145,7 +155,7 @@
 		const box = layouts[g].boxes[groups[g].items.findIndex((a) => a.id === id)];
 		if (!box) return;
 		const top = wrapper.getBoundingClientRect().top + gridTops[g] + box.y;
-		const clear = LABEL + stuckAt(wrapper);
+		const clear = clearTop(wrapper);
 		if (top < clear || top + box.h > window.innerHeight) {
 			const margin = Math.max(clear, (window.innerHeight - box.h) / 2);
 			window.scrollTo({ top: window.scrollY + top - margin });
@@ -179,11 +189,10 @@
 		measure();
 		const g = groups.findIndex((gr) => gr.key <= key);
 		const index = g < 0 ? groups.length - 1 : g;
-		// The section, not its sticky label: a stuck label sits at its section's end.
 		const section = wrapper?.querySelectorAll<HTMLElement>('section')[index];
 		if (section)
 			window.scrollTo({
-				top: section.getBoundingClientRect().top + window.scrollY - stuckAt(wrapper)
+				top: section.getBoundingClientRect().top + window.scrollY - clearTop(wrapper)
 			});
 		update();
 	}
@@ -201,6 +210,80 @@
 		onselect: (next) => onselect(next)
 	});
 	const lasso = $derived(drag.rect);
+
+	// --- zoom: five row heights, stepped by a pinch, ⌘± (the page) or a trackpad pinch --------
+	/** The FLIP of a zoom (spring 300/30 is about this long), on the spring curve. */
+	const ZOOM_MS = 320;
+
+	/**
+	 * One level bigger (+1) or smaller (−1). The photo under `at` (a pinch's centre; else the
+	 * middle of the screen) stays where it is on screen, and every tile moves from its old
+	 * place to its new one; tiles new to the page fade in.
+	 */
+	export async function zoom(by: 1 | -1, at = { x: innerWidth / 2, y: innerHeight / 2 }) {
+		if (!wrapper) return;
+		const under = document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>('.tile[data-id]');
+		const anchor = under
+			? { id: Number(under.dataset.id), top: under.getBoundingClientRect().top }
+			: null;
+		const before = snapshot(wrapper);
+		if (!gridZoom.step(viewport.width, by)) return;
+		await tick();
+		measure();
+		const index = anchor ? loader.items.findIndex((a) => a.id === anchor.id) : -1;
+		const box = index >= 0 ? globalBoxes()[index] : undefined;
+		if (anchor && box)
+			window.scrollTo({
+				top: window.scrollY + wrapper.getBoundingClientRect().top + box.y - anchor.top
+			});
+		update();
+		await tick();
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-spring');
+		flip(wrapper, before, { duration: ZOOM_MS, easing: easing.trim() || 'ease-out' });
+	}
+
+	const pinch = new Pinch();
+	function pointerdown(event: PointerEvent) {
+		if (zooms && event.pointerType === 'touch')
+			pinch.down(event.pointerId, event.clientX, event.clientY);
+		drag.down(event);
+	}
+	function pointermove(event: PointerEvent) {
+		const pinched = pinch.move(event.pointerId, event.clientX, event.clientY);
+		if (pinched?.step) void zoom(pinched.step, pinched);
+		drag.move(event);
+	}
+	function pointerup(event: PointerEvent, done: boolean) {
+		pinch.up(event.pointerId);
+		drag.end(done);
+	}
+
+	// A trackpad pinch is a wheel with Ctrl: the page's own zoom is kept off the grid. Not
+	// passive, so it can be stopped.
+	$effect(() => {
+		if (!zooms || !wrapper) return;
+		let sum = 0;
+		const onwheel = (event: WheelEvent) => {
+			const next = wheelStep(sum, event);
+			sum = next.sum;
+			if (!event.ctrlKey) return;
+			event.preventDefault();
+			if (next.step) void zoom(next.step, { x: event.clientX, y: event.clientY });
+		};
+		const target = wrapper;
+		target.addEventListener('wheel', onwheel, { passive: false });
+		return () => target.removeEventListener('wheel', onwheel);
+	});
+
+	// --- first load: three rows of blocks in photo shapes, until the first page arrives -----
+	const skeleton = $derived(
+		loader.loading && loader.items.length === 0
+			? justify(SKELETON_SHAPES, width, rowHeight, gap).boxes.filter(
+					(b) => b.y < SKELETON_ROWS * (rowHeight + gap) - gap
+				)
+			: []
+	);
 </script>
 
 <svelte:window
@@ -216,14 +299,19 @@
 	bind:this={wrapper}
 	bind:clientWidth={width}
 	role="presentation"
-	onpointerdown={drag.down}
-	onpointermove={drag.move}
-	onpointerup={() => drag.end(true)}
-	onpointercancel={() => drag.end(false)}
+	class:zooms
+	onpointerdown={pointerdown}
+	onpointermove={pointermove}
+	onpointerup={(event) => pointerup(event, true)}
+	onpointercancel={(event) => pointerup(event, false)}
 >
 	{#each groups as group, g (group.key)}
 		<section data-key={group.key} aria-labelledby={`m-${group.key}`}>
-			<h2 id={`m-${group.key}`}>{group.label}</h2>
+			<h2 id={`m-${group.key}`}>
+				{group.label}{#if counts?.get(group.key)}<span class="count data"
+						><span class="visually-hidden">, </span>{photos(counts.get(group.key)!)}</span
+					>{/if}
+			</h2>
 			<PhotoGrid
 				items={group.items}
 				layout={layouts[g]}
@@ -239,13 +327,25 @@
 			/>
 		</section>
 	{/each}
+	{#if skeleton.length}
+		<div class="skeleton" aria-hidden="true" style:height={`${skeleton.at(-1)!.y + rowHeight}px`}>
+			{#each skeleton as box, i (i)}
+				<span
+					style:transform={`translate(${box.x}px, ${box.y}px)`}
+					style:width={`${box.w}px`}
+					style:height={`${box.h}px`}
+				></span>
+			{/each}
+		</div>
+	{/if}
 	{#if loader.error}
 		<p class="quiet status">
 			{loader.error}
 			<button type="button" onclick={() => loader.retry()}>Try again</button>
 		</p>
 	{:else if loader.loading}
-		<p class="quiet status" role="status">Loading…</p>
+		<!-- Heard, not seen: the next page is asked for early, so paging shows nothing. -->
+		<p class="visually-hidden" role="status">Loading…</p>
 	{/if}
 </div>
 
@@ -264,19 +364,73 @@
 		position: relative;
 		min-height: 50vh;
 	}
-	section {
-		margin-bottom: var(--s-2);
+	/* Two fingers zoom the grid, not the page; one still scrolls it. */
+	.timeline.zooms {
+		touch-action: pan-y;
 	}
-	/* Month headings: a chapter title in the theme's title face, sticky. */
+	/* Month headings: a chapter title, not sticky. The month in view rides in the compact
+	   title instead (PageHead), so nothing cuts across the photos while they scroll. */
 	h2 {
-		position: sticky;
-		top: var(--top);
-		z-index: 2;
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--s-2);
 		margin: 0;
-		padding: var(--s-4) 0 var(--s-2);
-		font-size: var(--fs-20);
-		font-weight: 700;
-		background: var(--bg);
+		padding: var(--s-5) 0 var(--s-2);
+		font-size: var(--fs-22);
+		font-weight: 650;
+		letter-spacing: var(--track-22);
+	}
+	.count {
+		display: none;
+		color: var(--ink-2);
+		font-size: var(--fs-13);
+		font-weight: 500;
+		letter-spacing: 0;
+	}
+	/* First load: blocks in the photos' shapes and one slow sweep of light across them. They
+	   wait a moment before showing: a quick answer never flashes them. */
+	.skeleton {
+		position: relative;
+		overflow: hidden;
+		margin-top: var(--s-5);
+		animation: appear var(--motion) var(--ease) 150ms both;
+	}
+	.skeleton span {
+		position: absolute;
+		left: 0;
+		top: 0;
+		background: var(--fill);
+	}
+	.skeleton::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			100deg,
+			transparent 30%,
+			rgb(255 255 255 / 0.06) 50%,
+			transparent 70%
+		);
+		animation: sweep 1.6s var(--ease) infinite;
+	}
+	@keyframes appear {
+		from {
+			opacity: 0;
+		}
+	}
+	@keyframes sweep {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(100%);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.skeleton::after {
+			animation: none;
+		}
 	}
 	.status {
 		padding: var(--s-4) 0;
@@ -284,21 +438,27 @@
 	.lasso {
 		position: fixed;
 		z-index: var(--z-lasso);
-		border: var(--fine) solid var(--accent);
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
+		/* A quiet ink outline: on a black page an accent box reads as an error. */
+		border: var(--fine) solid color-mix(in oklab, var(--ink) 40%, transparent);
+		border-radius: 6px;
+		background: color-mix(in oklab, var(--ink) 6%, transparent);
 		pointer-events: none;
 	}
-	/* Without the laptop's top bar, under the page's compact glass title (PageHead), which is a
-	   touch target tall. */
+	/* Without the laptop's top bar, a month gone to stops under the compact glass title
+	   (PageHead), which is a touch target tall. */
 	@media (max-width: 1023px) {
-		h2 {
-			top: calc(var(--top) + var(--target));
+		section {
+			scroll-margin-top: calc(var(--target) + var(--s-2));
 		}
 	}
 	@media (max-width: 639px) {
 		h2 {
-			padding: var(--s-3) var(--s-2) var(--s-2);
-			font-size: var(--fs-16);
+			padding: var(--s-5) var(--s-2) var(--s-2);
+			font-size: var(--fs-17);
+			letter-spacing: 0;
+		}
+		.count {
+			display: inline;
 		}
 	}
 </style>

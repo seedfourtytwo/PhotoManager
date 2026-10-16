@@ -12,6 +12,7 @@ import {
 	loupe,
 	loupeAction,
 	resetMock,
+	scrubberOut,
 	selectionAction,
 	selectTiles,
 	sheetStepGone,
@@ -108,9 +109,8 @@ test('every screen', async ({ page }, info) => {
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '03-library', p);
 	if (isPhone(page)) {
-		// The time ruler shows only while the page scrolls: caught before it fades.
-		await page.evaluate(() => window.scrollBy(0, 300));
-		await expect(page.getByRole('slider', { name: 'Jump to date' })).toHaveCSS('opacity', '1');
+		// The time scrubber shows only after a fast scroll: caught before it fades.
+		await scrubberOut(page);
 		if (THEME === 'dark' || LIGHT.has('03b-library-ruler'))
 			await page.screenshot({ path: `${DIR}/${p}-03b-library-ruler.png` });
 		await page.evaluate(() => window.scrollTo(0, 0));
@@ -118,16 +118,15 @@ test('every screen', async ({ page }, info) => {
 
 	await page.locator('.tile').nth(3).click();
 	await shot(page, '04-loupe', p);
-	if (isPhone(page)) {
-		await page.getByRole('button', { name: 'Details' }).click();
-		await shot(page, '04b-loupe-info', p);
-		await page.getByRole('button', { name: 'Details' }).click();
-	}
+	await page.getByRole('button', { name: 'Details' }).click();
+	await shot(page, '04b-loupe-info', p);
+	await page.getByRole('button', { name: 'Details' }).click();
 	await page.getByRole('button', { name: 'Zoom' }).click();
 	await shot(page, '04d-loupe-zoom', p);
 	await page.keyboard.press('z');
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	await page.getByRole('button', { name: 'Rotate right' }).click();
+	await page.getByRole('button', { name: 'Aspect' }).click();
 	await page.getByRole('button', { name: '4:5', exact: true }).click();
 	await shot(page, '13-editor', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();
@@ -221,14 +220,13 @@ test('every screen', async ({ page }, info) => {
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '15-trash', p);
 
-	await page.goto('/admin');
-	await expect(page.getByRole('region', { name: 'Folders' })).toBeVisible();
+	await page.goto('/settings/overview');
+	await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 	await shot(page, '14-admin', p, true);
-	await page.getByRole('button', { name: /^Backups/ }).click();
-	const backups = page.getByRole('dialog', { name: 'Backups' });
-	await expect(backups).toHaveCSS('opacity', '1');
+	await page.goto('/settings/backups');
+	await expect(page.getByRole('button', { name: 'Add backup' })).toBeVisible();
 	await shot(page, '14b-backups', p);
-	await backups.getByRole('button', { name: 'Close' }).click();
+	await page.goto('/settings/folders');
 	await page
 		.getByRole('region', { name: 'Folders' })
 		.getByRole('button', { name: /^Old hard disk/ })
@@ -243,6 +241,7 @@ test('every screen', async ({ page }, info) => {
 	await stop.getByRole('button', { name: 'Cancel' }).click();
 
 	// The look of one account: the form, then that look tried on the admin's own screen.
+	await page.goto('/settings/people');
 	await page
 		.getByRole('region', { name: 'People' })
 		.getByRole('button', { name: /^Partner/ })

@@ -54,18 +54,38 @@ class FakeOllama:
         self.requests: list[httpx.Request] = []
         self.tags = ["vision:4b", "planner:8b"]
         self.show: dict[str, list[str] | None] = {"vision:4b": ["completion", "vision"]}
+        self.remote: dict[str, str] = {}  # model -> remote_host in /api/tags
+        self.show_remote: dict[str, str] = {}  # model -> remote_host in /api/show
+        self.chat_remote_host: str | None = None
+        self.redirect: dict[str, str] = {}  # path -> Location of a 307
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        if request.url.path == "/api/tags":
-            return httpx.Response(200, json={"models": [{"name": n} for n in self.tags]})
-        if request.url.path == "/api/show":
-            caps = self.show.get(json.loads(request.content)["model"])
-            return httpx.Response(200, json={} if caps is None else {"capabilities": caps})
+        path = request.url.path
+        if path in self.redirect:
+            return httpx.Response(307, headers={"Location": self.redirect[path]})
+        if path == "/api/tags":
+            return httpx.Response(200, json={"models": [self._listed(n) for n in self.tags]})
+        if path == "/api/show":
+            model = json.loads(request.content)["model"]
+            caps = self.show.get(model)
+            shown: dict[str, object] = {} if caps is None else {"capabilities": caps}
+            if model in self.show_remote:
+                shown["remote_host"] = self.show_remote[model]
+            return httpx.Response(200, json=shown)
         reply = self.chat_replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
-        return _chat_reply(reply)
+        response = _chat_reply(reply)
+        if self.chat_remote_host:
+            body = {**response.json(), "remote_host": self.chat_remote_host}
+            return httpx.Response(200, json=body)
+        return response
+
+    def _listed(self, name: str) -> dict[str, str]:
+        if name in self.remote:
+            return {"name": name, "remote_model": name, "remote_host": self.remote[name]}
+        return {"name": name}
 
     def chat_bodies(self) -> list[dict[str, object]]:
         return [json.loads(r.content) for r in self.requests if r.url.path == "/api/chat"]
@@ -75,8 +95,7 @@ def _provider(
     fake: Handler, settings: OllamaSettings = SETTINGS, log: ListLog | None = None
 ) -> tuple[OllamaProvider, ListLog]:
     log = log or ListLog()
-    client = httpx.Client(transport=httpx.MockTransport(fake), base_url=settings.base_url)
-    return OllamaProvider(settings, log, client=client), log
+    return OllamaProvider(settings, log, transport=httpx.MockTransport(fake)), log
 
 
 def _synthetic_jpeg(width: int = 3000, height: int = 2000) -> bytes:

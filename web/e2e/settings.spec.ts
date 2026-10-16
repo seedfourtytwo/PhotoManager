@@ -1,12 +1,22 @@
-/** You (/settings): the person's own page. */
+/** Settings: You, Appearance and Phones for everyone; the admin sections only for an admin. */
 import type { Page } from '@playwright/test';
-import { ADMIN, expect, expectAccessible, isPhone, resetMock, signIn, test } from './helpers.ts';
+import {
+	ADMIN,
+	MEMBER,
+	avatar,
+	expect,
+	expectAccessible,
+	isPhone,
+	resetMock,
+	signIn,
+	test
+} from './helpers.ts';
 
 const modes = (page: Page) => page.getByRole('group', { name: 'Mode' }).getByRole('button');
 
 /** The three modes share one line inside the screen, each a whole target on touch. */
 async function expectModesSideBySide(page: Page, width: number) {
-	await expect(modes(page)).toHaveText(['Dark', 'Light', 'Like the device']);
+	await expect(modes(page)).toHaveText(['Dark', 'Light', 'Auto']);
 	const boxes = await modes(page).evaluateAll((buttons) =>
 		buttons.map((button) => button.getBoundingClientRect().toJSON() as DOMRect)
 	);
@@ -18,6 +28,11 @@ async function expectModesSideBySide(page: Page, width: number) {
 	}
 }
 
+const ADMIN_SECTIONS = ['Overview', 'Folders', 'Backups', 'People', 'Search & faces'];
+/** The list of sections: the sidebar on a laptop, the root's list on a phone. */
+const sections = (page: Page) =>
+	page.getByRole('navigation', { name: 'Settings' }).getByRole('link');
+
 for (const width of [390, 320])
 	test(`phone, ${width} px: the three modes sit side by side, each a whole target`, async ({
 		page
@@ -25,25 +40,77 @@ for (const width of [390, 320])
 		test.skip(!isPhone(page), 'the narrow screen is the phone’s');
 		await resetMock();
 		await page.setViewportSize({ width, height: 800 });
-		await signIn(page, '/settings');
+		await signIn(page, '/settings/appearance');
 		await expectModesSideBySide(page, width);
 	});
 
 test('laptop: the three modes share one line', async ({ page }) => {
 	test.skip(isPhone(page), 'a phone has its own sizes');
 	await resetMock();
-	await signIn(page, '/settings');
+	await signIn(page, '/settings/appearance');
 	await expectModesSideBySide(page, page.viewportSize()!.width);
+	await expect(modes(page).filter({ hasText: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
+	await expectAccessible(page);
 });
 
-test('You: the person, their role, and the chosen mode', async ({ page }) => {
+test('You: the person and their role; the avatar opens it', async ({ page }) => {
 	await resetMock();
-	await signIn(page, '/settings');
+	await signIn(page);
+	await avatar(page).click();
+	await expect(page).toHaveURL(/\/settings$/);
 	await expect(page.getByRole('heading', { name: ADMIN.name, level: 1 })).toBeVisible();
 	await expect(page.locator('main .me .role')).toHaveText('Admin');
-	await expect(modes(page).filter({ hasText: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(page).toHaveTitle('You · Photos');
+	await expect(page).toHaveTitle('Settings · Photos');
 	await expectAccessible(page);
+});
+
+test('an admin sees every section; each has its own address', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	const names = isPhone(page)
+		? ['Appearance', 'Phones', ...ADMIN_SECTIONS]
+		: ['You', 'Appearance', 'Phones', ...ADMIN_SECTIONS];
+	await expect(sections(page)).toHaveText(names);
+	await sections(page).filter({ hasText: 'Backups' }).click();
+	await expect(page).toHaveURL(/\/settings\/backups$/);
+	await expect(page.getByRole('heading', { name: 'Backups', level: 1 })).toBeVisible();
+	await expectAccessible(page);
+	if (isPhone(page)) {
+		// a section is a page of its own on a phone, with a way back to the list
+		await page.getByRole('link', { name: 'Settings' }).click();
+		await expect(page).toHaveURL(/\/settings$/);
+	} else {
+		// the sidebar stays, and marks where you are
+		await expect(sections(page).filter({ hasText: 'Backups' })).toHaveAttribute(
+			'aria-current',
+			'page'
+		);
+		await sections(page).filter({ hasText: 'People' }).click();
+		await expect(page.getByRole('region', { name: 'People' })).toBeVisible();
+	}
+});
+
+test('a member sees no admin section, and an old Admin link tells them plainly', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page, '/settings', MEMBER);
+	await expect(page.getByRole('heading', { name: MEMBER.name, level: 1 })).toBeVisible();
+	for (const name of ADMIN_SECTIONS)
+		await expect(sections(page).filter({ hasText: name })).toHaveCount(0);
+	await page.goto('/admin');
+	await expect(page).toHaveURL(/\/settings\/overview$/);
+	await expect(page.getByText('Only admins can see this.')).toBeVisible();
+});
+
+test('the old Admin addresses lead to their section of Settings', async ({ page }) => {
+	await resetMock();
+	await signIn(page, '/settings');
+	await page.goto('/admin');
+	await expect(page).toHaveURL(/\/settings\/overview$/);
+	await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
+	await page.goto('/admin#a-backups');
+	await expect(page).toHaveURL(/\/settings\/backups$/);
 });
 
 test('phones: add one, its token shown once with Copy; open it, then revoke it', async ({
@@ -51,7 +118,7 @@ test('phones: add one, its token shown once with Copy; open it, then revoke it',
 	context
 }) => {
 	await resetMock();
-	await signIn(page, '/settings');
+	await signIn(page, '/settings/phones');
 	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 	const phones = page.getByRole('region', { name: 'Phones that send photos here' });
 	await phones.getByRole('button', { name: 'Add a phone' }).click();

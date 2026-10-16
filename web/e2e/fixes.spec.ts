@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
 const line = (page: Page) => page.locator('.page-head .line');
 
 test('counts follow a hide: the header and a filter sheet', async ({ page }) => {
-	await expect(line(page)).toHaveText(/^[\d,]+ photos$/);
+	await expect(line(page)).toHaveText(/^[\d,]+ photos · \d{4}–\d{4}$/);
 	const before = Number((await line(page).textContent())!.match(/([\d,]+)/)![1].replace(',', ''));
 	// The years in the When sheet add up to every photo.
 	const yearsTotal = async () => {
@@ -43,7 +43,7 @@ test('counts follow a hide: the header and a filter sheet', async ({ page }) => 
 	expect(await yearsTotal()).toBe(before);
 	await selectTiles(page, [0]);
 	await selectionAction(page, 'Hide');
-	await expect(line(page)).toHaveText(`${before - 1} photos`);
+	await expect(line(page)).toHaveText(new RegExp(`^${before - 1} photos · `));
 	await expect.poll(yearsTotal).toBe(before - 1);
 });
 
@@ -96,7 +96,7 @@ test('one photo is "1 photo": the header for a day that holds one', async ({ pag
 	const single = days.find((d) => d.count === 1);
 	expect(single, 'the library has a day with one photo').toBeTruthy();
 	await page.goto(`/?from=${single!.day}&to=${single!.day}`);
-	await expect(line(page)).toHaveText('1 photo');
+	await expect(line(page)).toHaveText(`1 photo · ${single!.day.slice(0, 4)}`);
 	await expect(page.locator('.tile')).toHaveCount(1);
 });
 

@@ -244,16 +244,26 @@ test('a sheet is modal: focus moves in and stays, Escape closes it and gives it 
 	await expect(opener).toBeFocused();
 });
 
-test('calendar: the same chips; click a day to open the filtered library', async ({ page }) => {
-	test.slow(); // axe walks every day of every year
+test('calendar: Years, then a year’s months, then the whole Library at that month', async ({
+	page
+}) => {
 	await page.goto('/calendar');
-	await expect(page.getByRole('group', { name: /Photos per day in 2026/ })).toBeVisible();
 	await expect(chip(page, 'When')).toBeVisible();
+	const year = page.getByRole('link', { name: /^2019 [\d,]+ photos?$/ });
+	await expect(year.getByRole('heading', { name: '2019' })).toBeVisible();
+	// Its cover comes once the card is near the screen.
+	await year.scrollIntoViewIfNeeded();
+	await expect(year.locator('img')).toHaveAttribute('data-in', '');
 	await expectAccessible(page);
-	const day = page.locator('svg a').first();
-	await day.click();
-	await expect(page).toHaveURL(/\/\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/);
-	await expect(page.locator('.tile').first()).toBeVisible();
+	await year.click();
+	await expect(page).toHaveURL(/\/calendar\/months#y2019$/);
+	const months = page.getByRole('region', { name: '2019' });
+	await expect(months.getByRole('heading', { name: '2019' })).toBeInViewport();
+	const month = months.getByRole('link').first();
+	const name = (await month.getByRole('heading').textContent())!;
+	await month.click();
+	await expect(page).toHaveURL(/\/#2019-\d{2}$/);
+	await expect(page.locator('section h2', { hasText: `${name} 2019` }).first()).toBeInViewport();
 });
 
 test('map: choose a cluster, then open its place in the library with an honest count', async ({
@@ -271,7 +281,8 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	const [, n] = (await open.textContent())!.match(/Open all (\d+) from/)!;
 	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
-	await expect(page.locator('.page-head .line')).toHaveText(`${n} photos`);
+	// The count, then the years these photos span.
+	await expect(page.locator('.page-head .line')).toHaveText(new RegExp(`^${n} photos · \\d{4}`));
 });
 
 test('map: the heading counts the dot that is chosen now, after the map has zoomed in', async ({

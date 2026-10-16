@@ -32,6 +32,8 @@ NOT_DOMAIN_ERRORS = {
     "ports.backup.MirrorSignInError": "a MirrorError, recorded on the run until the user signs in",
     "ports.ai.AIUnavailableError": MAY_PASS + " (the AI server is slow or down)",
     "ports.ai.AIUnreachableError": MAY_PASS + " (an AIUnavailableError: no answer at all)",
+    "adapters.ollama_guard.NotLocalError": "an AIUnreachableError: a setting that points off "
+    "this machine stops the app at start; later refusals make jobs retry, never fail a photo",
     "ports.ImportBusyError": "another import holds the library: the worker puts the job back",
     # --- never reach a route or a job ----------------------------------------------------------
     "adapters.tool_runner.ToolTimeoutError": SIGNAL + " (adapters raise their own 'too slow')",

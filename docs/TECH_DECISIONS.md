@@ -139,6 +139,18 @@ the bigger ones wait for the server GPU (planned RTX 3060 12 GB).
 llama.cpp server) with no domain change.
 **Client library:** `httpx` (sync client; its `MockTransport` lets the adapter be tested with
 no network and no model). Added 2026-09-29.
+**Local only (2026-10-15), enforced in code (`adapters/ollama_guard.py`), not just config:**
+no public LLM provider, and nothing that leaves C's machines.
+- `PA_OLLAMA_BASE_URL` must be loopback (127.0.0.0/8, ::1, `localhost`) or the private
+  network: 10/8, 172.16/12, 192.168/16, Tailscale's 100.64/10 and fd7a:115c:a1e0::/48. A
+  name counts by every address it resolves to. Anything else stops the app at start. A name
+  that does not resolve yet (home server off) lets the app start; every request re-checks it.
+- No Ollama cloud models. Ollama marks them by tag (`model:cloud`, `model:tag-cloud`,
+  `model:tag:cloud`; its `internal/modelref`) and by `remote_host` / `remote_model` in
+  `/api/tags`, `/api/show` and chat answers (`api/types.go`). A configured cloud name stops
+  the start; a listed or answering remote model is refused and logged. Belt and braces: run
+  Ollama itself with `OLLAMA_NO_CLOUD=1`.
+- Redirects are never followed; a 3xx answer is an error.
 
 ## Sources
 

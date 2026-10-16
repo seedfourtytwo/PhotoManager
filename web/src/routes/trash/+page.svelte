@@ -74,7 +74,8 @@
 		confirmEmpty = true;
 	}
 
-	async function load() {
+	/** `after`: a restore or a delete just took photos away (the first load takes none). */
+	async function load(after = false) {
 		try {
 			items = await api.trash();
 			loadedAt = new Date();
@@ -82,6 +83,8 @@
 			notice.error(e);
 		}
 		// Photos that were restored or deleted may have had the focus, or the button that did it.
+		// Never on arrival: the first photo would take a focus ring and look selected.
+		if (!after) return;
 		await tick();
 		refocus();
 	}
@@ -105,7 +108,7 @@
 			notice.show(`Restored ${photos(restored)}.`);
 			clear();
 			library.changed();
-			await load();
+			await load(true);
 		} catch (e) {
 			notice.error(e);
 		} finally {
@@ -121,7 +124,7 @@
 			notice.show(`Deleted ${plural(purged, 'library copy', 'library copies')} for good.`);
 			confirmEmpty = false;
 			clear();
-			await load();
+			await load(true);
 		} catch (e) {
 			notice.error(e);
 		}

@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { AlbumSummary } from '$lib/api';
-	import { api, notice, session } from '$lib/app.svelte';
-	import { formatCount } from '$lib/format';
+	import { api, notice, session, viewport } from '$lib/app.svelte';
+	import { albumStrip } from '$lib/collections';
+	import CardStrip from '$lib/components/CardStrip.svelte';
+	import CollectionCard from '$lib/components/CollectionCard.svelte';
+	import NewAlbumCard from '$lib/components/NewAlbumCard.svelte';
 	import NewAlbumDialog from '$lib/components/NewAlbumDialog.svelte';
 	import PageHead from '$lib/components/PageHead.svelte';
 	import IconButton from '$lib/components/ui/IconButton.svelte';
@@ -12,16 +15,30 @@
 	$effect(() => {
 		api
 			.albums()
-			.then((a) => (albums = a))
+			.then((a) => (albums = albumStrip(a, Infinity)))
 			.catch((e: unknown) => notice.error(e));
 	});
+
+	const mine = $derived((albums ?? []).filter((a) => a.role === 'owner'));
+	const shared = $derived((albums ?? []).filter((a) => a.role !== 'owner'));
+	/** Headed sections only when there are both kinds; else one grid. */
+	const sections = $derived(
+		mine.length && shared.length
+			? [
+					{ title: 'My albums', list: mine },
+					{ title: 'Shared with me', list: shared }
+				]
+			: [{ title: '', list: albums ?? [] }]
+	);
+	/** Four across a laptop (332 px at 1440), five past 1680; two on a phone. */
+	const grid = $derived({ min: viewport.phone ? 150 : 300, gap: 16 });
 </script>
 
 <svelte:head><title>Albums · Photos</title></svelte:head>
 
 <PageHead title="Albums" back={{ href: '/collections', label: 'Collections' }}>
 	{#snippet actions()}
-		{#if session.canEdit}
+		{#if session.canEdit && albums?.length}
 			<IconButton icon="plus" label="New album" filled onclick={() => (creating = true)} />
 		{/if}
 	{/snippet}
@@ -29,32 +46,38 @@
 
 <div class="page">
 	{#if albums && albums.length === 0}
-		<div class="empty-state">
-			<p>No albums yet.</p>
-			<p>
-				Select photos in the <a href="/">library</a> and choose “Add to album”{#if session.canEdit},
-					or start an empty one with +{/if}.
-			</p>
-		</div>
+		{#if session.canEdit}
+			<div class="first">
+				<NewAlbumCard onclick={() => (creating = true)} />
+			</div>
+		{/if}
+		<p class="quiet empty">
+			{session.canEdit ? 'Or select' : 'No albums yet. Select'} the ones you want in the
+			<a href="/">library</a> and choose “Add to album”.
+		</p>
 	{/if}
 
-	<ul class="albums">
-		{#each albums ?? [] as album (album.id)}
-			<li>
-				<a href={`/albums/${album.id}`}>
-					<span class="cover">
-						{#if album.cover}<img src={album.cover.url} alt="" loading="lazy" />{/if}
-					</span>
-					<span class="title">{album.title}</span>
-					<span class="count data"
-						>{formatCount(album.count)}<span class="visually-hidden"
-							>{album.count === 1 ? ' photo' : ' photos'}</span
-						>{#if album.role !== 'owner'}, shared with you{/if}</span
-					>
-				</a>
-			</li>
-		{/each}
-	</ul>
+	{#each sections as section (section.title)}
+		{#if section.list.length}
+			<section aria-label={section.title || undefined}>
+				{#if section.title}<h2>{section.title}</h2>{/if}
+				<CardStrip items={section.list} key={(a) => a.id} {grid} every>
+					{#snippet card(album, { i })}
+						<CollectionCard
+							href={`/albums/${album.id}`}
+							title={album.title}
+							count={album.count}
+							src={album.cover?.url ?? null}
+							index={i}
+							badge={album.role === 'owner'
+								? undefined
+								: { icon: 'person', label: 'Shared with you' }}
+						/>
+					{/snippet}
+				</CardStrip>
+			</section>
+		{/if}
+	{/each}
 </div>
 
 {#if creating}
@@ -63,58 +86,24 @@
 
 <style>
 	.page {
+		display: grid;
+		gap: var(--s-6);
 		padding: var(--s-2) var(--page-x) var(--s-7);
 	}
-	.albums {
-		list-style: none;
+	h2 {
+		margin: 0 0 var(--s-3);
+		font-size: var(--fs-22);
+		font-weight: 650;
+		letter-spacing: var(--track-22);
+	}
+	.first {
+		width: min(100%, 20rem);
+	}
+	.empty {
 		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-		gap: var(--s-5) var(--s-4);
+		max-width: var(--measure);
 	}
-	a {
-		position: relative; /* holds the count's hidden word */
-		display: grid;
-		gap: var(--s-1);
-		text-decoration: none;
-		border-radius: 0;
-	}
-	/* The cover is the one place we crop: a user-chosen album frame (rule 2). */
-	.cover {
-		aspect-ratio: 4 / 3;
-		background: var(--hairline);
-		overflow: hidden;
-		margin-bottom: var(--s-1);
-	}
-	.cover img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-	}
-	.title {
-		font-weight: 600;
-		line-height: var(--lh-tight);
-		overflow-wrap: anywhere;
-	}
-	.count {
-		color: var(--ink-2);
-		font-size: var(--fs-14);
-	}
-	@media (hover: hover) {
-		a:hover .title {
-			text-decoration: underline;
-			text-underline-offset: 0.2em;
-		}
-	}
-	a:focus-visible {
-		outline-offset: var(--s-1);
-	}
-	@media (max-width: 639px) {
-		.albums {
-			grid-template-columns: 1fr 1fr;
-			gap: var(--s-4) var(--s-3);
-		}
+	.empty a {
+		text-decoration: underline;
 	}
 </style>

@@ -111,11 +111,15 @@ test('fix date from the loupe: set an exact date', async ({ page }) => {
 
 test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	await page.locator('.tile').first().click();
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	const editor = page.getByRole('dialog', { name: 'Edit photo' });
 	await expect(editor.getByRole('group', { name: /Crop area/ })).toBeVisible();
 	await editor.getByRole('button', { name: 'Rotate right' }).click();
-	await editor.getByRole('button', { name: '1:1' }).click();
+	await editor.getByRole('button', { name: 'Aspect' }).click();
+	await editor
+		.getByRole('group', { name: 'Crop ratio' })
+		.getByRole('button', { name: '1:1' })
+		.click();
 	await expectAccessible(page);
 	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/edit'));
 	await editor.getByRole('button', { name: 'Save' }).click();
@@ -123,15 +127,16 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	expect(recipe).toMatchObject({ rotate: 90, flip_horizontal: false, straighten: 0 });
 	expect(recipe.crop.w).toBeGreaterThan(0);
 	await expect(editor).toHaveCount(0);
-	if (!isPhone(page))
-		await expect(
-			loupe(page)
-				.getByRole('complementary', { name: 'Details' })
-				.getByText('edited', { exact: true })
-		).toBeVisible();
+	await loupe(page).getByRole('button', { name: 'Details' }).click();
+	await expect(
+		loupe(page).getByRole('complementary', { name: 'Details' }).getByText('edited', { exact: true })
+	).toBeVisible();
+	await loupe(page).getByRole('button', { name: 'Details' }).click();
 
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/edit'));
+	// Under ⋯ in the editor's top bar.
+	await editor.getByRole('button', { name: 'More' }).click();
 	await page.getByRole('button', { name: 'Revert to original' }).click();
 	// It asks first: the saved edit is deleted.
 	await page
@@ -154,6 +159,8 @@ test('trash: move, see it with its thumbnail, open it full size, restore', async
 	await expect
 		.poll(() => tile.locator('img').evaluate((i: HTMLImageElement) => i.naturalWidth))
 		.toBeGreaterThan(0);
+	// Nothing was removed, so nothing takes the focus: the first photo must not look selected.
+	expect(await page.evaluate(() => !!document.activeElement?.closest('.tile'))).toBe(false);
 	await expectAccessible(page);
 	await tile.click();
 	const viewer = loupe(page);
@@ -228,7 +235,7 @@ test('download: original files are labelled as without edits, with a hint for ed
 	page
 }) => {
 	await page.locator('.tile').first().click();
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	await page.getByRole('button', { name: 'Rotate right' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('button', { name: 'Download' }).click();
@@ -280,7 +287,7 @@ test('download: a guest with view-only photos is told why nothing can be downloa
 	const tile = await scrollToTile(page, id);
 	if (isPhone(page)) await longPress(tile);
 	else await tile.locator('.check').click({ force: true });
-	await expect(page.getByText('1 selected')).toBeVisible();
+	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
 	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/may view these photos but not download them/)).toBeVisible();
@@ -338,6 +345,9 @@ test.describe('selection pill', () => {
 		await selectTiles(page, [0, 1]);
 		await expect(pill(page)).toHaveCSS('position', 'fixed');
 		await expect(pill(page)).toHaveCSS('border-radius', '999px');
+		// It rises into place: measured once it has arrived.
+		await expect(pill(page)).toHaveCSS('translate', 'none');
+		await expect(pill(page)).toHaveCSS('opacity', '1');
 		const box = (await pill(page).boundingBox())!;
 		const { width, height } = page.viewportSize()!;
 		expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThan(2);
@@ -486,11 +496,11 @@ test.describe('selection pill', () => {
 		const from = await centre(tiles.nth(0));
 		const to = await centre(tiles.nth(3));
 		const lift = await touchDown(page, from, to, { hold: 600 });
-		await expect(page.getByText('4 selected')).toBeVisible();
+		await expect(page.getByText('4 selected', { exact: true })).toBeVisible();
 		await lift();
 		// The page stayed put under the finger, and lifting it changes nothing.
 		expect(await page.evaluate(() => window.scrollY)).toBe(0);
-		await expect(page.getByText('4 selected')).toBeVisible();
+		await expect(page.getByText('4 selected', { exact: true })).toBeVisible();
 		await expect(page.locator('.tile.selected')).toHaveCount(4);
 	});
 });

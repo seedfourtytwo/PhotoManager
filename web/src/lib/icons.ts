@@ -28,6 +28,11 @@ export const ICONS = {
 	date: ['M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0z', 'M12 7.5V12l3 2'],
 	trash: ['M5 7h14', 'M10 7V4.5h4V7', 'M7 7l1 12.5h8L17 7'],
 	restore: ['M8 5L4 9l4 4', 'M4 9h10a5 5 0 0 1 0 10h-3'],
+	/* The editor's tools: a quarter turn, a mirror, the crop frame, and the level. */
+	rotate: ['M5 14V8h12', 'M14 5l3 3-3 3', 'M5 14h9v6H5z'],
+	flip: ['M12 3v18', 'M9 7L4 17h5z', 'M15 7l5 10h-5z'],
+	crop: ['M7 3v14h14', 'M3 7h14v14'],
+	straighten: ['M3 12h18', 'M12 8v8', 'M7 10v4', 'M17 10v4'],
 	close: ['M6 9l6 6 6-6'],
 	info: ['M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0z', 'M12 11v5', 'M12 7.8v.4'],
 	alert: ['M12 4 3 20h18z', 'M12 10v4.5', 'M12 17.2v.3'],

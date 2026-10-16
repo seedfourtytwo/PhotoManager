@@ -3,7 +3,8 @@
 	import type { AssetFilters, Id } from '$lib/api';
 	import { api, library, notice, session, viewport } from '$lib/app.svelte';
 	import { filtersFromParams, filtersToQuery } from '$lib/filters';
-	import { monthTotals } from '$lib/calendar';
+	import { libraryLine, monthTotals } from '$lib/calendar';
+	import { keyStep } from '$lib/grid-zoom';
 	import { photos } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
@@ -15,8 +16,11 @@
 		limitSelection,
 		selectAll,
 		selectAllLabel,
+		selectionTitle,
 		type Selection
 	} from '$lib/selection';
+	import { monthLabel } from '$lib/timeline';
+	import type { MenuItem } from '$lib/menu';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import LibraryHead from '$lib/components/LibraryHead.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
@@ -24,6 +28,7 @@
 	import Timeline from '$lib/components/Timeline.svelte';
 	import TimeRuler from '$lib/components/TimeRuler.svelte';
 	import UploadButton from '$lib/components/UploadButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import IconButton from '$lib/components/ui/IconButton.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
 
@@ -38,8 +43,10 @@
 		ownsPhoto?: boolean;
 		/** A photo of the timeline is about to open. */
 		onopenphoto?: () => void;
+		/** Go to this month (YYYY-MM) once the photos are in: a month's card opened the Library. */
+		startAt?: string | null;
 	};
-	let { current = true, ownsPhoto = true, onopenphoto }: Props = $props();
+	let { current = true, ownsPhoto = true, onopenphoto, startAt = null }: Props = $props();
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
@@ -52,6 +59,7 @@
 	let currentMonth = $state<string | null>(null);
 	let downloadAll = $state(false);
 	let timeline: Timeline | undefined = $state();
+	let upload: UploadButton | undefined = $state();
 
 	// A new filter (URL) starts the timeline over.
 	let lastQuery: string | null = null;
@@ -85,10 +93,26 @@
 			.catch(() => undefined);
 	}
 
+	let started = false;
+	$effect(() => {
+		if (started || !startAt || !timeline || !loader.items.length) return;
+		started = true;
+		void timeline.jumpTo(startAt);
+	});
+
 	function reloadAll() {
 		void loader.reload();
 		library.changed();
 	}
+
+	const counts = $derived(new Map(months.map((m) => [m.key, m.count])));
+	const selecting = $derived(choosing || selection.ids.size > 0);
+	/** A phone's ⋯: Upload is there, not a button of its own beside Select. */
+	const more = $derived<MenuItem[]>([
+		{ label: 'Larger photos', run: () => void timeline?.zoom(1) },
+		{ label: 'Smaller photos', run: () => void timeline?.zoom(-1) },
+		...(session.canEdit ? [{ label: 'Upload photos', run: () => upload?.pick() }] : [])
+	]);
 
 	const order = $derived(loader.items.map((a) => a.id));
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
@@ -135,44 +159,69 @@
 			event.preventDefault();
 			select(selectAll(order));
 		}
+		// ⌘+ and ⌘− size the photos, not the page.
+		const step = keyStep(event);
+		if (step) {
+			event.preventDefault();
+			void timeline?.zoom(step);
+		}
 	}
 </script>
 
 <svelte:window {onkeydown} />
 
-<!-- Kept clear of the time ruler's column on a laptop. -->
-<div class="head">
-	<LibraryHead view="grid" {query} {total}>
-		{#snippet tools()}
-			{#if order.length}
+<LibraryHead
+	view="all"
+	{query}
+	title={selecting ? selectionTitle(selection.ids.size) : 'Library'}
+	line={libraryLine(total, months)}
+	sub={currentMonth && loader.items.length ? monthLabel(currentMonth) : null}
+	more={viewport.phone ? more : []}
+>
+	{#snippet tools()}
+		{#if order.length}
+			{#if viewport.phone}
+				<button
+					type="button"
+					class="select-word"
+					aria-pressed={selecting}
+					onclick={() => (selecting ? stopChoosing() : (choosing = true))}
+					>{selecting ? 'Done' : 'Select'}</button
+				>
+			{:else}
 				<IconButton
 					icon="select"
 					label="Select"
-					class="select"
-					aria-pressed={choosing || selection.ids.size > 0}
-					onclick={() => (choosing || selection.ids.size ? stopChoosing() : (choosing = true))}
+					class="library-select"
+					aria-pressed={selecting}
+					onclick={() => (selecting ? stopChoosing() : (choosing = true))}
 				/>
 			{/if}
-			{#if query && total && session.canEdit}
-				<KeepOnPhone target={{ kind: 'filter', filters }} what="these photos" />
-			{/if}
-			<UploadButton onuploaded={reloadAll} />
-		{/snippet}
-	</LibraryHead>
-</div>
+		{/if}
+		{#if query && total && session.canEdit}
+			<KeepOnPhone target={{ kind: 'filter', filters }} what="these photos" />
+		{/if}
+		<UploadButton bind:this={upload} onuploaded={reloadAll} button={!viewport.phone} />
+	{/snippet}
+</LibraryHead>
 
 <div class="page">
 	{#if !loader.loading && !loader.error && loader.items.length === 0}
-		<div class="empty-state">
+		<div class="empty glass">
+			<Icon name="library" />
 			{#if query}
-				<p>No photos match these filters.</p>
-				<p>Loosen a filter, or <a href="/">show everything</a>.</p>
+				<h2>No photos match</h2>
+				<p>Loosen a filter, or show everything.</p>
+				<a class="button primary" href="/">Show everything</a>
 			{:else}
-				<p>The library is empty.</p>
-				<p>
-					Upload photos from this device, or an admin can add a folder of photos under
-					<a href="/admin">Admin</a>.
-				</p>
+				<h2>No photos yet</h2>
+				<p>Photos you upload, or a folder an admin adds, show here.</p>
+				<div class="choices">
+					{#if session.canEdit}
+						<button type="button" class="primary" onclick={() => upload?.pick()}>Upload</button>
+					{/if}
+					{#if session.isAdmin}<a class="button" href="/admin">Add a folder</a>{/if}
+				</div>
 			{/if}
 		</div>
 	{/if}
@@ -186,6 +235,8 @@
 		ontoggle={toggle}
 		onselect={select}
 		onmonth={(key) => (currentMonth = key)}
+		{counts}
+		zooms={current}
 	/>
 
 	<SelectionActions
@@ -214,18 +265,9 @@
 	/>
 </div>
 
-<!-- On a phone the selection pill takes the ruler's place while photos are being chosen. -->
-{#if viewport.desktop || (selection.ids.size === 0 && !choosing)}
-	<div class="ruler" class:away={!current} inert={!current}>
-		<TimeRuler
-			{months}
-			current={currentMonth}
-			onjump={(key) => timeline?.jumpTo(key)}
-			orientation={viewport.desktop ? 'vertical' : 'horizontal'}
-			fades={!viewport.desktop}
-		/>
-	</div>
-{/if}
+<div class="ruler" class:away={!current} inert={!current}>
+	<TimeRuler {months} current={currentMonth} onjump={(key) => timeline?.jumpTo(key)} />
+</div>
 
 {#if shown}
 	<Loupe
@@ -235,6 +277,11 @@
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
 		onchanged={(a) => loupe.changed(a)}
+		onremove={(ids) => {
+			loader.remove(ids);
+			library.changed();
+		}}
+		onreload={reloadAll}
 		ondates={() => {
 			// Its new date may put it beyond what is loaded: it stays open all the same.
 			loupe.hold();
@@ -248,20 +295,69 @@
 {/if}
 
 <style>
-	.head {
-		padding-right: calc(var(--s-8) - var(--page-x));
-	}
 	/* Pressed, Select takes the accent of a selection; its tick stays drawn, not filled. */
-	.head :global(.select[aria-pressed='true'] svg) {
+	:global(.library-select[aria-pressed='true'] svg) {
 		fill: none;
 	}
-	.page {
-		padding: 0 var(--s-8) 0 var(--page-x);
+	/* A phone's Select: a word in the glass cluster; Done while choosing. */
+	.select-word {
+		min-height: var(--target);
+		padding: 0 var(--s-3);
+		border-radius: var(--r-pill);
+		color: var(--ink);
+		font-size: var(--fs-15);
+		font-weight: 600;
 	}
-	/* Over Home's blocks the ruler stays out of sight; it comes with the Library. */
+	.select-word[aria-pressed='true'] {
+		font-weight: 700;
+	}
+	.page {
+		padding: 0 var(--page-x);
+	}
+	/* An empty Library: one glass card in the middle, saying what to do. */
+	.empty {
+		display: grid;
+		justify-items: center;
+		gap: var(--s-2);
+		max-width: 26rem;
+		margin: var(--s-7) auto;
+		padding: var(--s-6) var(--s-5);
+		border-radius: var(--r-2);
+		text-align: center;
+	}
+	.empty :global(svg) {
+		width: var(--s-7);
+		height: var(--s-7);
+		color: var(--ink-2);
+	}
+	.empty h2 {
+		margin: var(--s-2) 0 0;
+		font-size: var(--fs-22);
+		font-weight: 650;
+		letter-spacing: var(--track-22);
+	}
+	.empty p {
+		margin: 0 0 var(--s-3);
+		color: var(--ink-2);
+	}
+	.choices {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: var(--s-2);
+	}
+	/* The time scrubber: a column at the right edge, over the photos, below the top bar (and a
+	   phone's compact title) and above a phone's dock. Only the scrubber itself takes a press. */
 	.ruler {
+		position: fixed;
+		top: calc(var(--top) + var(--s-5));
+		bottom: var(--s-5);
+		right: 0;
+		z-index: var(--z-ruler);
+		pointer-events: none;
 		transition: opacity var(--motion) var(--ease);
 	}
+	/* Over Home's blocks the scrubber stays out of sight; it comes with the Library. */
 	.ruler.away {
 		opacity: 0;
 		visibility: hidden;
@@ -269,31 +365,10 @@
 			opacity var(--motion) var(--ease),
 			visibility 0s linear var(--motion);
 	}
-	/* The time ruler: a column at the right edge on a laptop. */
-	.ruler {
-		position: fixed;
-		top: var(--top);
-		right: 0;
-		width: calc(var(--s-8) - var(--s-1));
-		height: calc(100vh - var(--top));
-		z-index: var(--z-ruler);
-	}
-	/* Smaller screens: lying above the dock. Only the ruler itself takes the pointer. */
 	@media (max-width: 1023px) {
-		.head {
-			padding: 0;
-		}
-		.page {
-			padding: 0 var(--page-x);
-		}
 		.ruler {
-			top: auto;
-			left: var(--s-3);
-			right: var(--s-3);
-			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-2));
-			width: auto;
-			height: auto;
-			pointer-events: none;
+			top: calc(var(--top) + var(--target) + var(--s-4));
+			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
 		}
 	}
 	/* A phone: as close to the edge as the page says (`--library-x`: the photos' own gap). */

@@ -4,6 +4,7 @@ import {
 	GUEST,
 	expect,
 	expectAccessible,
+	fillPins,
 	isPhone,
 	resetMock,
 	signIn,
@@ -16,25 +17,25 @@ test.describe('first run and sign-in', () => {
 		await resetMock('none');
 		await page.goto('/');
 		await expect(page).toHaveURL(/\/setup$/);
-		await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Welcome to Photos' })).toBeVisible();
 		await expectAccessible(page);
 
-		await page.getByLabel('User name').fill('c');
+		// Your name; the sign-in name follows it, and can be changed under Details.
+		await page.getByRole('button', { name: 'Continue' }).click();
+		await expect(page.getByRole('alert')).toContainText('Type your name');
 		await page.getByLabel('Your name').fill('C');
-		const pin = page.getByLabel('PIN', { exact: true });
-		const again = page.getByLabel('PIN again');
-		await pin.fill('12');
-		await again.fill('12');
-		await page.getByRole('button', { name: 'Create admin account' }).click();
-		await expect(page.getByRole('alert')).toContainText('exactly 4 digits');
+		await page.getByText('Details').click();
+		await expect(page.getByLabel('Sign-in name')).toHaveValue('c');
+		await page.getByRole('button', { name: 'Continue' }).click();
 
-		await pin.fill('1234');
-		await again.fill('1235');
-		await page.getByRole('button', { name: 'Create admin account' }).click();
-		await expect(page.getByRole('alert')).toContainText('not the same');
-
-		await again.fill('1234');
-		await page.getByRole('button', { name: 'Create admin account' }).click();
+		// The PIN, twice: two different ones start it over.
+		await expect(page.getByRole('heading', { name: 'Choose a 4-digit PIN' })).toBeVisible();
+		await expectAccessible(page);
+		await page.getByLabel('Choose a 4-digit PIN').fill('1234');
+		await page.getByLabel('The same PIN again').fill('1235');
+		await expect(page.getByRole('alert')).toContainText("Those didn't match");
+		await page.getByLabel('Choose a 4-digit PIN').fill('1234');
+		await page.getByLabel('The same PIN again').fill('1234');
 		await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
 		await expect(page.locator('.tile').first()).toBeVisible();
 	});
@@ -101,14 +102,15 @@ test.describe('first run and sign-in', () => {
 		).toHaveAttribute('aria-current', 'page');
 	});
 
-	test('on a laptop there is no number pad: the PIN is typed and shows as dots', async ({
+	test('on a laptop the PIN is typed (or tapped on the same pad) and shows as dots', async ({
 		page
 	}) => {
 		test.skip(isPhone(page), 'a phone taps its PIN');
 		await resetMock();
 		await page.goto('/login');
 		await page.getByRole('button', { name: ADMIN.name, exact: true }).click();
-		await expect(page.getByRole('group', { name: 'Number pad' })).toBeHidden();
+		await expect(page.getByRole('group', { name: 'Number pad' })).toBeVisible();
+		await expect(page.getByText('Type or tap your PIN')).toBeVisible();
 		await expect(page.getByLabel('PIN')).toBeFocused();
 		await page.keyboard.type(ADMIN.pin.slice(0, 3));
 		await expect(page.locator('.dots i.on')).toHaveCount(3);
@@ -116,20 +118,31 @@ test.describe('first run and sign-in', () => {
 		await expect(page).toHaveURL(/\/home$/);
 	});
 
-	test('sign out, and change PIN in its sheet on You', async ({ page }) => {
+	test('sign out, and change PIN in its sheet on Settings: the new PIN is asked twice', async ({
+		page
+	}) => {
 		await resetMock();
 		await signIn(page, '/settings');
 		await expectAccessible(page);
 		await expect(page.getByLabel('Current PIN')).toHaveCount(0); // not on the page itself
 		await page.getByRole('button', { name: 'Change PIN' }).click();
 		const sheet = page.getByRole('dialog', { name: 'Change PIN' });
-		await sheet.getByLabel('Current PIN').fill('0000');
-		await sheet.getByLabel('New PIN').fill('5678');
+		await expect(sheet).toHaveCSS('opacity', '1');
 		await expectAccessible(page);
-		await sheet.getByRole('button', { name: 'Change PIN' }).click();
+		// a typo in the second entry changes nothing
+		await fillPins(sheet, { 'Current PIN': ADMIN.pin, 'New PIN': '5678', 'New PIN again': '5679' });
+		await expect(sheet.getByRole('alert')).toContainText("Those didn't match");
+		await expect(sheet.getByLabel('New PIN', { exact: true })).toBeVisible();
+		// a wrong current PIN is said, and it starts over
+		await sheet.getByRole('button', { name: 'Cancel' }).click();
+		await page.getByRole('button', { name: 'Change PIN' }).click();
+		await fillPins(sheet, { 'Current PIN': '0000', 'New PIN': '5678', 'New PIN again': '5678' });
 		await expect(sheet.getByRole('alert')).toContainText('current PIN');
-		await sheet.getByLabel('Current PIN').fill(ADMIN.pin);
-		await sheet.getByRole('button', { name: 'Change PIN' }).click();
+		await fillPins(sheet, {
+			'Current PIN': ADMIN.pin,
+			'New PIN': '5678',
+			'New PIN again': '5678'
+		});
 		await expect(sheet).toBeHidden();
 		await expect(toast(page)).toContainText('PIN changed');
 		await page.getByRole('button', { name: 'Sign out' }).click();
@@ -160,7 +173,7 @@ test('after ten wrong PINs the sign-in screen says how long to wait; an admin ca
 	await expectAccessible(page);
 
 	// The admin lifts the wait from Admin → People.
-	await signIn(page, '/admin');
+	await signIn(page, '/settings/people');
 	await unlockFromPeople(page);
 	const again = await request.post('/api/auth/login', {
 		data: { username: GUEST.username, pin: GUEST.pin }
@@ -186,6 +199,8 @@ test('a locked account is told how it gets unlocked; the right PIN works once an
 	await page.getByRole('button', { name: ADMIN.name, exact: true }).click();
 	await page.getByLabel('PIN').fill(ADMIN.pin);
 	await page.goto('/admin');
+	await expect(page).toHaveURL(/\/settings\/overview$/); // the old address leads to Settings
+	await page.goto('/settings/people');
 	await unlockFromPeople(page);
 	await expectAccessible(page);
 

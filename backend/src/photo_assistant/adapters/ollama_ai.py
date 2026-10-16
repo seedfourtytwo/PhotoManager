@@ -1,6 +1,8 @@
 """AIProvider backed by an Ollama server (laptop or home server over Tailscale).
 
-- Only the configured base URL is ever called, and only when a model is configured.
+- Only the configured base URL is ever called, and only when a model is configured. It must be
+  on this machine or the private network, its models local, and redirects are never followed
+  (``ollama_guard``): checked at start and again on every request.
 - Images are downscaled and stripped of metadata (GPS!) before they leave this process.
 - Output is constrained by a JSON schema (Ollama's ``format``), parsed strictly, validated by
   domain rules; one retry (with the problems fed back), then AIUnavailableError.
@@ -9,6 +11,7 @@
 
 import base64
 import json
+import logging
 import time
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
@@ -18,6 +21,13 @@ import httpx
 import pyvips  # type: ignore[import-untyped]
 
 from photo_assistant.adapters.null_ai import NullAIProvider
+from photo_assistant.adapters.ollama_guard import (
+    NotLocalError,
+    Resolve,
+    check_host,
+    is_cloud_model,
+    system_resolve,
+)
 from photo_assistant.domain.album_plan import (
     AlbumPlan,
     LibrarySummary,
@@ -35,6 +45,7 @@ from photo_assistant.ports.ai import (
     Capability,
 )
 
+log = logging.getLogger(__name__)
 T = TypeVar("T")
 Downscale = Callable[[bytes, int], bytes]
 _LOGGED_TEXT = 4000  # characters of prompt/response kept in the log
@@ -143,19 +154,34 @@ class OllamaProvider:
         settings: OllamaSettings,
         log: AILog,
         *,
-        client: httpx.Client | None = None,
+        transport: httpx.BaseTransport | None = None,
         downscale: Downscale = jpeg_preview,
+        resolve: Resolve = system_resolve,
     ) -> None:
+        _refuse_cloud_models(settings)
+        _check_base_url(settings.base_url, resolve)
         self._settings = settings
         self._log = log
         self._downscale = downscale
-        self._client = client or httpx.Client(
+        self._resolve = resolve
+        self._client = httpx.Client(
             base_url=settings.base_url,
             timeout=httpx.Timeout(
                 settings.timeout_seconds, connect=settings.connect_timeout_seconds
             ),
+            follow_redirects=False,  # a redirect could lead anywhere
+            event_hooks={"request": [self._check_request]},
+            transport=transport,
         )
         self._capabilities: frozenset[Capability] | None = None
+        self._remote: set[str] = set()  # models Ollama reported as running elsewhere
+
+    def _check_request(self, request: httpx.Request) -> None:
+        """The name may resolve elsewhere by now (or only now): check it before each call."""
+        try:
+            check_host(request.url.host, self._resolve)
+        except OSError as exc:
+            raise httpx.ConnectError(f"cannot resolve {request.url.host}", request=request) from exc
 
     def close(self) -> None:
         self._client.close()
@@ -168,6 +194,9 @@ class OllamaProvider:
                 return frozenset()
             try:
                 self._capabilities = self._detect()
+            except NotLocalError as exc:
+                log.warning("AI off: %s", exc)
+                return frozenset()
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 return frozenset()  # server down or odd: ask again next time
         return self._capabilities
@@ -175,7 +204,13 @@ class OllamaProvider:
     def _detect(self) -> frozenset[Capability]:
         response = self._client.get("/api/tags")
         response.raise_for_status()
-        names = [str(m["name"]) for m in response.json()["models"]]
+        names: list[str] = []
+        for entry in response.json()["models"]:
+            name = str(entry["name"])
+            if is_cloud_model(name) or entry.get("remote_host"):
+                self._refuse(name, entry.get("remote_host") or "ollama.com")
+            else:
+                names.append(name)
         found: set[Capability] = set()
         caption, plan = self._settings.caption_model, self._settings.plan_model
         if caption and any(_same_model(caption, n) for n in names) and self._has_vision(caption):
@@ -187,7 +222,11 @@ class OllamaProvider:
     def _has_vision(self, model: str) -> bool:
         response = self._client.post("/api/show", json={"model": model})
         response.raise_for_status()
-        capabilities = response.json().get("capabilities")
+        shown = response.json()
+        if shown.get("remote_host"):
+            self._refuse(model, shown["remote_host"])
+            return False
+        capabilities = shown.get("capabilities")
         # Older Ollama versions don't report capabilities: trust the configuration.
         return capabilities is None or "vision" in capabilities
 
@@ -255,9 +294,15 @@ class OllamaProvider:
 
     # --- the conversation with one retry ---------------------------------------------------
 
+    def _refuse(self, model: str, host: object) -> None:
+        log.warning("AI model %s refused: it runs on %s, not on this machine", model, host)
+        self._remote.add(model)
+
     def _model(self, model: str | None, capability: Capability) -> str:
         if not model:
             raise AIUnavailableError(f"no model configured for {capability.value}")
+        if model in self._remote:
+            raise NotLocalError(f"the model {model} is a cloud model: only local ones run")
         return model
 
     def _converse(
@@ -306,6 +351,9 @@ class OllamaProvider:
         }
         try:
             response = self._client.post("/api/chat", json=body)
+        except NotLocalError as exc:
+            self._log.record(call.done("", ok=False, error=str(exc)))
+            raise
         except httpx.TimeoutException as exc:
             self._log.record(call.done("", ok=False, error="timeout"))
             raise AIUnreachableError("the AI server did not answer in time") from exc
@@ -313,11 +361,51 @@ class OllamaProvider:
             self._log.record(call.done("", ok=False, error=f"connection: {exc}"))
             raise AIUnreachableError(f"cannot reach the AI server: {exc}") from exc
         call.status = response.status_code
-        if response.is_error:
+        if response.is_redirect:
+            target = response.headers.get("location", "")
+            self._log.record(call.done(target, ok=False, error="redirect not followed"))
+            raise NotLocalError(f"the AI server redirected to {target}: not followed")
+        if not response.is_success:
             detail = response.text[:500]
             self._log.record(call.done(detail, ok=False, error=f"HTTP {response.status_code}"))
             raise AIUnreachableError(f"the AI server refused the request: {detail}")
+        remote = _remote_host(response)
+        if remote:
+            self._refuse(model, remote)
+            self._log.record(call.done("", ok=False, error=f"answered by {remote}"))
+            raise NotLocalError(f"the model {model} is a cloud model (answered by {remote})")
         return _message_content(response)
+
+
+def _refuse_cloud_models(settings: OllamaSettings) -> None:
+    for which, model in (("caption", settings.caption_model), ("plan", settings.plan_model)):
+        if model and is_cloud_model(model):
+            raise NotLocalError(
+                f"the {which} model {model} is an Ollama cloud model (it runs on ollama.com): "
+                "only local models are allowed"
+            )
+
+
+def _check_base_url(base_url: str, resolve: Resolve) -> None:
+    """Stops the start when PA_OLLAMA_BASE_URL points off this machine and network. A name
+    that does not resolve yet (the home server is off) is checked again on each request."""
+    url = httpx.URL(base_url)
+    if url.scheme not in ("http", "https") or not url.host:
+        raise NotLocalError(f"PA_OLLAMA_BASE_URL={base_url} is not an http(s) address")
+    try:
+        check_host(url.host, resolve)
+    except NotLocalError as exc:
+        raise NotLocalError(f"PA_OLLAMA_BASE_URL={base_url}: {exc}") from exc
+    except OSError:
+        log.warning("AI server %s does not resolve yet: checked again on each request", url.host)
+
+
+def _remote_host(response: httpx.Response) -> str | None:
+    try:
+        remote = response.json().get("remote_host")
+    except (ValueError, AttributeError):
+        return None
+    return str(remote) if remote else None
 
 
 def _message_content(response: httpx.Response) -> str:
