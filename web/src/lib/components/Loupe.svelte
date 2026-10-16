@@ -455,7 +455,7 @@
 		grid-area: 1 / 1;
 		position: relative;
 		z-index: 1;
-		height: 9rem;
+		height: 7rem;
 		pointer-events: none;
 		background-color: light-dark(transparent, var(--bg));
 		-webkit-mask-image: var(--scrim-photo);
@@ -516,7 +516,9 @@
 		gap: var(--s-2);
 		margin-top: var(--fine);
 		font-size: var(--fs-13);
-		color: var(--ink-2);
+		font-weight: 500;
+		/* Over a photo --ink-2 would sink into it: the second line is quieter by size alone. */
+		color: var(--ink);
 		font-variant-numeric: tabular-nums;
 	}
 	.line span:last-child:not(:first-child) {

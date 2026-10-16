@@ -190,6 +190,10 @@
 		--menu-top: auto;
 		--menu-bottom: calc(100% + var(--s-3));
 	}
+	/* Its menu's rows stay one line each ("Keyboard shortcuts"). */
+	.bar :global(.panel button) {
+		white-space: nowrap;
+	}
 	.why {
 		font-size: var(--fs-12);
 		color: var(--ink-2);

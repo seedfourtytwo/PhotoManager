@@ -344,7 +344,19 @@
 		z-index: var(--z-editor);
 		background: var(--bg);
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: auto minmax(0, 1fr) auto;
+	}
+	/* One column: the bar, the photo (with Reset over its top), the tools. */
+	.top {
+		grid-area: 1 / 1;
+	}
+	.reset,
+	.area {
+		grid-area: 2 / 1;
+	}
+	.bottom {
+		grid-area: 3 / 1;
 	}
 	/* The top bar: Cancel, the title, Save (and ⋯ with Revert when there is a saved edit). */
 	.top {
@@ -372,7 +384,6 @@
 	}
 	/* Reset: a small glass pill under the bar, only once something changed. */
 	.reset {
-		grid-row: 2;
 		align-self: start;
 		justify-self: center;
 		position: relative;
@@ -385,8 +396,6 @@
 		font-weight: 600;
 	}
 	.area {
-		grid-row: 2;
-		grid-column: 1;
 		display: grid;
 		place-items: center;
 		margin: var(--s-7) var(--s-4) var(--s-4);
