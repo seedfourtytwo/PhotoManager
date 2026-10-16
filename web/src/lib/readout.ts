@@ -1,31 +1,28 @@
 /**
- * The two lines of the photo bar, each a few items the bar sets apart by space (no dots):
- * when and where, then what took the photo and how it was exposed. The photo's name, its file
- * and its pixel size are in the details.
+ * What the photo view writes about the photo: its title at the top (the day in words, then
+ * the time and the place, set apart by space, never by dots), and where it came from and who
+ * is in it, for the details. The camera, the name, the file and the pixel size are in the
+ * details alone.
  */
 import type { AssetDetail, AssetOut, Face, Id, Person } from './api/types';
 import { formatLongDay } from './dates';
-import { exposureParts, exposureSpoken } from './exposure';
 
-const known = (parts: (string | null | undefined)[]) =>
-	parts.filter((part): part is string => !!part?.trim());
+export type PhotoTitle = {
+	/** Line one: the day in words ("7 September 2026"). */
+	day: string;
+	/** Line two, piece by piece: the time, and the place by its most local name. */
+	line: string[];
+	/** Both lines as a screen reader says them, with a pause between pieces. */
+	spoken: string;
+};
 
-export function readout(asset: AssetOut, detail: AssetDetail | null): [string[], string[]] {
+export function photoTitle(asset: AssetOut): PhotoTitle {
 	const place = asset.place?.city ?? asset.place?.region ?? asset.place?.country;
-	return [
-		known([formatLongDay(asset.taken_at), asset.taken_at.slice(11, 16), place]),
-		known([detail?.camera_model, ...exposureParts(detail)])
-	];
-}
-
-/**
- * The two lines as a screen reader should say them: a pause where the bar leaves space, and
- * the settings in words ("14 August 2019, 18:42, Nice" and "iPhone 11, f 2.8, 1/250 second,
- * ISO 400, 35 millimetres"; "f/2.8" would be said "f slash 2.8").
- */
-export function readoutSpoken(asset: AssetOut, detail: AssetDetail | null): [string, string] {
-	const [when] = readout(asset, detail);
-	return [when.join(', '), known([detail?.camera_model, ...exposureSpoken(detail)]).join(', ')];
+	const day = formatLongDay(asset.taken_at);
+	const line = [asset.taken_at.slice(11, 16), place].filter((part): part is string =>
+		Boolean(part?.trim())
+	);
+	return { day, line, spoken: [day, ...line].join(', ') };
 }
 
 export type Origin = { key: string; label: string; file: string | null };

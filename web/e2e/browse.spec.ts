@@ -44,14 +44,17 @@ test('loupe: open, step with keys or swipe, the details, close', async ({ page }
 		await expect(photo).not.toHaveAttribute('alt', firstAlt!);
 		await page.keyboard.press('ArrowLeft');
 		await expect(photo).toHaveAttribute('alt', firstAlt!);
-		// Details are open by default on desktop; I toggles them.
+		// Details are closed until asked for on desktop; I toggles them.
+		await expect(viewer.getByRole('complementary')).toHaveCount(0);
+		await page.keyboard.press('i');
+		await expect(viewer.getByRole('complementary')).toBeVisible();
 		await page.keyboard.press('i');
 		await expect(viewer.getByRole('complementary')).toHaveCount(0);
 		await page.keyboard.press('i');
 	}
 	const info = viewer.getByRole('complementary', { name: 'Details' });
 	await expect(info).toContainText(/date (from camera|guessed from file|from file name)/);
-	await expect(info.getByText('From', { exact: true })).toBeVisible();
+	await expect(info.getByLabel('When and where')).toBeVisible();
 	await expectAccessible(page);
 
 	if (isPhone(page)) await viewer.getByRole('button', { name: 'Close' }).click();
@@ -62,6 +65,6 @@ test('loupe: open, step with keys or swipe, the details, close', async ({ page }
 test('guessed dates say so in the loupe', async ({ page }) => {
 	await page.goto('/?guessed_date=true');
 	await page.locator('.tile').first().click();
-	if (isPhone(page)) await page.getByRole('button', { name: 'Details' }).click();
+	await page.getByRole('button', { name: 'Details' }).click();
 	await expect(page.getByText('date guessed from file')).toBeVisible();
 });

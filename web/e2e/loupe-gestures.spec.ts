@@ -215,9 +215,13 @@ test.describe('photo view', () => {
 		await touchSwipe(page, photo, { x: photo.x - 200, y: photo.y });
 		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
 		const second = await alt(viewer);
-		await viewer.getByRole('button', { name: 'Previous photo' }).click();
+		// The edge buttons are not drawn on a touch screen and take no touch; a screen reader
+		// (which cannot swipe the photos) still presses them.
+		const previous = viewer.getByRole('button', { name: 'Previous photo' });
+		await expect(previous).toHaveCSS('clip-path', 'inset(50%)');
+		await previous.dispatchEvent('click');
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', first!);
-		await viewer.getByRole('button', { name: 'Next photo' }).click();
+		await viewer.getByRole('button', { name: 'Next photo' }).dispatchEvent('click');
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', second!);
 		await touchSwipe(page, photo, { x: photo.x + 200, y: photo.y });
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', first!);

@@ -82,9 +82,9 @@ function server() {
 	};
 }
 
-function open(items = photos, index = 0) {
+function open(items = photos, index = 0, extra: { onremove?: (ids: Set<number>) => void } = {}) {
 	const handlers = { onindex: vi.fn(), onclose: vi.fn(), onchanged: vi.fn() };
-	const view = render(Loupe, { items, index, ...handlers });
+	const view = render(Loupe, { items, index, ...handlers, ...extra });
 	const stage = document.querySelector<HTMLElement>('.stage')!;
 	/** A pointer event on the photo, `dx` to the right of its middle. */
 	const finger = (type: string, dx = 0, extra: PointerEventInit = {}) =>
@@ -105,7 +105,7 @@ const viewer = () => page.getByRole('dialog', { name: 'Photo viewer' });
 /** How large the open photo is drawn: 1 is its fit. */
 const zoom = () =>
 	Number(document.querySelector<HTMLElement>('.stage')!.style.getPropertyValue('--zoom'));
-const idle = () => expect.element(viewer(), { timeout: 4000 }).toHaveClass(/idle/);
+const idle = () => expect.element(viewer(), { timeout: 5000 }).toHaveClass(/hidden/);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 beforeEach(() => {
@@ -160,7 +160,7 @@ describe('Loupe: gestures', () => {
 		finger('pointerdown', 0, { pointerType: 'mouse', button: 2 });
 		finger('pointerup', 0, { pointerType: 'mouse', button: 2 });
 		await wait(400);
-		await expect.element(viewer()).not.toHaveClass(/idle/);
+		await expect.element(viewer()).not.toHaveClass(/hidden/);
 	});
 });
 
@@ -212,7 +212,8 @@ describe('Loupe: steps slide', () => {
 	it('the edge buttons slide the same way', async () => {
 		server();
 		const { onindex } = follow(five, 2);
-		await page.getByRole('button', { name: 'Previous photo' }).click();
+		// A component test has no page styles: the round button is a dot, clicked as the DOM does.
+		(page.getByRole('button', { name: 'Previous photo' }).element() as HTMLElement).click();
 		expect(onindex).not.toHaveBeenCalled();
 		await expect.poll(shift).toBeGreaterThan(5);
 		await expect.poll(() => onindex.mock.calls).toEqual([[1]]);
@@ -403,7 +404,8 @@ describe('Loupe: zoom', () => {
 		await userEvent.keyboard('z');
 		await tick();
 		expect(zoom()).toBe(2.5);
-		await zoomButton().click();
+		// Without the page's styles the zoom level pill lies over the button: clicked as the DOM does.
+		(zoomButton().element() as HTMLElement).click();
 		await tick();
 		expect(zoom()).toBe(1);
 	});
@@ -412,13 +414,28 @@ describe('Loupe: zoom', () => {
 		server();
 		const { finger } = open();
 		doubleTap(finger);
-		await expect.element(viewer()).toHaveClass(/idle/);
+		await expect.element(viewer()).toHaveClass(/hidden/);
 		doubleTap(finger);
-		await expect.element(viewer()).not.toHaveClass(/idle/);
+		await expect.element(viewer()).not.toHaveClass(/hidden/);
 	});
 });
 
 describe('Loupe: chrome', () => {
+	it('a tap on the photo fades all the chrome, the edges and the shade; the next brings it back', async () => {
+		server();
+		const { finger } = open();
+		await expect.element(viewer()).not.toHaveClass(/hidden/);
+		finger('pointerdown');
+		finger('pointerup');
+		await expect.element(viewer()).toHaveClass(/hidden/);
+		// Wait out the double tap: the next tap is a tap of its own.
+		await wait(400);
+		finger('pointerdown');
+		finger('pointerup');
+		await expect.element(viewer()).not.toHaveClass(/hidden/);
+		expect(document.querySelectorAll('.scrim')).toHaveLength(2);
+	});
+
 	it('idle chrome stays reachable for a screen reader', async () => {
 		server();
 		open();
@@ -434,7 +451,7 @@ describe('Loupe: chrome', () => {
 		await idle();
 		const close = page.getByRole('button', { name: 'Close' }).element() as HTMLElement;
 		close.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true }));
-		await expect.element(viewer()).not.toHaveClass(/idle/);
+		await expect.element(viewer()).not.toHaveClass(/hidden/);
 		close.click();
 		expect(onclose).not.toHaveBeenCalled();
 		close.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true }));
@@ -456,7 +473,7 @@ describe('Loupe: chrome', () => {
 		touch('pointerup');
 		close.click();
 		expect(onclose).toHaveBeenCalledOnce();
-		await expect.element(viewer()).not.toHaveClass(/idle/);
+		await expect.element(viewer()).not.toHaveClass(/hidden/);
 	});
 
 	it('stepping to the first or last photo with its edge button leaves the focus on the viewer', async () => {
@@ -490,9 +507,8 @@ describe('Loupe: details and actions', () => {
 	it('a change to the open photo keeps its details: no second fetch, the same buttons', async () => {
 		const api = server();
 		const { view } = open();
-		const edit = page.getByRole('button', { name: 'Edit' });
-		await expect.element(edit).toBeInTheDocument();
-		const button = edit.element();
+		await vi.waitFor(() => expect(api.count('GET', '/api/assets/1')).toBe(1));
+		const button = page.getByRole('button', { name: 'Add to album' }).element();
 		await view.rerender({ items: [{ ...photos[0], favourite: true }, ...photos.slice(1)] });
 		await expect
 			.element(page.getByRole('button', { name: 'Favourite' }))
@@ -537,8 +553,10 @@ describe('Loupe: details and actions', () => {
 	it('details that come back for a photo no longer open are not shown', async () => {
 		const api = server();
 		const { view } = open();
-		const readout = () => document.querySelector('.readout')!.textContent;
-		await vi.waitFor(() => expect(readout()).toContain('Camera 1'));
+		await page.getByRole('button', { name: 'Details', exact: true }).click();
+		const camera = () => document.querySelector('.details .model')?.textContent ?? '';
+		// The sheet's state outlives this viewer: it is closed again at the end.
+		await vi.waitFor(() => expect(camera()).toContain('Camera 1'));
 		// Adding to an album asks for the photo's details again; that answer is slow.
 		const release = api.hold('GET /api/assets/1');
 		await page.getByRole('button', { name: 'Add to album', exact: true }).click();
@@ -546,10 +564,69 @@ describe('Loupe: details and actions', () => {
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await vi.waitFor(() => expect(api.count('GET', '/api/assets/1')).toBe(2));
 		await view.rerender({ index: 1 });
-		await vi.waitFor(() => expect(readout()).toContain('Camera 2'));
+		await vi.waitFor(() => expect(camera()).toContain('Camera 2'));
 		release(detailOf(photos[0], 'Late answer'));
 		await wait(50);
-		expect(readout()).toContain('Camera 2');
+		expect(camera()).toContain('Camera 2');
+		await page.getByRole('button', { name: 'Details', exact: true }).click();
+		await expect.element(page.getByRole('complementary')).not.toBeInTheDocument();
+	});
+
+	it('Move to trash trashes the photo, moves on to the next one, and offers Undo', async () => {
+		const api = server();
+		const onremove = vi.fn();
+		const { onindex, onclose } = open(photos, 1, { onremove });
+		await page.getByRole('button', { name: 'Move to trash' }).click();
+		await vi.waitFor(() => expect(onremove).toHaveBeenCalledWith(new Set([2])));
+		expect(api.calls).toContainEqual({ method: 'DELETE', path: '/api/assets' });
+		expect(onindex).toHaveBeenCalledWith(2);
+		expect(onclose).not.toHaveBeenCalled();
+		expect(notice.text).toBe('Moved to the trash.');
+		notice.show('');
+	});
+
+	it('the last photo trashed steps back to the one before; the only one closes the viewer', async () => {
+		server();
+		const last = open(photos, 2, { onremove: vi.fn() });
+		await page.getByRole('button', { name: 'Move to trash' }).click();
+		await vi.waitFor(() => expect(last.onindex).toHaveBeenCalledWith(1));
+		last.view.unmount();
+		const only = open([photos[0]], 0, { onremove: vi.fn() });
+		await page.getByRole('button', { name: 'Move to trash' }).click();
+		await vi.waitFor(() => expect(only.onclose).toHaveBeenCalledOnce());
+		notice.show('');
+	});
+
+	it('a page that cannot drop a photo has no Move to trash', async () => {
+		server();
+		open();
+		// The photo may be edited (Edit is under More once its details are in) ...
+		await page.getByRole('button', { name: 'More' }).click();
+		await expect.element(page.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+		// ... but this page has no way to drop it.
+		await expect
+			.element(page.getByRole('button', { name: 'Move to trash' }))
+			.not.toBeInTheDocument();
+	});
+});
+
+describe('Loupe: the title', () => {
+	it('reads the day, then the time and the place, at the top; said in words with pauses', async () => {
+		const api = server();
+		const place = { country: 'France', region: null, city: 'Nice' };
+		open([{ ...photos[0], place }]);
+		const title = document.querySelector<HTMLElement>('.title')!;
+		expect(title.querySelector('.day')!.textContent).toBe('1 July 2019');
+		expect([...title.querySelectorAll('.line span')].map((s) => s.textContent)).toEqual([
+			'10:00',
+			'Nice'
+		]);
+		expect(title.querySelector('.visually-hidden')!.textContent).toBe('1 July 2019, 10:00, Nice');
+		expect(title.textContent).not.toContain('·');
+		// The camera is in the details, never on the chrome.
+		await vi.waitFor(() => expect(api.count('GET', '/api/assets/1')).toBe(1));
+		await tick();
+		expect(document.querySelector('.chrome')!.textContent).not.toContain('Camera 1');
 	});
 });
 
@@ -567,21 +644,30 @@ describe('Loupe: Close and Details', () => {
 		}
 	});
 
-	it('on a laptop the details sit beside the photo as label and value tiles, with who is in it', async () => {
+	it('on a laptop the details are closed until asked for, then a panel of grouped cards with who is in it', async () => {
 		await page.viewport(1280, 800);
 		server();
 		const { view } = open();
 		const details = page.getByRole('complementary', { name: 'Details' });
+		await expect.element(details).not.toBeInTheDocument();
+		const info = page.getByRole('button', { name: 'Details' });
+		await expect.element(info).toHaveAttribute('aria-pressed', 'false');
+		await info.click();
 		await expect.element(details).toBeVisible();
-		await expect
-			.element(page.getByRole('button', { name: 'Details' }))
-			.toHaveAttribute('aria-pressed', 'true');
-		const labels = () =>
-			[...details.element().querySelectorAll('.tile-row .k')].map((k) => k.textContent);
-		await vi.waitFor(() => expect(labels()).toEqual(['Taken', 'Camera', 'From']));
+		await expect.element(info).toHaveAttribute('aria-pressed', 'true');
+		const cards = () =>
+			[...details.element().querySelectorAll('.card')].map(
+				(card) => card.getAttribute('aria-label') ?? card.querySelector('h3, summary')?.textContent
+			);
+		// An admin also reads the file, closed until asked for.
+		await vi.waitFor(() => expect(cards()).toEqual(['When and where', 'Camera', 'File']));
+		// No loose line of key hints: those are under More, "Keyboard shortcuts".
+		expect(details.element().textContent).not.toMatch(/Esc|← →/);
 		await view.rerender({ index: 1 });
 		const sam = details.getByRole('link', { name: 'Sam' });
 		await expect.element(sam).toHaveAttribute('href', '/people/5');
-		expect(labels()).toEqual(['Taken', 'Camera', 'From', 'People']);
+		expect(cards()).toEqual(['When and where', 'People', 'Camera', 'File']);
+		await userEvent.keyboard('i');
+		await expect.element(details).not.toBeInTheDocument();
 	});
 });

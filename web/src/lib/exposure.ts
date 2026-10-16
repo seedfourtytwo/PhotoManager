@@ -56,3 +56,33 @@ export function exposureSpoken(exposure: Exposure | null): string[] {
 		known(focal_length) ? counted(short(focal_length), 'millimetre') : null
 	].filter((part) => part !== null);
 }
+
+/** One setting as the details' spec row shows it: a small label over its value. */
+export type Spec = { label: string; value: string; spoken: string };
+
+const NONE: Exposure = { f_number: null, exposure_time: null, iso: null, focal_length: null };
+
+/** The one setting `part` holds, written and in words; null when the photo does not carry it. */
+function spec(label: string, part: Partial<Exposure>): Spec | null {
+	const one = { ...NONE, ...part };
+	const [value] = exposureParts(one);
+	const [spoken] = exposureSpoken(one);
+	return value && spoken ? { label, value, spoken } : null;
+}
+
+/**
+ * The settings as the details' spec row lays them out: ISO, focal length, aperture, shutter
+ * (spec flight/library-search-viewer.md §6, the camera card). ISO's value is the bare number:
+ * its label says the rest.
+ */
+export function exposureSpecs(exposure: Exposure | null): Spec[] {
+	if (!exposure) return [];
+	const { f_number, exposure_time, iso, focal_length } = exposure;
+	const isoSpec = spec('ISO', { iso });
+	return [
+		isoSpec && { ...isoSpec, value: String(iso) },
+		spec('Focal', { focal_length }),
+		spec('Aperture', { f_number }),
+		spec('Shutter', { exposure_time })
+	].filter((one) => one !== null);
+}

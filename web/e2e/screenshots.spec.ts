@@ -118,16 +118,15 @@ test('every screen', async ({ page }, info) => {
 
 	await page.locator('.tile').nth(3).click();
 	await shot(page, '04-loupe', p);
-	if (isPhone(page)) {
-		await page.getByRole('button', { name: 'Details' }).click();
-		await shot(page, '04b-loupe-info', p);
-		await page.getByRole('button', { name: 'Details' }).click();
-	}
+	await page.getByRole('button', { name: 'Details' }).click();
+	await shot(page, '04b-loupe-info', p);
+	await page.getByRole('button', { name: 'Details' }).click();
 	await page.getByRole('button', { name: 'Zoom' }).click();
 	await shot(page, '04d-loupe-zoom', p);
 	await page.keyboard.press('z');
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	await page.getByRole('button', { name: 'Rotate right' }).click();
+	await page.getByRole('button', { name: 'Aspect' }).click();
 	await page.getByRole('button', { name: '4:5', exact: true }).click();
 	await shot(page, '13-editor', p);
 	await page.getByRole('button', { name: 'Cancel' }).click();

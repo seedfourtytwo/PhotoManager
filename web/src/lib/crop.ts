@@ -65,15 +65,41 @@ export function moveCrop(rect: CropRect, dx: number, dy: number): CropRect {
 	};
 }
 
-export type Handle = 'nw' | 'ne' | 'sw' | 'se';
+type Corner = 'nw' | 'ne' | 'sw' | 'se';
+/** A corner of the crop frame, or the middle of one of its edges. */
+export type Handle = Corner | 'n' | 'e' | 's' | 'w';
 
 /**
- * Drag a corner by (dx, dy) fractions. The opposite corner stays put; with a fixed `ratio`
- * the width leads and the height follows, both shrunk together if they would leave the image.
+ * Drag a corner or an edge by (dx, dy) fractions. The opposite corner (or edge) stays put; with
+ * a fixed `ratio` the width leads and the height follows, both shrunk together if they would
+ * leave the image. An edge moves its own side only; with a ratio, the side it moves leads.
  */
 export function resizeCrop(
 	rect: CropRect,
 	handle: Handle,
+	dx: number,
+	dy: number,
+	ratio: number | null,
+	imageAspect: number
+): CropRect {
+	switch (handle) {
+		case 'e':
+		case 'w':
+			return resizeCorner(rect, handle === 'e' ? 'se' : 'sw', dx, 0, ratio, imageAspect);
+		case 'n':
+		case 's': {
+			// With a ratio the width leads: the height the finger asks for, as the width it needs.
+			const width = ratio === null ? 0 : ((handle === 's' ? dy : -dy) * ratio) / imageAspect;
+			return resizeCorner(rect, handle === 's' ? 'se' : 'ne', width, dy, ratio, imageAspect);
+		}
+		default:
+			return resizeCorner(rect, handle, dx, dy, ratio, imageAspect);
+	}
+}
+
+function resizeCorner(
+	rect: CropRect,
+	handle: Corner,
 	dx: number,
 	dy: number,
 	ratio: number | null,

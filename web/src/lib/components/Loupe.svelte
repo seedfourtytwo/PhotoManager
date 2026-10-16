@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { AssetDetail, AssetOut } from '$lib/api';
-	import { api, notice, viewport } from '$lib/app.svelte';
+	import type { AssetDetail, AssetOut, Id } from '$lib/api';
+	import { api, library, notice, session, viewport } from '$lib/app.svelte';
 	import { DOUBLE_TAP_MS, type Gesture } from '$lib/gesture';
-	import { Idle } from '$lib/idle.svelte';
 	import { infoSheet } from '$lib/info-sheet.svelte';
 	import { photoOnScreen } from '$lib/loupe.svelte';
 	import { modal } from '$lib/modal';
+	import { photoTitle } from '$lib/readout';
+	import { ViewerChrome } from '$lib/viewer-chrome.svelte';
 	import PhotoBar from './PhotoBar.svelte';
 	import PhotoDialogs, { type PhotoDialog } from './PhotoDialogs.svelte';
 	import PhotoEdges from './PhotoEdges.svelte';
@@ -28,11 +29,31 @@
 		ondates?: () => void;
 		/** Trash: the photo is shown read-only, with Restore instead of the usual actions. */
 		onrestore?: (asset: AssetOut) => void;
+		/**
+		 * The photo went to the trash: the list should drop it. Without it the page cannot drop a
+		 * photo, and the viewer offers no Delete.
+		 */
+		onremove?: (ids: Set<Id>) => void;
+		/** Undo put a trashed photo back: the list should reload. */
+		onreload?: () => void;
 	};
-	let { items, index, onindex, onclose, onneedmore, onchanged, ondates, onrestore }: Props =
-		$props();
+	let {
+		items,
+		index,
+		onindex,
+		onclose,
+		onneedmore,
+		onchanged,
+		ondates,
+		onrestore,
+		onremove,
+		onreload
+	}: Props = $props();
 
-	const IDLE_MS = 2500;
+	/** A laptop's chrome fades this long after the mouse or a key last moved. */
+	const IDLE_MS = 3000;
+	/** The zoom level shows this long after it changed. */
+	const LEVEL_MS = 1000;
 	/**
 	 * The photos around the open one whose previews are fetched ahead, as steps from it. The
 	 * ones either side are already on the stage (PhotoStage), decoded and ready to slide in.
@@ -42,10 +63,11 @@
 	const NEED_MORE_WITHIN = 3;
 	const trash = $derived(onrestore !== undefined);
 	const asset = $derived(items[index]);
+	const title = $derived(asset && photoTitle(asset));
 	let detail = $state<AssetDetail | null>(null);
-	// The details: a panel beside the photo on a laptop, open from the start; a sheet on a
+	// The details: a panel beside the photo on a laptop, closed until asked for; a sheet on a
 	// phone, which has a history step of its own, so Back closes it and not the photo.
-	let panel = $state(viewport.desktop);
+	let panel = $state(false);
 	const info = $derived(infoSheet.open || (viewport.desktop && panel));
 	function setInfo(open: boolean) {
 		if (viewport.desktop && !infoSheet.open) panel = open;
@@ -57,10 +79,20 @@
 	let more = $state(false);
 	let root: HTMLDialogElement | undefined = $state();
 	let stage: PhotoStage | undefined = $state();
-	let zoomedIn = $state(false);
+	/** How large the photo is, in times its fit (1 at its fit). */
+	let scale = $state(1);
+	const zoomedIn = $derived(scale > 1);
+	/** The zoom level shows for a moment after it changes. */
+	let level = $state(false);
+	let levelTimer: ReturnType<typeof setTimeout> | undefined;
 	/** Actions in flight, each for its own photo: a second click while one runs is ignored. */
 	const busy = new SvelteSet<string>();
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
+	/** A mouse and a keyboard at hand: the chrome fades with idle, More lists the keys. */
+	const desk =
+		typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
+	/** What pressed last: a tap by a finger leaves the chrome until the next tap. */
+	let pointer = 'mouse';
 
 	const previewOf = (a: AssetOut) =>
 		a.thumb ? a.thumb.url.replace('/thumb', '/preview') : api.previewUrl(a.id);
@@ -109,17 +141,20 @@
 		else stepped(step);
 	}
 
-	// --- chrome: fades when idle, comes back on any touch, key or mouse movement ----------
+	// --- chrome: a tap on the photo hides and shows it; a laptop's fades with idle ----------
 	// An open menu is being read: it does not fade away under the eyes.
-	const chrome = new Idle(IDLE_MS, { idle: false, inUse: () => more });
+	const chrome = new ViewerChrome(IDLE_MS, () => more);
 
 	// Hidden chrome stays where it is for a screen reader. A press on it brings it back, and the
 	// click of that same press is dropped; a press that ends without a click is forgotten by
 	// the next one.
 	function onchromedown(e: PointerEvent) {
+		pointer = e.pointerType;
 		const target = e.target as HTMLElement;
-		waking = chrome.idle && target.closest('.top') !== null;
-		if (!target.closest('.stage')) chrome.wake();
+		waking = chrome.hidden && target.closest('.chrome') !== null;
+		if (target.closest('.stage')) return;
+		if (e.pointerType === 'mouse') chrome.stir();
+		else chrome.touch();
 	}
 	function onchromeclick(e: MouseEvent) {
 		if (!waking) return;
@@ -147,6 +182,40 @@
 			if (key === 'pinned') notice.show(value ? 'Pinned to Home.' : 'Unpinned from Home.');
 		} catch (e) {
 			onchanged({ ...target, [key]: !value });
+			notice.error(e);
+		} finally {
+			busy.delete(running);
+		}
+	}
+
+	/**
+	 * Delete: the photo goes to the trash (Undo puts it back). The viewer moves on to the next
+	 * photo, or the one before at the end, before the list drops it; the last one closes it.
+	 */
+	async function remove() {
+		const target = asset;
+		const running = target && `${target.id}:trash`;
+		if (!running || !onremove || busy.has(running)) return;
+		busy.add(running);
+		try {
+			await api.trashAssets([target.id]);
+			const at = items.indexOf(target);
+			const neighbour = items[at + 1] ? at + 1 : items[at - 1] ? at - 1 : -1;
+			if (neighbour >= 0) onindex(neighbour);
+			else onclose();
+			onremove(new Set([target.id]));
+			library.changed();
+			notice.show('Moved to the trash.', {
+				action: {
+					label: 'Undo',
+					run: () =>
+						void api
+							.restore([target.id])
+							.then(() => onreload?.())
+							.catch((e: unknown) => notice.error(e))
+				}
+			});
+		} catch (e) {
 			notice.error(e);
 		} finally {
 			busy.delete(running);
@@ -181,20 +250,21 @@
 			event.preventDefault();
 			action();
 		}
-		chrome.wake();
+		chrome.show(desk);
 	}
 
 	// --- gestures on the photo (PhotoStage says which; here is what each one does) ---------
 	/** Whether the chrome was hidden when the press on the photo began. */
-	let pressedIdle = false;
+	let pressedHidden = false;
 	let tapTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function ongesture(gesture: Gesture | null) {
-		const wasIdle = pressedIdle;
+		const wasHidden = pressedHidden;
+		const mouse = pointer === 'mouse';
 		clearTimeout(tapTimer);
 		if (gesture === 'tap') {
 			// It may be the first half of a double tap: the chrome waits to find out.
-			tapTimer = setTimeout(() => (wasIdle ? chrome.wake() : chrome.hide()), DOUBLE_TAP_MS);
+			tapTimer = setTimeout(() => chrome.tap({ wasHidden, mouse }), DOUBLE_TAP_MS);
 		} else if (gesture === 'next') stepped(1);
 		else if (gesture === 'previous') stepped(-1);
 		else if (gesture === 'details') setInfo(true);
@@ -202,24 +272,34 @@
 		else if (gesture === 'close') onclose();
 	}
 
-	/** Zoomed in, the photo has the screen to itself; back at its fit the chrome returns. */
-	function onzoom(zoomed: boolean) {
-		if (zoomed === zoomedIn) return;
-		zoomedIn = zoomed;
-		if (zoomed) chrome.hide();
-		else chrome.wake();
+	/**
+	 * Zoomed in, the photo has the screen to itself; back at its fit the chrome returns. The
+	 * level shows for a moment at the top whenever it changes.
+	 */
+	function onzoom(next: number) {
+		if (next === scale) return;
+		const crossed = next > 1 !== scale > 1;
+		scale = next;
+		if (crossed && next > 1) chrome.hide();
+		else if (crossed) chrome.show(desk);
+		level = true;
+		clearTimeout(levelTimer);
+		levelTimer = setTimeout(() => (level = false), LEVEL_MS);
 	}
+	/** "2.5×": at most one decimal. */
+	const levelText = $derived(`${Number(scale.toFixed(1))}×`);
 
 	onMount(() => {
 		// `use:modal` has opened it by now: the viewer itself takes the focus, not its first button.
 		root?.focus();
-		chrome.wake();
+		if (desk) chrome.stir();
 		photoOnScreen(asset?.id);
 	});
 	onDestroy(() => {
 		photoOnScreen(undefined);
 		chrome.stop();
 		clearTimeout(tapTimer);
+		clearTimeout(levelTimer);
 		if (document.fullscreenElement) void document.exitFullscreen();
 		// `use:modal` hands the focus back to where it was; the page then moves it to the tile
 		// of the photo that was open (it knows where).
@@ -234,11 +314,11 @@
 	class="loupe"
 	data-photo-view
 	class:info
-	class:idle={chrome.idle}
+	class:hidden={chrome.hidden}
 	bind:this={root}
 	aria-label="Photo viewer"
 	tabindex="-1"
-	onpointermove={(e) => e.pointerType === 'mouse' && chrome.wake()}
+	onpointermove={(e) => e.pointerType === 'mouse' && chrome.stir()}
 	onpointerdown={onchromedown}
 	onclickcapture={onchromeclick}
 	use:modal={onclose}
@@ -251,50 +331,71 @@
 			previous={items[index - 1]}
 			next={items[index + 1]}
 			preview={previewOf}
-			onpress={() => (pressedIdle = chrome.idle)}
+			onpress={() => (pressedHidden = chrome.hidden)}
 			{ongesture}
 			{onzoom}
 		/>
 
-		<PhotoEdges {index} count={items.length} faded={chrome.idle} inset={info} onstep={go} />
+		<!-- Soft shade at the top and bottom, under the chrome: no band, no seam over the photo. -->
+		<div class="scrim top-scrim" aria-hidden="true"></div>
+		<div class="scrim bottom-scrim" aria-hidden="true"></div>
 
-		<div class="top" role="toolbar" aria-label="Photo actions">
-			<IconButton icon="close" label="Close" class="glass close" onclick={onclose} />
+		<PhotoEdges {index} count={items.length} faded={chrome.hidden} inset={info} onstep={go} />
+
+		<div class="chrome" role="toolbar" aria-label="Photo actions">
+			<div class="top">
+				<IconButton icon="back" label="Close" class="glass close" onclick={onclose} />
+				<!-- The photo's title, as on an iPhone: the day, then the time and the place. -->
+				<div class="title">
+					<p class="day" aria-hidden="true">{title.day}</p>
+					<p class="line" aria-hidden="true">
+						{#each title.line as piece, i (i)}<span>{piece}</span>{/each}
+					</p>
+					<span class="visually-hidden">{title.spoken}</span>
+				</div>
+				<div class="right">
+					<IconButton
+						icon="zoom"
+						label="Zoom"
+						class="glass"
+						aria-pressed={zoomedIn}
+						onclick={() => stage?.zoom()}
+					/>
+					{#if canFullscreen}
+						<IconButton
+							icon="fullscreen"
+							label="Full screen"
+							class="glass fullscreen"
+							onclick={toggleFullscreen}
+						/>
+					{/if}
+				</div>
+			</div>
 			<PhotoBar
 				{asset}
 				{detail}
 				{trash}
+				{info}
 				busy={busy.has(`${asset.id}:favourite`)}
 				bind:more
+				keys={desk}
 				ontoggle={(key) => void toggle(key)}
 				onopen={(which) => (dialog = which)}
 				onrestore={() => onrestore?.(asset)}
+				oninfo={() => setInfo(!info)}
+				ondelete={onremove && session.canEdit ? () => void remove() : undefined}
 			/>
-			<div class="right">
-				<IconButton
-					icon="zoom"
-					label="Zoom"
-					class="glass"
-					aria-pressed={zoomedIn}
-					onclick={() => stage?.zoom()}
-				/>
-				{#if canFullscreen}
-					<IconButton
-						icon="fullscreen"
-						label="Full screen"
-						class="glass fullscreen"
-						onclick={toggleFullscreen}
-					/>
-				{/if}
-				<IconButton
-					icon="info"
-					label="Details"
-					class="glass"
-					aria-pressed={info}
-					onclick={() => setInfo(!info)}
-				/>
-			</div>
 		</div>
+
+		{#if level}
+			<!-- How far in, for a moment after it changes; tapped, back to the fit. -->
+			<button
+				type="button"
+				class="level glass data"
+				aria-label={zoomedIn ? `${levelText}: back to fit` : 'At fit'}
+				onclick={() => stage?.fit()}>{levelText}</button
+			>
+		{/if}
 
 		{#if info}
 			<PhotoInfo {asset} {detail} {trash} onclose={() => setInfo(false)} />
@@ -312,11 +413,11 @@
 {/if}
 
 <style>
-	/* The loupe: the photo takes the whole screen. Its chrome floats over it as glass (round
-	   Close and Details at the top, one bar at the bottom) and fades when idle. */
+	/* The loupe: the photo takes the whole screen on true black. Its chrome floats over it as
+	   glass on a soft shade at the top and bottom, and a tap fades all of it. */
 	.loupe {
-		/* The details beside the photo on a laptop: wide enough for a label and its value. */
-		--details: calc(var(--margin) * 1.5);
+		/* The details beside the photo on a laptop. */
+		--details: 22.5rem;
 		position: fixed;
 		inset: 0;
 		width: 100vw;
@@ -328,6 +429,7 @@
 		border: 0;
 		color: var(--ink);
 		z-index: var(--z-loupe);
+		/* True black in the dark look, where photos float. */
 		background: var(--bg);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
@@ -346,39 +448,114 @@
 			opacity: 0;
 		}
 	}
+	/* The shade the chrome stands on: the page colour faded out by the one gradient
+	   (--scrim-photo), at the bottom and, turned over, at the top. In a dark look only: in a light
+	   one the chrome's ink is dark, and a shade would hide it. It never takes a press. */
+	.scrim {
+		grid-area: 1 / 1;
+		position: relative;
+		z-index: 1;
+		height: 9rem;
+		pointer-events: none;
+		background-color: light-dark(transparent, var(--bg));
+		-webkit-mask-image: var(--scrim-photo);
+		mask-image: var(--scrim-photo);
+		transition: opacity var(--motion) var(--ease);
+	}
+	.top-scrim {
+		align-self: start;
+		transform: scaleY(-1);
+	}
+	.bottom-scrim {
+		align-self: end;
+	}
 	/* The chrome is one layer over the stage; only its pieces take the pointer. */
-	.top {
+	.chrome {
 		grid-area: 1 / 1;
 		position: relative;
 		z-index: 2;
 		pointer-events: none;
 		transition: opacity var(--motion) var(--ease);
 	}
-	.top :global(.close),
-	.right {
+	.top {
 		position: absolute;
-		top: var(--s-3);
+		top: var(--s-4);
+		left: var(--s-4);
+		right: var(--s-4);
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		gap: var(--s-3);
+	}
+	.top > :global(*) {
 		pointer-events: auto;
 	}
 	.top :global(.close) {
-		left: var(--s-3);
+		justify-self: start;
+	}
+	/* Two lines in the middle: the day, then the time and the place (spaced, never dotted). */
+	.title {
+		min-width: 0;
+		text-align: center;
+		line-height: var(--lh-tight);
+		pointer-events: none;
+	}
+	.title p {
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.day {
+		font-size: var(--fs-15);
+		font-weight: 600;
+	}
+	.line {
+		display: flex;
+		justify-content: center;
+		gap: var(--s-2);
+		margin-top: var(--fine);
+		font-size: var(--fs-13);
+		color: var(--ink-2);
+		font-variant-numeric: tabular-nums;
+	}
+	.line span:last-child:not(:first-child) {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.right {
-		right: var(--s-3);
+		justify-self: end;
 		display: flex;
 		gap: var(--s-2);
 	}
-	/* Zoomed in and the details open show themselves; their buttons stay plain ink (the
-	   accent is for selection, and a filled circle would swallow the i). */
+	/* Zoomed in shows itself in ink, not the accent (that is for selection). */
 	.right :global(.icon-button[aria-pressed='true']) {
 		color: var(--ink);
+		background: var(--tint);
 	}
 	.right :global(.icon-button[aria-pressed='true'] svg) {
 		fill: none;
 	}
-	/* Chrome fades when idle; any touch, key or mouse movement brings it back, and keyboard
-	   focus keeps it (a tapped button's plain focus does not). */
-	.idle .top:not(:has(:focus-visible)) {
+	/* The zoom level: a small glass pill, top centre, under the title. */
+	.level {
+		grid-area: 1 / 1;
+		align-self: start;
+		justify-self: center;
+		position: relative;
+		z-index: 2;
+		margin-top: calc(var(--s-4) + var(--target) + var(--s-3));
+		min-height: var(--s-6);
+		padding: 0 var(--s-3);
+		border-radius: var(--r-pill);
+		font-size: var(--fs-13);
+		font-weight: 600;
+		animation: fade-in var(--motion) var(--ease);
+	}
+	/* A tap fades all the chrome; any touch on it, a key or the mouse brings it back, and
+	   keyboard focus keeps it (a tapped button's plain focus does not). */
+	.hidden .chrome:not(:has(:focus-visible)),
+	.hidden .scrim {
 		opacity: 0;
 	}
 	@media (max-width: 1023px) {
@@ -386,18 +563,22 @@
 		.loupe.info {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.top :global(.close),
-		.right {
+		.top {
 			top: calc(env(safe-area-inset-top) + var(--s-2));
-		}
-		.top :global(.close) {
 			left: calc(env(safe-area-inset-left) + var(--s-3));
-		}
-		.right {
 			right: calc(env(safe-area-inset-right) + var(--s-3));
+			gap: var(--s-2);
+		}
+		.level {
+			margin-top: calc(env(safe-area-inset-top) + var(--s-2) + var(--target) + var(--s-3));
 		}
 		.right :global(.fullscreen) {
 			display: none;
+		}
+		/* The details sheet rises under the photo, not over it: the photo moves into the room
+		   above (PhotoInfo.svelte, the sheet's height). */
+		.loupe.info :global(.stage) {
+			margin-bottom: 55dvh;
 		}
 	}
 </style>

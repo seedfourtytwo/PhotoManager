@@ -42,8 +42,8 @@
 		 * photo is said once the photos have slid into place.
 		 */
 		ongesture: (gesture: Gesture | null) => void;
-		/** The photo went larger than its fit, or back to it. */
-		onzoom: (zoomed: boolean) => void;
+		/** The photo's size changed: how many times its fit it is now (1 at its fit). */
+		onzoom: (scale: number) => void;
 	};
 	let { asset, previous, next, preview, onpress, ongesture, onzoom }: Props = $props();
 
@@ -220,8 +220,10 @@
 	let moving = $state(false);
 	const isZoomed = $derived(zoomed(view));
 
+	// While fingers move it only crossing the fit is said (the chrome goes at once), not every
+	// frame; the size it rests at is said once they lift.
 	$effect(() => {
-		const now = isZoomed;
+		const now = moving ? (isZoomed ? untrack(() => view.scale) : 1) : view.scale;
 		untrack(() => onzoom(now));
 	});
 	// Another photo opens at its fit.
@@ -247,6 +249,11 @@
 	/** In on the middle of the photo, or back to its fit: what a double tap does, for a button. */
 	export function zoom() {
 		view = toggle(view, { x: 0, y: 0 }, ...sizes());
+	}
+
+	/** Back to its fit (the zoom level pill, tapped). */
+	export function fit() {
+		view = FIT;
 	}
 
 	function onpointerdown(e: PointerEvent) {

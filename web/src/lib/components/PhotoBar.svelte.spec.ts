@@ -64,25 +64,33 @@ const jpegFile = () =>
 		}
 	});
 
-function open(detail: AssetDetail | null = detailOf(), trash = false, shown = asset) {
-	const onopen = vi.fn();
-	const ontoggle = vi.fn();
-	render(PhotoBar, {
-		asset: shown,
-		detail,
-		trash,
-		busy: false,
-		more: false,
-		ontoggle,
-		onopen,
-		onrestore: vi.fn()
-	});
-	return { onopen, ontoggle };
+const props = () => ({
+	asset,
+	detail: detailOf(),
+	trash: false,
+	busy: false,
+	more: false,
+	info: false,
+	ontoggle: vi.fn(),
+	onopen: vi.fn(),
+	onrestore: vi.fn(),
+	oninfo: vi.fn()
+});
+
+function open(
+	detail: AssetDetail | null = detailOf(),
+	trash = false,
+	shown = asset,
+	extra: Partial<ReturnType<typeof props> & { ondelete: () => void; keys: boolean }> = {}
+) {
+	const all = { ...props(), asset: shown, detail, trash, ...extra };
+	render(PhotoBar, all);
+	return all;
 }
 
 /** The bar's actions by name: each is its icon alone, named for a screen reader. */
 const actions = () =>
-	[...document.querySelectorAll('.acts > button, .acts > .menu > button')].map((b) =>
+	[...document.querySelectorAll('.bar > button, .bar > .menu > button')].map((b) =>
 		b.getAttribute('aria-label')
 	);
 const button = (name: string) => page.getByRole('button', { name, exact: true });
@@ -98,11 +106,14 @@ afterEach(() => {
 });
 
 describe('PhotoBar on a device with a share sheet', () => {
-	it('holds Favourite, Share, Add to album, Edit and More; Download is under More', async () => {
+	it('holds Favourite, Share, Add to album, Details and More; Edit and Download are under More', async () => {
 		shareSheet();
 		server();
 		const { onopen } = open();
-		expect(actions()).toEqual(['Favourite', 'Share', 'Add to album', 'Edit', 'More']);
+		expect(actions()).toEqual(['Favourite', 'Share', 'Add to album', 'Details', 'More']);
+		await button('More').click();
+		await button('Edit').click();
+		expect(onopen).toHaveBeenCalledWith('edit');
 		await button('More').click();
 		await button('Download').click();
 		expect(onopen).toHaveBeenCalledWith('download');
@@ -187,7 +198,7 @@ describe('PhotoBar on a device with a share sheet', () => {
 		server();
 		open(null);
 		await expect.element(button('Share')).toBeDisabled();
-		expect(actions()).toEqual(['Favourite', 'Share', 'Add to album']);
+		expect(actions()).toEqual(['Favourite', 'Share', 'Add to album', 'Details']);
 	});
 
 	it('a guest who may download: Favourite, Share, and Download under More', async () => {
@@ -195,7 +206,7 @@ describe('PhotoBar on a device with a share sheet', () => {
 		server();
 		session.user = user('guest');
 		open(detailOf('download'));
-		expect(actions()).toEqual(['Favourite', 'Share', 'More']);
+		expect(actions()).toEqual(['Favourite', 'Share', 'Details', 'More']);
 		await button('More').click();
 		await expect.element(button('Download')).toBeInTheDocument();
 	});
@@ -206,62 +217,65 @@ describe('PhotoBar on a device with a share sheet', () => {
 		session.user = user('guest');
 		open(detailOf('view'));
 		// More holds Pin to Home: a mark of one's own, like Favourite (issue 54)
-		expect(actions()).toEqual(['Favourite', 'Download', 'More']);
+		expect(actions()).toEqual(['Favourite', 'Download', 'Details', 'More']);
 		await expect.element(button('Download')).toBeDisabled();
 		await expect.element(page.getByText('view only')).toBeInTheDocument();
 	});
 
-	it('trash: Restore only', async () => {
+	it('trash: Restore and Details only', async () => {
 		shareSheet();
 		server();
-		open(null, true);
-		expect(actions()).toEqual(['Restore']);
+		open(null, true, asset, { ondelete: vi.fn() });
+		expect(actions()).toEqual(['Restore', 'Details']);
 	});
 });
 
-describe('PhotoBar: the readout', () => {
-	const SHOT = { f_number: 2.8, exposure_time: 0.004, iso: 400, focal_length: 35 };
-	const items = (line: number) =>
-		[...document.querySelectorAll(`.readout .line:nth-child(${line}) .item`)].map(
-			(item) => item.textContent
-		);
-
-	it('line one: the day in words, the time and the place, each its own piece and no dots', async () => {
+describe('PhotoBar: Details, Delete and the keys', () => {
+	it('Details says whether the details are open, and opens and closes them', async () => {
 		server();
-		render(PhotoBar, {
-			asset: { ...asset, place: { country: 'France', region: null, city: 'Nice' } },
-			detail: detailOf('edit', { camera_model: 'iPhone 11', ...SHOT }),
-			trash: false,
-			busy: false,
-			more: false,
-			ontoggle: vi.fn(),
-			onopen: vi.fn(),
-			onrestore: vi.fn()
-		});
-		expect(items(1)).toEqual(['1 July 2019', '10:00', 'Nice']);
-		expect(items(2)).toEqual(['iPhone 11', 'f/2.8', '1/250 s', 'ISO 400', '35 mm']);
-		expect(document.querySelector('.readout')!.textContent).not.toContain('·');
+		const { oninfo } = open(detailOf(), false, asset, { info: true });
+		await expect.element(button('Details')).toHaveAttribute('aria-pressed', 'true');
+		await button('Details').click();
+		expect(oninfo).toHaveBeenCalledOnce();
 	});
 
-	it('each line is said in words, with a pause between pieces; the photo’s name is not on the bar', async () => {
+	it('Move to trash stands after Details for a photo that may be edited, on a page that can drop it', async () => {
 		server();
-		open(detailOf('edit', { camera_model: 'iPhone 11', name: 'Beach day', ...SHOT }));
-		const heard = [...document.querySelectorAll('.readout .line .visually-hidden')].map(
-			(words) => words.textContent
-		);
-		expect(heard).toEqual([
-			'1 July 2019, 10:00',
-			'iPhone 11, f 2.8, 1/250 second, ISO 400, 35 millimetres'
+		const ondelete = vi.fn();
+		open(detailOf(), false, asset, { ondelete });
+		expect(actions()).toEqual([
+			'Favourite',
+			'Download',
+			'Add to album',
+			'Details',
+			'Move to trash',
+			'More'
 		]);
-		expect(document.querySelector('.readout')!.textContent).not.toContain('Beach day');
+		await button('Move to trash').click();
+		expect(ondelete).toHaveBeenCalledOnce();
 	});
 
-	it('line two keeps its place while the details are on their way', async () => {
+	it('no Move to trash for a photo that may not be edited, or before its details say so', async () => {
 		server();
-		open(null);
-		await vi.waitFor(() => expect(items(1)).toEqual(['1 July 2019', '10:00']));
-		expect(document.querySelectorAll('.readout .line')).toHaveLength(2);
-		expect(items(2)).toEqual([]);
+		session.user = user('guest');
+		open(detailOf('download'), false, asset, { ondelete: vi.fn() });
+		expect(actions()).not.toContain('Move to trash');
+	});
+
+	it('with a keyboard at hand, More lists its shortcuts', async () => {
+		server();
+		const { onopen } = open(detailOf(), false, asset, { keys: true });
+		await button('More').click();
+		await button('Keyboard shortcuts').click();
+		expect(onopen).toHaveBeenCalledWith('keys');
+	});
+
+	it('without one, it does not', async () => {
+		server();
+		open();
+		await button('More').click();
+		await expect.element(button('Fix date')).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('Keyboard shortcuts');
 	});
 });
 
@@ -269,16 +283,7 @@ describe('PhotoBar: Favourite', () => {
 	it('gives a short pop when it is pressed, not when another photo opens already a favourite', async () => {
 		server();
 		const ontoggle = vi.fn();
-		const view = render(PhotoBar, {
-			asset,
-			detail: detailOf(),
-			trash: false,
-			busy: false,
-			more: false,
-			ontoggle,
-			onopen: vi.fn(),
-			onrestore: vi.fn()
-		});
+		const view = render(PhotoBar, { ...props(), ontoggle });
 		const heart = () => button('Favourite');
 		await heart().click();
 		expect(ontoggle).toHaveBeenCalledWith('favourite');
@@ -290,10 +295,10 @@ describe('PhotoBar: Favourite', () => {
 });
 
 describe('PhotoBar on a device without a share sheet', () => {
-	it('is as it was: Favourite, Download, Add to album, Edit, More, and no Share anywhere', async () => {
+	it('is as it was: Favourite, Download, Add to album, Details, More, and no Share anywhere', async () => {
 		server();
 		const { onopen } = open();
-		expect(actions()).toEqual(['Favourite', 'Download', 'Add to album', 'Edit', 'More']);
+		expect(actions()).toEqual(['Favourite', 'Download', 'Add to album', 'Details', 'More']);
 		await button('More').click();
 		await expect.element(button('Fix date')).toBeInTheDocument();
 		expect(document.body.textContent).not.toContain('Share');

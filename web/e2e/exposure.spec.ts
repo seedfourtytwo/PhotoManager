@@ -1,14 +1,13 @@
 /**
- * Camera and exposure settings in the photo view: the bar's second line and the details. Each
- * test sets the values of the photo it opens, so it reads the same on the mock and on the real
- * backend.
+ * Camera and exposure settings in the photo view: the camera card of the details, never the
+ * chrome. Each test sets the values of the photo it opens, so it reads the same on the mock and
+ * on the real backend.
  */
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import type { Exposure } from '../src/lib/exposure.ts';
 import {
 	expect,
 	expectAccessible,
-	isPhone,
 	loupe,
 	resetMock,
 	signIn,
@@ -19,127 +18,86 @@ import {
 
 const SHOT = { f_number: 2.8, exposure_time: 0.004, iso: 400, focal_length: 35 };
 const NONE = { f_number: null, exposure_time: null, iso: null, focal_length: null };
-const WRITTEN = ['f/2.8', '1/250 s', 'ISO 400', '35 mm'];
 const CAMERA = 'Test Camera';
-const LONG_CAMERA = `${'A very long camera model name '.repeat(3)}Mark IV`;
 
-/** Opens the newest photo with these exposure values, this camera and this name (a tidied name). */
+/** Opens the newest photo with these exposure values and this camera, and its details. */
 async function open(page: Page, exposure: Exposure, camera: string | null = CAMERA) {
 	await withDetail(page, () => ({ ...exposure, camera_model: camera, name: 'Beach day' }));
 	await page.locator('.tile').first().click();
-	return loupe(page).locator('.readout');
+	await loupe(page).getByRole('button', { name: 'Details' }).click();
+	const about = loupe(page).getByRole('complementary', { name: 'Details' });
+	await expect(about).toBeVisible();
+	return about;
 }
-/** Line two of the bar: camera and settings, each its own piece. */
-const lineTwo = (readout: Locator) => readout.locator('.line').nth(1);
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
 	await signIn(page);
 });
 
-test('line two reads the camera, then aperture, shutter, ISO and focal length, apart by space', async ({
+test('the camera card: the model, then ISO, focal length, aperture and shutter as spec cells', async ({
 	page
 }) => {
-	const line = lineTwo(await open(page, SHOT));
-	await expect(line.locator('[aria-hidden="true"] .item')).toHaveText([CAMERA, ...WRITTEN]);
-	await expect(line).not.toContainText('·');
-	await expect(line).not.toContainText('Beach day');
-	await expect(line).toHaveCSS('font-family', UI_FACE);
-	await expect(line).toHaveCSS('font-variant-numeric', /tabular-nums/);
+	const camera = (await open(page, SHOT)).getByLabel('Camera', { exact: true });
+	await expect(camera.locator('.model')).toHaveText(CAMERA);
+	await expect(camera.locator('dt')).toHaveText(['ISO', 'Focal', 'Aperture', 'Shutter']);
+	await expect(camera.locator('dd [aria-hidden="true"]')).toHaveText([
+		'400',
+		'35 mm',
+		'f/2.8',
+		'1/250 s'
+	]);
+	await expect(camera).not.toContainText('·');
+	await expect(camera.locator('dd').first()).toHaveCSS('font-family', UI_FACE);
+	await expect(camera.locator('dd').first()).toHaveCSS('font-variant-numeric', /tabular-nums/);
+	// Never on the chrome: the title and the bar say when and where, and the actions.
+	await expect(loupe(page).getByRole('toolbar')).not.toContainText(CAMERA);
+	await expect(loupe(page).getByRole('toolbar')).not.toContainText('f/2.8');
 	await expectAccessible(page);
 });
 
-test('a screen reader hears each line in words, with a pause between pieces', async ({ page }) => {
-	const readout = await open(page, SHOT);
-	await expect(lineTwo(readout).locator('.visually-hidden')).toHaveText(
-		`${CAMERA}, f 2.8, 1/250 second, ISO 400, 35 millimetres`
-	);
-	// What is read out: the day, time and place, then the words; the written form is skipped.
-	const heard = await readout.ariaSnapshot();
-	expect(heard).toMatch(/- paragraph: \d{1,2} [A-Z][a-z]+ \d{4}, \d{2}:\d{2}/);
-	expect(heard).toContain(`- paragraph: ${CAMERA}, f 2.8, 1/250 second, ISO 400, 35 millimetres`);
+test('a screen reader hears each setting in words, not its written form', async ({ page }) => {
+	const camera = (await open(page, SHOT)).getByLabel('Camera', { exact: true });
+	await expect(camera.locator('dd .visually-hidden')).toHaveText([
+		'ISO 400',
+		'35 millimetres',
+		'f 2.8',
+		'1/250 second'
+	]);
+	const heard = await camera.ariaSnapshot();
+	expect(heard).toContain('f 2.8');
 	expect(heard).not.toContain('f/2.8');
 });
 
 test('a photo with only some of the settings shows those', async ({ page }) => {
-	const line = lineTwo(await open(page, { ...NONE, iso: 400, focal_length: 35 }, null));
-	await expect(line.locator('[aria-hidden="true"] .item')).toHaveText(['ISO 400', '35 mm']);
-	await expect(line.locator('.visually-hidden')).toHaveText('ISO 400, 35 millimetres');
+	const camera = (await open(page, { ...NONE, iso: 400, focal_length: 35 }, null)).getByLabel(
+		'Camera',
+		{ exact: true }
+	);
+	await expect(camera.locator('dt')).toHaveText(['ISO', 'Focal']);
+	await expect(camera.locator('.model')).toHaveCount(0);
 });
 
-test('a photo with no settings: line two is the camera alone', async ({ page }) => {
-	const line = lineTwo(await open(page, NONE));
-	await expect(line.locator('.item')).toHaveText([CAMERA]);
-	await expect(line.locator('.visually-hidden')).toHaveText(CAMERA);
+test('a photo with no settings: the camera alone, no spec row', async ({ page }) => {
+	const camera = (await open(page, NONE)).getByLabel('Camera', { exact: true });
+	await expect(camera.locator('.model')).toHaveText(CAMERA);
+	await expect(camera.locator('.specs')).toHaveCount(0);
 });
 
-test('at 320 px every piece of line two is whole or left out, and nothing leaves the bar', async ({
+test('at 320 px the spec row stays one row inside the card, and the page does not scroll sideways', async ({
 	page
 }) => {
-	test.skip(isPhone(page), 'one project sets the width itself');
 	await page.setViewportSize({ width: 320, height: 800 });
-	for (const camera of [CAMERA, LONG_CAMERA]) {
-		const line = lineTwo(await open(page, SHOT, camera));
-		await expect(line.locator('.item').first()).toHaveText(camera);
-		const measured = await line.evaluate((p) => {
-			const box = p.getBoundingClientRect();
-			const bar = p.closest('.bar')!.getBoundingClientRect();
-			const items = [...p.querySelectorAll<HTMLElement>('.item')].map((item) => {
-				const at = item.getBoundingClientRect();
-				return {
-					text: item.textContent,
-					shown: at.top < box.bottom && at.bottom > box.top,
-					inside: at.left >= box.left - 0.5 && at.right <= box.right + 0.5,
-					cut: item.scrollWidth > item.clientWidth
-				};
-			});
-			return {
-				items,
-				oneLine: box.height < 2 * parseFloat(getComputedStyle(p).fontSize) * 1.5,
-				line: [box.left, box.right],
-				bar: [bar.left, bar.right],
-				pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth
-			};
-		});
-		const shown = measured.items.filter((item) => item.shown);
-		// What shows is a run from the start: the camera, then settings in order.
-		expect(shown.map((item) => item.text)).toEqual(
-			measured.items.slice(0, shown.length).map((item) => item.text)
-		);
-		expect(shown.length).toBeGreaterThanOrEqual(2);
-		// Settings are never cut; only a camera name longer than the line is, with an ellipsis.
-		for (const item of shown.slice(1)) expect(item.cut).toBe(false);
-		for (const item of shown) expect(item.inside).toBe(true);
-		expect(measured.oneLine).toBe(true);
-		expect(measured.line[0]).toBeGreaterThanOrEqual(measured.bar[0]);
-		expect(measured.line[1]).toBeLessThanOrEqual(measured.bar[1]);
-		expect(measured.bar[0]).toBeGreaterThanOrEqual(0);
-		expect(measured.bar[1]).toBeLessThanOrEqual(320);
-		expect(measured.pageScrolls).toBe(false);
-		await loupe(page).getByRole('button', { name: 'Close' }).click();
-		await expect(loupe(page)).toHaveCount(0);
-		await page.unroute(/\/api\/assets\/\d+$/);
-	}
-});
-
-test('the details list the settings apart by space, and say them in words', async ({ page }) => {
-	await open(page, SHOT);
-	if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Details' }).click();
-	const about = loupe(page).getByRole('complementary', { name: 'Details' });
-	const settings = about.locator('.settings');
-	await expect(settings.locator('[aria-hidden="true"] > span')).toHaveText(WRITTEN);
-	await expect(settings).not.toContainText('·');
-	await expect(settings).toHaveCSS('font-family', UI_FACE);
-	await expect(settings.locator('.visually-hidden')).toHaveText(
-		'f 2.8, 1/250 second, ISO 400, 35 millimetres'
-	);
-});
-
-test('the details of a photo with no settings have no such tile', async ({ page }) => {
-	await open(page, NONE);
-	if (isPhone(page)) await loupe(page).getByRole('button', { name: 'Details' }).click();
-	const about = loupe(page).getByRole('complementary', { name: 'Details' });
-	await expect(about).toBeVisible();
-	await expect(about.getByText('Taken', { exact: true })).toBeVisible();
-	await expect(about.locator('.settings')).toHaveCount(0);
+	const camera = (await open(page, SHOT)).getByLabel('Camera', { exact: true });
+	const measured = await camera.locator('.specs').evaluate((row) => {
+		const box = row.getBoundingClientRect();
+		const card = row.closest('.card')!.getBoundingClientRect();
+		const cells = [...row.children].map((cell) => cell.getBoundingClientRect());
+		return {
+			oneRow: cells.every((cell) => Math.abs(cell.top - cells[0].top) < 1),
+			inside: box.left >= card.left && box.right <= card.right + 0.5,
+			pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth
+		};
+	});
+	expect(measured).toEqual({ oneRow: true, inside: true, pageScrolls: false });
 });

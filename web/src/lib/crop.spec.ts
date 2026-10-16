@@ -97,6 +97,32 @@ describe('moveCrop and resizeCrop', () => {
 		expect((r.w * 1.5) / r.h).toBeCloseTo(1, 6);
 		expect(r.y + r.h).toBeLessThanOrEqual(1 + 1e-9);
 	});
+
+	it('an edge moves its one side: the other three stay', () => {
+		close(resizeCrop(rect, 'e', 0.1, 0.3, null, 1.5), { x: 0.2, y: 0.2, w: 0.6, h: 0.5 });
+		close(resizeCrop(rect, 'w', -0.1, 0.3, null, 1.5), { x: 0.1, y: 0.2, w: 0.6, h: 0.5 });
+		close(resizeCrop(rect, 'n', 0.3, -0.1, null, 1.5), { x: 0.2, y: 0.1, w: 0.5, h: 0.6 });
+		close(resizeCrop(rect, 's', 0.3, 0.1, null, 1.5), { x: 0.2, y: 0.2, w: 0.5, h: 0.6 });
+	});
+
+	it('an edge stops at the image and at the minimum size', () => {
+		close(resizeCrop(rect, 'e', 1, 0, null, 1.5), { x: 0.2, w: 0.8 });
+		close(resizeCrop(rect, 'n', 0, -1, null, 1.5), { y: 0, h: 0.7 });
+		expect(resizeCrop(rect, 'w', 1, 0, null, 1.5).w).toBeCloseTo(0.05, 6);
+	});
+
+	it('with a fixed ratio an edge keeps the shape: the side it moves leads, the other follows', () => {
+		const square = { x: 0.2, y: 0.2, w: 0.4, h: 0.6 }; // 1:1 on a 1.5 image
+		const wider = resizeCrop(square, 'e', 0.1, 0, 1, 1.5);
+		expect(wider.w).toBeCloseTo(0.5, 6);
+		expect((wider.w * 1.5) / wider.h).toBeCloseTo(1, 6);
+		const taller = resizeCrop(square, 's', 0, 0.15, 1, 1.5);
+		expect(taller.h).toBeCloseTo(0.75, 6);
+		expect((taller.w * 1.5) / taller.h).toBeCloseTo(1, 6);
+		const shorter = resizeCrop(square, 'n', 0, 0.15, 1, 1.5);
+		expect(shorter.h).toBeCloseTo(0.45, 6);
+		expect(shorter.y + shorter.h).toBeCloseTo(0.8, 6);
+	});
 });
 
 describe('straighten', () => {

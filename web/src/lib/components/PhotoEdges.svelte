@@ -7,8 +7,7 @@
 		count: number;
 		/** The viewer's chrome is hidden: so are these, unless the keyboard is on one. */
 		faded: boolean;
-		/** The details are open: beside the photo on a laptop (Next stands at the photo's edge,
-		    not the screen's), over its lower half on a phone (both rise above them). */
+		/** The details are open beside the photo (a laptop): Next stands at the photo's edge. */
 		inset: boolean;
 		onstep: (step: -1 | 1) => void;
 	};
@@ -17,7 +16,7 @@
 
 <button
 	type="button"
-	class="edge prev"
+	class="edge prev glass"
 	class:faded
 	class:inset
 	aria-label="Previous photo"
@@ -26,7 +25,7 @@
 >
 <button
 	type="button"
-	class="edge next"
+	class="edge next glass"
 	class:faded
 	class:inset
 	aria-label="Next photo"
@@ -35,51 +34,49 @@
 >
 
 <style>
-	/* The two edges of the viewer: Previous and Next, for a mouse and for the keyboard. */
+	/* Previous and Next, for a mouse and for the keyboard: round glass at the middle of either
+	   edge, fading with the rest of the chrome. A finger swipes instead: on a touch screen they
+	   are not drawn and take no touch (spec flight/library-search-viewer.md §6), but stay for a
+	   screen reader, which cannot swipe the photos, and show when the keyboard is on one. */
 	.edge {
 		position: absolute;
+		z-index: 2;
 		top: 50%;
-		transform: translateY(-50%);
-		width: var(--s-6);
-		height: 6rem;
+		translate: 0 -50%;
+		width: var(--target);
+		height: var(--target);
 		padding: 0;
 		display: grid;
 		place-items: center;
-		color: var(--ink-2);
-		border-radius: 0;
+		color: var(--ink);
+		border-radius: var(--r-pill);
 		transition: opacity var(--motion) var(--ease);
-	}
-	@media (hover: hover) {
-		.edge:hover {
-			color: var(--ink);
-		}
 	}
 	.edge:disabled {
 		visibility: hidden;
 	}
 	.prev {
-		left: 0;
+		left: var(--s-4);
 	}
 	.next {
-		right: 0;
+		right: var(--s-4);
 	}
 	.next.inset {
-		right: var(--details);
+		right: calc(var(--details) + var(--s-4));
 	}
 	/* They fade with the rest of the chrome; keyboard focus keeps one in sight. */
 	.edge.faded:not(:focus-visible) {
 		opacity: 0;
+		pointer-events: none;
+	}
+	@media (hover: none) {
+		.edge:not(:focus-visible) {
+			clip-path: inset(50%);
+		}
 	}
 	@media (max-width: 1023px) {
 		.next.inset {
-			right: 0;
-		}
-		.edge.inset {
-			top: 25%;
-		}
-		.edge {
-			width: var(--target);
-			height: 5rem;
+			right: var(--s-4);
 		}
 	}
 </style>

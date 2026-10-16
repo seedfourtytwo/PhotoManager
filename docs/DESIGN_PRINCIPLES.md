@@ -149,26 +149,26 @@ Line heights: `--lh-display` 1.05 (display), `--lh-tight` 1.15 (titles), `--lh-u
 
 ### Space, shape, motion
 
-| Token                                     | Value                                                                                                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--s-1 … --s-9`                           | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96 px — the only spacings used                                                                                       |
-| `--page-x`                                | 32 px laptop, 16 px phone (grids on a phone use `--gutter` and pad their words; a hero bleeds past it)                                                     |
-| `--gutter`                                | 2 px between photos, and beside them on a phone; the look's gap dial moves it (0–8 px), so nothing else uses it                                            |
-| `--fine`                                  | 2 px: the finest line and gap inside a control (the ruler's needle, an icon and its word) and the seam between rows of a group; no dial moves it           |
-| `--r-1` / `--r-2` / `--r-pill`            | 14 px controls · 28 px sheets and raised surfaces · full round for bars and chips; grid photos are never rounded (a face is a round badge, not a photo)     |
-| `--r-card`                                | 24 px (`--r-2` less 4, so the corners dial moves it): Home's hero and memory cards                                                                         |
-| `--check-radius`                          | 4 px: checkbox corners (`--r-1` would make a 16 px box round)                                                                                              |
-| `--target`                                | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button                         |
-| `--capsule`                               | 52 px: the height of the laptop's floating glass capsule                                                                                                   |
-| `--top`                                   | the room the capsule takes on a laptop (16 px above it, 8 px below); 0 on a phone                                                                          |
-| `--dock`                                  | 64 px: the floating dock on a phone, and the photo view's action bar                                                                                       |
-| `--bar`                                   | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock                                                           |
-| `--pill`                                  | 52 px: the least height of the selection pill; the toast steps over it by this much                                                                        |
-| `--blur`                                  | `blur(24px) saturate(1.8)`: the frosted-glass look (with `--glass` and `--glass-edge`; solid where blur is unavailable or `prefers-reduced-transparency`)  |
-| `--margin`                                | 224 px (14rem) right margin for notes on a laptop                                                                                                          |
-| `--press` / `--motion` / `--motion-sheet` | 100 ms a control giving under the finger · 200 ms fades and colour · 380 ms sheets and page changes; off under `prefers-reduced-motion`                    |
-| `--ease` / `--ease-sheet`                 | `cubic-bezier(.2,0,0,1)` · `cubic-bezier(.32,.72,0,1)`, the curve of an iPhone sheet                                                                       |
-| `--ease-spring` / `lib/spring.ts`         | a spring (stiffness 300, damping 30) as a CSS `linear()` curve, and the same spring in code for gestures, seeded with the release speed                    |
+| Token                                     | Value                                                                                                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--s-1 … --s-9`                           | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96 px — the only spacings used                                                                                      |
+| `--page-x`                                | 32 px laptop, 16 px phone (grids on a phone use `--gutter` and pad their words; a hero bleeds past it)                                                    |
+| `--gutter`                                | 2 px between photos, and beside them on a phone; the look's gap dial moves it (0–8 px), so nothing else uses it                                           |
+| `--fine`                                  | 2 px: the finest line and gap inside a control (the ruler's needle, an icon and its word) and the seam between rows of a group; no dial moves it          |
+| `--r-1` / `--r-2` / `--r-pill`            | 14 px controls · 28 px sheets and raised surfaces · full round for bars and chips; grid photos are never rounded (a face is a round badge, not a photo)   |
+| `--r-card`                                | 24 px (`--r-2` less 4, so the corners dial moves it): Home's hero and memory cards                                                                        |
+| `--check-radius`                          | 4 px: checkbox corners (`--r-1` would make a 16 px box round)                                                                                             |
+| `--target`                                | 44 px, in pixels on purpose: minimum control height on touch screens (`pointer: coarse`) and the smallest size of any phone button                        |
+| `--capsule`                               | 52 px: the height of the laptop's floating glass capsule                                                                                                  |
+| `--top`                                   | the room the capsule takes on a laptop (16 px above it, 8 px below); 0 on a phone                                                                         |
+| `--dock`                                  | 64 px: the floating dock on a phone, and the photo view's action bar                                                                                      |
+| `--bar`                                   | `--dock` + 16 px: the room a phone page keeps free at its bottom so nothing hides under the dock                                                          |
+| `--pill`                                  | 52 px: the least height of the selection pill; the toast steps over it by this much                                                                       |
+| `--blur`                                  | `blur(24px) saturate(1.8)`: the frosted-glass look (with `--glass` and `--glass-edge`; solid where blur is unavailable or `prefers-reduced-transparency`) |
+| `--margin`                                | 224 px (14rem) right margin for notes on a laptop                                                                                                         |
+| `--press` / `--motion` / `--motion-sheet` | 100 ms a control giving under the finger · 200 ms fades and colour · 380 ms sheets and page changes; off under `prefers-reduced-motion`                   |
+| `--ease` / `--ease-sheet`                 | `cubic-bezier(.2,0,0,1)` · `cubic-bezier(.32,.72,0,1)`, the curve of an iPhone sheet                                                                      |
+| `--ease-spring` / `lib/spring.ts`         | a spring (stiffness 300, damping 30) as a CSS `linear()` curve, and the same spring in code for gestures, seeded with the release speed                   |
 
 Layers, lowest first (a number of 1 to 5 inside one component orders its own pieces and is
 not a token):
@@ -345,24 +345,40 @@ not a token):
   commands and run tables live only there. Backups and Problems open from their tiles; a
   backup place shows its state as a dot in `--ok` or `--fail` with a shape that reads without
   colour.
-- **The photo view** (the loupe) gives the photo the whole screen. Its chrome floats over it as
-  glass: round icon buttons at the top, Close (a chevron down) at the left and Zoom, Full screen
-  (laptop) and Details at the right; one bar at the bottom with a two-line readout in the UI
-  face, its pieces set apart by space, never by dots (the day in words, the time, the place /
-  the camera, aperture, shutter, ISO and focal length; a piece that does not fit is left out
-  whole, a long place or camera is cut), and at most five icon actions: Favourite, Download,
-  Add to album, Edit, More. A screen reader hears each line in words. On a device with a share
+- **The photo view** (the loupe) gives the photo the whole screen, centred on true black. Its
+  chrome floats over it as glass on a soft shade at the top and bottom (never a band or a seam
+  over the photo): at the top a round Close (‹) at the left, the photo's title in the middle as
+  two lines (the day in words; the time and the place, set apart by space, never by dots), and
+  Zoom and Full screen (laptop) at the right; at the bottom one glass capsule of icons alone,
+  each named for screen readers and as a tooltip: Favourite, Download, Add to album,
+  Details, Move to trash (where the page can drop a photo) and More. On a device with a share
   sheet (a phone over HTTPS) Share takes Download's place and Download is under More; where
   there is none, Share is not shown. The heart is the Favourite button, first in the bar: the
-  accent and filled when on, with a short pop when pressed. The details are label and value
-  tiles (Taken, Place, Camera, Settings, From with the photo's name and, for an admin, the
-  file's path, People, Albums): a panel beside the photo on a laptop and a bottom sheet on a
-  phone. Chrome fades when idle. The photo follows the finger; every gesture (swipe sideways,
-  pull down, swipe up, double-tap) has a button that does the same. A double tap zooms in on
-  the spot tapped and the next one goes back; two fingers zoom from the photo's fit up to four
-  times its size. Zoomed in, the chrome is put away, one finger moves the photo as far as its
-  edges, and it is not swiped; another photo opens at its fit. It opens from its tile and
-  closes back to it as a view transition.
+  accent and filled when on, with a short pop when pressed. More is a glass menu (Edit, Private, Fix
+  date, Pin to Home, More like this and, on a laptop, Keyboard shortcuts). A tap on the photo
+  fades all the chrome and the next brings it back; on a laptop it also fades after 3 s
+  without the mouse or a key, and Previous and Next are round glass arrows at the edges that
+  fade with it (a touch screen swipes and draws none). The details are grouped cards: when and
+  where, the people, a map card (the offline outline of `lib/world.ts` with a dot, never an
+  online tile), the camera with its settings as a row of spec cells (ISO, focal length,
+  aperture, shutter), the albums as chips, and, for an admin only, a closed "File" card with
+  the name and the original's path. On a laptop they are a glass panel beside the photo,
+  closed until asked for (Details or I); on a phone a sheet that rises under the photo, which
+  moves up into the room above it. The photo follows the finger; every gesture (swipe
+  sideways, pull down, swipe up, double-tap) has a button that does the same. A double tap
+  zooms in on the spot tapped and the next one goes back; two fingers zoom from the photo's
+  fit up to four times its size; the level shows for a moment as a small glass pill at the
+  top, which goes back to the fit when tapped. Zoomed in, the chrome is put away, one finger
+  moves the photo as far as its edges, and it is not swiped; another photo opens at its fit.
+  It opens from its tile and closes back to it as a view transition.
+- **The editor** is laid out as Apple Photos': Cancel, the title and Save on a glass bar at the
+  top (⋯ holds Revert to original once there is a saved edit), Reset as a small glass pill
+  under it once something changed, the photo in the room left, and the tools as one glass
+  capsule of icon-and-word segments at the bottom (Rotate, Flip, Aspect, Straighten), one row
+  at every width; Aspect and Straighten open their own row above it (the ratios as chips, the
+  straighten slider). The crop frame has L-shaped corners and a bar at the middle of each
+  edge, all of them handles; the thirds show while it is held; what will be cut away is
+  dimmed.
 - **An order of one's own** (`ui/OrderList`: Collections rows, Home blocks): a tile group,
   each row a switch, the ones shown first in their order with a Move up icon (the first has
   none), then the ones switched off. The last one shown cannot be switched off. A row moves to
@@ -413,15 +429,15 @@ not a token):
 
 ## 3. Layout by device
 
-|                 | Laptop (≥ 1024 px)                                              | Phone (< 640 px)                                                                                                                  |
-| --------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Navigation      | floating glass capsule: the places; Search and the avatar beside | floating glass capsule with the places under a sliding lens, Search a round button beside it; the avatar in each page's title row |
-| Filters         | a row of chips under the title; a question opens under its chip | the same chips; a question opens as a bottom sheet                                                                                |
-| Loupe metadata  | Details: a panel of label/value tiles beside the photo          | Details opens a bottom sheet of the same tiles                                                                                    |
-| Loupe actions   | round Close and Details at the top, one glass bar at the bottom | the same                                                                                                                          |
-| Time ruler      | upright at the right edge                                       | lying above the dock, fading when idle                                                                                            |
-| Selection       | click / shift-click / drag-lasso                                | long-press, then drag or tap                                                                                                      |
-| Grid row height | ~220 px                                                         | ~110 px, pinch to change                                                                                                          |
+|                 | Laptop (≥ 1024 px)                                                           | Phone (< 640 px)                                                                                                                  |
+| --------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation      | floating glass capsule: the places; Search and the avatar beside             | floating glass capsule with the places under a sliding lens, Search a round button beside it; the avatar in each page's title row |
+| Filters         | a row of chips under the title; a question opens under its chip              | the same chips; a question opens as a bottom sheet                                                                                |
+| Loupe metadata  | Details: a glass panel of grouped cards beside the photo, closed until asked | Details opens a sheet of the same cards under the photo                                                                           |
+| Loupe actions   | Close, the title, Zoom at the top; one glass capsule of icons at the bottom  | the same, without Full screen and the edge arrows                                                                                 |
+| Time ruler      | upright at the right edge                                                    | lying above the dock, fading when idle                                                                                            |
+| Selection       | click / shift-click / drag-lasso                                             | long-press, then drag or tap                                                                                                      |
+| Grid row height | ~220 px                                                                      | ~110 px, pinch to change                                                                                                          |
 
 The row heights are for the look's medium photo size; small is ¾ of it and large 1.4 times.
 Only the look sets it: there is no photo size setting per device.
