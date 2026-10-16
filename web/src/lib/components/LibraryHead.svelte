@@ -61,7 +61,7 @@
 				{/if}
 				{@render tools?.()}
 				{#if viewport.phone}
-					<Menu label="More" text="More" icon="more" filled={false} items={menu} />
+					<Menu label="Library menu" text="More" icon="more" filled={false} items={menu} />
 				{/if}
 			</div>
 		{/snippet}
