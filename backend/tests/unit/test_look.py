@@ -10,6 +10,7 @@ import pytest
 from photo_assistant.domain.look import (
     DEFAULT_LOOK,
     CollectionsRow,
+    Face,
     HomeSection,
     Look,
     LookError,
@@ -41,6 +42,7 @@ EVERYTHING = {
     "corners": 4,
     "photoGap": 6,
     "textScale": 1.15,
+    "face": "atkinson",
     "thumbSize": "large",
     "showToday": True,
     "startPage": "library",
@@ -62,6 +64,7 @@ def test_the_defaults_are_the_ones_in_the_spec() -> None:
         "corners": None,
         "photoGap": None,
         "textScale": 1,
+        "face": "inter",
         "thumbSize": "medium",
         "showToday": True,
         "startPage": "today",
@@ -88,6 +91,7 @@ def test_every_field_is_read() -> None:
         corners=4,
         photo_gap=6,
         text_scale=1.15,
+        face=Face.ATKINSON,
         thumb_size=ThumbSize.LARGE,
         show_today=True,
         start_page=StartPage.LIBRARY,
@@ -96,6 +100,14 @@ def test_every_field_is_read() -> None:
         home_sections=(HomeSection.PEOPLE, HomeSection.PINNED),
     )
     assert look_sheet(parse_look(EVERYTHING)) == EVERYTHING
+
+
+def test_the_face_is_inter_or_the_larger_text_face_and_nothing_else() -> None:
+    assert parse_look({}).face is Face.INTER
+    assert parse_look({"face": "atkinson"}).face is Face.ATKINSON
+    with pytest.raises(LookError, match="'face' must be one of: inter, atkinson"):
+        parse_look({"face": "comic-sans"})
+    assert read_look(json.dumps({"face": "gone", "mode": "light"})) == Look(mode=Mode.LIGHT)
 
 
 def test_an_unknown_field_is_rejected_by_name() -> None:
@@ -173,7 +185,13 @@ def test_a_value_of_the_wrong_kind_is_rejected(field: str, value: object) -> Non
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("theme", "neon"), ("mode", "sepia"), ("thumbSize", "huge"), ("startPage", "admin")],
+    [
+        ("theme", "neon"),
+        ("mode", "sepia"),
+        ("thumbSize", "huge"),
+        ("face", "comic"),
+        ("startPage", "admin"),
+    ],
 )
 def test_an_unknown_choice_is_rejected(field: str, value: str) -> None:
     with pytest.raises(LookError, match=f"'{field}'"):

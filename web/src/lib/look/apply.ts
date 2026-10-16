@@ -1,6 +1,6 @@
 /**
- * What a look sets on the page: two attributes and a few CSS variables on the root element,
- * which themes.css and tokens.css read. A null value means "remove it", so going back to the
+ * What a look sets on the page: three attributes and a few CSS variables on the root element,
+ * which themes.css, tokens.css and fonts.css read. A null value means "remove it", so going back to the
  * defaults leaves nothing behind. The first-paint script in app.html sets the same from the
  * cached sheet; boot.spec.ts keeps the two equal.
  */
@@ -30,7 +30,7 @@ export function themeDials(theme: Theme, mode: Mode): ThemeDials {
 }
 
 export type RootLook = {
-	attributes: Record<'data-look' | 'data-theme', string | null>;
+	attributes: Record<'data-look' | 'data-theme' | 'data-face', string | null>;
 	variables: Record<'--acc-h' | '--r-1' | '--r-2' | '--gutter' | '--text-scale', string | null>;
 };
 
@@ -51,7 +51,9 @@ export function rootLook(look: Look): RootLook {
 		attributes: {
 			// absent = Safelight, and absent = follow the device (themes.css)
 			'data-look': look.theme === 'safelight' ? null : look.theme,
-			'data-theme': look.mode === 'system' ? null : look.mode
+			'data-theme': look.mode === 'system' ? null : look.mode,
+			// absent = Inter; "atkinson" = the Larger text face
+			'data-face': look.face === 'inter' ? null : look.face
 		},
 		variables: {
 			'--acc-h': look.accentHue === null ? null : String(look.accentHue),

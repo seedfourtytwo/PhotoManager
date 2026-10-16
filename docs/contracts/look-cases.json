@@ -38,6 +38,8 @@
     { "sheet": { "showToday": "no", "startPage": "library" }, "reads": { "startPage": "library" } },
     { "sheet": { "theme": "album", "addedInANewerVersion": [1, 2] }, "reads": { "theme": "album" } },
     { "sheet": { "theme": "neon" }, "reads": {} },
+    { "sheet": { "face": "atkinson", "theme": "album" }, "reads": { "face": "atkinson", "theme": "album" } },
+    { "sheet": { "face": "dyslexic", "mode": "light" }, "reads": { "mode": "light" } },
     { "sheet": {}, "reads": {} },
     { "sheet": [], "reads": {} },
     { "sheet": [{ "mode": "light" }], "reads": {} },

@@ -102,6 +102,7 @@ whole sheet of any account.
 | `corners` | whole number 0–22 (px), or `null` | `null` |
 | `photoGap` | whole number 0–8 (px), or `null` | `null` |
 | `textScale` | 0.9–1.25, two decimals | `1` |
+| `face` (v1.17) | `"inter"`, `"atkinson"` ("Larger text": Atkinson Hyperlegible, drawn for readers with low vision). Set by an admin; the web marks the page `data-face="atkinson"` for it and leaves Inter unmarked | `"inter"` |
 | `thumbSize` | `"small"`, `"medium"`, `"large"` | `"medium"` |
 | `showToday` | `true` / `false` | `true` |
 | `startPage` | `"today"`, `"library"` | `"today"` |
@@ -736,3 +737,13 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Backups | `Run.error_kind` and `problems[].error_kind` in `/api/backups/health` (see "Backups" above). | `BackupErrorKind`; a headline in plain words per kind, the raw `error`/`message` behind "Details". |
+
+---
+
+# v1.17 changes (a Larger text face, Flight UI)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Look | New field `face`: `"inter"` (default) or `"atkinson"` (see "Look" above). An admin sets it, like the other fields; `PUT /api/me/look` still takes only `mode` and `homeSections`. | `Look.face`, `FACES`; `applyLook` (and the first-paint script in `app.html`) set `data-face="atkinson"` on the root, removed for Inter. The CSS for it comes with the Flight type slice. |

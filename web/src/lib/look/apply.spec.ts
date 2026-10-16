@@ -37,7 +37,7 @@ function fakeRoot(attributes: Record<string, string> = {}, variables: Record<str
 describe('rootLook', () => {
 	it('the default look sets the dark mode and no variable', () => {
 		expect(rootLook(parseLook({}))).toEqual({
-			attributes: { 'data-look': null, 'data-theme': 'dark' },
+			attributes: { 'data-look': null, 'data-theme': 'dark', 'data-face': null },
 			variables: NOTHING
 		});
 	});
@@ -45,6 +45,11 @@ describe('rootLook', () => {
 	it('the Album theme is an attribute, Safelight is its absence', () => {
 		expect(rootLook(parseLook({ theme: 'album' })).attributes['data-look']).toBe('album');
 		expect(rootLook(parseLook({ theme: 'safelight' })).attributes['data-look']).toBeNull();
+	});
+
+	it('the larger text face is an attribute, Inter is its absence', () => {
+		expect(rootLook(parseLook({ face: 'atkinson' })).attributes['data-face']).toBe('atkinson');
+		expect(rootLook(parseLook({ face: 'inter' })).attributes['data-face']).toBeNull();
 	});
 
 	it('following the device removes the mode attribute', () => {
@@ -133,7 +138,8 @@ describe('applyLook', () => {
 				accentHue: 30,
 				corners: 2,
 				photoGap: 1,
-				textScale: 1.2
+				textScale: 1.2,
+				face: 'atkinson'
 			}),
 			root
 		);

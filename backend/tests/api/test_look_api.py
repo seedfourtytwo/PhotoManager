@@ -14,6 +14,7 @@ DEFAULTS = {
     "corners": None,
     "photoGap": None,
     "textScale": 1,
+    "face": "inter",
     "thumbSize": "medium",
     "showToday": True,
     "startPage": "today",
@@ -37,6 +38,7 @@ WARM = {
     "corners": 6,
     "photoGap": 4,
     "textScale": 1.15,
+    "face": "atkinson",
     "thumbSize": "large",
     "showToday": True,
     "startPage": "library",
@@ -105,6 +107,7 @@ def test_a_home_with_nothing_on_it_is_refused(admin: TestClient) -> None:
     [
         {"mode": "light", "accentHue": 200},
         {"theme": "album"},
+        {"face": "atkinson"},  # an admin gives the larger text face
         {"mode": "light", "css": "x"},
         {},
         ["light"],
@@ -163,6 +166,16 @@ def test_an_admin_sets_any_accounts_look_and_that_account_gets_it(admin: TestCli
     assert gran.get("/api/me/look").json() == DEFAULTS
     assert admin.put(_look_url(admin, "gran"), json={"textScale": 1.25}).status_code == 200
     assert gran.get("/api/me/look").json() == {**DEFAULTS, "textScale": 1.25}
+
+
+def test_an_admin_gives_an_account_the_larger_text_face(admin: TestClient) -> None:
+    lea = add_user(admin, "lea")
+    assert admin.put(_look_url(admin, "lea"), json={"face": "atkinson"}).status_code == 200
+    assert lea.get("/api/me/look").json() == {**DEFAULTS, "face": "atkinson"}
+    assert refusal(admin.put(_look_url(admin, "lea"), json={"face": "comic"})) == (
+        422,
+        {"detail": "'face' must be one of: inter, atkinson"},
+    )
 
 
 def test_an_admin_sets_their_own_look(admin: TestClient) -> None:

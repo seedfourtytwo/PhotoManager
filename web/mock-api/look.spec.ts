@@ -81,6 +81,23 @@ describe('the look in the mock, as the backend serves it (contract v1.5)', () =>
 		expect(await admin.setAccountLook(me, {})).toEqual(DEFAULT_LOOK);
 	});
 
+	it('an admin gives an account the larger text face; the account cannot', async () => {
+		const admin = await mock.signedIn();
+		const partner = await mock.signedIn('partner', '2345');
+		const partnerId = (await admin.users()).find((u) => u.username === 'partner')!.id;
+		expect((await admin.setAccountLook(partnerId, { face: 'atkinson' })).face).toBe('atkinson');
+		expect((await partner.myLook()).face).toBe('atkinson');
+		await expect(
+			admin.setAccountLook(partnerId, { face: 'comic' as 'inter' })
+		).rejects.toMatchObject({ status: 422, message: expect.stringContaining("'face'") });
+		const refused = await partner.raw('/api/me/look', {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ face: 'inter' })
+		});
+		expect(refused.status).toBe(422);
+	});
+
 	it('a reset of the mock forgets every look', async () => {
 		const admin = await mock.signedIn();
 		await admin.setMyMode('light');

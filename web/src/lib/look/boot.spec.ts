@@ -57,6 +57,8 @@ describe('the first-paint script', () => {
 		['the defaults', cached({})],
 		['a light Album look', cached({ theme: 'album', mode: 'light' })],
 		['following the device', cached({ mode: 'system' })],
+		['the larger text face', cached({ face: 'atkinson' })],
+		['a face this build does not know', raw({ face: 'dyslexic', theme: 'album' })],
 		['every dial', cached({ accentHue: 200, corners: 6, photoGap: 4, textScale: 1.15 })],
 		['dials at zero', cached({ accentHue: 0, corners: 0, photoGap: 0, textScale: 0.9 })],
 		['the old pa.theme setting alone', { 'pa.theme': 'light' }],
