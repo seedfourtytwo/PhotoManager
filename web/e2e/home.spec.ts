@@ -479,6 +479,11 @@ test('home: Pinned shows two dozen at most, then See all opens the rest in the L
 		// as if many more were pinned than Home shows
 		await route.fulfill({ response, json: { ...answer, next_cursor: 'more' } });
 	});
+	// one pinned photo at least (the real backend's library starts with none)
+	const id = await freshUnpinned(page);
+	expect(
+		(await page.request.patch(`/api/assets/${id}/state`, { data: { pinned: true } })).ok()
+	).toBe(true);
 	await page.reload();
 	const pinned = page.getByRole('main').getByRole('region', { name: 'Pinned' });
 	await expect(pinned).toBeVisible();
