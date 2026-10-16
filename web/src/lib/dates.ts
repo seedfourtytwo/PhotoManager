@@ -144,6 +144,16 @@ export function formatLongDay(value: string): string {
 }
 
 /**
+ * What a date field says under a date it read month first. The field shows it day first, so
+ * the note quotes the numbers as they were written ("7/25/2019"), never the field's own text.
+ */
+export function monthFirstNote(written: string, value: string): string {
+	const numbers = NUMBERS.exec(written);
+	const day = formatLongDay(value);
+	return numbers ? `“${numbers[0]}” was read month first: ${day}` : `Read month first: ${day}`;
+}
+
+/**
  * What a piece of text says: a day (`YYYY-MM-DD`), a time of day (`HH:MM:SS`) or both.
  * `monthFirst` is true when numbers such as 7/25/2019 could only be read month first.
  */

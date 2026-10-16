@@ -52,12 +52,14 @@ export function simpleChoices(edited: boolean): { value: Simple; label: string; 
 	];
 }
 
-/** The plain choice these options amount to, or null when they were set by hand to something else. */
-export function simpleOf(options: DownloadOptions): Simple | null {
-	const found = (Object.keys(SIMPLE) as Simple[]).find(
-		(key) => SIMPLE[key].format === options.format && SIMPLE[key].max_edge === options.max_edge
-	);
-	return found ?? null;
+/**
+ * The plain choice these options read as, whatever was set under More options: the choices
+ * are sizes, so a long edge is Smaller and none is Full size (With edits when the photos have
+ * edits and a made file carries them). Never none, so the dialog never shows nothing chosen.
+ */
+export function simpleOf(options: DownloadOptions, edited: boolean): Simple {
+	if (options.max_edge !== null) return 'small';
+	return edited && options.format !== 'original' ? 'edited' : 'full';
 }
 
 export function applySimple(options: DownloadOptions, choice: Simple): DownloadOptions {

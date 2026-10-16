@@ -77,7 +77,7 @@ describe('the plain choices the dialog opens on', () => {
 	});
 
 	it('the default is full size: the file as it was taken', () => {
-		expect(simpleOf(DEFAULT_OPTIONS)).toBe('full');
+		expect(simpleOf(DEFAULT_OPTIONS, false)).toBe('full');
 		expect(isUntouched(applySimple({ ...DEFAULT_OPTIONS, max_edge: 1080 }, 'full'))).toBe(true);
 	});
 
@@ -87,8 +87,8 @@ describe('the plain choices the dialog opens on', () => {
 			format: 'jpeg',
 			max_edge: null
 		});
-		expect(simpleOf(applySimple(DEFAULT_OPTIONS, 'small'))).toBe('small');
-		expect(simpleOf(applySimple(DEFAULT_OPTIONS, 'edited'))).toBe('edited');
+		expect(simpleOf(applySimple(DEFAULT_OPTIONS, 'small'), true)).toBe('small');
+		expect(simpleOf(applySimple(DEFAULT_OPTIONS, 'edited'), true)).toBe('edited');
 	});
 
 	it('a choice changes format and size only', () => {
@@ -99,13 +99,31 @@ describe('the plain choices the dialog opens on', () => {
 			folders: 'year'
 		} as const;
 		expect(applySimple(mine, 'small')).toEqual({ ...mine, format: 'jpeg', max_edge: 2048 });
-		expect(simpleOf({ ...mine, quality: 40 })).toBe('full');
+		expect(simpleOf({ ...mine, quality: 40 }, false)).toBe('full');
 	});
 
-	it('anything set by hand that is none of them is no plain choice', () => {
-		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'png' })).toBeNull();
-		expect(simpleOf({ ...DEFAULT_OPTIONS, max_edge: 2048 })).toBeNull();
-		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'jpeg', max_edge: 1280 })).toBeNull();
+	// "More options" never leaves the plain choices with none chosen: they are sizes, so
+	// whatever is set by hand is still one of them.
+	it('what is set by hand still reads as a plain choice, by its size', () => {
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'png' }, false)).toBe('full');
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'jpeg' }, false)).toBe('full');
+		expect(simpleOf({ ...DEFAULT_OPTIONS, max_edge: 2048 }, false)).toBe('small');
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'jpeg', max_edge: 1280 }, false)).toBe('small');
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'webp', max_edge: 3840 }, true)).toBe('small');
+	});
+
+	it('with edits, a full-size made file is “With edits” and the original is “Full size”', () => {
+		expect(simpleOf({ ...DEFAULT_OPTIONS, format: 'png' }, true)).toBe('edited');
+		expect(simpleOf(DEFAULT_OPTIONS, true)).toBe('full');
+	});
+
+	it('the plain choice it reads as is always one that is offered', () => {
+		for (const edited of [false, true])
+			for (const format of ['original', 'jpeg', 'png', 'webp'] as const)
+				for (const max_edge of [null, 3840, 1080]) {
+					const offered = simpleChoices(edited).map((c) => c.value);
+					expect(offered).toContain(simpleOf({ ...DEFAULT_OPTIONS, format, max_edge }, edited));
+				}
 	});
 });
 

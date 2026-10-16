@@ -188,7 +188,7 @@ describe('DownloadDialog', () => {
 		await expect.element(choice('Full size')).toBeChecked();
 		await expect.element(choice('Smaller')).not.toBeChecked();
 		await expect.element(choice('With edits')).not.toBeInTheDocument();
-		await expect.element(page.getByRole('checkbox', { name: 'Remove location' })).toBeVisible();
+		await expect.element(page.getByRole('switch', { name: 'Remove location' })).toBeVisible();
 		expect(document.querySelectorAll('input[type=radio]').length).toBe(2);
 		await expect.element(page.getByRole('combobox', { name: 'Folders' })).not.toBeInTheDocument();
 
@@ -221,18 +221,37 @@ describe('DownloadDialog', () => {
 		);
 	});
 
-	it('a format picked by hand is none of the plain choices, and picking one again wins', async () => {
+	// The plan's bug: More options left both plain choices unchecked, so the dialog looked broken.
+	it('More options never leaves both plain choices unchecked: they follow the size', async () => {
+		stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
+		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
+		await page.getByRole('button', { name: 'More options' }).click();
+		await expect.element(choice('Full size')).toBeChecked();
+		await choice('JPEG').click();
+		await expect.element(choice('Full size')).toBeChecked();
+		await choice('PNG').click();
+		await expect.element(choice('Full size')).toBeChecked();
+		await choice('1080').click();
+		await expect.element(choice('Smaller')).toBeChecked();
+		await expect.element(choice('Full size')).not.toBeChecked();
+		await choice('Custom').click();
+		await expect.element(choice('Smaller')).toBeChecked();
+	});
+
+	it('picking a plain choice again wins over what was set by hand', async () => {
 		const sent = stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
 		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
 		await page.getByRole('button', { name: 'More options' }).click();
 		await choice('PNG').click();
-		await expect.element(choice('Full size')).not.toBeChecked();
-		await expect.element(choice('Smaller')).not.toBeChecked();
 		await choice('Full size').click();
 		await expect.element(choice('Original file (without edits)')).toBeChecked();
 		await vi.waitFor(() =>
 			expect(sent.at(-1)?.body).toMatchObject({ format: 'original', max_edge: null })
 		);
+		await choice('1080').click();
+		await choice('Smaller').click();
+		await expect.element(choice('2048')).toBeChecked();
+		await expect.element(choice('JPEG')).toBeChecked();
 	});
 });
 

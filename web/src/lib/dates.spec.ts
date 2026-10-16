@@ -8,6 +8,7 @@ import {
 	formatTaken,
 	isValidLocal,
 	mergeReading,
+	monthFirstNote,
 	previewDateChange,
 	readDateText,
 	shiftLocal,
@@ -372,5 +373,27 @@ describe('mergeReading (a part the text did not give is kept from the field)', (
 		expect(mergeReading(reading('2001-02-03', '04:05:06'), '2019-07-04', false)).toBe('2001-02-03');
 		expect(mergeReading(reading('2001-02-03', null), null, false)).toBe('2001-02-03');
 		expect(mergeReading(reading(null, '04:05:06'), '2019-07-04', false)).toBeNull();
+	});
+});
+// The field then shows the date day first ("25/07/2019"), so a note that only said "Read as
+// month first: 25 July 2019" beside it contradicted what was on screen: 25 is not a month.
+describe('monthFirstNote', () => {
+	it('quotes the numbers as they were written, then the day in words', () => {
+		expect(monthFirstNote('7/25/2019 6:30 PM', '2019-07-25T18:30:00')).toBe(
+			'“7/25/2019” was read month first: 25 July 2019'
+		);
+		expect(monthFirstNote('Taken 07-25-19', '2019-07-25')).toBe(
+			'“07-25-19” was read month first: 25 July 2019'
+		);
+	});
+
+	it('never quotes what the field shows day first', () => {
+		const note = monthFirstNote('7/25/2019', '2019-07-25');
+		expect(note).not.toContain('25/07');
+		expect(note).not.toMatch(/“25/);
+	});
+
+	it('without numbers to quote it still names the day', () => {
+		expect(monthFirstNote('', '2019-07-25')).toBe('Read month first: 25 July 2019');
 	});
 });
