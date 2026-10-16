@@ -63,6 +63,11 @@ export function rediscoverNote(asset: AssetOut): string {
 	return [day, place].filter(Boolean).join(', ');
 }
 
+/** The small label over a hero's title: "Rediscover · 2016"; a guessed year is not told. */
+export function heroEyebrow(name: string, asset: AssetOut): string {
+	return guessed(asset) ? name : `${name} · ${asset.taken_at.slice(0, 4)}`;
+}
+
 /** The years a story of single photos spans: "2016", "2012 to 2019"; guessed dates left out. */
 export function storyYears(items: readonly AssetOut[]): string {
 	const years = items.filter((a) => !guessed(a)).map((a) => Number(a.taken_at.slice(0, 4)));
@@ -118,11 +123,14 @@ export function memoryLine(memory: Memory): string {
 		: dateRange(memory.from, memory.to);
 }
 
-/** "42 photos arrived from Léa’s iPhone." Several folders are joined as one says them. */
+/**
+ * "42 photos arrived from Léa’s iPhone": the line under New this week's title, so no full stop.
+ * Several folders are joined as one says them.
+ */
 export function arrivalsSentence(arrivals: NewArrivals): string {
 	const what = `${photos(arrivals.count)} arrived`;
 	const from = inWords(arrivals.sources.map((source) => source.label));
-	return from ? `${what} from ${from}.` : `${what} this week.`;
+	return from ? `${what} from ${from}` : `${what} this week`;
 }
 
 /** Each block of Home by its name, as its heading says it. */

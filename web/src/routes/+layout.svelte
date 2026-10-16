@@ -21,6 +21,7 @@
 	import { movePage } from '$lib/motion';
 	import { pageMove } from '$lib/nav';
 	import { arrival, landing, mayLand } from '$lib/start-page.svelte';
+	import { standalone, statusPlate } from '$lib/state/status-plate.svelte';
 
 	let { children } = $props();
 
@@ -50,7 +51,11 @@
 		if (move) return movePage(move, navigation.complete);
 	});
 
+	/** Opened from the Home Screen: the status-bar plate may be needed (spec flight/home §12). */
+	let app = $state(false);
+
 	onMount(() => {
+		app = standalone();
 		look.show();
 		forgetOldDensity();
 		if (!bare) void session.load();
@@ -154,6 +159,13 @@
 			{#if !holding}{@render children()}{/if}
 		</main>
 		<InstallTip />
+		<!-- Keeps the white clock readable over a light page when Photos runs as an app. -->
+		<div
+			class="status-plate"
+			class:shown={app && !statusPlate.covered}
+			aria-hidden="true"
+			data-status-plate
+		></div>
 	</div>
 {:else if session.error}
 	<main id="main" class="bare">
@@ -201,6 +213,26 @@
 		min-width: 0;
 		outline: none;
 		padding-top: var(--top);
+	}
+	/* Under the clock, the light look only (dark pages need none); zero tall in a browser tab. */
+	.status-plate {
+		display: none;
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: calc(var(--z-bar) + 1);
+		height: env(safe-area-inset-top, 0px);
+		background: linear-gradient(rgb(0 0 0 / 0.55), rgb(0 0 0 / 0.25));
+		pointer-events: none;
+	}
+	:global(:root[data-theme='light']) .status-plate.shown {
+		display: block;
+	}
+	@media (prefers-color-scheme: light) {
+		:global(:root:not([data-theme='dark'])) .status-plate.shown {
+			display: block;
+		}
 	}
 	.bare {
 		max-width: 24rem;

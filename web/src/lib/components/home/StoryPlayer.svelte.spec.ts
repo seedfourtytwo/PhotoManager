@@ -14,9 +14,10 @@ function play(list: AssetOut[] | null = photos) {
 	const onclose = vi.fn();
 	const view = render(StoryPlayer, {
 		title: 'Lisbon, July 2024',
-		dates: '12 to 19 July 2024',
+		dates: 'Memories · 12 to 19 July 2024',
 		photos: list,
 		poster,
+		filter: { from: '2024-07-12', to: '2024-07-19', guessed_date: false as const },
 		onclose
 	});
 	return { onclose, view };
@@ -39,10 +40,10 @@ afterEach(() => {
 });
 
 describe('StoryPlayer', () => {
-	it('shows the poster, the title and the dates while the photos come; Close closes', async () => {
+	it('shows the poster, the title and its label while the photos come; Close closes', async () => {
 		const { onclose } = play(null);
 		await expect.element(player()).toBeVisible();
-		await expect.element(player().getByText('12 to 19 July 2024')).toBeVisible();
+		await expect.element(player().getByText('Memories · 12 to 19 July 2024')).toBeVisible();
 		expect(shown()).toBe(2);
 		expect(segments()).toBe(0);
 		await page.getByRole('button', { name: 'Close' }).click();
@@ -63,16 +64,81 @@ describe('StoryPlayer', () => {
 		expect(onclose).not.toHaveBeenCalled();
 	});
 
-	it('the next one after the last photo closes the story', async () => {
+	it('after the last photo it stays on it with Play again and the period in the Library', async () => {
 		const { onclose } = play();
-		for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Next photo' }).click();
-		expect(shown()).toBe(3);
+		for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Next photo' }).click();
 		expect(onclose).not.toHaveBeenCalled();
-		await page.getByRole('button', { name: 'Next photo' }).click();
-		expect(onclose).toHaveBeenCalled();
+		expect(shown()).toBe(3);
+		await expect
+			.element(player().getByRole('link', { name: 'Show in Library' }))
+			.toHaveAttribute('href', '/?from=2024-07-12&to=2024-07-19&guessed_date=false');
+		await expect
+			.element(player().getByRole('button', { name: 'Next photo' }))
+			.not.toBeInTheDocument();
+		await player().getByRole('button', { name: 'Play again' }).click();
+		expect(shown()).toBe(1);
+		await expect
+			.element(player().getByRole('button', { name: 'Play again' }))
+			.not.toBeInTheDocument();
+		expect(document.querySelectorAll('.story .fill.done').length).toBe(0);
 	});
 
-	it('goes on by itself, each photo for its time, and closes after the last', async () => {
+	it('Rediscover’s single photos have no period: no Show in Library at the end', async () => {
+		render(StoryPlayer, {
+			title: 'Five years ago',
+			dates: 'Rediscover · 2016 to 2021',
+			photos: [photos[0]],
+			poster: photos[0],
+			onclose: vi.fn()
+		});
+		await page.getByRole('button', { name: 'Next photo' }).click();
+		await expect.element(page.getByRole('button', { name: 'Play again' })).toBeVisible();
+		await expect
+			.element(page.getByRole('link', { name: 'Show in Library' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('true black, no grey bars: a photo the screen’s way round fills it, another sits on itself, blurred', async () => {
+		const wide = makeAsset(7, '2024-07-17T10:00:00', 1600, 900);
+		const tall = makeAsset(8, '2024-07-18T10:00:00', 900, 1600);
+		render(StoryPlayer, {
+			title: 'Two ways',
+			dates: '',
+			photos: [wide, tall],
+			poster: wide,
+			onclose: vi.fn()
+		});
+		await expect.element(page.getByRole('dialog', { name: 'Two ways' })).toBeVisible();
+		const landscape = innerWidth > innerHeight;
+		const top = () => [...document.querySelectorAll('.story .layer')].at(-1)!;
+		expect(getComputedStyle(document.querySelector('.story')!).backgroundColor).toBe(
+			'rgb(0, 0, 0)'
+		);
+		expect(
+			top()
+				.querySelector('.photo')!
+				.classList.contains(landscape ? 'cover' : 'contain')
+		).toBe(true);
+		expect(top().querySelector('.backdrop') !== null).toBe(!landscape);
+		await page.getByRole('button', { name: 'Next photo' }).click();
+		expect(
+			top()
+				.querySelector('.photo')!
+				.classList.contains(landscape ? 'contain' : 'cover')
+		).toBe(true);
+		expect(top().querySelector('.backdrop') !== null).toBe(landscape);
+	});
+
+	it('each photo moves its own way, the first two differently', async () => {
+		play();
+		await expect.element(player()).toBeVisible();
+		const pan = () => [...document.querySelectorAll('.story .layer')].at(-1)!.className;
+		expect(pan()).toMatch(/pan-in/);
+		await page.getByRole('button', { name: 'Next photo' }).click();
+		expect(pan()).toMatch(/pan-out/);
+	});
+
+	it('goes on by itself, each photo for its time, and stops at the end', async () => {
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
 		const { onclose } = play();
 		await tick();
@@ -88,7 +154,22 @@ describe('StoryPlayer', () => {
 		expect(shown()).toBe(3);
 		vi.advanceTimersByTime(PHOTO_MS);
 		await tick();
-		expect(onclose).toHaveBeenCalled();
+		expect(onclose).not.toHaveBeenCalled();
+		expect(document.querySelector('.story.ended')).not.toBeNull();
+	});
+
+	it('its buttons fade once the pointer rests, and come back when it moves', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+		play();
+		await tick();
+		const story = document.querySelector<HTMLElement>('.story')!;
+		expect(story.classList.contains('idle')).toBe(false);
+		vi.advanceTimersByTime(2600);
+		await tick();
+		expect(story.classList.contains('idle')).toBe(true);
+		story.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+		await tick();
+		expect(story.classList.contains('idle')).toBe(false);
 	});
 
 	it('Pause holds it where it is; Play goes on with the time it had left', async () => {
@@ -151,7 +232,7 @@ describe('StoryPlayer', () => {
 		finger('pointerdown', 100);
 		finger('pointermove', 140);
 		await tick();
-		expect(stage.style.transform).toBe('translateY(40px)');
+		expect(stage.style.transform).toMatch(/^translateY\(40px\) scale\(0\.98/);
 		await new Promise((done) => setTimeout(done, 250));
 		finger('pointerup', 140);
 		await tick();

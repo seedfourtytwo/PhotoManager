@@ -82,3 +82,17 @@ export function step(clock: Clock, by: 1 | -1, now: number): Clock | null {
 	if (index >= clock.count) return null;
 	return { ...clock, index, shown: 0, since: clock.since === null ? null : now };
 }
+
+/**
+ * How a photo sits on the stage: filling it (cropped) when it is the screen's way round, whole
+ * over a blurred copy of itself when not, so there are never grey bars. A square one shows whole.
+ */
+export function fitFor(photo: number, screen: number): 'cover' | 'contain' {
+	return (photo > 1 && screen > 1) || (photo < 1 && screen < 1) ? 'cover' : 'contain';
+}
+
+export type Pan = 'in' | 'out' | 'left' | 'right';
+const PANS: readonly Pan[] = ['in', 'out', 'left', 'right'];
+
+/** The slow move of the photo at `index`: one of four in turn, the same each time it is told. */
+export const panFor = (index: number): Pan => PANS[index % PANS.length];

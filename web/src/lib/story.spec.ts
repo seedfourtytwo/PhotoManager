@@ -4,7 +4,9 @@ import {
 	PHOTO_MS,
 	STORY_LIMIT,
 	collect,
+	fitFor,
 	left,
+	panFor,
 	pause,
 	resume,
 	spread,
@@ -132,5 +134,23 @@ describe('collect: the photos of a period, oldest first', () => {
 		const some = await collect(ask, 2);
 		expect(some.map((a) => a.id)).toEqual([2, 3, 4, 5]);
 		expect(asked).toEqual([null, 'a']);
+	});
+});
+
+describe('fitFor: a photo fills the screen when it has its shape, else shows whole', () => {
+	it.each([
+		[1.5, 16 / 9, 'cover'],
+		[0.75, 390 / 844, 'cover'],
+		[1.5, 390 / 844, 'contain'],
+		[0.75, 16 / 9, 'contain'],
+		[1, 1.6, 'contain']
+	] as const)('a %d photo on a %d screen: %s', (photo, screen, fit) => {
+		expect(fitFor(photo, screen)).toBe(fit);
+	});
+});
+
+describe('panFor: each photo moves its own way, the same each time', () => {
+	it('four moves in turn, by its place in the story', () => {
+		expect([0, 1, 2, 3, 4].map(panFor)).toEqual(['in', 'out', 'left', 'right', 'in']);
 	});
 });
