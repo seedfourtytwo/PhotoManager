@@ -1,7 +1,7 @@
 /** Photos and albums as the API sends them to one user. */
 import type { AlbumCover, AlbumSummary, AssetDetail, AssetOut } from '../src/lib/api/types.ts';
 import { live, setFor, type AccessHelpers } from './access.ts';
-import { editedSize } from './images.ts';
+import { editedSize, skyOf } from './images.ts';
 import { displayName } from './names.ts';
 import type { MockAlbum, MockAsset, MockUser, World } from './types.ts';
 
@@ -17,6 +17,7 @@ export function shapeHelpers(h: World & AccessHelpers) {
 			height: size.height,
 			kind: a.kind,
 			thumb: { url: `/api/assets/${a.id}/thumb?v=${a.edit_version}` },
+			colour: skyOf(a),
 			preview_ready: true,
 			favourite: setFor(h.state().favourites, user.id).has(a.id),
 			pinned: setFor(h.state().pinned, user.id).has(a.id),

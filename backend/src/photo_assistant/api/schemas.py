@@ -228,6 +228,7 @@ class AssetOut(BaseModel):
     height: int | None
     kind: str
     thumb: ImageRef | None
+    colour: str | None  # dominant colour "#rrggbb", a placeholder until the thumbnail loads
     preview_ready: bool
     favourite: bool
     pinned: bool
@@ -254,6 +255,7 @@ class AssetOut(BaseModel):
             height=height,
             kind=a.kind.value,
             thumb=thumb,
+            colour=a.colour,
             preview_ready=a.preview_path is not None,
             favourite=v.favourite,
             pinned=v.pinned,

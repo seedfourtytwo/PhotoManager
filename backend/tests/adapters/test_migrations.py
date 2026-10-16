@@ -84,7 +84,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 33
+    assert _latest() == 34
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:
@@ -539,11 +539,39 @@ def test_photos_from_before_0030_come_through_with_no_exposure(tmp_path: Path) -
     new_columns = ("f_number", "exposure_time", "iso", "focal_length")
     rows = upgraded.execute("SELECT * FROM asset ORDER BY id").fetchall()
     assert [tuple(r)[: len(before[0])] for r in rows] == before, "nothing else changed"
-    assert [r.keys()[len(before[0]) :] for r in rows] == [list(new_columns)] * 2
+    added = slice(len(before[0]), len(before[0]) + len(new_columns))  # later ones follow
+    assert [r.keys()[added] for r in rows] == [list(new_columns)] * 2
     assert all(r[column] is None for r in rows for column in new_columns)
     repo = SqliteRepository(Database(upgraded, db))
     assert [i for i, _ in repo.assets_without_exposure(0, 10)] == [1, 2]
     assert len(list((tmp_path / "backups").glob(f"library-v{previous}-*.db"))) == 1
+
+
+def test_photos_from_before_0034_have_no_colour_until_the_colour_job_reads_one(
+    tmp_path: Path,
+) -> None:
+    """0034: the dominant colour is one nullable column; the colour job finds the photos
+    with a thumbnail and no colour through its own index."""
+    db = tmp_path / "library.db"
+    _make_v3_library(db)
+    conn = sqlite3.connect(db)
+    previous = max(n for n, _ in _migrations() if n < 34)
+    for number, sql in _migrations():
+        if 3 < number <= previous:
+            conn.executescript(f"BEGIN;{sql};PRAGMA user_version = {number};COMMIT;")
+    conn.execute("UPDATE asset SET thumb_path = NULL WHERE id = 2")  # its thumbnail is lost
+    conn.commit()
+    conn.close()
+
+    upgraded = open_database(db, backup_dir=tmp_path / "backups")
+
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == _latest()
+    assert [r["colour"] for r in upgraded.execute("SELECT colour FROM asset")] == [None, None]
+    repo = SqliteRepository(Database(upgraded, db))
+    assert [i for i, _ in repo.assets_without_colour(0, 10)] == [1], "no thumbnail, no colour"
+    repo.set_colours([(1, "#336699")])
+    assert repo.assets_without_colour(0, 10) == []
+    assert repo.get_asset(1).colour == "#336699"  # type: ignore[union-attr]
 
 
 def test_devices_from_before_0031_keep_nothing_and_their_rules_go_with_them(

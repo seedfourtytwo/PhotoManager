@@ -223,11 +223,13 @@ New sources default to `{everyone: "download", users: []}`.
 `AssetOut` (list item):
 ```
 {id, taken_at, tz_offset_minutes, date_source, width, height, kind,
- thumb: {url} | null, preview_ready, favourite, pinned, hidden, private,
+ thumb: {url} | null, colour: "#rrggbb" | null, preview_ready, favourite, pinned, hidden, private,
  place: {country, region, city} | null, edited: bool, variant_of: id|null,
  group_id: id|null}          # bursts / near-duplicates share a group
 ```
 `thumb.url` and preview URLs include `?v=<edit version>` so browsers re-fetch after an edit.
+`colour` (v1.16) is the photo's dominant colour, read from its thumbnail (before any edit): paint
+it while the thumbnail loads. `null` until the server has read it (seconds after an import).
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -737,6 +739,16 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Backups | `Run.error_kind` and `problems[].error_kind` in `/api/backups/health` (see "Backups" above). | `BackupErrorKind`; a headline in plain words per kind, the raw `error`/`message` behind "Details". |
+
+---
+
+# v1.16 changes (placeholder colour, Flight UI)
+
+Additions only. Migration `0034` (`asset.colour`).
+
+| Area | Change | Web impact |
+|---|---|---|
+| Assets | `AssetOut.colour`: the dominant colour `"#rrggbb"`, or `null` until read (see "Assets" above). Everywhere an `AssetOut` is answered (timeline, albums, Home, search, trash…). | `AssetOut.colour`; grids paint it behind a loading thumbnail instead of a flat fill. |
 
 ---
 

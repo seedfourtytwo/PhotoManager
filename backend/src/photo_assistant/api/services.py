@@ -48,7 +48,14 @@ from photo_assistant.app.derivatives import GeneratePreview
 from photo_assistant.app.device_sync import DeviceSync
 from photo_assistant.app.downloads import Downloads
 from photo_assistant.app.editing import RENDER_EDIT_JOB, Editor
-from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB, GeocodeAssets, GroupSimilar
+from photo_assistant.app.enrich import (
+    COLOUR_JOB,
+    GEOCODE_JOB,
+    GROUP_JOB,
+    GeocodeAssets,
+    GroupSimilar,
+    PaintColours,
+)
 from photo_assistant.app.exposure_backfill import EXPOSURE_BACKFILL_JOB, BackfillExposure
 from photo_assistant.app.import_source import PREVIEW_JOB, ImportSettings, ImportSource
 from photo_assistant.app.ml_jobs import CLUSTER_FACES
@@ -94,12 +101,14 @@ class Services:
     stop_watching: StopWatching  # removes a source; the folder itself is never touched
 
     def enqueue_enrichment(self) -> None:
-        """After an import: places and groups for whatever is new (both are idempotent)."""
+        """After an import: places, groups and colours for whatever is new (all idempotent)."""
         self.repo.enqueue_once(GEOCODE_JOB)
         self.repo.enqueue_once(GROUP_JOB)
+        self.repo.enqueue_once(COLOUR_JOB)
 
     def start_background(self) -> None:
         """Server only (never the CLI): the job worker and the periodic housekeeping."""
+        self.repo.enqueue_once(COLOUR_JOB)  # photos from before colours were kept get theirs
         self.worker.start()
         self.ops.start()
 
@@ -160,6 +169,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
         outcome = integrations.sync_source.run(int(str(payload["source_id"])))
         repo.enqueue_once(GEOCODE_JOB)
         repo.enqueue_once(GROUP_JOB)
+        repo.enqueue_once(COLOUR_JOB)
         return outcome
 
     rechecks = ScheduledChecks(repo, clock)
@@ -225,6 +235,7 @@ def build_services(settings: Settings, role: str = "cli") -> Services:
             ),
             SCAN_JOB_KIND: scan,  # one handler: pulls rclone sources, then imports any kind
             GEOCODE_JOB: GeocodeAssets(repo, OfflineGeocoder()),
+            COLOUR_JOB: PaintColours(repo, renderer, store.absolute),
             GROUP_JOB: GroupSimilar(
                 repo, ImageHashPhash(), lambda rel: store.absolute(rel), review=review
             ),

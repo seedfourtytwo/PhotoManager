@@ -1,6 +1,7 @@
 """Timeline filters, facets, calendar, map, places, groups, per-user state, date fixes, trash."""
 
 import os
+import re
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -174,6 +175,15 @@ def test_places_list_countries_and_cities_with_cover_and_centre(lib: Lib) -> Non
     after = c.get("/api/places").json()
     assert [(p["name"], p["count"]) for p in after] == [("France", 2), ("Paris", 2)], "as facets"
     assert after[0]["cover"]["asset_id"] == ids["paris2"]
+
+
+def test_every_imported_photo_has_its_dominant_colour(shared_lib: Lib) -> None:
+    c, ids = shared_lib.admin, shared_lib.ids
+    items = c.get("/api/assets").json()["items"]
+    assert len(items) == len(ids)
+    assert all(re.fullmatch(r"#[0-9a-f]{6}", a["colour"]) for a in items), items
+    colour = next(a["colour"] for a in items if a["id"] == ids["paris1"])
+    assert c.get(f"/api/assets/{ids['paris1']}").json()["colour"] == colour
 
 
 def test_bursts_share_a_group(shared_lib: Lib) -> None:

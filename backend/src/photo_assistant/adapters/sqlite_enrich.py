@@ -1,4 +1,5 @@
-"""EnrichmentStore and ExposureStore on SQLite: places, perceptual hashes, groups, exposure."""
+"""EnrichmentStore, ColourStore and ExposureStore on SQLite: places, perceptual hashes, groups,
+dominant colours, exposure."""
 
 from collections.abc import Sequence
 from datetime import datetime
@@ -63,6 +64,20 @@ class EnrichMixin(SqliteBase):
                 """UPDATE asset SET f_number = ?, exposure_time = ?, iso = ?, focal_length = ?
                    WHERE id = ?""",
                 [(e.f_number, e.exposure_time, e.iso, e.focal_length, i) for i, e in exposures],
+            )
+
+    def assets_without_colour(self, after_id: int, limit: int) -> list[tuple[int, str]]:
+        rows = self._all(
+            """SELECT id, thumb_path FROM asset INDEXED BY asset_without_colour
+               WHERE id > ? AND colour IS NULL AND thumb_path IS NOT NULL ORDER BY id LIMIT ?""",
+            (after_id, limit),
+        )
+        return [(int(r["id"]), str(r["thumb_path"])) for r in rows]
+
+    def set_colours(self, colours: Sequence[tuple[int, str]]) -> None:
+        with self._transaction():
+            self._conn.executemany(
+                "UPDATE asset SET colour = ? WHERE id = ?", [(c, i) for i, c in colours]
             )
 
     def set_phash(self, asset_id: int, phash: str) -> None:

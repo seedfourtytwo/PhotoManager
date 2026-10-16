@@ -78,6 +78,7 @@ class Asset(NewAsset):
     preview_path: str | None = None
     variant_of: int | None = None  # e.g. an iPhone IMG_E edit points at its original
     thumb_size: tuple[int, int] | None = None  # unknown for photos migrated from M1
+    colour: str | None = None  # dominant colour "#rrggbb" (domain/colour.py); None: not yet
 
 
 class Outcome(StrEnum):

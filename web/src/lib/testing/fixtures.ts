@@ -16,6 +16,7 @@ export const makeAsset = (
 	height,
 	kind: 'photo',
 	thumb: { url: `/api/assets/${id}/thumb` },
+	colour: null,
 	preview_ready: true,
 	favourite: false,
 	pinned: false,

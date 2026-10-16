@@ -16,9 +16,12 @@ function mix(hex: string, other: string, t: number): string {
 	return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
 }
 
+/** The sky fills most of a synthetic photo: it stands for its dominant colour. */
+export const skyOf = (asset: MockAsset): string => asset.place?.sky ?? '#a0a8b0';
+
 function scene(asset: MockAsset, w: number, h: number): string {
 	const r = rng(asset.seed);
-	const sky = asset.place?.sky ?? '#a0a8b0';
+	const sky = skyOf(asset);
 	const ground = asset.place?.ground ?? '#6c6a60';
 	const dusk = r.next() < 0.3;
 	const top = dusk ? mix(sky, '#2a2440', 0.55) : mix(sky, '#ffffff', 0.25);
