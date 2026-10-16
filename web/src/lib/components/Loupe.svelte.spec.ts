@@ -661,6 +661,8 @@ describe('Loupe: Close and Details', () => {
 			);
 		// An admin also reads the file, closed until asked for.
 		await vi.waitFor(() => expect(cards()).toEqual(['When and where', 'Camera', 'File']));
+		// It scrolls: a keyboard can scroll it only once it has the focus (axe).
+		expect((details.element() as HTMLElement).tabIndex).toBe(0);
 		// No loose line of key hints: those are under More, "Keyboard shortcuts".
 		expect(details.element().textContent).not.toMatch(/Esc|← →/);
 		await view.rerender({ index: 1 });

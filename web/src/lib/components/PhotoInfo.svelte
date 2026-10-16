@@ -62,7 +62,11 @@
 <!-- Grouped cards (spec flight/library-search-viewer.md §6): when and where, who, the map,
      the camera, the albums, and the file for an admin. A glass panel beside the photo on a
      laptop; a sheet under the photo on a phone. -->
-<aside class="details glass" aria-labelledby={titleId} use:sheetDrag={onclose}>
+<!-- It scrolls when the cards are taller than it, and a keyboard scrolls only what has the
+     focus: it takes the focus itself, as it may hold nothing else that does (axe
+     scrollable-region-focusable). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<aside class="details glass" aria-labelledby={titleId} tabindex="0" use:sheetDrag={onclose}>
 	<div class="grab" data-grab aria-hidden="true"></div>
 	<h2 id={titleId}>Details</h2>
 
