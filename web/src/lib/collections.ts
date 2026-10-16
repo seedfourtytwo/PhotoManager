@@ -1,5 +1,5 @@
 /** What each row of the Collections page shows: who, what and where, in which order. */
-import type { AlbumSummary, Facets, Person, Place } from './api/types';
+import type { AlbumSummary, Facets, Person, PlaceSummary } from './api/types';
 import { filtersToQuery } from './filters';
 import type { IconName } from './icons';
 
@@ -36,20 +36,30 @@ export function placeStrip(places: Facets['places'], limit = STRIP_LIMIT): Place
 		.map((place) => ({ ...place, href: `/${filtersToQuery({ place: place.name })}` }));
 }
 
-/** A place with where one of its photos was taken: that tells a country from a city. */
-export type SeenPlace = PlaceItem & { of: Place | null };
+/** A place's card: its name, its count, its newest photo, and the library filtered by it. */
+export type PlaceCard = PlaceItem & { cover: string | null };
 
-/** A country that is one city and nothing else says the same thing twice: the city stays. */
-export function withoutEchoes<T extends SeenPlace>(places: readonly T[]): T[] {
-	return places.filter(
-		(country) =>
-			!places.some(
-				(city) =>
-					city.name !== country.name &&
-					city.count === country.count &&
-					city.of?.country === country.name
-			)
-	);
+/**
+ * The places of `GET /api/places` (one answer, covers included) as cards, most photos first.
+ * A country that is one city and nothing else says the same thing twice: the city stays.
+ */
+export function placeCards(places: readonly PlaceSummary[], limit = STRIP_LIMIT): PlaceCard[] {
+	const echo = (country: PlaceSummary) =>
+		country.kind === 'country' &&
+		places.some(
+			(city) =>
+				city.kind === 'city' && city.country === country.name && city.count === country.count
+		);
+	return places
+		.filter((place) => place.name && place.count > 0 && !echo(place))
+		.sort((a, b) => b.count - a.count)
+		.slice(0, limit)
+		.map((place) => ({
+			name: place.name,
+			count: place.count,
+			href: `/${filtersToQuery({ place: place.name })}`,
+			cover: place.cover?.url ?? null
+		}));
 }
 
 /** The tiles at the end of Collections: what waits for a decision, and what was put aside. */

@@ -1,21 +1,14 @@
 <script lang="ts">
 	import type { AlbumSummary, Person } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
-	import {
-		STRIP_LIMIT,
-		albumStrip,
-		peopleStrip,
-		personName,
-		placeStrip,
-		withoutEchoes,
-		type SeenPlace
-	} from '$lib/collections';
+	import { albumStrip, peopleStrip, placeCards, type PlaceCard } from '$lib/collections';
 	import type { CollectionsRow } from '$lib/look';
-	import { formatCount } from '$lib/format';
 	import { collectionRows } from '$lib/nav';
+	import CardStrip from './CardStrip.svelte';
+	import CollectionCard from './CollectionCard.svelte';
+	import FaceBubble from './FaceBubble.svelte';
 	import Icon from './Icon.svelte';
 	import NewAlbumDialog from './NewAlbumDialog.svelte';
-	import Portrait from './Portrait.svelte';
 	import IconButton from './ui/IconButton.svelte';
 
 	/** The rows of the account's look, in its order. A row left out is not asked for. */
@@ -30,7 +23,7 @@
 	// null: not answered yet. A row that failed stays null and is named in `failed`.
 	let people = $state<Person[] | null>(null);
 	let albums = $state<AlbumSummary[] | null>(null);
-	let places = $state<(SeenPlace & { cover: string | null })[] | null>(null);
+	let places = $state<PlaceCard[] | null>(null);
 	let failed = $state<Partial<Record<CollectionsRow, true>>>({});
 	let creating = $state(false);
 
@@ -53,38 +46,23 @@
 	$effect(() => {
 		if (wantsAlbums) return load('albums', api.albums, (list) => (albums = albumStrip(list)));
 	});
+	// One request: every place with its count and its newest photo as the cover.
 	$effect(() => {
-		if (wantsPlaces) return load('places', seePlaces, (list) => (places = list));
+		if (wantsPlaces) return load('places', api.places, (list) => (places = placeCards(list)));
 	});
 
-	/** The places with the most photos, each with its newest photo. The photo is the cover,
-	    and says whether the name is a country or a city, so a country that is one city is not
-	    shown twice. More are asked for than shown, so dropping those leaves a full row. */
-	async function seePlaces() {
-		const facets = await api.facets({});
-		const seen = await Promise.all(
-			placeStrip(facets.places, STRIP_LIMIT * 2).map(async (place) => {
-				const newest = await api
-					.assets({ place: place.name }, null, 1)
-					.then((page) => page.items[0])
-					.catch(() => undefined); // the place still shows, in a plain frame
-				return { ...place, of: newest?.place ?? null, cover: newest?.thumb?.url ?? null };
-			})
-		);
-		return withoutEchoes(seen).slice(0, STRIP_LIMIT);
-	}
+	/** Faces: eight across a laptop, centred; a rail of 4.4 on a phone, the fifth peeking. */
+	const FACES = { grid: { min: 112, gap: 24, max: 8 }, rail: { visible: 4.4, gap: 16 } };
+	/** Albums: four across a laptop (332 px at 1440), 2.3 on a phone's rail. */
+	const ALBUMS = { grid: { min: 300, gap: 16 }, rail: { visible: 2.3, gap: 12 } };
+	/** Places: smaller frames than albums, so the rows read apart; 2.3 on a phone. */
+	const PLACES = { grid: { min: 240, gap: 16 }, rail: { visible: 2.3, gap: 12 } };
 </script>
 
-{#snippet count(n: number)}
-	<span class="count data"
-		>{formatCount(n)}<span class="visually-hidden">{n === 1 ? ' photo' : ' photos'}</span></span
-	>
-{/snippet}
-
-{#snippet cover(url: string | null | undefined)}
-	<span class="cover"
-		>{#if url}<img src={url} alt="" loading="lazy" />{/if}</span
-	>
+{#snippet waiting(kind: 'faces' | 'cards')}
+	<div class="waiting {kind}" aria-hidden="true">
+		{#each { length: kind === 'faces' ? 8 : 5 } as _, i (i)}<span></span>{/each}
+	</div>
 {/snippet}
 
 <ul class="rows">
@@ -93,58 +71,60 @@
 			<div class="head">
 				<h2><a {href}>{label}<Icon name="chevron" /></a></h2>
 				{#if row === 'albums' && session.canEdit}
-					<IconButton icon="plus" label="New album" onclick={() => (creating = true)} />
+					<IconButton icon="plus" label="New album" filled onclick={() => (creating = true)} />
 				{/if}
 			</div>
 			{#if row === 'people'}
 				{#if people?.length}
-					<div class="rail">
-						{#each people as person (person.id)}
-							<a class="item person" href={`/people/${person.id}`}>
-								<Portrait portrait={person.portrait} size={76} />
-								<span class="name" class:unnamed={!person.name}>{personName(person)}</span>
-							</a>
-						{/each}
-					</div>
+					<CardStrip items={people} key={(p) => p.id} {...FACES} centre>
+						{#snippet card(person, { size })}<FaceBubble {person} {size} />{/snippet}
+					</CardStrip>
 				{:else if people}
 					<p class="quiet none">
 						No people yet. Faces are grouped here once photos have been looked at.
 					</p>
 				{:else if !failed.people}
-					<div class="rail waiting faces" aria-hidden="true"></div>
+					{@render waiting('faces')}
 				{/if}
 			{:else if row === 'albums'}
 				{#if albums?.length}
-					<div class="grid">
-						{#each albums as album (album.id)}
-							<a class="item" href={`/albums/${album.id}`}>
-								{@render cover(album.cover?.url)}
-								<span class="name">{album.title}</span>
-								{@render count(album.count)}
-							</a>
-						{/each}
-					</div>
+					<CardStrip items={albums} key={(a) => a.id} {...ALBUMS}>
+						{#snippet card(album, { i })}
+							<CollectionCard
+								href={`/albums/${album.id}`}
+								title={album.title}
+								count={album.count}
+								src={album.cover?.url ?? null}
+								index={i}
+								badge={album.role === 'owner'
+									? undefined
+									: { icon: 'person', label: 'Shared with you' }}
+							/>
+						{/snippet}
+					</CardStrip>
 				{:else if albums}
 					<p class="quiet none">
 						No albums yet. Select photos in the <a href="/">library</a> and choose “Add to album”.
 					</p>
 				{:else if !failed.albums}
-					<div class="grid waiting" aria-hidden="true"></div>
+					{@render waiting('cards')}
 				{/if}
 			{:else if places?.length}
-				<div class="rail">
-					{#each places as place (place.name)}
-						<a class="item" href={place.href}>
-							{@render cover(place.cover)}
-							<span class="name">{place.name}</span>
-							{@render count(place.count)}
-						</a>
-					{/each}
-				</div>
+				<CardStrip items={places} key={(p) => p.name} {...PLACES}>
+					{#snippet card(place, { i })}
+						<CollectionCard
+							href={place.href}
+							title={place.name}
+							count={place.count}
+							src={place.cover}
+							index={i}
+						/>
+					{/snippet}
+				</CardStrip>
 			{:else if places}
 				<p class="quiet none">No places yet. Photos that know where they were taken show here.</p>
 			{:else if !failed.places}
-				<div class="rail waiting" aria-hidden="true"></div>
+				{@render waiting('cards')}
 			{/if}
 		</li>
 	{/each}
@@ -169,10 +149,13 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--s-2);
-		margin: 0 0 var(--s-2);
+		margin: 0 0 var(--s-3);
 	}
 	h2 {
 		margin: 0;
+		font-size: var(--fs-22);
+		font-weight: 650;
+		letter-spacing: var(--track-22);
 	}
 	a {
 		text-decoration: none;
@@ -183,97 +166,47 @@
 		align-items: center;
 		gap: var(--fine);
 		min-height: var(--target);
+		transition: opacity var(--press) var(--ease);
+	}
+	h2 a:active {
+		opacity: 0.6;
 	}
 	h2 a :global(svg) {
 		color: var(--ink-3);
 	}
-	.head :global(.icon-button) {
-		margin-right: calc(-1 * var(--s-2));
-	}
-	/* A strip runs off the side of a phone, so it reads as "there is more": it bleeds to
-	   both screen edges and scrolls sideways. On a laptop the same items simply wrap. */
-	.rail {
-		display: flex;
-		gap: var(--s-3);
-		overflow-x: auto;
-		scroll-snap-type: x proximity;
-		scroll-padding-inline: var(--page-x);
-		scrollbar-width: none;
-		margin: calc(-1 * var(--s-2)) calc(-1 * var(--page-x));
-		padding: var(--s-2) var(--page-x); /* room for the focus ring */
-	}
-	.rail::-webkit-scrollbar {
-		display: none;
-	}
-	/* Albums: a grid of covers, two across on a phone. */
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 40%), 1fr));
-		gap: var(--s-4) var(--s-3);
-	}
-	/* Hold the row's place while it loads, so the rows below do not jump. */
+	/* Hold the row's place while it loads, in the shapes that will come: a quiet pulse, no
+	   words. It waits a moment first, so a quick answer never flashes it. */
 	.waiting {
-		min-height: 10.25rem;
+		display: flex;
+		gap: var(--s-4);
+		overflow: hidden;
+		animation: appear var(--motion) var(--ease) 150ms both;
+	}
+	.waiting span {
+		flex: 1 0 min(15rem, 40%);
+		aspect-ratio: 4 / 3;
+		border-radius: var(--r-card);
+		background: var(--fill);
+		animation: pulse 1.2s var(--ease) infinite alternate;
 	}
 	.waiting.faces {
-		min-height: 7.5rem;
+		justify-content: center;
+		gap: var(--s-5);
 	}
-	.item {
-		/* holds the count's hidden word, which the strip's scroller would not clip otherwise */
-		position: relative;
-		flex: none;
-		display: grid;
-		justify-items: start;
-		align-content: start; /* a one-line name keeps its count right under it */
-		gap: var(--s-1);
-		width: 10.5rem;
-		scroll-snap-align: start;
+	.waiting.faces span {
+		flex: 0 0 min(7rem, 20%);
+		aspect-ratio: 1;
+		border-radius: 50%;
 	}
-	.grid .item {
-		width: auto;
+	@keyframes appear {
+		from {
+			opacity: 0;
+		}
 	}
-	.person {
-		justify-items: center;
-		text-align: center;
-		width: 5.25rem;
-	}
-	.item :global(.face),
-	.cover {
-		margin-bottom: var(--s-1);
-	}
-	/* A cover is a chosen frame (rule 2), so it may crop. */
-	.cover {
-		display: block;
-		width: 100%;
-		aspect-ratio: 4 / 3;
-		background: var(--hairline);
-		overflow: hidden;
-	}
-	.cover img {
-		display: block;
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-	.name {
-		max-width: 100%;
-		font-weight: 600;
-		line-height: var(--lh-tight);
-		/* A name too long for its cover takes a second line; only then is it cut, with an ellipsis. */
-		display: -webkit-box;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		overflow: hidden;
-		overflow-wrap: anywhere;
-	}
-	.name.unnamed {
-		font-weight: 400;
-		color: var(--ink-2);
-	}
-	.count {
-		color: var(--ink-2);
-		font-size: var(--fs-14);
+	@keyframes pulse {
+		to {
+			opacity: 0.5;
+		}
 	}
 	.none {
 		max-width: var(--measure);
@@ -283,31 +216,9 @@
 	.none a {
 		text-decoration: underline;
 	}
-	@media (hover: hover) {
-		h2 a:hover,
-		.item:hover .name {
-			text-decoration: underline;
-			text-underline-offset: 0.2em;
-		}
-	}
-	@media (min-width: 1024px) {
-		.rail {
-			flex-wrap: wrap;
-			row-gap: var(--s-5);
-			overflow: visible;
-		}
-		.item:not(.person) {
-			width: 12rem;
-		}
-		.grid {
-			grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-		}
-		.grid .item {
-			width: auto;
-		}
-		/* A wide page: the + stays beside the heading it belongs to. */
-		.head {
-			justify-content: flex-start;
+	@media (prefers-reduced-motion: reduce) {
+		.waiting span {
+			animation: none;
 		}
 	}
 </style>

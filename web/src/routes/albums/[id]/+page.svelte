@@ -11,7 +11,9 @@
 	import { spread } from '$lib/story';
 	import { aspect, justify, rowHeightFor } from '$lib/timeline';
 	import AddPhotosDialog from '$lib/components/AddPhotosDialog.svelte';
-	import AlbumHero from '$lib/components/AlbumHero.svelte';
+	import CollectionHero from '$lib/components/CollectionHero.svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import IconButton from '$lib/components/ui/IconButton.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import KeepOnPhone from '$lib/components/KeepOnPhone.svelte';
@@ -34,6 +36,8 @@
 	let title = $state('');
 	let description = $state('');
 	let width = $state(0);
+	/** The hero's title: the page head shows its compact title once this has gone. */
+	let heading = $state<HTMLElement>();
 
 	const canEdit = $derived(album?.role === 'owner' || album?.role === 'editor');
 	const layout = $derived(
@@ -95,26 +99,49 @@
 
 <svelte:head><title>{album?.title ?? 'Album'} · Photos</title></svelte:head>
 
-<PageHead title={album?.title ?? 'Album'} hideTitle back={{ href: '/albums', label: 'Albums' }}>
-	{#snippet actions()}
-		{#if album}<Menu label="More" text="More" icon="more" round items={more} />{/if}
-	{/snippet}
-</PageHead>
+{#snippet head()}
+	<PageHead
+		title={album?.title ?? 'Album'}
+		hideTitle
+		watch={heading}
+		back={{ href: '/albums', label: 'Albums' }}
+	/>
+{/snippet}
 
 {#if album && !view.error}
-	<AlbumHero
-		{album}
+	<CollectionHero
+		title={album.title}
+		eyebrow={album.role === 'owner' ? 'Album' : 'Shared with you'}
+		description={album.description}
 		line={albumLine(items)}
-		onplay={items.length ? () => (playing = spread(items)) : undefined}
-		onadd={canEdit ? () => (view.dialog = 'add') : undefined}
-		onshare={album.role === 'owner' ? () => (view.dialog = 'share') : undefined}
+		src={album.cover?.preview_url ?? null}
+		{head}
+		bind:heading
 	>
 		{#snippet actions()}
+			{#if items.length}
+				<button type="button" class="primary pill" onclick={() => (playing = spread(items))}
+					><Icon name="play" />Play</button
+				>
+			{:else if canEdit}
+				<button type="button" class="primary pill" onclick={() => (view.dialog = 'add')}
+					><Icon name="plus" />Add photos</button
+				>
+			{/if}
+			{#if canEdit && items.length}
+				<IconButton icon="plus" label="Add photos" onclick={() => (view.dialog = 'add')} />
+			{/if}
+			{#if album?.role === 'owner'}
+				<IconButton icon="share" label="Share" onclick={() => (view.dialog = 'share')} />
+			{/if}
 			{#if album && session.canEdit}
 				<KeepOnPhone target={{ kind: 'album', album_id: album.id }} what="this album" />
 			{/if}
+			<Menu label="More" text="More" icon="more" round filled={false} items={more} />
 		{/snippet}
-	</AlbumHero>
+	</CollectionHero>
+{:else}
+	{@render head()}
 {/if}
 
 <div class="page">
@@ -164,8 +191,6 @@
 				{ label: 'Remove from album', run: view.removeSelected, hidden: !canEdit }
 			]}
 		/>
-	{:else}
-		<p class="quiet">Loading…</p>
 	{/if}
 </div>
 
@@ -245,27 +270,32 @@
 {/if}
 
 <style>
+	/* The photos run edge to edge under the hero, the look's gutter between them. */
 	.page {
-		padding: 0 var(--page-x) var(--s-7);
+		padding: var(--gutter) 0 var(--s-7);
+	}
+	.page > p {
+		padding-inline: var(--page-x);
 	}
 	.arranging {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--s-1) var(--s-3);
-		margin: 0 0 var(--s-3);
+		margin: var(--s-3) 0;
 		color: var(--ink-2);
 	}
 	.arranging button {
 		font-weight: 600;
 		color: var(--ink);
 	}
-	@media (max-width: 639px) {
-		.page {
-			padding: 0 var(--gutter) var(--s-7);
-		}
-		.page > p {
-			padding-inline: var(--s-2);
-		}
+	.pill {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s-2);
+		min-height: var(--target);
+		padding: 0 var(--s-5) 0 var(--s-4);
+		border-radius: var(--r-pill);
+		white-space: nowrap;
 	}
 </style>
