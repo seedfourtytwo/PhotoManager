@@ -8,6 +8,61 @@ export function project(lat: number, lon: number, view: Viewport): [number, numb
 	return [((lon + 180) / 360) * view.width, ((90 - lat) / 180) * view.height];
 }
 
+/** A window onto the 360 × 180 map: its top-left corner and its width (its height follows
+ *  from the frame's shape). */
+export type MapView = { x: number; y: number; w: number };
+
+/** The closest the map zooms in (degrees across): past it the 1:110m outline is only blocks. */
+export const MIN_VIEW = 2;
+const WORLD = { x: 0, y: 0, w: 360 };
+
+/**
+ * The view kept on the map: no wider than the world, no closer than `MIN_VIEW`, and not past
+ * its edges. A frame taller than the world (a phone held upright) shows it whole, centred.
+ * `aspect` is the frame's width ÷ height.
+ */
+export function clampView(view: MapView, aspect: number): MapView {
+	const w = Math.min(360, Math.max(MIN_VIEW, view.w));
+	const h = w / aspect;
+	const y = h >= 180 ? (180 - h) / 2 : Math.min(Math.max(view.y, 0), 180 - h);
+	return { w, x: Math.min(Math.max(view.x, 0), 360 - w), y };
+}
+
+/**
+ * The view that frames every point with `pad` of their spread on each side (spec §7: the map
+ * opens on the photos, not on the world), in a frame of `aspect`. The whole world when there
+ * are none.
+ */
+export function fitView(points: readonly MapPoint[], aspect: number, pad = 0.1): MapView {
+	if (!points.length) return { ...WORLD };
+	let [left, top] = project(points[0].lat, points[0].lon, MAP);
+	let [right, bottom] = [left, top];
+	for (const p of points) {
+		const [x, y] = project(p.lat, p.lon, MAP);
+		left = Math.min(left, x);
+		right = Math.max(right, x);
+		top = Math.min(top, y);
+		bottom = Math.max(bottom, y);
+	}
+	const across = (right - left) * (1 + 2 * pad);
+	const down = (bottom - top) * (1 + 2 * pad);
+	const w = Math.max(across, down * aspect, MIN_VIEW);
+	const cx = (left + right) / 2;
+	const cy = (top + bottom) / 2;
+	return clampView({ w, x: cx - w / 2, y: cy - w / aspect / 2 }, aspect);
+}
+
+/** The whole map, as `project` draws it. */
+const MAP: Viewport = { width: 360, height: 180 };
+
+/** A gesture, as the picture moved on screen: by (tx, ty) px, scaled by s about its corner. */
+export type Gesture = { tx: number; ty: number; s: number };
+
+/** The view once a gesture is let go: what the moved picture shows now (not yet clamped). */
+export function moved(view: MapView, { tx, ty, s }: Gesture, pxPerUnit: number): MapView {
+	return { x: view.x - tx / s / pxPerUnit, y: view.y - ty / s / pxPerUnit, w: view.w / s };
+}
+
 export type Cluster = {
 	x: number;
 	y: number;

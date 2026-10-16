@@ -4,53 +4,65 @@
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
 	import type { AssetOut, Id, MapPoint } from '$lib/api';
 	import { api, notice, settings, viewport } from '$lib/app.svelte';
-	import { describeFilters, filtersFromParams, filtersToQuery } from '$lib/filters';
-	import { photos } from '$lib/format';
+	import { filtersFromParams, filtersToQuery } from '$lib/filters';
+	import { formatCount, photos } from '$lib/format';
 	import { eachPage } from '$lib/paging';
 	import {
+		clampView,
 		clusterPoints,
-		clusterRadius,
 		clustersInView,
 		dominantPlace,
+		fitView,
+		moved,
 		nearestCluster,
-		type Cluster
+		type Cluster,
+		type MapView
 	} from '$lib/geo';
-	import { aspect, justify, rowHeightFor } from '$lib/timeline';
+	import { aspect as tileAspect, justify } from '$lib/timeline';
 	import { LAND_PATH } from '$lib/world';
 	import FilterChips from '$lib/components/FilterChips.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
+	import IconButton from '$lib/components/ui/IconButton.svelte';
 
+	/**
+	 * Places (spec collections-people-places §7): our own offline outline of the world, dark,
+	 * full-bleed under the floating bars, opening on the photos (not the world). Photos sit on
+	 * it as bubbles of their newest picture. A gesture moves the drawn map as one picture
+	 * (a CSS transform) and the view and the bubbles are worked out again only when it ends.
+	 */
 	const filters = $derived(filtersFromParams(page.url.searchParams));
 	let points = $state.raw<MapPoint[]>([]);
 	let loaded = $state(false);
 	let located = $state.raw<Map<Id, AssetOut>>(new Map());
-	/** Where on the map a dot was chosen. */
+	/** Where on the map a bubble was chosen. */
 	let chosenAt = $state<{ x: number; y: number } | null>(null);
 	let width = $state(0);
-	let gridWidth = $state(0);
+	let height = $state(0);
+	let panelWidth = $state(0);
 
-	// The map is 360 × 180 "degrees"; the view is a window onto it.
-	let view = $state({ x: 0, y: 0, w: 360 });
-	const aspectRatio = 2;
-	const vh = $derived(view.w / aspectRatio);
+	let view = $state<MapView>({ x: 0, y: 0, w: 360 });
+	/** The view was fitted to these points: a new answer (other filters) fits again. */
+	let fittedTo: MapPoint[] | null = null;
+	const frame = $derived(width && height ? width / height : 2);
+	const vh = $derived(view.w / frame);
 	const pxPerUnit = $derived(width ? width / view.w : 1);
-	// Clustering depends on the points and the zoom only, so panning (x, y) never redoes it;
-	// what is on screen is a cheap filter over the result.
+	/** A bubble's side (px): a thumb is a target, so 44 at least. */
+	const BUBBLE = $derived(viewport.phone ? 44 : 56);
+	// Clustering depends on the points and the zoom only, so a pan never redoes it; what is
+	// on screen is a cheap filter over the result. Bubbles never overlap.
 	const allClusters = $derived(
 		clusterPoints(
 			points,
 			{ width: 360, height: 180 },
-			22 / pxPerUnit,
-			// the drawn dot plus a little air, so dots never overlap or hide each other
-			(n) => (Math.max(clusterRadius(n, 2), 3) + 2) / pxPerUnit
+			(BUBBLE + 8) / pxPerUnit,
+			() => (BUBBLE / 2 + 4) / pxPerUnit
 		)
 	);
 	const clusters = $derived(
-		clustersInView(allClusters, { x: view.x, y: view.y, w: view.w, h: vh }, 5)
+		clustersInView(allClusters, { x: view.x, y: view.y, w: view.w, h: vh }, BUBBLE / pxPerUnit)
 	);
-	// The chosen dot is the one that is there now: choosing zooms in and the dots split, so
-	// the heading, the photos below and the dot drawn as chosen are always the same dot.
 	const chosen = $derived(chosenAt ? nearestCluster(allClusters, chosenAt) : null);
 
 	$effect(() => {
@@ -69,18 +81,20 @@
 		return () => (stale = true);
 	});
 
-	/**
-	 * List items (with place names) for every located photo, for cluster names and grids.
-	 * Swapped in after every page, so a chosen dot shows its photos while the rest still loads.
-	 */
+	// Open on the photos: once they and the frame's size are known, and again for new filters.
+	$effect(() => {
+		if (!loaded || !width || !height || fittedTo === points) return;
+		fittedTo = points;
+		view = fitView(points, frame);
+	});
+
+	/** List items (with place names and thumbs) for every located photo: bubbles and grids. */
 	function loadLocated(f: typeof filters, isStale: () => boolean) {
 		let first = true;
 		return eachPage(
 			(cursor) => api.assets({ ...f, has_location: true }, cursor, 500),
 			(items) => {
-				// Grown from what is shown (it may hold an edit made in the loupe meanwhile) and
-				// replaced whole as $state.raw: no need for a reactive map.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- replaced whole
 				const next = new Map(first ? [] : located);
 				first = false;
 				for (const a of items) next.set(a.id, a);
@@ -95,38 +109,122 @@
 		return new Map(map).set(asset.id, asset);
 	}
 
-	function clamp(v: { x: number; y: number; w: number }) {
-		const w = Math.min(360, Math.max(6, v.w));
-		return {
-			w,
-			x: Math.min(Math.max(v.x, 0), 360 - w),
-			y: Math.min(Math.max(v.y, 0), 180 - w / aspectRatio)
-		};
+	/** The newest photo of a bubble, for its picture. */
+	function coverOf(c: Cluster): AssetOut | null {
+		let best: AssetOut | null = null;
+		for (const id of c.ids) {
+			const a = located.get(id);
+			if (a && (!best || a.taken_at > best.taken_at)) best = a;
+		}
+		return best;
 	}
 
 	function zoom(factor: number, cx = view.x + view.w / 2, cy = view.y + vh / 2) {
 		const w = view.w * factor;
-		view = clamp({ w, x: cx - (cx - view.x) * factor, y: cy - (cy - view.y) * factor });
+		view = clampView({ w, x: cx - (cx - view.x) * factor, y: cy - (cy - view.y) * factor }, frame);
 	}
 
-	function toMap(event: MouseEvent, svg: SVGSVGElement) {
-		const r = svg.getBoundingClientRect();
-		return {
-			x: view.x + ((event.clientX - r.left) / r.width) * view.w,
-			y: view.y + ((event.clientY - r.top) / r.height) * vh
-		};
-	}
-
-	let pan: { x: number; y: number; view: typeof view } | null = null;
+	// --- gestures: one finger (or the mouse) pans, two pinch; the picture moves, then settles --
+	let stage = $state<HTMLElement>();
+	let box: DOMRect | null = null;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- where the fingers are, not state
+	const pointers = new Map<number, { x: number; y: number }>();
+	/** The gesture so far, in px of the screen: a move, and a scale about the frame's corner. */
+	let live = { tx: 0, ty: 0, s: 1 };
+	let velocity = { x: 0, y: 0, t: 0 };
+	/** Where the first finger went down. */
+	let origin = { x: 0, y: 0 };
+	let glide = 0;
 	/**
-	 * The pointer moved since it went down. It outlives `pan` (cleared on pointerup) because the
-	 * click that ends a pan fires after pointerup, and that click must not choose a dot.
+	 * The pointer moved since it went down. It outlives the gesture because the click that
+	 * ends a pan fires after pointerup, and that click must not choose a bubble.
 	 */
 	let dragged = false;
+
+	function show() {
+		if (stage) stage.style.transform = `translate(${live.tx}px, ${live.ty}px) scale(${live.s})`;
+	}
+
+	function settle() {
+		cancelAnimationFrame(glide);
+		if (live.tx || live.ty || live.s !== 1) view = clampView(moved(view, live, pxPerUnit), frame);
+		live = { tx: 0, ty: 0, s: 1 };
+		if (stage) stage.style.transform = '';
+	}
+
+	function down(event: PointerEvent) {
+		if (event.button !== 0) return;
+		cancelAnimationFrame(glide);
+		box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+		if (pointers.size === 1) {
+			dragged = false;
+			origin = { x: event.clientX, y: event.clientY };
+		}
+		velocity = { x: 0, y: 0, t: event.timeStamp };
+	}
+
+	function move(event: PointerEvent) {
+		const last = pointers.get(event.pointerId);
+		if (!last || !box) return;
+		const next = { x: event.clientX, y: event.clientY };
+		pointers.set(event.pointerId, next);
+		const dx = next.x - last.x;
+		const dy = next.y - last.y;
+		// In pixels, so a click with a slightly unsteady hand is still a click at any zoom.
+		if (pointers.size > 1 || Math.hypot(next.x - origin.x, next.y - origin.y) > 4) dragged = true;
+		if (pointers.size === 1) {
+			live = { ...live, tx: live.tx + dx, ty: live.ty + dy };
+			const dt = Math.max(event.timeStamp - velocity.t, 1);
+			velocity = { x: dx / dt, y: dy / dt, t: event.timeStamp };
+		} else {
+			// two fingers: scale about the point between them, then follow it half as far
+			const other = [...pointers].find(([id]) => id !== event.pointerId)![1];
+			const apart = (a: typeof next, b: typeof next) => Math.hypot(a.x - b.x, a.y - b.y);
+			const factor = apart(next, other) / Math.max(apart(last, other), 1);
+			const mx = (last.x + other.x) / 2 - box.left;
+			const my = (last.y + other.y) / 2 - box.top;
+			live = {
+				s: live.s * factor,
+				tx: mx - (mx - live.tx) * factor + dx / 2,
+				ty: my - (my - live.ty) * factor + dy / 2
+			};
+		}
+		if (dragged) show();
+	}
+
+	function up(event: PointerEvent) {
+		if (!pointers.delete(event.pointerId) || pointers.size) return;
+		if (!dragged) {
+			live = { tx: 0, ty: 0, s: 1 };
+			return;
+		}
+		const still = event.timeStamp - velocity.t > 60;
+		if (still || matchMedia('(prefers-reduced-motion: reduce)').matches) return settle();
+		// Let go while moving: the map glides on and slows (velocity decay), then settles.
+		let { x: vx, y: vy } = velocity;
+		let then = performance.now();
+		const step = (now: number) => {
+			const dt = now - then;
+			then = now;
+			live = { ...live, tx: live.tx + vx * dt, ty: live.ty + vy * dt };
+			show();
+			const decay = Math.pow(0.995, dt);
+			vx *= decay;
+			vy *= decay;
+			if (Math.hypot(vx, vy) < 0.02) settle();
+			else glide = requestAnimationFrame(step);
+		};
+		glide = requestAnimationFrame(step);
+	}
+
 	function onwheel(event: WheelEvent) {
 		event.preventDefault();
-		const p = toMap(event, event.currentTarget as SVGSVGElement);
-		zoom(event.deltaY > 0 ? 1.25 : 0.8, p.x, p.y);
+		settle();
+		const r = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		const x = view.x + ((event.clientX - r.left) / r.width) * view.w;
+		const y = view.y + ((event.clientY - r.top) / r.height) * vh;
+		zoom(event.deltaY > 0 ? 1.25 : 0.8, x, y);
 	}
 
 	const chosenItems = $derived(
@@ -135,9 +233,9 @@
 	const chosenPlace = $derived(dominantPlace(chosenItems.map((a) => a.place)));
 	const layout = $derived(
 		justify(
-			chosenItems.map((a) => aspect(a)),
-			gridWidth,
-			rowHeightFor(viewport.width, settings.thumbSize),
+			chosenItems.map((a) => tileAspect(a)),
+			panelWidth,
+			viewport.phone ? 96 : 120,
 			settings.gap
 		)
 	);
@@ -148,7 +246,7 @@
 	const tracker = new LoupeTracker();
 	$effect(() => tracker.seen(loupeId));
 
-	/** How many photos the library shows for the chosen place (it may differ from the dot). */
+	/** How many photos the library shows for the chosen place (it may differ from the bubble). */
 	let placeTotal = $state<number | null>(null);
 	$effect(() => {
 		const place = chosenPlace;
@@ -163,117 +261,115 @@
 		return () => (stale = true);
 	});
 
+	/** The panel's width on a laptop (25rem), and the sheet's share of a phone's height. */
+	const PANEL = 400;
+	const SHEET = 0.55;
+
+	/**
+	 * Choose a bubble: it zooms in when it is dense (so it splits) and comes to the middle of
+	 * what the panel or the sheet leaves of the map.
+	 */
 	function choose(c: Cluster) {
 		chosenAt = { x: c.x, y: c.y };
-		// Zoom towards dense clusters so they split; single places stay put.
-		if (c.ids.length > 1 && view.w > 20) zoom(0.35, c.x, c.y);
+		const w = c.ids.length > 1 && view.w > 20 ? view.w * 0.35 : view.w;
+		const px = width / w;
+		const free = viewport.desktop
+			? { x: (width - PANEL) / 2, y: height / 2 }
+			: { x: width / 2, y: (height * (1 - SHEET)) / 2 };
+		view = clampView({ w, x: c.x - free.x / px, y: c.y - free.y / px }, frame);
 	}
 </script>
 
-<svelte:head><title>Map · Photos</title></svelte:head>
+<svelte:head><title>Places · Photos</title></svelte:head>
 
-<div class="page">
-	<header>
-		<h1>Map</h1>
-		<p class="quiet">
-			{photos(points.length)} with a location{#if describeFilters(filters)},&ensp;{describeFilters(
-					filters
-				)}{/if}
-		</p>
-		<span class="tools">
-			<button type="button" onclick={() => zoom(0.5)} aria-label="Zoom in">Zoom in</button>
-			<button type="button" onclick={() => zoom(2)} aria-label="Zoom out">Zoom out</button>
-			<button type="button" onclick={() => (view = { x: 0, y: 0, w: 360 })}>World</button>
-		</span>
-	</header>
-	<!-- The Library's filter chips; they run to the page's edges, as they do there. -->
-	<div class="chips-room"><FilterChips /></div>
-
-	<div class="map" bind:clientWidth={width}>
-		<svg
-			viewBox={`${view.x} ${view.y} ${view.w} ${vh}`}
-			role="group"
-			aria-label="World map of photo locations; drag to pan, wheel to zoom"
-			{onwheel}
-			onpointerdown={(e) => {
-				pan = { x: e.clientX, y: e.clientY, view };
-				dragged = false;
-			}}
-			onpointermove={(e) => {
-				if (!pan || !width) return;
-				const dx = ((e.clientX - pan.x) / width) * pan.view.w;
-				const dy = ((e.clientY - pan.y) / width) * pan.view.w;
-				// In pixels, so a click with a slightly unsteady hand is still a click at any zoom.
-				if (Math.abs(e.clientX - pan.x) + Math.abs(e.clientY - pan.y) > 4) dragged = true;
-				if (dragged) view = clamp({ ...pan.view, x: pan.view.x - dx, y: pan.view.y - dy });
-			}}
-			onpointerup={() => (pan = null)}
-			onpointerleave={() => (pan = null)}
-		>
-			<rect x="0" y="0" width="360" height="180" class="sea" />
-			<path d={LAND_PATH} class="land" />
+<div class="places" class:choosing={!!chosen}>
+	<!-- The map: drag or two fingers to move and zoom, the wheel to zoom, a bubble to choose. -->
+	<div
+		class="map"
+		role="group"
+		aria-label="World map of photo locations; drag to pan, pinch or wheel to zoom"
+		bind:clientWidth={width}
+		bind:clientHeight={height}
+		{onwheel}
+		onpointerdown={down}
+		onpointermove={move}
+		onpointerup={up}
+		onpointercancel={up}
+		onpointerleave={up}
+	>
+		<div class="stage" bind:this={stage}>
+			<svg viewBox={`${view.x} ${view.y} ${view.w} ${vh}`} preserveAspectRatio="none">
+				<path d={LAND_PATH} class="land" />
+			</svg>
 			{#each clusters as c (c.ids[0])}
-				{@const r = clusterRadius(c.ids.length, 2) / pxPerUnit}
+				{@const cover = coverOf(c)}
 				<a
+					class="bubble"
+					class:chosen={chosen?.ids[0] === c.ids[0]}
 					href={`/${filtersToQuery(filters)}`}
 					aria-label={`${photos(c.ids.length)} here`}
+					aria-current={chosen?.ids[0] === c.ids[0] ? 'true' : undefined}
+					style:left={`${(c.x - view.x) * pxPerUnit}px`}
+					style:top={`${(c.y - view.y) * pxPerUnit}px`}
+					style:--size={`${BUBBLE}px`}
+					style:background-color={cover?.colour}
+					draggable="false"
 					onclick={(e) => {
 						e.preventDefault();
 						// detail 0 is the keyboard (Enter), which no drag precedes
 						if (e.detail === 0 || !dragged) choose(c);
 					}}
 				>
-					<circle
-						cx={c.x}
-						cy={c.y}
-						r={Math.max(r, 3 / pxPerUnit)}
-						class="dot"
-						class:chosen={chosen?.ids[0] === c.ids[0]}
-					/>
+					{#if cover?.thumb}<img src={cover.thumb.url} alt="" draggable="false" />{/if}
+					{#if c.ids.length > 1}<span class="n glass">{formatCount(c.ids.length)}</span>{/if}
 				</a>
 			{/each}
-			<!-- Counts go on top of every dot but never take a click (a neighbour's label could
-			     otherwise cover a small cluster); each link already says its count. -->
-			<g class="counts" aria-hidden="true">
-				{#each clusters as c (c.ids[0])}
-					{#if c.ids.length > 1}
-						<text
-							x={c.x + clusterRadius(c.ids.length, 2) / pxPerUnit + 3 / pxPerUnit}
-							y={c.y}
-							font-size={11 / pxPerUnit}
-							class="n">{c.ids.length}</text
-						>
-					{/if}
-				{/each}
-			</g>
-		</svg>
+		</div>
 	</div>
 
+	<div class="top">
+		<a class="back glass" href="/collections" data-move="back"
+			><Icon name="back" /><span>Collections</span></a
+		>
+		<div class="title glass">
+			<h1>Places</h1>
+			<p>{photos(points.length)} with a location</p>
+		</div>
+	</div>
+	<div class="chips"><FilterChips /></div>
+
+	<div class="controls glass" role="group" aria-label="Map">
+		{#if !viewport.phone}
+			<IconButton icon="plus" label="Zoom in" onclick={() => zoom(0.5)} />
+			<IconButton icon="minus" label="Zoom out" onclick={() => zoom(2)} />
+		{/if}
+		<IconButton
+			icon="zoom"
+			label="Show all photos"
+			onclick={() => (view = fitView(points, frame))}
+		/>
+	</div>
+
+	{#if loaded && !points.length}
+		<p class="empty glass">No photos with a location yet</p>
+	{/if}
+
 	{#if chosen}
-		<section class="chosen" aria-live="polite">
-			<h2>
-				{chosenPlace ?? 'Here'} <span class="quiet">{chosen.ids.length}</span>
-				{#if chosenPlace && placeTotal !== null}
-					<button
-						type="button"
-						onclick={() =>
-							goto(`/${filtersToQuery({ ...filters, place: chosenPlace ?? undefined })}`)}
-						>Open all {placeTotal} from {chosenPlace} in the library</button
-					>
-				{/if}
-			</h2>
-			{#if chosenPlace && placeTotal !== null && placeTotal !== chosen.ids.length}
-				<p class="quiet small">
-					{#if placeTotal > chosen.ids.length}
-						This dot holds {photos(chosen.ids.length)}; the library filters by place, so it shows
-						all {placeTotal} from {chosenPlace}.
-					{:else}
-						This dot holds {photos(chosen.ids.length)} from more than one place; the library filters by
-						place, so it shows the {placeTotal} from {chosenPlace}.
-					{/if}
-				</p>
+		<section class="chosen glass" aria-live="polite">
+			<header>
+				<h2>{chosenPlace ?? 'Here'} <span class="quiet">{chosen.ids.length}</span></h2>
+				<IconButton icon="x" label="Close" onclick={() => (chosenAt = null)} />
+			</header>
+			{#if chosenPlace && placeTotal !== null}
+				<button
+					type="button"
+					class="primary pill"
+					onclick={() =>
+						goto(`/${filtersToQuery({ ...filters, place: chosenPlace ?? undefined })}`)}
+					>Show all {formatCount(placeTotal)} in Library</button
+				>
 			{/if}
-			<div bind:clientWidth={gridWidth}>
+			<div class="grid" bind:clientWidth={panelWidth}>
 				<PhotoGrid
 					items={chosenItems}
 					{layout}
@@ -284,16 +380,6 @@
 				/>
 			</div>
 		</section>
-	{:else if points.length}
-		<p class="quiet hint">Choose a dot to see its photos.</p>
-	{:else if loaded}
-		<div class="empty-state">
-			<p>No photos with a location here.</p>
-			<p>
-				Photos appear on the map when the camera saved where they were taken. Loosen a filter to see
-				more.
-			</p>
-		</div>
 	{/if}
 </div>
 
@@ -308,122 +394,223 @@
 {/if}
 
 <style>
-	.page {
-		padding: 0 var(--page-x) var(--s-6);
+	/* The map is the page: fixed under the floating bars, the whole window. */
+	.map {
+		position: fixed;
+		inset: 0;
+		overflow: hidden;
+		background: var(--bg);
+		touch-action: none;
+		cursor: grab;
+		-webkit-user-select: none;
+		user-select: none;
 	}
-	header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: var(--s-1) var(--s-4);
-		padding: var(--s-5) 0 var(--s-3);
+	.map:active {
+		cursor: grabbing;
 	}
-	header p {
-		margin: 0;
-		flex: 1;
-		font-size: var(--fs-12);
-	}
-	.tools {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0 var(--s-1);
-		margin-right: calc(-1 * var(--s-2));
-	}
-	.tools button {
-		color: var(--ink-2);
-	}
-	@media (hover: hover) {
-		.tools button:hover {
-			color: var(--ink);
-		}
-	}
-	.chips-room {
-		margin: 0 calc(-1 * var(--page-x));
+	.stage {
+		position: absolute;
+		inset: 0;
+		transform-origin: 0 0;
+		will-change: transform;
 	}
 	svg {
 		display: block;
 		width: 100%;
-		height: auto;
-		touch-action: none;
-		cursor: grab;
-	}
-	svg:active {
-		cursor: grabbing;
-	}
-	.sea {
-		fill: var(--bg);
+		height: 100%;
 	}
 	.land {
-		fill: color-mix(in srgb, var(--ink) 11%, var(--bg));
+		fill: var(--fill);
 	}
-	/* One ink for every place; the chosen dot takes the accent (it is the selection). */
-	.dot {
-		fill: var(--ink);
-		fill-opacity: 0.8;
+	/* A bubble: the newest photo of the place, rounded, with a ring and its count on glass. */
+	.bubble {
+		position: absolute;
+		width: var(--size);
+		height: var(--size);
+		translate: -50% -50%;
+		border-radius: 12px;
+		background: var(--raised);
+		box-shadow:
+			0 0 0 2px var(--on-photo),
+			var(--lift);
+		transition: scale var(--press) var(--ease);
 	}
-	.dot.chosen,
-	a:focus-visible .dot {
-		fill: var(--accent);
-		fill-opacity: 1;
+	.bubble:active {
+		scale: 0.94;
 	}
-	a:focus {
-		outline: none;
-	}
-	.counts {
+	.bubble img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		object-fit: cover;
 		pointer-events: none;
 	}
+	.bubble.chosen,
+	.bubble:focus-visible {
+		outline: none;
+		box-shadow:
+			0 0 0 3px var(--accent),
+			var(--lift);
+	}
 	.n {
-		fill: var(--ink);
-		dominant-baseline: middle;
-		font-family: var(--font-ui);
-		paint-order: stroke;
-		stroke: var(--bg);
-		stroke-width: 0.6px;
-	}
-	.hint {
-		margin: var(--s-3) 0;
-	}
-	.chosen h2 {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0 var(--s-2);
-		margin: var(--s-5) 0 var(--s-3);
-	}
-	.chosen h2 .quiet {
-		font-family: var(--font-ui);
+		position: absolute;
+		top: calc(-1 * var(--s-2));
+		right: calc(-1 * var(--s-2));
+		min-width: 1.375rem;
+		padding: 0 var(--s-1);
+		box-sizing: border-box;
+		border-radius: var(--r-pill);
+		color: var(--ink);
 		font-size: var(--fs-12);
+		font-weight: 650;
+		line-height: 1.375rem;
+		text-align: center;
 	}
-	.chosen h2 button {
+	/* What floats over the map: glass, under the laptop's capsule or the phone's clock. */
+	.top,
+	.chips,
+	.controls,
+	.empty,
+	.chosen {
+		position: fixed;
+		z-index: 1;
+	}
+	.top {
+		top: calc(var(--top) + var(--s-2));
+		left: calc(var(--page-x) + env(safe-area-inset-left));
+		display: flex;
+		align-items: center;
+		gap: var(--s-2);
+	}
+	.back,
+	.title {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s-1);
+		min-height: var(--target);
+		padding: 0 var(--s-4) 0 var(--s-2);
+		border-radius: var(--r-pill);
+		box-shadow: var(--glass-edge), var(--lift);
+		color: var(--ink);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.title {
+		gap: var(--s-2);
+		padding: 0 var(--s-4);
+	}
+	h1 {
+		font-size: var(--fs-17);
+		font-weight: 650;
+	}
+	.title p {
+		margin: 0;
 		color: var(--ink-2);
-		font-family: var(--font-ui);
-		font-size: var(--fs-14);
+		font-size: var(--fs-13);
 	}
-	@media (hover: hover) {
-		.chosen h2 button:hover {
-			color: var(--ink);
+	.chips {
+		top: calc(var(--top) + var(--target) + var(--s-4));
+		left: 0;
+		right: 0;
+		pointer-events: none;
+	}
+	.chips > :global(*) {
+		pointer-events: auto;
+	}
+	.controls {
+		right: calc(var(--page-x) + env(safe-area-inset-right));
+		bottom: var(--s-5);
+		display: grid;
+		padding: var(--s-1);
+		border-radius: var(--r-pill);
+		box-shadow: var(--glass-edge), var(--lift);
+	}
+	.empty {
+		top: 50%;
+		left: 50%;
+		translate: -50% -50%;
+		margin: 0;
+		padding: var(--s-3) var(--s-5);
+		border-radius: var(--r-pill);
+		box-shadow: var(--glass-edge), var(--lift);
+		color: var(--ink);
+		font-weight: 600;
+	}
+	/* The chosen bubble's photos: a glass panel at the right of a laptop. */
+	.chosen {
+		top: calc(var(--top) + var(--s-2));
+		right: calc(var(--page-x) + env(safe-area-inset-right));
+		bottom: var(--s-5);
+		width: 25rem;
+		display: grid;
+		grid-template-rows: auto auto 1fr;
+		gap: var(--s-3);
+		padding: var(--s-4);
+		box-sizing: border-box;
+		border-radius: var(--r-2);
+		box-shadow: var(--glass-edge), var(--lift);
+		overflow: hidden;
+	}
+	.choosing .controls {
+		right: calc(var(--page-x) + 25rem + var(--s-3));
+	}
+	.chosen header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s-2);
+	}
+	h2 {
+		margin: 0;
+		font-size: var(--fs-28);
+		font-weight: 700;
+		letter-spacing: var(--track-22);
+		overflow-wrap: anywhere;
+	}
+	h2 .quiet {
+		font-size: var(--fs-15);
+		font-weight: 500;
+		letter-spacing: 0;
+	}
+	.pill {
+		justify-self: start;
+		min-height: var(--target);
+		padding: 0 var(--s-5);
+		border-radius: var(--r-pill);
+	}
+	.grid {
+		min-height: 0;
+		overflow-y: auto;
+		margin: 0 calc(-1 * var(--s-4)) calc(-1 * var(--s-4));
+	}
+	/* A phone: the controls and the chosen photos stand above the dock; the photos as a
+	   sheet from the bottom, the map still live above it. */
+	@media (max-width: 1023px) {
+		.controls {
+			bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
+		}
+		.chosen {
+			top: auto;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			width: auto;
+			max-height: 55dvh;
+			padding-bottom: calc(var(--bar) + env(safe-area-inset-bottom) + var(--s-3));
+			border-radius: var(--r-2) var(--r-2) 0 0;
+		}
+		.choosing .controls {
+			right: calc(var(--page-x) + env(safe-area-inset-right));
+			bottom: calc(55dvh + var(--s-3));
+		}
+		.grid {
+			margin-bottom: 0;
 		}
 	}
-	.chosen p {
-		margin: 0 0 var(--s-3);
-	}
-	@media (max-width: 639px) {
-		.page {
-			padding: 0 var(--gutter) var(--s-6);
-		}
-		header,
-		.chosen h2,
-		.chosen p,
-		.hint {
-			padding-inline: var(--s-2);
-		}
-		.tools {
-			flex-basis: 100%;
-			margin: 0 0 0 calc(-1 * var(--s-2));
-		}
-		/* To the screen's edges and not past them: the page is wider than the screen otherwise. */
-		.chips-room {
-			margin: 0 calc(-1 * var(--gutter));
+	@media (prefers-reduced-motion: reduce) {
+		.bubble:active {
+			scale: none;
 		}
 	}
 </style>

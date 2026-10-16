@@ -45,9 +45,9 @@ test('map: a drag that starts on a dot pans the map, it does not choose the dot'
 	await page.mouse.down();
 	await page.mouse.move(x + 40, y + 10, { steps: 8 });
 	await page.mouse.up();
-	const after = await viewBox();
-	expect(after[0]).not.toBe(before[0]); // it panned
-	expect(after[2]).toBe(before[2]); // and did not zoom into the dot
+	// it panned (the map may glide on a little before it settles)…
+	await expect.poll(async () => (await viewBox())[0]).not.toBe(before[0]);
+	expect((await viewBox())[2]).toBe(before[2]); // …and did not zoom into the dot
 	await expect(page.locator('section.chosen')).toHaveCount(0);
 	// Choosing still works afterwards, from the keyboard and with a click.
 	await dots.first().press('Enter');
