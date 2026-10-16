@@ -77,8 +77,11 @@
 	--gutter: 2px; /* between photos, and beside them on a phone; the look's gap dial moves it */
 	--fine: 2px; /* the finest line and gap: the ruler's needle, an icon and its word */
 	--margin: 14rem; /* 224: right-margin notes and filters on desktop */
-	--top: 56px; /* the top bar on a laptop; 0 on a phone. Sticky things offset by it. */
-	--dock: 56px; /* the floating dock on a phone */
+	--capsule: 52px; /* the laptop's floating glass capsule */
+	/* The room the capsule takes on a laptop: 16 px above it, 8 px below. Sticky things and
+	   the first content stop under it; in pixels, like the capsule. */
+	--top: calc(env(safe-area-inset-top, 0px) + 16px + var(--capsule) + 8px);
+	--dock: 64px; /* the floating dock on a phone */
 	--bar: calc(var(--dock) + var(--s-4)); /* room the dock takes at the bottom of a phone */
 	--pill: 52px; /* the selection pill; the toast steps over it */
 	--blur: blur(24px) saturate(1.8); /* the frosted-glass look of what floats over photos */
@@ -92,7 +95,7 @@
 	/* Layers — what floats over what, lowest first. Numbers of 1 to 5 inside a component
 	   order its own pieces and stay there. */
 	--z-ruler: 4; /* the time ruler beside the photos */
-	--z-bar: 20; /* the top bar on a laptop */
+	--z-bar: 20; /* the floating capsule on a laptop */
 	--z-selection: 25; /* the selection pill */
 	--z-dock: 28; /* the dock on a phone: over the pill, so its open menu is not covered */
 	--z-menu: 30; /* an open menu */
@@ -152,7 +155,7 @@
 	:root {
 		--page-x: var(--s-4);
 		--fs-display: 2.5rem;
-		/* No bar on top, but a phone's clock and notch: sticky things stop under them. */
+		/* No capsule on top, but a phone's clock and notch: sticky things stop under them. */
 		--top: env(safe-area-inset-top, 0px);
 	}
 }

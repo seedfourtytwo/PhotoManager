@@ -16,16 +16,26 @@ test.beforeEach(async () => {
 });
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Main' });
+/** A laptop's capsule (1024 px and wider); a phone or a tablet has the dock. */
+const wide = (page: Page) => (page.viewportSize()?.width ?? 1440) >= 1024;
+/** Search in the bar: a round button that opens a field on a laptop, a link on the dock. */
+const searchIn = (page: Page) =>
+	nav(page).getByRole(wide(page) ? 'button' : 'link', { name: 'Search', exact: true });
+/** Whether the root says the laptop's capsule is away (lib/scroll-chrome.svelte.ts). */
+const away = (page: Page) =>
+	page.evaluate(() => document.documentElement.dataset.chrome === 'away');
 
 test('shell: Home, Library, Collections and Search in the bar; the rest is on You', async ({
 	page
 }) => {
 	await signIn(page);
-	for (const name of ['Home', 'Library', 'Collections', 'Search'])
+	for (const name of ['Home', 'Library', 'Collections'])
 		await expect(nav(page).getByRole('link', { name, exact: true })).toBeVisible();
+	await expect(searchIn(page)).toBeVisible();
 	for (const name of ['Map', 'People', 'Albums', 'Trash', 'Settings', 'Admin'])
 		await expect(nav(page).getByRole('link', { name, exact: true })).toBeHidden();
-	await expect(nav(page).getByRole('button')).toHaveCount(0); // no account menu
+	// No account menu: the only button is a laptop's Search.
+	await expect(nav(page).getByRole('button')).toHaveCount(wide(page) ? 1 : 0);
 	await expect(nav(page).getByRole('link', { name: 'Library', exact: true })).toHaveAttribute(
 		'aria-current',
 		'page'
@@ -33,13 +43,24 @@ test('shell: Home, Library, Collections and Search in the bar; the rest is on Yo
 	await expectAccessible(page);
 });
 
-test('laptop: the avatar sits at the right of the bar and opens You', async ({ page }) => {
+test('laptop: a glass capsule floats centred at the top, the avatar on its line at the right', async ({
+	page
+}) => {
 	test.skip(isPhone(page), 'on a phone the avatar is in the page’s title row');
 	await signIn(page);
+	const capsule = (await nav(page).getByRole('list').boundingBox())!;
+	const search = (await searchIn(page).boundingBox())!;
+	expect(capsule.y).toBe(16);
+	expect(capsule.height).toBe(52);
+	expect(search).toMatchObject({ y: 16, width: 52, height: 52 });
+	// The capsule and Search beside it sit together in the middle of the window.
+	const width = page.viewportSize()!.width;
+	expect(Math.abs(capsule.x - (width - search.x - search.width))).toBeLessThanOrEqual(2);
 	const me = nav(page).getByRole('link', { name: /^You\b/ });
-	const bar = (await nav(page).boundingBox())!;
 	const box = (await me.boundingBox())!;
-	expect(box.x + box.width).toBeGreaterThan(bar.x + bar.width - 64);
+	expect(box.width).toBe(40);
+	expect(box.y + box.height / 2).toBe(capsule.y + capsule.height / 2);
+	expect(box.x + box.width).toBeGreaterThan(width - 64);
 	await expect(me).toHaveText('C');
 	await me.click();
 	await expect(page).toHaveURL(/\/settings$/);
@@ -67,8 +88,7 @@ test('shell: the bar is frosted glass, and solid when the device asks for less t
 	page
 }) => {
 	await signIn(page);
-	// A laptop frosts the bar itself, a phone the pieces of the dock.
-	const bar = isPhone(page) ? nav(page).getByRole('list') : nav(page);
+	const bar = nav(page).getByRole('list');
 	const backdrop = () => bar.evaluate((el) => getComputedStyle(el).backdropFilter);
 	expect(await backdrop()).toContain('blur');
 	const cdp = await page.context().newCDPSession(page);
@@ -94,14 +114,13 @@ test('shell: Collections leads to people, places and albums', async ({ page }) =
 	);
 });
 
-test('phone: the lens moves to the chosen place, and leaves when none is', async ({ page }) => {
-	test.skip(!isPhone(page), 'the sliding lens is the dock’s');
+test('the lens moves to the chosen place, and leaves when none is', async ({ page }) => {
 	await signIn(page);
 	const places = nav(page).getByRole('list');
 	const lens = () =>
 		places.evaluate((ul) => {
 			const style = getComputedStyle(ul, '::before');
-			return { x: new DOMMatrix(style.transform).m41, shown: style.opacity === '1' };
+			return { x: Math.round(new DOMMatrix(style.transform).m41), shown: style.opacity === '1' };
 		});
 	const left = async (i: number) => (await places.getByRole('listitem').nth(i).boundingBox())!.x;
 	const step = (await left(1)) - (await left(0));
@@ -109,7 +128,7 @@ test('phone: the lens moves to the chosen place, and leaves when none is', async
 	await expect.poll(lens).toEqual({ x: Math.round(step), shown: true });
 	await nav(page).getByRole('link', { name: 'Collections', exact: true }).click();
 	await expect.poll(async () => Math.round((await lens()).x)).toBe(Math.round(2 * step));
-	await nav(page).getByRole('link', { name: 'Search', exact: true }).click();
+	await follow(page, '/search');
 	await expect.poll(async () => (await lens()).shown).toBe(false);
 });
 
@@ -156,32 +175,134 @@ test('shell: nothing on the page hides under the bar', async ({ page }) => {
 	await signIn(page);
 	const heading = page.getByRole('main').getByRole('heading').first();
 	await expect(heading).toBeVisible();
-	const bar = (await nav(page).boundingBox())!;
+	const bar = (await nav(page).getByRole('list').boundingBox())!;
 	const head = (await heading.boundingBox())!;
-	expect(bar.y).toBe(0);
 	expect(head.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+	await page.mouse.move(600, 500);
 	await page.mouse.wheel(0, 2000);
-	// A month heading sticks right under the bar: its top edge is the bar's bottom edge.
+	// A month heading sticks where the capsule's room ends (`--top`: 16 + 52 + 8 px), so
+	// nothing is under the capsule when it comes back.
 	const tops = () =>
 		page
 			.getByRole('main')
 			.getByRole('heading', { level: 2 })
 			.evaluateAll((all) => all.map((h) => Math.round(h.getBoundingClientRect().top)));
-	await expect.poll(async () => (await tops()).includes(Math.round(bar.height))).toBe(true);
+	await expect.poll(async () => (await tops()).includes(76)).toBe(true);
 });
 
-test('phone: the compact title shows once the large title has scrolled away, not before', async ({
+test('laptop: the capsule steps away while the page scrolls down and comes back on the way up', async ({
 	page
 }) => {
-	test.skip(!isPhone(page), 'a laptop has its top bar instead');
+	test.skip(isPhone(page), 'the dock stays');
+	await signIn(page);
+	await expect(page.locator('.tile img').first()).toBeVisible();
+	const capsule = nav(page).getByRole('list');
+	const bottom = async () => {
+		const box = (await capsule.boundingBox())!;
+		return box.y + box.height;
+	};
+	await page.mouse.move(600, 500);
+	await page.mouse.wheel(0, 800);
+	await expect.poll(() => away(page)).toBe(true);
+	await expect.poll(bottom).toBeLessThanOrEqual(0); // above the window, not only faded
+	await page.mouse.wheel(0, -40);
+	await expect.poll(() => away(page)).toBe(false);
+	await expect.poll(bottom).toBe(16 + 52);
+	// A new page brings it back too.
+	await page.mouse.wheel(0, 800);
+	await expect.poll(() => away(page)).toBe(true);
+	await follow(page, '/collections');
+	await expect.poll(() => away(page)).toBe(false);
+});
+
+test('laptop: under reduced motion the capsule goes and comes without moving', async ({ page }) => {
+	test.skip(isPhone(page), 'the dock stays');
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await signIn(page);
+	const duration = () => nav(page).evaluate((el) => getComputedStyle(el).transitionDuration);
+	expect((await duration()).split(', ').every((d) => d === '0s')).toBe(true);
+});
+
+test('laptop: keyboard focus brings the capsule back, and it stays while focus is in it', async ({
+	page
+}) => {
+	test.skip(isPhone(page), 'the dock stays');
+	await signIn(page);
+	await expect(page.locator('.tile img').first()).toBeVisible();
+	await page.mouse.move(600, 500);
+	await page.mouse.wheel(0, 800);
+	await expect.poll(() => away(page)).toBe(true);
+	await nav(page).getByRole('link', { name: 'Library', exact: true }).focus();
+	await expect.poll(() => away(page)).toBe(false);
+	await page.evaluate(() => window.scrollBy(0, 600));
+	await page.waitForTimeout(300);
+	expect(await away(page)).toBe(false);
+});
+
+test('laptop: the capsule stays while a menu is open', async ({ page }) => {
+	test.skip(isPhone(page), 'the dock stays');
+	await signIn(page);
+	await expect(page.locator('.tile img').first()).toBeVisible();
+	// The More filter: on a laptop a popover under its chip.
+	await page.getByRole('main').getByRole('button', { name: 'More', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'More' })).toBeVisible();
+	await page.evaluate(() => window.scrollBy(0, 600));
+	await page.waitForTimeout(300);
+	expect(await away(page)).toBe(false);
+});
+
+test('laptop: Search opens into a field over the capsule; Enter searches, Escape closes it', async ({
+	page
+}) => {
+	test.skip(isPhone(page), 'the dock’s Search is a link to the page');
+	await signIn(page);
+	await searchIn(page).click();
+	const field = nav(page).getByRole('searchbox', { name: 'Search photos' });
+	await expect(field).toBeFocused();
+	await expect(searchIn(page)).toHaveAttribute('aria-expanded', 'true');
+	await page.keyboard.press('Escape');
+	await expect(field).toHaveCount(0);
+	await expect(searchIn(page)).toBeFocused();
+	await page.keyboard.press('Enter');
+	await field.fill('sarlat');
+	await field.press('Enter');
+	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
+	await expect(field).toHaveCount(0);
+	// On Search itself the button leads to the page's own field.
+	await searchIn(page).click();
+	await expect(page.getByRole('main').getByRole('searchbox', { name: 'Search' })).toBeFocused();
+	await expect(field).toHaveCount(0);
+	await expectAccessible(page);
+});
+
+test('the compact title shows once the large title has scrolled away, not before', async ({
+	page
+}) => {
 	await signIn(page);
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	const compact = page.locator('.compact');
+	// The large title with the count under it
+	const title = page
+		.getByRole('main')
+		.getByRole('heading', { name: 'Library', level: 1 })
+		.locator('..');
 	await expect(compact).toHaveCSS('opacity', '0');
 	await page.evaluate(() => window.scrollBy(0, 400));
+	// The large title has faded on its way out; on a laptop the compact one takes the
+	// capsule's line while the capsule is away.
 	await expect(compact).toHaveCSS('opacity', '1');
+	await expect(title).toHaveCSS('opacity', '0');
+	const box = (await compact.boundingBox())!;
+	const width = page.viewportSize()!.width;
+	expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+	if (wide(page)) {
+		// Back up a little: the capsule returns and the compact title gives it its line.
+		await page.evaluate(() => window.scrollBy(0, -40));
+		await expect(compact).toHaveCSS('opacity', '0');
+	}
 	await page.evaluate(() => window.scrollTo(0, 0));
 	await expect(compact).toHaveCSS('opacity', '0');
+	await expect(title).toHaveCSS('opacity', '1');
 });
 
 test('shell: touch targets in the dock are at least 44 px both ways', async ({ page }) => {
@@ -190,7 +311,7 @@ test('shell: touch targets in the dock are at least 44 px both ways', async ({ p
 	for (const name of ['Library', 'Collections', 'Search']) {
 		const box = (await nav(page).getByRole('link', { name, exact: true }).boundingBox())!;
 		expect(box.width).toBeGreaterThanOrEqual(44);
-		expect(box.height).toBeGreaterThanOrEqual(44);
+		expect(box.height).toBeGreaterThanOrEqual(56); // the dock is 64 px tall
 	}
 });
 

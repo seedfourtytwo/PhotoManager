@@ -3,6 +3,9 @@
 	import { backupWatch, session } from '$lib/app.svelte';
 	import { attentionOf, initialOf } from '$lib/nav';
 
+	/** On glass, as the laptop's own circle beside the capsule; on the page's fill otherwise. */
+	let { glass = false }: { glass?: boolean } = $props();
+
 	const initial = $derived(initialOf(session.user?.display_name));
 	const attention = $derived(attentionOf(session.isAdmin, backupWatch.health));
 </script>
@@ -10,6 +13,7 @@
 <!-- The person's own page: look, phones, PIN, sign out; a red dot when something needs an admin. -->
 <a
 	class="avatar"
+	class:glass
 	href="/settings"
 	aria-current={page.url.pathname === '/settings' ? 'page' : undefined}
 	aria-label={attention ? `You: ${attention}` : 'You'}
@@ -27,14 +31,23 @@
 		flex: none;
 		width: 2.5rem;
 		height: 2.5rem;
-		min-width: var(--target);
-		min-height: var(--target);
 		border-radius: 50%;
-		background: var(--fill);
 		color: var(--ink);
 		font-weight: 700;
 		text-decoration: none;
 		transition: transform var(--press) var(--ease);
+	}
+	.avatar:not(.glass) {
+		background: var(--fill);
+	}
+	.avatar.glass {
+		box-shadow: var(--glass-edge), var(--lift);
+	}
+	@media (pointer: coarse) {
+		.avatar {
+			min-width: var(--target);
+			min-height: var(--target);
+		}
 	}
 	.avatar:active {
 		transform: scale(0.95);

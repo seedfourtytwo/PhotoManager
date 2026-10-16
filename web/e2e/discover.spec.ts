@@ -3,6 +3,7 @@ import {
 	expect,
 	expectAccessible,
 	GUEST,
+	isPhone,
 	loupe,
 	MEMBER,
 	REAL_BACKEND,
@@ -17,10 +18,13 @@ test('search without models: word matches, and a calm note that leads an admin t
 }) => {
 	await resetMock();
 	await signIn(page);
-	await page
-		.getByRole('navigation', { name: 'Main' })
-		.getByRole('link', { name: 'Search' })
-		.click();
+	const nav = page.getByRole('navigation', { name: 'Main' });
+	if (isPhone(page)) await nav.getByRole('link', { name: 'Search' }).click();
+	else {
+		// A laptop's Search opens into a field; Enter with nothing typed opens the page.
+		await nav.getByRole('button', { name: 'Search' }).click();
+		await page.keyboard.press('Enter');
+	}
 	await expect(page).toHaveURL(/\/search$/);
 	const box = page.getByRole('searchbox', { name: 'Search' });
 	await expect(box).toBeFocused();
