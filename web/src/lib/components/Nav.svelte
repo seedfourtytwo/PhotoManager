@@ -208,17 +208,6 @@
 	.search[aria-current='page'] {
 		background: color-mix(in oklab, var(--ink) 18%, var(--raised));
 	}
-	/* Still read out: the look's "dock labels" switch only takes the words off the screen. */
-	.places.wordless .word,
-	a.search .word {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-	}
-
 	/* Laptop: the capsule floats at the top, centred; the avatar on the same line at the right. */
 	@media (min-width: 1024px) {
 		nav {
@@ -369,6 +358,17 @@
 		}
 		.search {
 			width: var(--dock);
+		}
+		/* Still read out: the look's "dock labels" switch (a phone setting) and the round Search
+		   take the words off the screen only. */
+		.places.wordless .word,
+		a.search .word {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
 		}
 		.find,
 		.finder,

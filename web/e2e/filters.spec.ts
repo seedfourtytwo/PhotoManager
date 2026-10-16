@@ -201,10 +201,6 @@ async function scrollDown(page: Page, sheet: Locator) {
 }
 
 test.describe('long lists', () => {
-	// The lists are made long on their way to the page (`longLists`); a request the service
-	// worker takes over would pass by that, once it controls the page.
-	test.use({ serviceWorkers: 'block' });
-
 	for (const [question, last] of Object.entries(LAST_ROW)) {
 		test(`${question}: a list longer than the screen scrolls to its last row, by finger or wheel`, async ({
 			page
