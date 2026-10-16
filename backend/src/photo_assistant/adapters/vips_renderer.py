@@ -17,6 +17,8 @@ _ROTATIONS = {90: "d90", 180: "d180", 270: "d270"}
 # Never ask libvips to decode at more than this edge (it only shrinks, never upscales):
 # a tiny crop divides the wanted edge by a tiny fraction (QA A6).
 _MAX_DECODE_EDGE = 100_000
+# A dominant colour is read from at most this many pixels a side (domain/colour.py).
+_SAMPLE_EDGE = 32
 
 
 # libwebp's effort 0-6: 2 halves a 2048 px preview's encode time against the default 4
@@ -137,6 +139,20 @@ class VipsRenderer:
             partial.replace(destination)
         finally:
             partial.unlink(missing_ok=True)
+
+    def colour_sample(self, image: Path) -> list[tuple[int, int, int]]:
+        """The pixels of ``image`` shrunk to at most 32 px a side by plain block averages (no
+        sharpening kernel to invent colours at edges), as sRGB; transparency over black."""
+        picture = pyvips.Image.new_from_file(str(image), access="sequential")
+        if picture.hasalpha():
+            picture = picture.flatten(background=[0])
+        if picture.interpretation != "srgb":
+            picture = picture.colourspace("srgb")
+        step = math.ceil(max(picture.width, picture.height) / _SAMPLE_EDGE)
+        if step > 1:
+            picture = picture.shrink(step, step)
+        data = bytes(picture[:3].cast("uchar").write_to_memory())
+        return [(data[i], data[i + 1], data[i + 2]) for i in range(0, len(data), 3)]
 
     def dimensions(self, image: Path) -> tuple[int, int]:
         header = pyvips.Image.new_from_file(str(image))  # reads the header only

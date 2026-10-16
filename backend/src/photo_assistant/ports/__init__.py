@@ -106,6 +106,10 @@ class ImageRenderer(Protocol):
         """Width and height of an image file, as stored (no orientation applied)."""
         ...
 
+    def colour_sample(self, image: Path) -> list[tuple[int, int, int]]:
+        """A few hundred sRGB pixels of an image (a thumbnail), to find its dominant colour."""
+        ...
+
     def render_variant(self, source: Path, destination: Path, spec: RenderSpec) -> tuple[int, int]:
         """Orientation-corrected, recipe applied, resized, encoded as asked. Returns its size."""
         ...

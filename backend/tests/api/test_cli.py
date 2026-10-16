@@ -140,7 +140,7 @@ def test_a_cli_import_leaves_the_servers_other_jobs_in_the_queue(
         services.close()
     write_photo(tmp_path / "pics" / "a.jpg", seed=1)
     assert cli.main(["import", str(tmp_path / "pics")]) == 0
-    assert "Making 3 " in capsys.readouterr().out, "its own preview, places and groups"
+    assert "Making 4 " in capsys.readouterr().out, "its own preview, places, groups, colours"
     services = build_services(get_settings())
     try:
         waiting = [(j["kind"], j["attempts"]) for j in services.repo.list_jobs("queued")]
@@ -154,7 +154,7 @@ def test_a_cli_import_leaves_the_servers_other_jobs_in_the_queue(
         ("scan_source", 0),
         ("cluster_faces", 0),
     ]
-    assert done == {"preview", "geocode", "group"} and failed == []
+    assert done == {"preview", "geocode", "group", "colour"} and failed == []
 
 
 def test_backup_list_from_the_main_cli(

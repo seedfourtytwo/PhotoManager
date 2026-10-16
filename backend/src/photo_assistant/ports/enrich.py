@@ -1,5 +1,5 @@
-"""Ports for background enrichment: offline reverse geocoding, perceptual hashing, and the
-exposure settings of photos imported before they were kept."""
+"""Ports for background enrichment: offline reverse geocoding, perceptual hashing, dominant
+colours, and the exposure settings of photos imported before they were kept."""
 
 from collections.abc import Sequence
 from datetime import datetime
@@ -47,6 +47,21 @@ class EnrichmentStore(Protocol):
     def set_groups(self, groups: dict[int, int | None]) -> int:
         """Store group ids; returns how many changed."""
         ...
+
+
+class ColourSampler(Protocol):
+    def colour_sample(self, image: Path) -> list[tuple[int, int, int]]:
+        """A few hundred sRGB pixels of an image (a thumbnail), to find its dominant colour."""
+        ...
+
+
+class ColourStore(Protocol):
+    def assets_without_colour(self, after_id: int, limit: int) -> list[tuple[int, str]]:
+        """(asset id, thumbnail path relative to the data root) of photos with a thumbnail
+        and no colour yet, trashed ones included (they may be restored), by id."""
+        ...
+
+    def set_colours(self, colours: Sequence[tuple[int, str]]) -> None: ...
 
 
 class ExposureStore(Protocol):

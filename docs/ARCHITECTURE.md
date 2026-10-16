@@ -58,7 +58,7 @@ admin (see Visibility in §7); `0026` keeps what the last global face-clustering
 on first request and cached as `derived/portrait/<hh>/<hash>-<cut key>.webp`); `0030` keeps how a
 photo was exposed (`asset.f_number`, `exposure_time`, `iso`, `focal_length`); `0031` keeps what
 each device keeps on it (`sync_rule`) and what the phone said it saved (`sync_sent`), for "Keep on my
-phone"; `0032` lets an account pin photos to its Home (`user_asset.pinned_at`). `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
+phone"; `0032` lets an account pin photos to its Home (`user_asset.pinned_at`). `0034` keeps each photo's dominant colour (`asset.colour`, `#rrggbb`), the placeholder a grid paints until the thumbnail arrives: the `colour` job reads it from the thumbnail (`domain/colour.py`: the mean of the most crowded bucket of similar colours, never an average of the whole picture) after every import and once at start-up. `ANALYZE` runs after migrating, `PRAGMA optimize` every 6 h. Upgrades are tested from v3 (M1) and v16 (M2) libraries with data.
 
 ```
 user(id, username UNIQUE NOCASE, display_name, password_hash argon2id, role[admin|member|guest],
@@ -80,7 +80,8 @@ asset(id, content_hash UNIQUE, kind, mime_type, byte_size, width, height,
       first_source_id  -- where it was first found (informational; grants nothing)
       private, private_by  -- the marker (0017): hides it only from people who reach it
                            -- solely through the marker's own sources or albums
-      place_id, phash, group_id, edit_version, trashed_at, trashed_by)
+      place_id, phash, group_id, edit_version, trashed_at, trashed_by,
+      colour)              -- 0034: dominant colour "#rrggbb" of the thumbnail; NULL until read
 asset_source(asset_id, source_id, relative_path, seen_at, byte_size, mtime_ns, ctime_ns)
 user_asset(user_id, asset_id, favourite, hidden,                      -- per-user state
            pinned_at)       -- 0032: NULL = not pinned; else when (UTC), kept on a re-pin

@@ -29,7 +29,7 @@ from photo_assistant.api.main import create_app
 from photo_assistant.api.services import build_services
 from photo_assistant.api.settings import get_settings
 from photo_assistant.app.accounts import AccountError
-from photo_assistant.app.enrich import GEOCODE_JOB, GROUP_JOB
+from photo_assistant.app.enrich import COLOUR_JOB, GEOCODE_JOB, GROUP_JOB
 from photo_assistant.app.exposure_backfill import EXPOSURE_BACKFILL_JOB
 from photo_assistant.app.import_source import PREVIEW_JOB, SourceUnavailableError
 from photo_assistant.domain.access import PIN_LENGTH, Role
@@ -38,7 +38,7 @@ from photo_assistant.ports import ImportBusyError
 
 # What an import itself queues. Everything else in the queue (backups, scans of other
 # sources, ML) belongs to the server and stays there.
-_IMPORT_JOBS = frozenset({PREVIEW_JOB, GEOCODE_JOB, GROUP_JOB})
+_IMPORT_JOBS = frozenset({PREVIEW_JOB, GEOCODE_JOB, GROUP_JOB, COLOUR_JOB})
 
 
 def _serve() -> int:

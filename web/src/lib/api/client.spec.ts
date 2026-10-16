@@ -35,6 +35,7 @@ const asset = (id: number): AssetOut => ({
 	height: 3,
 	kind: 'photo',
 	thumb: null,
+	colour: null,
 	preview_ready: false,
 	favourite: false,
 	pinned: false,

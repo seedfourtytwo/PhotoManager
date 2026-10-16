@@ -52,6 +52,7 @@ def asset_from_row(row: sqlite3.Row) -> Asset:
         preview_path=row["preview_path"],
         variant_of=row["variant_of"],
         thumb_size=(row["thumb_w"], row["thumb_h"]) if row["thumb_w"] else None,
+        colour=row["colour"],
         exposure=Exposure(row["f_number"], row["exposure_time"], row["iso"], row["focal_length"]),
     )
 

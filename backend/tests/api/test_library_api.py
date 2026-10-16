@@ -182,7 +182,7 @@ def test_stats_and_jobs(client: TestClient, source_guard: Path) -> None:
     assert stats["free_bytes"] > 0
     jobs = client.get("/api/jobs", params={"status": "done"}).json()
     # local-ML analysis is only planned when its model files are installed (C31): not here
-    assert {j["kind"] for j in jobs} == {"scan_source", "preview", "geocode", "group"}
+    assert {j["kind"] for j in jobs} == {"scan_source", "preview", "geocode", "group", "colour"}
     assert client.post("/api/jobs/999/retry").status_code == 404
 
 

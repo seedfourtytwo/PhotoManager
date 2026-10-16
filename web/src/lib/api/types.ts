@@ -157,6 +157,8 @@ export type AssetOut = {
 	height: number | null;
 	kind: string;
 	thumb: { url: string } | null;
+	/** Dominant colour `#rrggbb` to paint while the thumbnail loads; null until read (v1.16). */
+	colour: string | null;
 	preview_ready: boolean;
 	favourite: boolean;
 	/** On the account's Home (issue 54); like a favourite, the account's own. */

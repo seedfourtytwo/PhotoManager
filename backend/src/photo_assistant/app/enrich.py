@@ -1,6 +1,7 @@
-"""Background jobs that add knowledge to photos after import (FEATURES 2.4, 2.5).
+"""Background jobs that add knowledge to photos after import (FEATURES 2.4, 2.5), and the
+dominant colour a grid paints until a thumbnail arrives (Flight).
 
-Both are safe to run any number of times: they only look at photos still missing the data.
+All are safe to run any number of times: they only look at photos still missing the data.
 """
 
 import logging
@@ -8,13 +9,21 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from photo_assistant.domain.colour import dominant_colour
 from photo_assistant.domain.grouping import group_shots, runs_with
-from photo_assistant.ports.enrich import EnrichmentStore, Geocoder, PerceptualHasher
+from photo_assistant.ports.enrich import (
+    ColourSampler,
+    ColourStore,
+    EnrichmentStore,
+    Geocoder,
+    PerceptualHasher,
+)
 
 log = logging.getLogger(__name__)
 
 GEOCODE_JOB = "geocode"
 GROUP_JOB = "group"
+COLOUR_JOB = "colour"
 FULL_REGROUP: dict[str, object] = {"full": True}  # payload: regroup the whole library
 
 
@@ -41,6 +50,41 @@ class GeocodeAssets:
             done += len(found)
             after = todo[-1][0]
         return done
+
+
+class PaintColours:
+    """Photos with a thumbnail get its dominant colour. Queued after every import and once at
+    start-up, so it also fills in photos imported before colours were kept."""
+
+    def __init__(
+        self,
+        repo: ColourStore,
+        sampler: ColourSampler,
+        absolute: Callable[[str], Path],
+        batch: int = 200,
+    ) -> None:
+        self._repo = repo
+        self._sampler = sampler
+        self._absolute = absolute
+        self._batch = batch
+
+    def __call__(self, payload: dict[str, object]) -> int:
+        done, after = 0, 0
+        while todo := self._repo.assets_without_colour(after, self._batch):
+            found = [(i, c) for i, path in todo if (c := self._colour(i, path)) is not None]
+            self._repo.set_colours(found)
+            done += len(found)
+            after = todo[-1][0]
+        return done
+
+    def _colour(self, asset_id: int, thumb: str) -> str | None:
+        try:
+            return dominant_colour(self._sampler.colour_sample(self._absolute(thumb)))
+        except Exception:  # a missing or broken thumbnail: tried again by the next run
+            log.warning(
+                "could not read a thumbnail's colour", extra={"asset_id": asset_id}, exc_info=True
+            )
+            return None
 
 
 class GroupSimilar:

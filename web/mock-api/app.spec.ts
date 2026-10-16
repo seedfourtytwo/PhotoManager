@@ -336,6 +336,13 @@ describe('with seeded users', () => {
 		});
 	});
 
+	it('paints every photo with its dominant colour', async () => {
+		const api = await signedIn();
+		const { items } = await api.assets({}, null, 50);
+		expect(items.length).toBeGreaterThan(0);
+		for (const a of items) expect(a.colour).toMatch(/^#[0-9a-f]{6}$/);
+	});
+
 	it('estimates and streams a ZIP download', async () => {
 		const api = await signedIn();
 		const ids = (await api.assets({}, null, 2)).items.map((a) => a.id);
