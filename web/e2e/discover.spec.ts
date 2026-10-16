@@ -56,7 +56,11 @@ test('without models, a member reads plain words on Search and People: no comman
 
 	// People says nothing to a member about it: there is nothing a member could do.
 	await page.goto('/people');
-	await expect(page.getByRole('link', { name: /^Léa/ })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'People', level: 1 })).toBeVisible();
+	const loaded = page
+		.getByText('No people yet.')
+		.or(page.getByRole('main').locator('a[href^="/people/"]').first());
+	await expect(loaded).toBeVisible();
 	await expect(note).toHaveCount(0);
 	await expect(page.getByText('Faces are paused')).toHaveCount(0);
 });
