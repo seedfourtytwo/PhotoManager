@@ -75,7 +75,10 @@
 		flex: 1 0 auto;
 	}
 	/* One glass capsule for every control: the segmented sits in it without its own fill. */
+	/* Glass makes it a layer of its own: lifted, so the ⋯ menu it opens lies over the photos. */
 	.cluster {
+		position: relative;
+		z-index: var(--z-menu);
 		display: flex;
 		align-items: center;
 		gap: var(--fine);
