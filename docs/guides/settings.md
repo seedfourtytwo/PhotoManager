@@ -49,16 +49,16 @@ Write lists (`PA_ALLOWED_HOSTS`) comma-separated, without quotes, brackets or sp
 | Local ML | `PA_ML_ENABLED` | `true` | `false`: no photo is queued for search, faces or tags. |
 | Local ML | `PA_ML_MODELS_DIR` | not set | Folder with the model files (`just models` fills it); not set = `<data root>/models`. |
 | Local ML | `PA_ML_PROVIDER` | `auto` | Where models run: `auto` (graphics card if this onnxruntime supports it, else processor), `cpu`, or `cuda` (an error if it is missing). |
-| Local ML | `PA_ML_CLIP_MODEL` | `ViT-B-32__openai` | The search model, by its Immich name on Hugging Face. `XLM-Roberta-Large-Vit-B-32` understands French and English queries. |
+| Local ML | `PA_ML_CLIP_MODEL` | `ViT-B-16-SigLIP2__webli` | The search model, by its Immich name on Hugging Face. After changing it, `just ml-backfill` re-analyses every photo. `XLM-Roberta-Large-Vit-B-32` understands French and English queries. |
 | Local ML | `PA_ML_CLIP_BATCH_SIZE` | `16` | Photos handed to the search model at once (1 to 256). |
 | Local ML | `PA_ML_FACE_MODEL` | `buffalo_l` | Face model: `buffalo_l` (more accurate, non-commercial licence) or `yunet_sface`. |
 | Local ML | `PA_ML_FACE_DET_SIZE` | `640` | Image size the face detector works at, in pixels (160 to 1920). |
 | Local ML | `PA_ML_FACE_MIN_SCORE` | not set | How sure the detector must be that something is a face (0 to 1); not set = 0.7 for buffalo_l, 0.8 for yunet_sface. |
 | Local ML | `PA_ML_FACE_MAX_DISTANCE` | not set | How different two faces may be and still count as one person; not set = 0.5 for buffalo_l, 0.6 for yunet_sface. |
 | Local ML | `PA_ML_FACE_MIN_FACES` | `3` | Faces needed before a new person is suggested. |
-| Local ML | `PA_ML_TAG_MARGIN` | `0.03` | How clearly a tag must beat the neutral baseline: higher = fewer, surer tags. |
+| Local ML | `PA_ML_TAG_MARGIN` | not set | How clearly a tag must beat the neutral baseline: higher = fewer, surer tags; not set = 0 for ViT-B-16-SigLIP2__webli, 0.03 for other models. |
 | Local ML | `PA_ML_TAG_MAX_TAGS` | `3` | Most automatic tags per photo. |
-| Local ML | `PA_ML_SEARCH_MIN_SCORE` | not set | Search hits scoring below this are dropped; not set = keep all. |
+| Local ML | `PA_ML_SEARCH_MIN_SCORE` | not set | Search hits scoring below this are dropped; not set = 0.08 for ViT-B-16-SigLIP2__webli, keep all for other models. -1 keeps all. |
 | Backups | `PA_BACKUP_ENABLED` | `true` | `false` stops scheduled backups from running inside the server (`just backup run` still works). |
 | Backups | `PA_BACKUP_POLL_SECONDS` | `60` | How often the server checks whether a backup is due. |
 | Backups | `PA_BACKUP_RESTORE_SAMPLE` | `20` | Photos restored and compared in one restore test. |

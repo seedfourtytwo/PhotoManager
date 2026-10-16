@@ -215,7 +215,9 @@ def test_systemd_user_service() -> None:
     assert service["EnvironmentFile"] == ["@REPO@/.env"]
     assert service["ExecStart"][0].startswith("@REPO@/backend/.venv/bin/python -m photo_assistant")
     assert service["Restart"] == ["on-failure"] and service["Nice"] == ["5"]
-    assert service["MemoryMax"]
+    # SigLIP2 peaked at 2.8 GB with both halves loaded (laptop study, TECH_DECISIONS.md),
+    # before faces and preview rendering.
+    assert service["MemoryHigh"] == ["3G"] and service["MemoryMax"] == ["4G"]
     assert "PA_HOST" not in " ".join(service.get("Environment", [])), "stays on 127.0.0.1"
     assert unit["Install"]["WantedBy"] == ["default.target"], "user services: default.target"
 

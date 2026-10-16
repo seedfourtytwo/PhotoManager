@@ -1,5 +1,8 @@
+import math
+
 import pytest
 
+from photo_assistant.api.settings import MlSettings
 from photo_assistant.domain.tags import (
     BACKGROUND_PROMPTS,
     VOCABULARY,
@@ -76,3 +79,20 @@ def test_default_vocabulary_flags_documents_and_receipts() -> None:
     assert is_screen_or_document([TagScore("receipt", 0.1)])
     assert is_screen_or_document([TagScore("document", 0.1)])
     assert not is_screen_or_document([TagScore("food", 0.1)])
+
+
+def test_siglip2_scale_scores_still_produce_tags_at_the_default_margin() -> None:
+    # SigLIP2 cosines sit around 0 to 0.13, far below CLIP's 0.15 to 0.35 band.
+    def embed(prompt: str) -> Vector:
+        return (1.0, 0.0, 0.0) if prompt == "a photo of a beach." else (0.0, 1.0, 0.0)
+
+    def image(beach: float, background: float) -> Vector:
+        return (beach, background, math.sqrt(1 - beach**2 - background**2))
+
+    model = build_tag_model(embed, (TagSpec("beach", ("a photo of a beach.",)),))
+    params = MlSettings(_env_file=None).tag_params()  # type: ignore[call-arg]
+    assert [t.name for t in zero_shot_tags(image(0.10, 0.08), model, params)] == ["beach"]
+    assert zero_shot_tags(image(0.07, 0.08), model, params) == []
+    assert zero_shot_tags(image(0.10, 0.08), model, TagParams(margin=0.03)) == [], (
+        "the old CLIP margin would tag nothing at this scale"
+    )

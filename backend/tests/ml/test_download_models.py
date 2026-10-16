@@ -153,3 +153,9 @@ def test_run_and_main(
     monkeypatch.setattr(dm, "open_url", FakeNet({}))  # never the real network in tests
     assert dm.main(["--models-dir", str(tmp_path / "x"), "--faces", "none", "--clip", "nope?"]) == 1
     assert "error:" in capsys.readouterr().err
+
+
+def test_default_download_is_the_default_search_model() -> None:
+    from photo_assistant.api.settings import MlSettings
+
+    assert dm.parse_args([]).clip == MlSettings(_env_file=None).clip_model  # type: ignore[call-arg]
