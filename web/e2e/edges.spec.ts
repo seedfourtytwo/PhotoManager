@@ -50,7 +50,7 @@ test('edges: the page asks for the whole screen', async ({ page }) => {
 });
 
 // prettier-ignore
-const PAGES = ['/home', '/', '/collections', '/search', '/settings', '/admin', '/albums', '/people', '/map', '/calendar', '/trash', '/review'];
+const PAGES = ['/home', '/', '/collections', '/search', '/settings', '/settings/appearance', '/settings/overview', '/settings/folders', '/settings/backups', '/settings/people', '/albums', '/people', '/map', '/calendar', '/trash', '/review'];
 
 // A page even a little wider than the screen slides sideways under the finger, and on a phone
 // that is the whole app wobbling; Chrome shrinks it instead and the dock sinks into the home bar.

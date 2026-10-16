@@ -79,6 +79,20 @@ describe('LookForm', () => {
 		expect(calls).toEqual([{ method: 'GET', url: '/api/admin/accounts/2/look', body: undefined }]);
 	});
 
+	it('Larger text is a switch: on saves the Atkinson face, and trying it shows it here', async () => {
+		const calls = serve(hers, echo);
+		render(LookForm, { user: donna, onclose: () => {} });
+		const larger = form().getByRole('switch', { name: 'Larger text' });
+		await expect.element(larger).not.toBeChecked();
+		await larger.click();
+		await button('Try on my screen').click();
+		expect(root.getAttribute('data-face')).toBe('atkinson');
+		await button('Save for Donna').click();
+		const put = calls.find((c) => c.method === 'PUT');
+		expect(put?.body).toMatchObject({ face: 'atkinson' });
+		expect(root.getAttribute('data-face')).toBeNull(); // the trial ended: my own look again
+	});
+
 	it('Try on my screen shows the sheet here and saves nothing', async () => {
 		const calls = serve(hers, echo);
 		render(LookForm, { user: donna, onclose: () => {} });

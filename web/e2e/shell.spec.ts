@@ -67,7 +67,9 @@ test('laptop: a glass capsule floats centred at the top, the avatar on its line 
 	await expect(page.getByRole('heading', { name: 'C', level: 1 })).toBeVisible();
 	await expect(me).toHaveAttribute('aria-current', 'page');
 	const main = page.getByRole('main');
-	await expect(main.getByRole('link', { name: /^Admin/ })).toHaveAttribute('href', '/admin');
+	await expect(
+		main.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Overview' })
+	).toHaveAttribute('href', '/settings/overview');
 	await expect(main.getByRole('button', { name: 'Change PIN' })).toBeVisible();
 	await expect(main.getByRole('button', { name: 'Sign out' })).toBeVisible();
 });

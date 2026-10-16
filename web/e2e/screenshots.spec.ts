@@ -221,14 +221,13 @@ test('every screen', async ({ page }, info) => {
 	await expect(page.locator('.tile img').first()).toBeVisible();
 	await shot(page, '15-trash', p);
 
-	await page.goto('/admin');
-	await expect(page.getByRole('region', { name: 'Folders' })).toBeVisible();
+	await page.goto('/settings/overview');
+	await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 	await shot(page, '14-admin', p, true);
-	await page.getByRole('button', { name: /^Backups/ }).click();
-	const backups = page.getByRole('dialog', { name: 'Backups' });
-	await expect(backups).toHaveCSS('opacity', '1');
+	await page.goto('/settings/backups');
+	await expect(page.getByRole('button', { name: 'Add backup' })).toBeVisible();
 	await shot(page, '14b-backups', p);
-	await backups.getByRole('button', { name: 'Close' }).click();
+	await page.goto('/settings/folders');
 	await page
 		.getByRole('region', { name: 'Folders' })
 		.getByRole('button', { name: /^Old hard disk/ })
@@ -243,6 +242,7 @@ test('every screen', async ({ page }, info) => {
 	await stop.getByRole('button', { name: 'Cancel' }).click();
 
 	// The look of one account: the form, then that look tried on the admin's own screen.
+	await page.goto('/settings/people');
 	await page
 		.getByRole('region', { name: 'People' })
 		.getByRole('button', { name: /^Partner/ })

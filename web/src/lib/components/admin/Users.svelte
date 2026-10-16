@@ -3,6 +3,7 @@
 	import { api, notice, session } from '$lib/app.svelte';
 	import { PIN_FIELD } from '$lib/pin';
 	import Dialog from '../Dialog.svelte';
+	import PinSheet from '../PinSheet.svelte';
 	import IconButton from '../ui/IconButton.svelte';
 	import TileGroup from '../ui/TileGroup.svelte';
 	import TileRow from '../ui/TileRow.svelte';
@@ -17,7 +18,6 @@
 	let resetting = $state<ManagedUser | null>(null);
 	let styling = $state<ManagedUser | null>(null);
 	let form = $state({ username: '', display_name: '', pin: '', role: 'member' as Role });
-	let newPin = $state('');
 	/** Whose sheet is open: their role, their actions, their user name. */
 	let openId = $state<number | null>(null);
 	const open = $derived(users.find((u) => u.id === openId) ?? null);
@@ -81,17 +81,11 @@
 		}
 	}
 
-	function closeReset() {
-		resetting = null;
-		newPin = '';
-	}
-
-	async function reset() {
-		// The dialog may be cancelled while the request is on its way: remember who it was for.
-		const who = resetting;
-		if (!who || !(await patch(who, { pin: newPin }))) return;
+	/** The sheet asked for the new PIN twice; a refusal is thrown back so it starts over. */
+	async function reset(who: ManagedUser, pin: string) {
+		const updated = await api.updateUser(who.id, { pin });
+		users = users.map((u) => (u.id === updated.id ? updated : u));
 		notice.show(`New PIN set for ${who.username}.`);
-		if (resetting?.id === who.id) closeReset();
 	}
 
 	/** Thirty wrong PINs lock an account until someone lifts it here (or sets a new PIN). */
@@ -157,18 +151,17 @@
 		{/snippet}
 	</Dialog>
 {:else if resetting}
-	<Dialog title={`New PIN for ${resetting.username}`} onclose={closeReset}>
-		<label class="field">PIN <input {...PIN_FIELD} bind:value={newPin} autocomplete="off" /></label>
-		<p class="quiet small">Exactly {PIN_LENGTH} digits.</p>
-		{#snippet actions()}
-			<button
-				class="primary"
-				type="button"
-				disabled={!isPin(newPin) || pending !== null}
-				onclick={reset}>Set PIN</button
-			>
-		{/snippet}
-	</Dialog>
+	{@const who = resetting}
+	<PinSheet
+		title={`New PIN for ${who.username}`}
+		askCurrent={false}
+		line="Give it to them in person; they can change it in Settings."
+		submit={({ pin }) => reset(who, pin)}
+		onclose={() => {
+			// a sheet closed while its PIN was on the way leaves the next person's sheet open
+			if (resetting?.id === who.id) resetting = null;
+		}}
+	/>
 {:else if styling}
 	{#key styling.id}
 		<LookForm user={styling} onclose={() => (styling = null)} />

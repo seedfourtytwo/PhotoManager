@@ -1,4 +1,4 @@
-import { expect, expectAccessible, resetMock, signIn, test } from './helpers.ts';
+import { expect, expectAccessible, isPhone, resetMock, signIn, test } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	// one look-alike, two screenshots and a receipt wait for review
@@ -30,6 +30,34 @@ test('review: a look-alike sits beside the photo it resembles; one decision per 
 	await expect(page.getByRole('status')).toContainText('Moved 1 photo to the trash');
 	await expect(one).toBeHidden();
 	await expect(shots.getByRole('listitem')).toHaveCount(1);
+});
+
+test('review: a look-alike and its library photo are compared at a usable size, not letterboxed', async ({
+	page
+}) => {
+	const alike = page.getByRole('region', { name: /Look like photos you already have/ });
+	const frames = alike.locator('figure .frame');
+	await expect(frames).toHaveCount(2);
+	const viewport = page.viewportSize()!;
+	for (const frame of await frames.all()) {
+		const box = (await frame.boundingBox())!;
+		// laptop: each about half the column; phone: each nearly the screen, swiped between
+		expect(box.width).toBeGreaterThanOrEqual(isPhone(page) ? viewport.width * 0.7 : 280);
+		const img = frame.locator('img');
+		if (await img.count())
+			expect(await img.evaluate((i) => getComputedStyle(i).objectFit)).not.toBe('contain');
+	}
+});
+
+test('review: phone: the last decision is never under the dock', async ({ page }) => {
+	test.skip(!isPhone(page), 'the dock is the phone’s');
+	const last = page.getByRole('button', { name: /^Keep/ }).last();
+	await expect(last).toBeVisible();
+	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+	const dock = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+	await expect
+		.poll(async () => (await last.boundingBox())!.y + (await last.boundingBox())!.height)
+		.toBeLessThanOrEqual(dock.y);
 });
 
 test('review: decide a whole group at once, until nothing is left', async ({ page }) => {

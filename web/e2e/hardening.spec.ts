@@ -5,6 +5,7 @@ import {
 	countSlow,
 	delayRoute,
 	expect,
+	fillPins,
 	follow,
 	isPhone,
 	loupe,
@@ -114,7 +115,7 @@ const TWO_POLLS_MS = 3200;
 
 test('admin: counts are polled at a steady pace while work is running', async ({ page }) => {
 	const asked = await busyStats(page);
-	await signIn(page, '/admin');
+	await signIn(page, '/settings/overview');
 	await expect(page.getByText(/working: 1 running/)).toBeVisible();
 	const from = asked.length;
 	await page.waitForTimeout(TWO_POLLS_MS);
@@ -127,7 +128,7 @@ test('admin: polling stops when you leave the page, also with a request in fligh
 	page
 }) => {
 	const asked = await busyStats(page, 400);
-	await signIn(page, '/admin');
+	await signIn(page, '/settings/overview');
 	await expect(page.getByText(/working: 1 running/)).toBeVisible();
 	const next = asked.length + 1;
 	await expect.poll(() => asked.length).toBeGreaterThanOrEqual(next); // one is in flight now
@@ -357,9 +358,14 @@ test.describe('a double click sends one request', () => {
 		await signIn(page, '/settings');
 		await page.getByRole('button', { name: 'Change PIN' }).click();
 		const sheet = page.getByRole('dialog', { name: 'Change PIN' });
-		await sheet.getByLabel('Current PIN').fill(ADMIN.pin);
-		await sheet.getByLabel('New PIN').fill('8642');
-		await sheet.getByRole('button', { name: 'Change PIN' }).dblclick();
+		await fillPins(sheet, { 'Current PIN': ADMIN.pin, 'New PIN': '8642' });
+		// the fourth digit sends it; a key pressed again meanwhile sends nothing more
+		const again = sheet.getByLabel('New PIN again', { exact: true });
+		await again.fill('8642');
+		await sheet
+			.getByRole('button', { name: '2', exact: true })
+			.click({ force: true })
+			.catch(() => undefined);
 		await expect(page.getByRole('status').filter({ hasText: 'PIN changed' })).toBeVisible();
 		expect(posts.count).toBe(1);
 		await expect(page.getByRole('alert').filter({ hasText: /PIN/ })).toHaveCount(0);
@@ -367,8 +373,7 @@ test.describe('a double click sends one request', () => {
 
 	test('Analyse photos queues once', async ({ page }) => {
 		const posts = await countSlow(page, '**/api/ml/backfill', 'POST');
-		await signIn(page, '/admin');
-		await page.getByRole('region', { name: 'Search and faces' }).getByRole('button').click();
+		await signIn(page, '/settings/search');
 		await page.getByRole('button', { name: 'Analyse photos not done yet' }).dblclick();
 		await expect(page.getByRole('status').filter({ hasText: /Queued/ })).toBeVisible();
 		expect(posts.count).toBe(1);

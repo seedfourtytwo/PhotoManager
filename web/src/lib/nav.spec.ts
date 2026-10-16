@@ -98,8 +98,8 @@ describe('attentionOf', () => {
 		problems: [...problems]
 	});
 
-	it('tells an admin the first thing that needs them', () => {
-		expect(attentionOf(true, health([problem]))).toBe('The last backup failed 3 days ago.');
+	it('tells an admin the first thing that needs them, in plain words', () => {
+		expect(attentionOf(true, health([problem]))).toBe("Last backup didn't finish");
 	});
 	it('says nothing when all is well', () => {
 		expect(attentionOf(true, health([]))).toBeNull();
@@ -144,7 +144,7 @@ describe('pageMove', () => {
 		['/collections', '/people'],
 		['/people', '/people/12'],
 		['/', '/settings'],
-		['/settings', '/admin'],
+		['/settings', '/settings/backups'],
 		['/albums/3', '/albums/3/print'],
 		['/people/12', '/people/13']
 	])('drills in from %s to %s', (from, to) => {
@@ -153,7 +153,7 @@ describe('pageMove', () => {
 	it.each([
 		['/people/12', '/people'],
 		['/people', '/collections'],
-		['/admin', '/settings'],
+		['/settings/backups', '/settings'],
 		['/settings', '/']
 	])('goes back from %s to %s', (from, to) => {
 		expect(pageMove({ from, to })).toBe('back');

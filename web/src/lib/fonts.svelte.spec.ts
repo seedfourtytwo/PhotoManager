@@ -4,6 +4,7 @@
  * in a real browser with the real file.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import './tokens.css';
 import './fonts.css';
 
 const spans: HTMLElement[] = [];
@@ -17,6 +18,29 @@ function widthOf(text: string, numeric: 'tabular-nums' | 'proportional-nums') {
 	spans.push(span);
 	return span.getBoundingClientRect().width;
 }
+
+describe('Larger text', () => {
+	const root = document.documentElement;
+	afterEach(() => root.removeAttribute('data-face'));
+	const familyOf = (token: string) => {
+		const span = document.createElement('span');
+		span.style.fontFamily = `var(${token})`;
+		document.body.append(span);
+		spans.push(span);
+		return getComputedStyle(span).fontFamily;
+	};
+
+	it('Inter is the face of everything by default', () => {
+		for (const token of ['--font-ui', '--font-data', '--font-title'])
+			expect(familyOf(token)).toMatch(/^"?Inter/);
+	});
+
+	it("the account's Larger text sets Atkinson Hyperlegible for everything you read", () => {
+		root.setAttribute('data-face', 'atkinson');
+		for (const token of ['--font-ui', '--font-data', '--font-title'])
+			expect(familyOf(token)).toMatch(/^"?Atkinson Hyperlegible Next/);
+	});
+});
 
 describe('Inter', () => {
 	it('loads from the vendored files', async () => {

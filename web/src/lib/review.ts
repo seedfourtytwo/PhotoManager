@@ -16,3 +16,21 @@ export function reviewTitle(reason: string): string {
 export function reviewOne(reason: string): string {
 	return TITLES[reason]?.[1] ?? 'Held back';
 }
+
+type Sized = { width: number | null; height: number | null };
+const pixels = (a: Sized) => (a.width && a.height ? a.width * a.height : 0);
+
+/** "4032 × 3024 · 12 MP": what a look-alike's size chip says; '' when the size is not known. */
+export function sizeLine(a: Sized): string {
+	const n = pixels(a);
+	if (!n) return '';
+	const mp = n / 1e6;
+	return `${a.width} × ${a.height} · ${mp >= 10 ? Math.round(mp) : Math.round(mp * 10) / 10} MP`;
+}
+
+/** Which of two photos has more pixels, or null when they are the same or a size is unknown. */
+export function largerOf(first: Sized, second: Sized): 'first' | 'second' | null {
+	const [a, b] = [pixels(first), pixels(second)];
+	if (!a || !b || a === b) return null;
+	return a > b ? 'first' : 'second';
+}

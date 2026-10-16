@@ -68,8 +68,10 @@ test('without models, People leads an admin to where faces are set up', async ({
 	await expect(note.locator('code')).toHaveCount(0);
 	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
 	await note.getByRole('link', { name: 'Admin' }).click();
-	await expect(page).toHaveURL(/\/admin$/);
-	await expect(page.getByRole('heading', { name: 'Search and faces' })).toBeVisible();
+	// Admin is a part of Settings now: the old link lands on its overview, which leads on.
+	await expect(page).toHaveURL(/\/settings\/overview$/);
+	await page.getByRole('region', { name: 'Search & faces' }).getByRole('link').click();
+	await expect(page.getByRole('heading', { name: 'Search & faces', level: 1 })).toBeVisible();
 });
 
 test('search before typing: faces, places and, once search by meaning is set up, things', async ({

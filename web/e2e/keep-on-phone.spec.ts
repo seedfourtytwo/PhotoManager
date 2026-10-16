@@ -22,7 +22,7 @@ async function openPhone(page: Page) {
 
 test('keep an album on a phone, leave out screenshots, and see it on You', async ({ page }) => {
 	await resetMock();
-	await signIn(page, '/settings');
+	await signIn(page, '/settings/phones');
 	const phones = page.getByRole('region', { name: 'Phones that send photos here' });
 	await phones.getByRole('button', { name: 'Add a phone' }).click();
 	const add = page.getByRole('dialog', { name: 'Add a phone' });
@@ -51,7 +51,7 @@ test('keep an album on a phone, leave out screenshots, and see it on You', async
 		'aria-pressed',
 		'true'
 	);
-	await follow(page, '/settings');
+	await follow(page, '/settings/phones');
 	keeps = await openPhone(page);
 	await expect(keeps.getByRole('region', { name: 'Keeps' })).toContainText('Summers at the house');
 	await expectAccessible(page);

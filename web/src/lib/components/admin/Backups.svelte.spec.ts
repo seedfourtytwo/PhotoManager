@@ -65,6 +65,22 @@ const withCopy = (over: Partial<BackupTarget>) =>
 		...over
 	});
 
+describe('a failed backup', () => {
+	it('says what happened in plain words, the tool’s text only under Details', async () => {
+		const failed = run({
+			status: 'failed',
+			error: 'repository not reachable: connection refused',
+			error_kind: 'unreachable'
+		});
+		render(Backups, props([target({ last_run: failed, needs_attention: true })]));
+		await expect.element(page.getByText(/didn't answer/)).toBeVisible();
+		const raw = page.getByText('repository not reachable: connection refused');
+		await expect.element(raw).not.toBeVisible();
+		await page.getByText('Details', { exact: true }).click();
+		await expect.element(raw).toBeVisible();
+	});
+});
+
 describe('Backups header line', () => {
 	it('says when two places are protected', async () => {
 		render(Backups, props([target()], health(2, 2)));

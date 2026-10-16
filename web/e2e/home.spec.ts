@@ -123,7 +123,7 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 });
 
 test('home: with nothing to show it says so in one sentence, and what to do', async ({ page }) => {
-	await signIn(page, '/admin');
+	await signIn(page, '/settings');
 	const nothing: HomeData = {
 		on_this_day: null,
 		rediscover: [],
@@ -162,7 +162,7 @@ test('home: with nothing to show it says so in one sentence, and what to do', as
 test('You → Home: the account turns blocks off and moves them; its Home follows, a reload too', async ({
 	page
 }) => {
-	await signIn(page, '/settings');
+	await signIn(page, '/settings/appearance');
 	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
 	await expect(editor.getByRole('switch')).toHaveCount(8);
 	await editor.getByRole('switch', { name: 'Rediscover' }).click();
@@ -427,7 +427,7 @@ test('start page: the look decides, Library or no Home at all', async ({
 	browser,
 	baseURL
 }) => {
-	await signIn(page, '/admin');
+	await signIn(page, '/settings');
 	const setLook = (sheet: Record<string, unknown>) =>
 		page.evaluate(async (body) => {
 			const me = (await (await fetch('/api/auth/me')).json()) as { id: number };

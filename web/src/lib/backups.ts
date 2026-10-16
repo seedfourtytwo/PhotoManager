@@ -1,5 +1,5 @@
 /** How a backup place and its Proton copy are doing, in the words the admin page uses. */
-import type { BackupHealth, BackupTarget } from '$lib/api';
+import type { BackupErrorKind, BackupHealth, BackupProblem, BackupTarget } from '$lib/api';
 import { plural } from './format';
 
 export type PlaceState = 'ok' | 'not connected' | 'needs attention';
@@ -29,13 +29,55 @@ export function copyPlaceState(t: BackupTarget): PlaceState {
 	return protonCopyState(t) === 'up to date' ? 'ok' : 'not connected';
 }
 
+/** A problem as people read it: what happened, what to do, and the tool's own text kept aside. */
+export type PlainProblem = { headline: string; line: string; details: string | null };
+
+const KIND_WORDS: Record<BackupErrorKind, { headline: string; line: string }> = {
+	unreachable: {
+		headline: "Backup place didn't answer",
+		line: "Check it's switched on and connected, then back up again."
+	},
+	disk_full: {
+		headline: 'Backup place is full',
+		line: 'Make space there, or add another backup place.'
+	},
+	auth: {
+		headline: "Backup couldn't unlock",
+		line: 'Its password or sign-in was refused. Open Backups to set it again.'
+	},
+	locked: {
+		headline: 'Backup was busy',
+		line: 'Another backup was still running. It tries again by itself.'
+	},
+	unknown: {
+		headline: "Last backup didn't finish",
+		line: 'Open Backups and press Back up now. Details has what went wrong.'
+	}
+};
+
+/** The headline and the line of what to do for one kind of failure. */
+export function kindWords(kind: BackupErrorKind): { headline: string; line: string } {
+	return KIND_WORDS[kind];
+}
+
 /**
- * The one plain sentence on the Admin page's Backups tile: the first problem in its own words,
- * else where the library is safe; '' until the health is known.
+ * A backup problem in plain words. A failure (it has an `error_kind`) gets its kind's words and
+ * keeps the raw text for Details; any other problem (overdue, key not saved) is already a plain
+ * sentence from the server, so it is the line under a general headline.
+ */
+export function problemWords(problem: BackupProblem): PlainProblem {
+	if (problem.error_kind) return { ...KIND_WORDS[problem.error_kind], details: problem.message };
+	const headline = problem.severity === 'alert' ? 'Backups need you' : 'Backups need a look';
+	return { headline, line: problem.message, details: null };
+}
+
+/**
+ * The one plain sentence on the Backups row: the first problem's headline, else where the
+ * library is safe; '' until the health is known.
  */
 export function backupSentence(health: BackupHealth | null): string {
 	if (!health) return '';
-	if (health.problems.length) return health.problems[0].message;
+	if (health.problems.length) return problemWords(health.problems[0]).headline;
 	if (health.places_total === 0) return 'No backups yet: the library exists only on this computer';
 	if (health.protected) return `Protected in ${plural(health.places_ok, 'place')}`;
 	return `Only ${health.places_ok} of ${plural(health.places_total, 'place')} up to date`;
