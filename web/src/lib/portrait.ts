@@ -90,15 +90,6 @@ export function wheelZoom(deltaY: number): number {
 	return Math.exp(-deltaY * WHEEL_ZOOM);
 }
 
-/** The slider: 0 shows the whole shorter edge, 1 the closest cut; even steps zoom evenly. */
-export function sliderOfSize(size: number): number {
-	return Math.log(clamp(size, MIN_SIZE, 1)) / Math.log(MIN_SIZE);
-}
-
-export function sizeOfSlider(value: number): number {
-	return MIN_SIZE ** clamp(value, 0, 1);
-}
-
 /** What a key does on the stage: arrows move the circle over the photo, + and - zoom. */
 export function nudge(circle: Circle, key: string, aspect: number): Circle | null {
 	const moves: Record<string, [number, number]> = {

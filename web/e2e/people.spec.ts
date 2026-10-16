@@ -61,7 +61,7 @@ test('hidden people wait in their own list and can be shown again', async ({ pag
 	await page.keyboard.press('Escape');
 
 	await page.goto('/people');
-	await page.getByText('Hidden (1)').click();
+	await page.getByRole('button', { name: /^Hidden people/ }).click();
 	await page.getByRole('button', { name: 'Show again' }).click();
 	await expect(strangers).toHaveCount(before);
 	await expect(page.getByText(/^Hidden/)).toHaveCount(0);
@@ -77,7 +77,7 @@ test('a guest cannot hide anyone and is not shown the hidden list', async ({ pag
 	await signIn(page, '/people', GUEST);
 	await expect(page.getByRole('heading', { name: 'People' })).toBeVisible();
 	await expect(page.getByText(/^Hidden/)).toHaveCount(0);
-	await page.getByRole('main').locator('.people a').first().click();
+	await page.getByRole('main').locator('a[href^="/people/"]').first().click();
 	await expect(page.locator('.tile').first()).toBeVisible();
 	// a guest has no tools for a person: no ⋯ at all
 	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
@@ -86,14 +86,14 @@ test('a guest cannot hide anyone and is not shown the hidden list', async ({ pag
 
 // --- the portrait ------------------------------------------------------------------------------
 
-type Circle = { face_id: number; cx: number; cy: number; size: number };
+type Circle = { face_id: number; asset_id: number; cx: number; cy: number; size: number };
 
 /** A named person's page, and the round picture in its heading. */
 async function openSomeoneNamed(page: Page, who = undefined as typeof GUEST | undefined) {
 	await signIn(page, '/people', who);
 	await page.getByRole('link', { name: /^Léa/ }).click();
 	await expect(page).toHaveURL(/\/people\/\d+$/);
-	const portrait = page.locator('header img');
+	const portrait = page.locator('header .face img');
 	await expect(portrait).toBeVisible();
 	return portrait;
 }
@@ -114,8 +114,7 @@ test('change a portrait: pick another photo, zoom, save; the page shows the new 
 	);
 
 	await dialog.getByRole('button', { name: 'Photo 2', exact: true }).click();
-	const zoom = dialog.getByRole('slider', { name: 'Zoom' });
-	await expect(zoom).toBeEnabled();
+	await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
 	const stage = dialog.getByRole('group', { name: /^Portrait/ });
 	await stage.focus();
 	await page.keyboard.press('+');
@@ -133,12 +132,11 @@ test('change a portrait: pick another photo, zoom, save; the page shows the new 
 	await expect(dialog).toHaveCount(0);
 	await expect(portrait).not.toHaveAttribute('src', before!);
 	expect(await portrait.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true); // prettier-ignore
-	// and everywhere else the person is shown
-	const after = await portrait.getAttribute('src');
+	// and on People, whose card shows the photo the portrait now comes from
 	await page.goto('/people');
 	await expect(page.getByRole('link', { name: /^Léa/ }).locator('img')).toHaveAttribute(
 		'src',
-		after!
+		new RegExp(`/api/assets/${offered[1].asset_id}/preview`)
 	);
 });
 
@@ -148,7 +146,7 @@ test('the portrait itself opens the dialog, and a drag moves the photo under the
 	await openSomeoneNamed(page);
 	await page.getByRole('button', { name: 'Change portrait of Léa' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Change portrait' });
-	await expect(dialog.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
+	await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
 	// Axe must not measure contrast while the dialog is still fading in.
 	await expect(dialog).toHaveCSS('opacity', '1');
 	await expectAccessible(page);
@@ -182,7 +180,7 @@ test('“Use automatic” goes back to the automatic portrait', async ({ page })
 	await personTool(page, 'Change portrait');
 	const dialog = page.getByRole('dialog', { name: 'Change portrait' });
 	await expect(dialog.getByRole('button', { name: 'Use automatic' })).toBeDisabled();
-	await expect(dialog.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
+	await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
 	await dialog.getByRole('group', { name: /^Portrait/ }).focus();
 	await page.keyboard.press('+');
 	await dialog.getByRole('button', { name: 'Save' }).click();
@@ -208,10 +206,10 @@ test('a person plays as a story, and opens in the Library with Who answered', as
 	await signIn(page, '/people');
 	const first = page
 		.getByRole('main')
-		.locator('.people a')
+		.locator('a[href^="/people/"]')
 		.filter({ hasNotText: /^Someone/ })
 		.first();
-	const name = (await first.getAttribute('aria-label')) ?? (await first.innerText());
+	const name = await first.locator('.name').innerText();
 	await first.click();
 	await page.getByRole('button', { name: 'Play' }).click();
 	const story = page
@@ -221,9 +219,9 @@ test('a person plays as a story, and opens in the Library with Who answered', as
 	await page.keyboard.press('Escape');
 	await expect(story).toBeHidden();
 
-	await page.getByRole('link', { name: 'In Library' }).click();
+	await page.getByRole('link', { name: 'Show in Library' }).click();
 	await expect(page).toHaveURL(/\/\?person_id=\d+$/);
 	const who = page.getByRole('group', { name: 'Filters' }).getByRole('button').first();
-	await expect(who).toHaveText(name.split('\n')[0].trim());
+	await expect(who).toHaveText(name.trim());
 	await expect(page.getByRole('img', { name: /^Photo/ }).first()).toBeVisible();
 });

@@ -1,5 +1,6 @@
 /** What a person's page says under their name. */
 import type { AssetOut } from './api/types';
+import type { MonthGroup } from './timeline';
 import { photos } from './format';
 
 export type Years = { first: number; last: number };
@@ -19,4 +20,12 @@ export function personLine(count: number, years: Years | null): string {
 	if (!years) return photos(count);
 	const span = years.first === years.last ? `${years.first}` : `${years.first} to ${years.last}`;
 	return `${photos(count)}, ${span}`;
+}
+
+/**
+ * A person's photos as one group: one continuous justified mosaic, so no year ends in a short
+ * row (the year in view rides in a chip instead). For Timeline's `grouping`.
+ */
+export function asOneMosaic(newestFirst: AssetOut[]): MonthGroup[] {
+	return newestFirst.length ? [{ key: 'all', label: 'All photos', items: newestFirst }] : [];
 }

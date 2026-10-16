@@ -1,15 +1,22 @@
 <script lang="ts">
 	import type { MlStatus, Person } from '$lib/api';
-	import { api, library, notice, session } from '$lib/app.svelte';
+	import { api, library, notice, session, viewport } from '$lib/app.svelte';
+	import { mostSeen } from '$lib/collections';
 	import { photos } from '$lib/format';
+	import CardStrip from '$lib/components/CardStrip.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
+	import FaceBubble from '$lib/components/FaceBubble.svelte';
+	import FaceCard from '$lib/components/FaceCard.svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import NameDialog from '$lib/components/NameDialog.svelte';
 	import PageHead from '$lib/components/PageHead.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
 
-	/** One size for every face (small multiples); three fit across a 320 px phone. */
-	const PORTRAIT = 84;
 	let people = $state<Person[] | null>(null);
 	let hidden = $state<Person[]>([]);
 	let status = $state<MlStatus | null>(null);
+	let naming = $state<Person | null>(null);
+	let showingHidden = $state(false);
 
 	$effect(() => {
 		void library.version; // hiding, and its Undo, change who is listed
@@ -32,13 +39,18 @@
 			.catch(() => undefined);
 	});
 
-	const named = $derived((people ?? []).filter((p) => p.name));
-	const unnamed = $derived((people ?? []).filter((p) => !p.name));
+	/** The four seen most, as large cards; everyone else as faces, the named first. */
+	const split = $derived(mostSeen(people ?? []));
+	const faces = $derived({
+		min: viewport.phone ? 96 : 120,
+		gap: viewport.phone ? 16 : 24
+	});
 
 	async function showAgain(person: Person) {
 		try {
 			await api.hidePerson(person.id, false);
 			library.changed();
+			if (hidden.length <= 1) showingHidden = false;
 		} catch (e) {
 			notice.error(e);
 		}
@@ -50,11 +62,13 @@
 <PageHead title="People" back={{ href: '/collections', label: 'Collections' }} />
 
 <div class="page">
-	{#if status && !status.faces.ready}
-		<p class="quiet small note" role="note">
-			New faces are not being found yet. People found so far stay listed.
-			{#if session.isAdmin}Set it up in <a href="/admin">Admin</a>, under Search and faces.{/if}
-		</p>
+	<!-- Faces not being found: an admin is shown the way to set it up; a member is told
+	     nothing they could act on. -->
+	{#if status && !status.faces.ready && session.isAdmin}
+		<a class="banner glass" href="/settings/search">
+			<span>Faces are paused</span>
+			<span class="quiet">Set up <Icon name="chevron" /></span>
+		</a>
 	{/if}
 
 	{#if people && people.length === 0}
@@ -63,103 +77,111 @@
 				<p>Everyone found so far is hidden.</p>
 			{:else}
 				<p>No people yet.</p>
-				<p>Faces are grouped here once photos have been analysed; then you can name them.</p>
+				<p>Faces are grouped here once photos have been looked at; then you can name them.</p>
 			{/if}
 		</div>
 	{/if}
 
-	{#each [{ title: 'Named', list: named }, { title: 'Not named yet', list: unnamed }] as group (group.title)}
-		{#if group.list.length}
-			<h2>{group.title}</h2>
-			<ul class="people">
-				{#each group.list as person (person.id)}
-					<li>
-						<a href={`/people/${person.id}`}>
-							<Portrait portrait={person.portrait} size={PORTRAIT} />
-							<span class="name" class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
-						</a>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	{/each}
+	{#if split.top.length}
+		<section aria-label="Most seen">
+			<CardStrip
+				items={split.top}
+				key={(p) => p.id}
+				grid={{ min: viewport.phone ? 140 : 240, gap: 16, max: 4 }}
+				every
+			>
+				{#snippet card(person, { i })}<FaceCard {person} index={i} />{/snippet}
+			</CardStrip>
+		</section>
+	{/if}
+
+	{#if split.rest.length}
+		<section aria-label="Everyone">
+			<CardStrip items={split.rest} key={(p) => p.id} grid={faces} every>
+				{#snippet card(person, { size })}
+					<FaceBubble
+						{person}
+						{size}
+						count
+						onname={session.canEdit ? () => (naming = person) : undefined}
+					/>
+				{/snippet}
+			</CardStrip>
+		</section>
+	{/if}
 
 	{#if hidden.length}
-		<details class="hidden">
-			<summary class="quiet">Hidden ({hidden.length})</summary>
-			<ul class="tiles">
-				{#each hidden as person (person.id)}
-					<li class="tile-row">
-						<a href={`/people/${person.id}`}>
-							<Portrait portrait={person.portrait} size={40} />
-							<span class="tile-main">
-								<span class="tile-title" class:quiet={!person.name}>{person.name ?? 'Someone'}</span
-								>
-								<span class="tile-line">{photos(person.asset_count)}</span>
-							</span>
-						</a>
-						<button type="button" onclick={() => showAgain(person)}>Show again</button>
-					</li>
-				{/each}
-			</ul>
-		</details>
+		<button type="button" class="hidden-row glass" onclick={() => (showingHidden = true)}>
+			<span>Hidden people</span>
+			<span class="quiet">{hidden.length} <Icon name="chevron" /></span>
+		</button>
 	{/if}
 </div>
 
+{#if naming}
+	<NameDialog
+		person={naming}
+		onclose={() => (naming = null)}
+		onsaved={() => {
+			naming = null;
+			library.changed();
+		}}
+	/>
+{/if}
+
+{#if showingHidden}
+	<Dialog title="Hidden people" cancelLabel="Close" onclose={() => (showingHidden = false)}>
+		<ul class="tiles">
+			{#each hidden as person (person.id)}
+				<li class="tile-row">
+					<a href={`/people/${person.id}`}>
+						<Portrait portrait={person.portrait} size={40} />
+						<span class="tile-main">
+							<span class="tile-title" class:quiet={!person.name}>{person.name ?? 'Someone'}</span>
+							<span class="tile-line">{photos(person.asset_count)}</span>
+						</span>
+					</a>
+					<button type="button" onclick={() => showAgain(person)}>Show again</button>
+				</li>
+			{/each}
+		</ul>
+	</Dialog>
+{/if}
+
 <style>
 	.page {
-		padding: 0 var(--page-x) var(--s-7);
-	}
-	.note {
-		max-width: var(--measure);
-		margin: 0 0 var(--s-4);
-	}
-	h2 {
-		margin: var(--s-5) 0 var(--s-3);
-	}
-	h2:first-of-type {
-		margin-top: var(--s-2);
-	}
-	/* Small multiples: identical faces, names beneath them like captions. */
-	.people {
-		list-style: none;
-		margin: 0;
-		padding: 0;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
-		gap: var(--s-5) var(--s-3);
+		gap: var(--s-6);
+		padding: var(--s-2) var(--page-x) var(--s-7);
 	}
-	.people a {
-		display: grid;
-		justify-items: center;
-		gap: var(--s-2);
-		text-align: center;
-		text-decoration: none;
-	}
-	.name {
-		max-width: 100%;
-		font-weight: 600;
-		line-height: var(--lh-tight);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.name.quiet {
-		font-weight: 400;
-		font-style: var(--voice-style);
-	}
-	/* Left out on purpose: one quiet line, opened only by who goes looking. */
-	.hidden {
-		margin-top: var(--s-7);
-		max-width: var(--measure);
-	}
-	.hidden summary {
-		cursor: pointer;
+	/* A quiet glass row: what needs an admin, and the people left out. */
+	.banner,
+	.hidden-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s-3);
+		max-width: 35rem;
 		min-height: var(--target);
-		align-content: center;
-		margin-bottom: var(--s-2);
+		padding: var(--s-2) var(--s-4);
+		border-radius: var(--r-1);
+		color: var(--ink);
+		font-weight: 600;
+		text-decoration: none;
+		box-sizing: border-box;
 	}
-	.hidden a {
+	.banner .quiet,
+	.hidden-row .quiet {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s-1);
+		font-weight: 500;
+	}
+	.hidden-row {
+		width: 100%;
+		text-align: left;
+	}
+	.tiles a {
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);
@@ -168,18 +190,7 @@
 		color: var(--ink);
 		text-decoration: none;
 	}
-	.hidden button {
+	.tiles button {
 		color: var(--ink-2);
-	}
-	@media (hover: hover) {
-		.people a:hover .name {
-			text-decoration: underline;
-			text-underline-offset: 0.2em;
-		}
-	}
-	@media (max-width: 639px) {
-		.people {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-		}
 	}
 </style>

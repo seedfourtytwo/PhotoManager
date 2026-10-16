@@ -7,8 +7,6 @@
 		nudge,
 		pan,
 		photoLayout,
-		sizeOfSlider,
-		sliderOfSize,
 		wheelZoom,
 		zoomAbout,
 		type Circle
@@ -17,14 +15,16 @@
 	import Portrait from './Portrait.svelte';
 
 	/**
-	 * Choose a person's portrait: which of their photos, and where the circle sits on it. The
-	 * square stage shows the photo without its edits under a round window; what the window
-	 * shows is what the server will cut.
+	 * Choose a person's portrait (spec collections-people-places §6): which of their photos, and
+	 * where the circle sits on it, like a crop tool. The square black stage shows the photo
+	 * without its edits under a round window; what the window shows is what the server will
+	 * cut. Drag to move, pinch or scroll to zoom (+ and − on the keys), double-tap to go back
+	 * to the face as found.
 	 */
 	type Props = { person: Person; onclose: () => void; onsaved: (person: Person) => void };
 	let { person, onclose, onsaved }: Props = $props();
 
-	const FACE = 56;
+	const FACE = 64;
 	const circleOf = ({ cx, cy, size }: Circle): Circle => ({ cx, cy, size });
 
 	// svelte-ignore state_referenced_locally (the dialog starts from the portrait it opened on)
@@ -111,9 +111,10 @@
 		circle = next;
 	}
 
-	function slide(event: Event) {
-		const size = sizeOfSlider(Number((event.currentTarget as HTMLInputElement).value));
-		circle = zoomAbout(circle, circle.size / size, 0.5, 0.5, aspect);
+	/** Back to the circle the face was found in. */
+	function refit() {
+		if (!picked || !aspect) return;
+		circle = fitCircle(circleOf(picked), aspect);
 	}
 
 	async function send(change: () => Promise<Person>) {
@@ -133,7 +134,7 @@
 	const useAutomatic = () => send(() => api.clearPortrait(person.id));
 </script>
 
-<Dialog title="Change portrait" {onclose}>
+<Dialog title="Change portrait" wide {onclose}>
 	<p class="quiet small">
 		Choose a photo, then drag it and zoom until the face sits well in the circle.
 	</p>
@@ -169,6 +170,7 @@
 		onlostpointercapture={(e) => pointers.delete(e.pointerId)}
 		onwheel={wheel}
 		onkeydown={keys}
+		ondblclick={refit}
 	>
 		{#if picked}
 			{#key picked.face_id}
@@ -188,19 +190,6 @@
 		<span class="window"></span>
 	</div>
 
-	<label class="field zoom">
-		Zoom
-		<input
-			type="range"
-			min="0"
-			max="1"
-			step="0.01"
-			value={sliderOfSize(circle.size)}
-			disabled={!aspect}
-			oninput={slide}
-		/>
-	</label>
-
 	{#snippet actions()}
 		<button type="button" disabled={busy || !person.portrait?.chosen} onclick={useAutomatic}
 			>Use automatic</button
@@ -213,14 +202,19 @@
 	p {
 		margin: 0 0 var(--s-3);
 	}
+	/* The photos to choose from: a rail that runs to the sheet's edges, the next one peeking. */
 	.faces {
 		list-style: none;
 		display: flex;
-		gap: var(--s-2);
-		margin: 0 0 var(--s-4);
+		gap: var(--s-3);
+		margin: 0 calc(-1 * var(--s-5)) var(--s-4);
 		/* room for the ring of the one in use, which the scroller would cut */
-		padding: var(--s-1);
+		padding: var(--s-2) var(--s-5);
 		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.faces li {
+		flex: none;
 	}
 	.faces button {
 		display: block;
@@ -230,16 +224,18 @@
 	}
 	/* Selection is the accent's one job. */
 	.faces button[aria-pressed='true'] {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
+		box-shadow:
+			0 0 0 3px var(--raised),
+			0 0 0 6px var(--accent);
 	}
 	.stage {
 		position: relative;
-		width: min(100%, 20rem);
+		width: min(100%, 45rem, 60dvh);
 		aspect-ratio: 1;
-		margin: 0 auto var(--s-4);
+		margin: 0 auto var(--s-2);
 		overflow: hidden;
-		background: var(--hairline);
+		border-radius: var(--r-1);
+		background: var(--bg);
 		cursor: grab;
 		touch-action: none;
 		-webkit-user-select: none;
@@ -266,14 +262,7 @@
 		position: absolute;
 		inset: 0;
 		border-radius: 50%;
-		box-shadow: 0 0 0 100vmax var(--photo-shade-55);
+		box-shadow: 0 0 0 100vmax var(--scrim);
 		pointer-events: none;
-	}
-	.zoom {
-		width: min(100%, 20rem);
-		margin: 0 auto;
-	}
-	.zoom input {
-		max-width: none;
 	}
 </style>

@@ -57,7 +57,7 @@ async function photoLoaded(width = 400, height = 300) {
 	Object.defineProperty(img, 'naturalWidth', { value: width, configurable: true });
 	Object.defineProperty(img, 'naturalHeight', { value: height, configurable: true });
 	img.dispatchEvent(new Event('load'));
-	await expect.element(page.getByRole('slider', { name: 'Zoom' })).toBeEnabled();
+	await expect.element(page.getByRole('button', { name: 'Save' })).toBeEnabled();
 }
 
 /** The stage, taking pointer events made here: only a real pointer can be captured. */
@@ -171,17 +171,25 @@ describe('PortraitDialog', () => {
 		expect(body.cy).toBeCloseTo(0.4);
 	});
 
-	it('zooms with the slider, about the middle', async () => {
+	it('has no zoom slider: pinch, wheel and the + and − keys zoom', async () => {
+		open(lea(face(1)));
+		await photoLoaded();
+		expect(page.getByRole('slider').elements()).toHaveLength(0);
+	});
+
+	it('a double tap goes back to the face as it was found', async () => {
 		const { sent } = open(lea(face(1)));
 		await photoLoaded();
-		const slider = page.getByRole('slider', { name: 'Zoom' });
-		await slider.fill('0');
+		await stage().click();
+		await userEvent.keyboard('++{ArrowRight}');
+		(stage().element() as HTMLElement).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 		await page.getByRole('button', { name: 'Save' }).click();
 		await vi.waitFor(() => expect(sent.at(-1)!.method).toBe('PUT'));
 		const body = sent.at(-1)!.body as { cx: number; cy: number; size: number };
-		expect(body.size).toBe(1);
-		expect(body.cy).toBe(0.5);
-		expect(body.cx).toBeCloseTo(0.5);
+		const found = face(1);
+		expect(body.size).toBeCloseTo(found.size);
+		expect(body.cx).toBeCloseTo(found.cx);
+		expect(body.cy).toBeCloseTo(found.cy);
 	});
 
 	it('“Use automatic” clears the choice; there is nothing to clear without one', async () => {
