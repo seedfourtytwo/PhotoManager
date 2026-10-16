@@ -1,12 +1,14 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import { afterNavigate, goto } from '$app/navigation';
+	import { tick, untrack } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { continued } from '$lib/continuation.svelte';
 	import { look } from '$lib/look';
 	import { placesFor } from '$lib/nav';
 	import { ScrollChrome } from '$lib/scroll-chrome.svelte';
-	import { searchHref } from '$lib/search';
+	import { viewport } from '$lib/app.svelte';
+	import { rememberSearch } from '$lib/recent-searches';
+	import { typedSearch } from '$lib/typed-search';
 	import Avatar from './Avatar.svelte';
 	import Icon from './Icon.svelte';
 
@@ -20,18 +22,37 @@
 	let bar = $state<HTMLElement>();
 	const chrome = new ScrollChrome(() => bar);
 	$effect(() => chrome.watch());
-	afterNavigate(() => chrome.reset());
-
-	// Laptop: the round Search opens into a field over the capsule; Enter searches.
+	// Laptop: the round Search opens into a field over the capsule; Enter searches. On Search
+	// itself this is the page's one field (the page has none of its own on a laptop): open,
+	// holding the words searched for, and searching as they are typed.
 	let finding = $state(false);
 	let words = $state('');
 	let find = $state<HTMLButtonElement>();
 	let field = $state<HTMLInputElement>();
+	const typed = typedSearch();
+	const onSearch = $derived(path === '/search' && viewport.desktop);
+
+	afterNavigate(() => chrome.reset());
+
+	// Search on a laptop (also when it is the page the app opened on): the field is open with
+	// the words of the address, which it follows except while they are being typed here.
+	let wasThere = false;
+	$effect(() => {
+		const there = onSearch && !page.url.searchParams.has('like');
+		const q = page.url.searchParams.get('q')?.trim() ?? '';
+		untrack(() => {
+			if (!there) {
+				if (wasThere) finding = false; // Search left: the capsule comes back
+				wasThere = false;
+				return;
+			}
+			wasThere = true;
+			if (document.activeElement !== field) words = q;
+			if (!finding) void openFind();
+		});
+	});
 
 	async function openFind() {
-		// On Search itself the page's own field is the one to use.
-		const own = document.querySelector<HTMLInputElement>('#main input[type="search"]');
-		if (path === '/search' && own) return own.focus();
 		finding = true;
 		await tick();
 		field?.focus();
@@ -46,13 +67,13 @@
 
 	function search(event: SubmitEvent) {
 		event.preventDefault();
-		const asked = words.trim();
-		words = '';
-		void closeFind(false);
-		void goto(asked ? searchHref(asked) : '/search');
+		rememberSearch(words);
+		// From another page, a step of its own; on Search, the search in place.
+		typed(words, { now: true, push: !onSearch });
 	}
 
 	function leaving(event: FocusEvent) {
+		if (onSearch) return; // Search's own field stays out
 		const next = event.relatedTarget;
 		if (!(next instanceof Node) || !(event.currentTarget as Node).contains(next))
 			void closeFind(false);
@@ -114,6 +135,7 @@
 					aria-label="Search photos"
 					placeholder="People, places, things"
 					enterkeyhint="search"
+					oninput={() => onSearch && typed(words)}
 					onkeydown={(event) => {
 						if (event.key !== 'Escape') return;
 						event.preventDefault();
@@ -300,11 +322,12 @@
 		.finder input:focus-visible {
 			box-shadow: none;
 		}
+		/* Focus is a quiet ink ring: the accent would read as an error here. */
 		.finder:focus-within {
 			box-shadow:
 				var(--glass-edge),
 				var(--lift),
-				inset 0 0 0 var(--fine) var(--accent);
+				inset 0 0 0 var(--fine) color-mix(in oklab, var(--ink) 30%, transparent);
 		}
 		.places[inert],
 		.find[inert] {

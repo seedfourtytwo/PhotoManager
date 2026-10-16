@@ -8,8 +8,7 @@ import {
 	peopleStrip,
 	personName,
 	photoCount,
-	placeCards,
-	placeStrip
+	placeCards
 } from './collections';
 
 const person = (id: number, name: string | null, asset_count: number): Person => ({
@@ -83,33 +82,6 @@ describe('album strip', () => {
 	it('stops at the limit and leaves the given list alone', () => {
 		expect(albumStrip(albums, 1).map((a) => a.id)).toEqual([2]);
 		expect(albums.map((a) => a.id)).toEqual([1, 2, 3]);
-	});
-});
-
-describe('place strip', () => {
-	const places = [
-		{ name: 'Carnac', count: 36 },
-		{ name: 'France', count: 180 },
-		{ name: '', count: 12 },
-		{ name: 'Sarlat-la-Canéda', count: 36 },
-		{ name: 'Montara', count: 0 }
-	];
-	it('shows the places with the most photos first, and none without a name or a photo', () => {
-		expect(placeStrip(places).map((p) => [p.name, p.count])).toEqual([
-			['France', 180],
-			['Carnac', 36],
-			['Sarlat-la-Canéda', 36]
-		]);
-	});
-	it('opens the library filtered by the place', () => {
-		expect(placeStrip(places).map((p) => p.href)).toEqual([
-			'/?place=France',
-			'/?place=Carnac',
-			'/?place=Sarlat-la-Can%C3%A9da'
-		]);
-	});
-	it('stops at the limit', () => {
-		expect(placeStrip(places, 1).map((p) => p.name)).toEqual(['France']);
 	});
 });
 
