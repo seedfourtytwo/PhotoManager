@@ -171,7 +171,7 @@ test('You → Home: the account turns blocks off and moves them; its Home follow
 	await page.keyboard.press('Space');
 	for (let step = 0; step < 3; step++) await page.keyboard.press('ArrowUp');
 	await page.keyboard.press('Space');
-	await expect(editor.getByRole('status')).toHaveText('Years dropped, 1 of 7');
+	await expect(editor.locator('.said')).toHaveText('Years dropped, 1 of 7');
 	const order = ['years', 'on_this_day', 'memories', 'suggested', 'pinned', 'people', 'new'];
 	await expect
 		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections)

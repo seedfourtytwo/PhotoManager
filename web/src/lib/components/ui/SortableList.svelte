@@ -398,7 +398,8 @@
 			{#each others as item (item)}{@render row(item, false)}{/each}
 		</ul>
 	{/if}
-	<p class="visually-hidden" role="status" aria-live="polite">{said}</p>
+	<!-- Said aloud as the row moves; not a status role, which is the toast's alone. -->
+	<p class="visually-hidden said" aria-live="polite" aria-atomic="true">{said}</p>
 </div>
 
 <style>

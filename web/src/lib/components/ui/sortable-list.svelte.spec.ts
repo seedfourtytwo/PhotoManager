@@ -9,6 +9,8 @@ const ALL: readonly Row[] = ['people', 'places', 'albums', 'utilities'];
 const NAMES = { people: 'People', places: 'Places', albums: 'Albums', utilities: 'Utilities' };
 const LABEL = 'Collections shows, in this order';
 const group = () => page.getByRole('group', { name: LABEL });
+/** What the list says aloud as a row moves. */
+const said = () => page.elementLocator(document.querySelector('.sortable .said')!);
 
 /** The list as a parent keeps it: each change is saved and given back, as Settings does. */
 function show(chosen: Row[], extra: { hints?: Partial<Record<Row, string>> } = {}) {
@@ -125,19 +127,19 @@ describe('SortableList: the keyboard on the grip', () => {
 		const grip = group().getByRole('button', { name: 'Reorder Places' });
 		(grip.element() as HTMLElement).focus();
 		await userEvent.keyboard(' ');
-		await expect.element(page.getByRole('status')).toHaveTextContent('Places picked up, 3 of 3');
+		await expect.element(said()).toHaveTextContent('Places picked up, 3 of 3');
 		await userEvent.keyboard('{ArrowUp}');
-		await expect.element(page.getByRole('status')).toHaveTextContent('Places, 2 of 3');
+		await expect.element(said()).toHaveTextContent('Places, 2 of 3');
 		await userEvent.keyboard('{ArrowUp}');
 		await userEvent.keyboard('{ArrowUp}'); // already first: stays
-		await expect.element(page.getByRole('status')).toHaveTextContent('Places, 1 of 3');
+		await expect.element(said()).toHaveTextContent('Places, 1 of 3');
 		expect(onchange).not.toHaveBeenCalled();
 		// the grip keeps the focus as its row moves
 		expect(document.activeElement).toBe(grip.element());
 		await userEvent.keyboard(' ');
 		expect(onchange).toHaveBeenCalledTimes(1);
 		expect(onchange).toHaveBeenLastCalledWith(['places', 'albums', 'people']);
-		await expect.element(page.getByRole('status')).toHaveTextContent('Places dropped, 1 of 3');
+		await expect.element(said()).toHaveTextContent('Places dropped, 1 of 3');
 	});
 
 	it('Escape puts it back where it was, and nothing is saved', async () => {
