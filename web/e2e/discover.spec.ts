@@ -54,23 +54,25 @@ test('without models, a member reads plain words on Search and People: no comman
 	await expect(note.locator('code')).toHaveCount(0);
 	await expect(note.getByRole('link')).toHaveCount(0);
 
+	// People says nothing to a member about it: there is nothing a member could do.
 	await page.goto('/people');
-	await expect(note).toContainText('New faces are not being found yet');
-	await expect(note.locator('code')).toHaveCount(0);
-	await expect(note.getByRole('link')).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'People', level: 1 })).toBeVisible();
+	const loaded = page
+		.getByText('No people yet.')
+		.or(page.getByRole('main').locator('a[href^="/people/"]').first());
+	await expect(loaded).toBeVisible();
+	await expect(note).toHaveCount(0);
+	await expect(page.getByText('Faces are paused')).toHaveCount(0);
 });
 
 test('without models, People leads an admin to where faces are set up', async ({ page }) => {
 	await resetMock();
 	await signIn(page, '/people');
-	const note = page.getByRole('note');
-	await expect(note).toContainText('New faces are not being found yet');
-	await expect(note.locator('code')).toHaveCount(0);
-	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
-	await note.getByRole('link', { name: 'Admin' }).click();
-	// Admin is a part of Settings now: the old link lands on its overview, which leads on.
-	await expect(page).toHaveURL(/\/settings\/overview$/);
-	await page.getByRole('region', { name: 'Search & faces' }).getByRole('link').click();
+	// one glass row, no command, straight to the setup
+	const paused = page.getByRole('link', { name: /^Faces are paused/ });
+	await expect(paused.locator('code')).toHaveCount(0);
+	await paused.click();
+	await expect(page).toHaveURL(/\/settings\/search$/);
 	await expect(page.getByRole('heading', { name: 'Search & faces', level: 1 })).toBeVisible();
 });
 
@@ -131,7 +133,7 @@ test('people: grid of faces, rename, merge, and a person’s photos', async ({ p
 	await more.click();
 	await page.getByRole('button', { name: 'Merge with…' }).click();
 	const merge = page.getByRole('dialog', { name: 'Merge people' });
-	await merge.getByRole('checkbox').first().check();
+	await merge.getByRole('group', { name: 'People to merge' }).getByRole('button').first().click();
 	const post = page.waitForRequest((r) => r.url().endsWith('/merge'));
 	await merge.getByRole('button', { name: /^Merge/ }).click();
 	expect((await post).postDataJSON().source_ids).toHaveLength(1);
@@ -144,7 +146,7 @@ test('guests see people but cannot rename or merge', async ({ page }) => {
 	test.skip(REAL_BACKEND, 'faces need the ML models, which the E2E server does not have');
 	await resetMock();
 	await signIn(page, '/people', GUEST);
-	await page.getByRole('main').locator('.people a').first().click();
+	await page.getByRole('main').locator('a[href^="/people/"]').first().click();
 	await expect(page).toHaveURL(/\/people\/\d+$/);
 	await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: /^(Name|Rename)$/ })).toHaveCount(0);

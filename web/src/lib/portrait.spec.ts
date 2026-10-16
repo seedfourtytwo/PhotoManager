@@ -5,8 +5,6 @@ import {
 	nudge,
 	pan,
 	photoLayout,
-	sizeOfSlider,
-	sliderOfSize,
 	wheelZoom,
 	zoomAbout,
 	type Circle
@@ -148,21 +146,6 @@ describe('wheelZoom', () => {
 
 	it('adds up: many small turns of a trackpad are one large turn', () => {
 		expect(wheelZoom(-4) ** 25).toBeCloseTo(wheelZoom(-100));
-	});
-});
-
-describe('the zoom slider', () => {
-	it('runs from the whole photo (0) to the closest cut (1), evenly in zoom', () => {
-		expect(sliderOfSize(1)).toBeCloseTo(0);
-		expect(sliderOfSize(MIN_SIZE)).toBeCloseTo(1);
-		expect(sizeOfSlider(0)).toBe(1);
-		expect(sizeOfSlider(1)).toBeCloseTo(MIN_SIZE);
-		expect(sizeOfSlider(0.5)).toBeCloseTo(Math.sqrt(MIN_SIZE));
-	});
-
-	it('goes there and back', () => {
-		for (const size of [1, 0.8, 0.31, 0.05, MIN_SIZE])
-			expect(sizeOfSlider(sliderOfSize(size))).toBeCloseTo(size);
 	});
 });
 

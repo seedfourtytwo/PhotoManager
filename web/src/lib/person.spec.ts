@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeAsset } from './testing/fixtures';
-import { personLine, yearsOf } from './person';
+import { asOneMosaic, personLine, yearsOf } from './person';
 
 describe('the years a person appears in', () => {
 	const newestFirst = [
@@ -29,5 +29,17 @@ describe('the line under a person’s name', () => {
 	it('says the count alone while the years are not known', () => {
 		expect(personLine(1204, null)).toBe('1,204 photos');
 		expect(personLine(1, null)).toBe('1 photo');
+	});
+});
+
+describe('a person’s photos as one mosaic', () => {
+	it('keeps every photo in one group, in order, across the years', () => {
+		const photos = [makeAsset(1, '2026-01-02T10:00:00'), makeAsset(2, '2019-07-01T10:00:00')];
+		const groups = asOneMosaic(photos);
+		expect(groups).toHaveLength(1);
+		expect(groups[0].items.map((a) => a.id)).toEqual([1, 2]);
+	});
+	it('nothing loaded: no group, so no heading over nothing', () => {
+		expect(asOneMosaic([])).toEqual([]);
 	});
 });

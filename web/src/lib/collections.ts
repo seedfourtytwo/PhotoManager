@@ -20,6 +20,19 @@ export function peopleStrip(people: readonly Person[], limit = STRIP_LIMIT): Per
 	].slice(0, limit);
 }
 
+/** How many people People shows large, as cards: the ones seen most. */
+export const MOST_SEEN = 4;
+
+/**
+ * People's two parts: the named people seen most, as cards (`top`), then everyone else as
+ * faces, the named first (`rest`), each with the most photos first.
+ */
+export function mostSeen(people: readonly Person[], cards = MOST_SEEN) {
+	const ordered = peopleStrip(people, Infinity);
+	const top = ordered.filter((p) => p.name).slice(0, cards);
+	return { top, rest: ordered.filter((p) => !top.includes(p)) };
+}
+
 /** The album changed last comes first. */
 export function albumStrip(albums: readonly AlbumSummary[], limit = STRIP_LIMIT): AlbumSummary[] {
 	return [...albums].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, limit);

@@ -41,7 +41,6 @@
 			placeholder="Album name"
 			aria-label="Title"
 			autocomplete="off"
-			autofocus
 		/>
 		{#if title.length >= ALBUM_TITLE_MAX}
 			<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>

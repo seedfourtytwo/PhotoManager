@@ -4,6 +4,7 @@ import { filtersFromParams } from './filters';
 import {
 	UTILITIES,
 	albumStrip,
+	mostSeen,
 	peopleStrip,
 	personName,
 	photoCount,
@@ -211,5 +212,29 @@ describe('utilities', () => {
 			'/review',
 			'/trash'
 		]);
+	});
+});
+
+describe('most seen', () => {
+	const people = [
+		person(1, 'Sam', 27),
+		person(2, null, 90),
+		person(3, 'Léa', 40),
+		person(4, 'Tom', 12),
+		person(5, 'Grandma', 30),
+		person(6, 'Ana', 3),
+		person(7, null, 5)
+	];
+	it('the four named people with the most photos are the cards', () => {
+		expect(mostSeen(people).top.map((p) => p.name)).toEqual(['Léa', 'Grandma', 'Sam', 'Tom']);
+	});
+	it('everyone else follows as faces, the named first, nobody twice', () => {
+		expect(mostSeen(people).rest.map((p) => p.id)).toEqual([6, 2, 7]);
+	});
+	it('an unnamed person is never a card, however often seen', () => {
+		expect(mostSeen([person(2, null, 90)])).toEqual({ top: [], rest: [person(2, null, 90)] });
+	});
+	it('fewer named people than cards: all of them are cards', () => {
+		expect(mostSeen(people.slice(0, 2)).top.map((p) => p.id)).toEqual([1]);
 	});
 });
