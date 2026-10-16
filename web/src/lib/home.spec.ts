@@ -220,37 +220,49 @@ describe('homeBlocks: the blocks Home draws, in the account’s order', () => {
 	const everyBlock = [...DEFAULT_LOOK.homeSections];
 
 	it('draws every block that has photos, in the order chosen', () => {
-		expect(homeBlocks(all, [cover], [{ id: 1 }], everyBlock)).toEqual(everyBlock);
-		expect(homeBlocks(all, [cover], [{ id: 1 }], ['pinned', 'years', 'on_this_day'])).toEqual([
-			'pinned',
-			'years',
-			'on_this_day'
-		]);
+		expect(
+			homeBlocks(all, { pinned: [cover], people: [{ id: 1 }], suggested: [{}] }, everyBlock)
+		).toEqual(everyBlock);
+		expect(
+			homeBlocks(all, { pinned: [cover], people: [{ id: 1 }], suggested: [{}] }, [
+				'pinned',
+				'years',
+				'on_this_day'
+			])
+		).toEqual(['pinned', 'years', 'on_this_day']);
 	});
-	it.each<[string, HomeData, AssetOut[], unknown[], HomeSection]>([
-		['on this day', { ...nothing, on_this_day: day() }, [], [], 'on_this_day'],
-		['a photo to rediscover', { ...nothing, rediscover: [cover] }, [], [], 'rediscover'],
+	it.each<[string, HomeData, AssetOut[], unknown[], unknown[], HomeSection]>([
+		['on this day', { ...nothing, on_this_day: day() }, [], [], [], 'on_this_day'],
+		['a photo to rediscover', { ...nothing, rediscover: [cover] }, [], [], [], 'rediscover'],
 		[
 			'a memory',
 			{ ...nothing, memories: [memory('2024-07-12', '2024-07-19')] },
 			[],
 			[],
+			[],
 			'memories'
 		],
-		['a year', { ...nothing, years: [memory('2016-01-01', '2016-12-31')] }, [], [], 'years'],
-		['a pinned photo', nothing, [cover], [], 'pinned'],
-		['a person', nothing, [], [{ id: 1 }], 'people'],
-		['new photos', { ...nothing, new: fresh(3, []) }, [], [], 'new']
-	])('with only %s, draws only that', (_, home, pinned, people, block) => {
-		expect(homeBlocks(home, pinned, people, everyBlock)).toEqual([block]);
+		['a year', { ...nothing, years: [memory('2016-01-01', '2016-12-31')] }, [], [], [], 'years'],
+		['a pinned photo', nothing, [cover], [], [], 'pinned'],
+		['a person', nothing, [], [{ id: 1 }], [], 'people'],
+		['a suggested album', nothing, [], [], [{}], 'suggested'],
+		['new photos', { ...nothing, new: fresh(3, []) }, [], [], [], 'new']
+	])('with only %s, draws only that', (_, home, pinned, people, suggested, block) => {
+		expect(homeBlocks(home, { pinned, people, suggested }, everyBlock)).toEqual([block]);
 	});
 	it('leaves out a block turned off, though it has photos', () => {
-		expect(homeBlocks(all, [cover], [{ id: 1 }], ['people', 'new'])).toEqual(['people', 'new']);
+		expect(
+			homeBlocks(all, { pinned: [cover], people: [{ id: 1 }], suggested: [{}] }, ['people', 'new'])
+		).toEqual(['people', 'new']);
 	});
 	it('draws nothing when no chosen block has photos, nor one not answered yet', () => {
-		expect(homeBlocks(nothing, [], [], everyBlock)).toEqual([]);
-		expect(homeBlocks(nothing, null, null, everyBlock)).toEqual([]);
-		expect(homeBlocks(all, [], [], ['pinned', 'people'])).toEqual([]);
+		expect(homeBlocks(nothing, { pinned: [], people: [], suggested: [] }, everyBlock)).toEqual([]);
+		expect(
+			homeBlocks(nothing, { pinned: null, people: null, suggested: null }, everyBlock)
+		).toEqual([]);
+		expect(
+			homeBlocks(all, { pinned: [], people: [], suggested: [] }, ['pinned', 'people', 'suggested'])
+		).toEqual([]);
 	});
 });
 

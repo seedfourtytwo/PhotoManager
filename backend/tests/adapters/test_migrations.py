@@ -32,6 +32,8 @@ EXPECTED_TABLES = {
     "backup_target", "backup_run",
     # keep on my phone (0031)
     "sync_rule", "sync_sent",
+    # suggested albums (0033)
+    "album_suggestion_answer",
 }  # fmt: skip
 
 
@@ -82,7 +84,7 @@ def _make_v3_library(db: Path) -> None:
 def test_migrations_are_numbered_one_by_one_without_gaps() -> None:
     numbers = [n for n, _ in _migrations()]
     assert numbers == list(range(1, len(numbers) + 1))
-    assert _latest() == 32
+    assert _latest() == 33
 
 
 def test_a_fresh_library_reaches_the_latest_version(tmp_path: Path) -> None:

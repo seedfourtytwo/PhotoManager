@@ -124,7 +124,7 @@ theme(id, name, tokens_json);  layout(id, name, slots_json)     -- data, not cod
 
 The SQLite adapter is one `SqliteRepository` composed of per-area mixins
 (`sqlite_accounts`, `sqlite_access`, `sqlite_library`, `sqlite_home`, `sqlite_albums`,
-`sqlite_edits`, `sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
+`sqlite_suggestions`, `sqlite_edits`, `sqlite_enrich`, `sqlite_trash`). It and every other store (integrations, ML, backups) are built
 on the process's ONE `Database` (`adapters/sqlite_database.py`, B16/B26): a single writer
 connection behind a single lock for every write and transaction (transactions nest by joining
 the outer one), and a read-only WAL connection per thread for reads, so reads never wait for a
@@ -345,6 +345,18 @@ The person filter (`person_id`) is one more condition of the shared filter SQL: 
 `EXISTS` over `face` (index `face_by_person`) after the visibility rule, so it never
 widens what a viewer sees; `pinned` starts from the viewer's own `user_asset` rows like
 favourites. Timings: `PERFORMANCE.md`.
+
+### Suggested albums (FEATURES 5.6)
+`GET /api/album-suggestions` (`app/album_suggestions.py`) reads the visible library once with
+`event_photos` (`adapters/sqlite_suggestions.py`: real dates only, with GPS, place and the
+person ids of its faces) and splits it into events in one time-ordered pass
+(`domain/events.py`): more than 3 h apart or 25 km apart starts a new event, except while
+away from home (30 km from the grid cell with the most photos), where 16 h and any distance
+stay one trip; the same person keeps an event going for up to 6 h. Events of eight photos,
+not mostly in the viewer's own albums and not answered before, are proposed, newest first.
+Titles come from facts (`event_title`); `Namer` is the seam where an AI rename would plug
+in later. Keep makes the album and records the answer in one transaction
+(`album_suggestion_answer`, 0033), so a double tap makes one album; Discard records it too.
 
 ### Album → print
 `Album` (pages → slots → assets + crops) + `Theme` + `Layout`s → `PrintRenderer`

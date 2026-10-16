@@ -129,26 +129,31 @@ export const SECTION_NAMES: Record<HomeSection, string> = {
 	on_this_day: 'On this day',
 	rediscover: 'Rediscover',
 	memories: 'Memories',
+	suggested: 'Suggested albums',
 	years: 'Years',
 	pinned: 'Pinned',
 	people: 'People',
 	new: 'New this week'
 };
 
-/**
- * The blocks Home draws: of the `sections` the account chose, in its order, those with
- * something to show. `pinned` and `people` are null until they are answered.
- */
+/** What Home asks for besides `HomeData`; null until it is answered. */
+export type HomeExtras = {
+	pinned: readonly AssetOut[] | null;
+	people: readonly unknown[] | null;
+	suggested: readonly unknown[] | null;
+};
+
+/** The blocks Home draws: of the `sections` the account chose, in its order, those with something to show. */
 export function homeBlocks(
 	home: HomeData,
-	pinned: readonly AssetOut[] | null,
-	people: readonly unknown[] | null,
+	{ pinned, people, suggested }: HomeExtras,
 	sections: readonly HomeSection[]
 ): HomeSection[] {
 	const has: Record<HomeSection, boolean> = {
 		on_this_day: home.on_this_day !== null,
 		rediscover: home.rediscover.length > 0,
 		memories: home.memories.length > 0,
+		suggested: Boolean(suggested?.length),
 		years: home.years.length > 0,
 		pinned: Boolean(pinned?.length),
 		people: Boolean(people?.length),

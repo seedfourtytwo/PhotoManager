@@ -26,6 +26,7 @@ from photo_assistant.adapters.sqlite_enrich import EnrichMixin
 from photo_assistant.adapters.sqlite_home import HomeMixin
 from photo_assistant.adapters.sqlite_library import LibraryMixin
 from photo_assistant.adapters.sqlite_review import ReviewMixin
+from photo_assistant.adapters.sqlite_suggestions import SuggestionsMixin
 from photo_assistant.adapters.sqlite_trash import TrashMixin
 from photo_assistant.domain.access import KEPT_KIND, SourceAccess, default_source_access
 from photo_assistant.domain.model import (
@@ -85,6 +86,7 @@ class SqliteRepository(
     AccessMixin,
     LibraryMixin,
     HomeMixin,
+    SuggestionsMixin,
     AlbumsMixin,
     EditsMixin,
     EnrichMixin,

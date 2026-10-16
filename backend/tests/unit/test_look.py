@@ -71,6 +71,7 @@ def test_the_defaults_are_the_ones_in_the_spec() -> None:
             "on_this_day",
             "rediscover",
             "memories",
+            "suggested",
             "years",
             "pinned",
             "people",

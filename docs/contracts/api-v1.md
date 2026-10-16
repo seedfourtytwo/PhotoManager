@@ -107,7 +107,7 @@ whole sheet of any account.
 | `startPage` | `"today"`, `"library"` | `"today"` |
 | `collectionsRows` | one to three of `"people"`, `"places"`, `"albums"`, each once, in the order shown | all three, in that order |
 | `dockLabels` | `true` / `false` | `true` |
-| `homeSections` (v1.11) | one to seven of `"on_this_day"`, `"rediscover"`, `"memories"`, `"years"`, `"pinned"`, `"people"`, `"new"`, each once, in the order Home shows them; the ones left out are off | all seven, in that order |
+| `homeSections` (v1.11) | one to eight of `"on_this_day"`, `"rediscover"`, `"memories"`, `"suggested"` (v1.13), `"years"`, `"pinned"`, `"people"`, `"new"`, each once, in the order Home shows them; the ones left out are off | all eight, in that order |
 
 Rules (`backend/src/photo_assistant/domain/look.py` is the source; `web/src/lib/look/sheet.ts`
 mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases.json`):
@@ -359,6 +359,34 @@ the day it was taken; each `filter` carries `guessed_date: false` for that reaso
 | DELETE | `/api/albums/{id}/items` | `{asset_ids}` | `{count}` |
 | PUT | `/api/albums/{id}/order` | `{asset_ids}` (full order) | `204` |
 | GET/PUT | `/api/albums/{id}/members` | `[{user_id, role:"viewer"|"editor"}]` | same |
+
+## Suggested albums (v1.13, FEATURES 5.6)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/album-suggestions` | – | `Suggestion[]`, newest first, at most 6; `[]` for a guest |
+| POST | `/api/album-suggestions/{key}/keep` | – | `201 AlbumSummary`: a new album you own holding the photos you see; members and admins only |
+| POST | `/api/album-suggestions/{key}/discard` | – | `204`; members and admins only |
+
+```
+Suggestion = {key, title, from: "YYYY-MM-DD", to: "YYYY-MM-DD", count, cover: AssetOut,
+              items: AssetOut[]}   # items: its first 4 photos, in time order
+```
+Events are made from what the timeline shows you (as Home: no guessed dates, nothing hidden
+by you). A new event starts when the next photo is more than 3 hours after the last, or more
+than 25 km from it, except on a trip: away from home (more than 30 km from where most photos
+are), photos up to 16 hours apart and in any place stay one event, so a trip crosses the
+night. A person already on the event's photos keeps it going for up to 6 hours. An event
+needs 8 photos; one with half its photos already in an album of yours (owned or as a member)
+is left out. `title` comes from facts only: the one city, else region, else country all its
+named photos share, else the city with the most, then its day or months: `"Saint-Malo ·
+12 July 2025"`, `"Brittany · July 2025"`; the date alone without a place. `key` is the
+event's oldest photo in the library, stable while the event grows. `cover`: its middle photo.
+
+Nothing is made until **keep**. Keep and discard are remembered per account, so an answered
+suggestion never comes back, even when its album is deleted later. A `key` that is not an
+open suggestion of yours (answered, or the events changed) is `404` `{"detail": "this
+suggestion is no longer there; the list may have changed"}`.
 
 ## Trash
 
@@ -673,3 +701,14 @@ Additions only.
 | Area | Change | Web impact |
 |---|---|---|
 | Albums | `AlbumSummary.cover` gains `asset_id`, `preview_url`, `width`, `height` (see "Albums" above); `url` stays the thumbnail. | `AlbumCover`; a hero uses `cover.preview_url` and the size for its frame instead of rewriting the thumbnail URL. |
+
+---
+
+# v1.13 changes (suggested albums, FEATURES 5.6)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Albums | `GET /api/album-suggestions`, `POST /api/album-suggestions/{key}/keep` and `/discard` (see "Suggested albums" above). | `api.albumSuggestions`, `keepSuggestion`, `discardSuggestion`; Home has a "Suggested albums" block with Keep and Discard. |
+| Look | `homeSections` may also hold `"suggested"` (eight blocks). A new account shows it after Memories; an account that already chose its blocks finds it off until it switches it on in You. | `HOME_SECTIONS` gains `suggested`. |

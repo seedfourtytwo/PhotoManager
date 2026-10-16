@@ -97,6 +97,12 @@ test('every screen', async ({ page }, info) => {
 	await page.keyboard.press('Escape');
 	await expect(story).toBeHidden();
 	await sheetStepGone(page);
+	const suggested = page.getByRole('main').getByRole('region', { name: 'Suggested albums' });
+	await suggested.getByRole('button', { name: 'Keep' }).first().scrollIntoViewIfNeeded();
+	// the buttons clear of the floating dock
+	if (isPhone(page)) await page.mouse.wheel(0, 120);
+	await expect(suggested.locator('img').first()).toBeVisible();
+	await shot(page, '00c-suggested-albums', p);
 
 	await page.goto('/');
 	await expect(page.locator('.tile img').first()).toBeVisible();

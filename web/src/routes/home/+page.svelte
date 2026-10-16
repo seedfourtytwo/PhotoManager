@@ -1,6 +1,15 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { AssetOut, HomeData, HomeFilter, Id, Memory, Person } from '$lib/api';
+	import type {
+		AlbumSuggestion,
+		AssetOut,
+		HomeData,
+		HomeFilter,
+		Id,
+		Memory,
+		Person
+	} from '$lib/api';
 	import { api, library, notice, session } from '$lib/app.svelte';
 	import { peopleStrip, personName } from '$lib/collections';
 	import { errorMessage } from '$lib/format';
@@ -36,6 +45,7 @@
 	import HomeSection from '$lib/components/home/HomeSection.svelte';
 	import MemoryRow from '$lib/components/home/MemoryRow.svelte';
 	import StoryPlayer from '$lib/components/home/StoryPlayer.svelte';
+	import SuggestedAlbums from '$lib/components/home/SuggestedAlbums.svelte';
 
 	/** The pinned photos shown: one page of the timeline; a family pins a few. */
 	const PINNED_SHOWN = 200;
@@ -46,6 +56,9 @@
 	let home = $state.raw<HomeData | null>(null);
 	let pinned = $state.raw<AssetOut[] | null>(null);
 	let people = $state.raw<Person[] | null>(null);
+	let suggested = $state.raw<AlbumSuggestion[] | null>(null);
+	/** The suggestion being kept or discarded. */
+	let answering = $state<string | null>(null);
 	let error = $state('');
 	/** Whether the library has no photo at all, asked only when Home has nothing to show. */
 	let libraryEmpty = $state<boolean | null>(null);
@@ -66,6 +79,10 @@
 			.people()
 			.then((list) => !left && (people = peopleStrip(list.filter((person) => person.name))))
 			.catch(() => !left && (people = [])); // no faces yet, or none for this account
+		api
+			.albumSuggestions()
+			.then((list) => !left && (suggested = list))
+			.catch(() => !left && (suggested = [])); // Home stands without them
 		return () => (left = true);
 	});
 
@@ -81,9 +98,11 @@
 	}
 
 	const fresh = $derived(home?.new.items ?? []);
-	const blocks = $derived(home ? homeBlocks(home, pinned, people, look.shown.homeSections) : []);
+	const blocks = $derived(
+		home ? homeBlocks(home, { pinned, people, suggested }, look.shown.homeSections) : []
+	);
 	const nothing = $derived(
-		home !== null && pinned !== null && people !== null && blocks.length === 0
+		home !== null && pinned !== null && people !== null && suggested !== null && blocks.length === 0
 	);
 	$effect(() => {
 		if (!nothing) return;
@@ -98,6 +117,25 @@
 	function cameBack() {
 		if (document.visibilityState === 'visible' && dayLine(new Date()) !== today)
 			today = dayLine(new Date());
+	}
+
+	// --- suggested albums: Keep makes the album, Discard forgets it; the card goes either way --
+	async function answer(suggestion: AlbumSuggestion, keep: boolean) {
+		answering = suggestion.key;
+		try {
+			if (keep) {
+				const album = await api.keepSuggestion(suggestion.key);
+				notice.show(`Album “${album.title}” made.`, {
+					action: { label: 'Open', run: () => void goto(`/albums/${album.id}`) }
+				});
+			} else await api.discardSuggestion(suggestion.key);
+			// the next one, if any, takes its place
+			suggested = await api.albumSuggestions();
+		} catch (e: unknown) {
+			notice.error(e);
+		} finally {
+			answering = null;
+		}
 	}
 
 	// --- the story player ----------------------------------------------------------------------
@@ -243,6 +281,15 @@
 			{:else if block === 'memories'}
 				<HomeSection title={SECTION_NAMES.memories}>
 					<MemoryRow memories={home.memories} onplay={playMemory} />
+				</HomeSection>
+			{:else if block === 'suggested' && suggested}
+				<HomeSection title={SECTION_NAMES.suggested}>
+					<SuggestedAlbums
+						suggestions={suggested}
+						busy={answering}
+						onkeep={(s) => answer(s, true)}
+						ondiscard={(s) => answer(s, false)}
+					/>
 				</HomeSection>
 			{:else if block === 'years'}
 				<HomeSection title={SECTION_NAMES.years} href="/">

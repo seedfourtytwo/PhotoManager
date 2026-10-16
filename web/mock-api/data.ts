@@ -180,6 +180,7 @@ export function makeState(options: {
 		pinned: new Map([[1, new Set(assets.filter((_, i) => i % 50 === 7).map((a) => a.id))]]),
 		hidden: new Map([[1, new Set([assets[5].id])]]),
 		albums,
+		suggestionAnswers: new Map(),
 		reports,
 		jobs: [
 			{
