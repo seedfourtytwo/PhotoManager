@@ -78,12 +78,25 @@ describe('Users: Reset PIN', () => {
 		render(Users);
 		await (await sheetOf('partner')).getByRole('button', { name: 'Reset PIN' }).click();
 		const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
-		await dialog.getByLabelText('PIN').fill('1111');
-		await dialog.getByRole('button', { name: 'Set PIN' }).click();
-		await vi.waitFor(() => expect(notice.text).toBe('That PIN is too easy to guess.'));
+		await dialog.getByLabelText('New PIN', { exact: true }).fill('1111');
+		await dialog.getByLabelText('New PIN again', { exact: true }).fill('1111');
+		await expect
+			.element(dialog.getByRole('alert'))
+			.toHaveTextContent('That PIN is too easy to guess.');
 		await new Promise((r) => setTimeout(r, 50));
 		expect(notice.text).not.toMatch(/New PIN set/);
-		await expect.element(dialog).toBeInTheDocument();
+		await expect.element(dialog.getByLabelText('New PIN', { exact: true })).toHaveValue('');
+	});
+
+	it('asks for the new PIN twice: two different ones set nothing', async () => {
+		const calls = stubFetch(() => ({ json: people }));
+		render(Users);
+		await (await sheetOf('partner')).getByRole('button', { name: 'Reset PIN' }).click();
+		const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
+		await dialog.getByLabelText('New PIN', { exact: true }).fill('1111');
+		await dialog.getByLabelText('New PIN again', { exact: true }).fill('1112');
+		await expect.element(dialog.getByRole('alert')).toHaveTextContent("Those didn't match");
+		expect(calls.filter((c) => c.method === 'PATCH')).toEqual([]);
 	});
 
 	it('survives Cancel while the request is on its way, and opens empty for the next person', async () => {
@@ -97,9 +110,9 @@ describe('Users: Reset PIN', () => {
 		render(Users);
 		await (await sheetOf('partner')).getByRole('button', { name: 'Reset PIN' }).click();
 		const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
-		await dialog.getByLabelText('PIN').fill('4321');
-		await dialog.getByRole('button', { name: 'Set PIN' }).click();
-		await expect.element(dialog.getByRole('button', { name: 'Set PIN' })).toBeDisabled();
+		await dialog.getByLabelText('New PIN', { exact: true }).fill('4321');
+		await dialog.getByLabelText('New PIN again', { exact: true }).fill('4321');
+		await expect.element(dialog.getByRole('button', { name: '1', exact: true })).toBeDisabled(); // on its way
 		await dialog.getByRole('button', { name: 'Cancel' }).click();
 		hold.open();
 		await vi.waitFor(() => expect(notice.text).toBe('New PIN set for partner.'));
@@ -109,7 +122,11 @@ describe('Users: Reset PIN', () => {
 
 		await (await sheetOf('guest')).getByRole('button', { name: 'Reset PIN' }).click();
 		await expect
-			.element(page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabelText('PIN'))
+			.element(
+				page
+					.getByRole('dialog', { name: 'New PIN for guest' })
+					.getByLabelText('New PIN', { exact: true })
+			)
 			.toHaveValue('');
 	});
 });
@@ -183,8 +200,8 @@ describe('Users: Unlock', () => {
 		render(Users);
 		await (await sheetOf('partner')).getByRole('button', { name: 'Reset PIN' }).click();
 		const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
-		await dialog.getByLabelText('PIN').fill('4321');
-		await dialog.getByRole('button', { name: 'Set PIN' }).click();
+		await dialog.getByLabelText('New PIN', { exact: true }).fill('4321');
+		await dialog.getByLabelText('New PIN again', { exact: true }).fill('4321');
 		await vi.waitFor(() => expect(notice.text).toBe('New PIN set for partner.'));
 		await expect.element(tileOf('partner')).not.toHaveAccessibleName(/Locked/);
 	});
