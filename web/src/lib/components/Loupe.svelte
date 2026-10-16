@@ -576,9 +576,13 @@
 			display: none;
 		}
 		/* The details sheet rises under the photo, not over it: the photo moves into the room
-		   above (PhotoInfo.svelte, the sheet's height). */
+		   above (PhotoInfo.svelte, the sheet's height). The bar stays over the sheet's foot, as
+		   on an iPhone: Details closes them again where it opened them. */
 		.loupe.info :global(.stage) {
 			margin-bottom: 55dvh;
+		}
+		.loupe.info .chrome {
+			z-index: 4;
 		}
 	}
 </style>

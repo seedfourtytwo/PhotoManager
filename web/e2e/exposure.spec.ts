@@ -22,7 +22,12 @@ const CAMERA = 'Test Camera';
 
 /** Opens the newest photo with these exposure values and this camera, and its details. */
 async function open(page: Page, exposure: Exposure, camera: string | null = CAMERA) {
-	await withDetail(page, () => ({ ...exposure, camera_model: camera, name: 'Beach day' }));
+	await withDetail(page, () => ({
+		...exposure,
+		camera_model: camera,
+		camera_make: null,
+		name: 'Beach day'
+	}));
 	await page.locator('.tile').first().click();
 	await loupe(page).getByRole('button', { name: 'Details' }).click();
 	const about = loupe(page).getByRole('complementary', { name: 'Details' });

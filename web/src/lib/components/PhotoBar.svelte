@@ -180,9 +180,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		/* Real room between two targets; at 320 px six of them fill the capsule exactly. */
 		gap: var(--s-2);
-		max-width: calc(100% - 2 * var(--s-2));
+		max-width: calc(100% - 2 * var(--s-4));
 		box-sizing: border-box;
 		padding: var(--s-1) var(--s-2);
 		border-radius: var(--r-pill);
@@ -215,13 +214,16 @@
 		}
 	}
 	@media (max-width: 1023px) {
+		/* A phone: the capsule spans the screen, its icons spread evenly, the round targets at
+		   its ends being its own ends. On its side, the notch takes one end: the bar keeps clear
+		   of both. */
 		.bar {
 			bottom: calc(env(safe-area-inset-bottom) + var(--s-3));
-			/* On its side, a phone's notch takes one end: the bar keeps clear of both. The round
-			   targets at its ends are the capsule's own ends. */
-			max-width: calc(
-				100% - 2 * var(--s-2) - 2 * max(env(safe-area-inset-left), env(safe-area-inset-right))
-			);
+			left: calc(var(--s-2) + max(env(safe-area-inset-left), env(safe-area-inset-right)));
+			right: calc(var(--s-2) + max(env(safe-area-inset-left), env(safe-area-inset-right)));
+			translate: none;
+			max-width: none;
+			gap: var(--fine);
 			padding-inline: 0;
 		}
 	}

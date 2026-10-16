@@ -2,7 +2,7 @@
  * The loupe (the photo view): its bar, chrome that comes back on touch, real swipes, URL state,
  * rights, guarded actions, toasts on top of it, and the view transition from and to the tile.
  */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
 	ADMIN,
 	centre,
@@ -152,7 +152,9 @@ test.describe('as admin', () => {
 		});
 		const favourite = loupe(page).getByRole('button', { name: 'Favourite' });
 		const at = await centre(favourite);
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 5000 });
+		const photo = await centre(loupe(page).locator('img.photo'));
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect(toolbar).toHaveCSS('opacity', '0');
 		await page.touchscreen.tap(at.x, at.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');
 		await page.waitForTimeout(NOTHING_HAPPENS_MS);
@@ -319,7 +321,7 @@ test.describe('photo view', () => {
 		await expect(loupe(page).getByRole('toolbar')).not.toContainText('Beach day');
 	});
 
-	test('the bar holds Favourite, Download, Add to album, Edit, Details, Move to trash and More; More holds the rest', async ({
+	test('the bar holds Favourite, Download, Add to album, Details, Move to trash and More; More holds the rest', async ({
 		page
 	}) => {
 		await page.locator('.tile').first().click();
@@ -329,12 +331,11 @@ test.describe('photo view', () => {
 			'Favourite',
 			'Download',
 			'Add to album',
-			'Edit',
 			'Details',
 			'Move to trash',
 			'More'
 		]);
-		await expect(actions.locator('svg')).toHaveCount(7);
+		await expect(actions.locator('svg')).toHaveCount(6);
 		// Icons alone: each word is its name and its tooltip, shown only when the look asks.
 		for (const action of await actions.all()) {
 			await expect(action.locator('.word')).toBeHidden();
@@ -356,9 +357,18 @@ test.describe('photo view', () => {
 		await dialog.getByRole('button', { name: 'Add' }).click();
 		await expect(toast(page)).toContainText('Created “From the photo view” with 1 photo');
 		await expect(loupe(page)).toBeVisible();
-		if (!isPhone(page))
-			await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
+		// The details name the album it is in now.
+		await loupe(page).getByRole('button', { name: 'Details' }).click();
+		await expect(loupe(page).getByRole('link', { name: 'From the photo view' })).toBeVisible();
 	});
+
+	/**
+	 * The toast once it has popped in: it rises from 12 px lower at 90 % of its size (its
+	 * `@starting-style`, +layout.svelte) for 380 ms, so a box measured before then is not where
+	 * it rests.
+	 */
+	const settled = (slip: Locator) =>
+		slip.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
 
 	/** The toast is what a finger or a pointer at its middle would hit: in sight, on top, not inert. */
 	const expectOnTop = (page: Page) =>
@@ -388,6 +398,7 @@ test.describe('photo view', () => {
 		expect(await toast(page).evaluate((slip) => slip.closest('dialog')?.ariaLabel)).toBe(
 			'Photo viewer'
 		);
+		await settled(toast(page));
 		const slip = (await toast(page).boundingBox())!;
 		const bar = (await loupe(page).locator('.bar').boundingBox())!;
 		expect(slip.y + slip.height).toBeLessThan(bar.y);

@@ -255,7 +255,10 @@ test.describe('photo view', () => {
 		const viewer = loupe(page);
 		const toolbar = viewer.getByRole('toolbar', { name: 'Photo actions' });
 		const close = viewer.getByRole('button', { name: 'Close' });
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 10_000 });
+		// A tap on the photo hides the chrome (a finger never hides it by a timer).
+		const photo = await centre(viewer.locator('img.photo'));
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect(toolbar).toHaveCSS('opacity', '0');
 		// A finger lands on the hidden Close and slides off: the chrome is back, nothing pressed.
 		const at = await centre(close);
 		await (
@@ -275,7 +278,9 @@ test.describe('photo view', () => {
 		await page.locator('.tile').first().click();
 		const viewer = loupe(page);
 		const toolbar = viewer.getByRole('toolbar', { name: 'Photo actions' });
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 10_000 });
+		const photo = await centre(viewer.locator('img.photo'));
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect(toolbar).toHaveCSS('opacity', '0');
 		const at = await centre(viewer.getByRole('button', { name: 'Close' }));
 		await page.touchscreen.tap(at.x, at.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');

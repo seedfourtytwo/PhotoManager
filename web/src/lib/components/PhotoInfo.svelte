@@ -368,8 +368,10 @@
 			backdrop-filter: none;
 			border-radius: var(--r-2) var(--r-2) 0 0;
 			box-shadow: var(--lift);
+			/* At its foot the photo's bar floats over it (Loupe.svelte): what scrolls clears it. */
 			padding: 0 calc(var(--s-4) + env(safe-area-inset-right))
-				calc(var(--s-4) + env(safe-area-inset-bottom)) calc(var(--s-4) + env(safe-area-inset-left));
+				calc(var(--s-6) + var(--target) + var(--s-4) + env(safe-area-inset-bottom))
+				calc(var(--s-4) + env(safe-area-inset-left));
 			transition: translate var(--motion-sheet) var(--ease-sheet);
 		}
 		@starting-style {
