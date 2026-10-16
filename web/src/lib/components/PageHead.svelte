@@ -20,6 +20,8 @@
 		avatar?: boolean;
 		/** A second line in the compact title (the Library’s month in view). */
 		sub?: string | null;
+		/** The page's own title (a hero's): the compact title shows once it has gone under the top. */
+		watch?: HTMLElement;
 	};
 	let {
 		title,
@@ -28,32 +30,33 @@
 		actions,
 		hideTitle = false,
 		avatar = true,
-		sub = null
+		sub = null,
+		watch
 	}: Props = $props();
 
 	// The large title lifts and fades as it scrolls under the top (the capsule's room on a
 	// laptop, the clock on a phone); once it is gone a compact glass title takes its place.
-	// Observed, not computed on every scroll event. A page that leaves its title to a hero is
-	// watched by its head. `collapse` runs 0 → 1 as the title passes under the top.
+	// Observed, not computed on every scroll event. A page that leaves its title to a hero
+	// watches the hero's title, else its head. `collapse` runs 0 → 1 as the title passes under the top.
 	let heading = $state<HTMLElement>();
 	let head = $state<HTMLElement>();
 	let collapse = $state(0);
 	let width = $state(0);
 	const gone = $derived(collapse === 1);
 	$effect(() => {
-		const target = heading ?? head;
+		const target = watch ?? heading ?? head;
 		void width; // the top is the capsule's on a laptop, the clock's on a phone
 		if (!target) return;
 		const top = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
-		const watch = new IntersectionObserver(
+		const observer = new IntersectionObserver(
 			([entry]) => {
 				const above = entry.boundingClientRect.top < (entry.rootBounds?.top ?? top);
 				collapse = !above ? 0 : entry.isIntersecting ? 1 - entry.intersectionRatio : 1;
 			},
 			{ rootMargin: `${-top}px 0px 0px 0px`, threshold: STEPS }
 		);
-		watch.observe(target);
-		return () => watch.disconnect();
+		observer.observe(target);
+		return () => observer.disconnect();
 	});
 </script>
 

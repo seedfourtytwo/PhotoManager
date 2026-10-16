@@ -71,8 +71,7 @@ test('share an album with another person', async ({ page }) => {
 	const dialog = page.getByRole('dialog', { name: 'Share album' });
 	// Names come from the user directory (v1.1), so owners who aren't admins see them too.
 	await expect(dialog.getByRole('listitem').filter({ hasText: 'Partner' })).toBeVisible();
-	await dialog.getByLabel('Person to add').selectOption({ label: 'Guest' });
-	await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+	await dialog.getByRole('button', { name: 'Add Guest' }).click();
 	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/members'));
 	await dialog.getByRole('button', { name: 'Save' }).click();
 	expect((await put).postDataJSON()).toEqual([
@@ -96,10 +95,9 @@ test('share on a slow link: nothing can be saved until the current members are i
 	const dialog = page.getByRole('dialog', { name: 'Share album' });
 	await expect(dialog.getByRole('status')).toHaveText('Loading…');
 	await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
-	await expect(dialog.getByLabel('Person to add')).toHaveCount(0);
+	await expect(dialog.getByRole('list', { name: 'Add people' })).toHaveCount(0);
 	release();
-	await dialog.getByLabel('Person to add').selectOption({ label: 'Guest' });
-	await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+	await dialog.getByRole('button', { name: 'Add Guest' }).click();
 	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/members'));
 	await dialog.getByRole('button', { name: 'Save' }).click();
 	// Partner, who was already a member, is still in what gets saved.
@@ -119,7 +117,7 @@ test('share when the members cannot be loaded: it says so and Save stays off', a
 	const dialog = page.getByRole('dialog', { name: 'Share album' });
 	await expect(dialog.getByRole('alert')).toContainText('Could not load who this album is shared');
 	await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
-	await expect(dialog.getByLabel('Person to add')).toHaveCount(0);
+	await expect(dialog.getByRole('list', { name: 'Add people' })).toHaveCount(0);
 });
 
 test('remove from album, then Undo puts the photos back where they were', async ({ page }) => {

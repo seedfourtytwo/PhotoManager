@@ -4,7 +4,7 @@
 	import { api, notice } from '$lib/app.svelte';
 	import Dialog from './Dialog.svelte';
 
-	/** Start an empty album; it opens once made. */
+	/** Start an empty album: its name, large, and a quiet line about it; it opens once made. */
 	type Props = { onclose: () => void };
 	let { onclose }: Props = $props();
 
@@ -34,11 +34,25 @@
 <Dialog title="New album" {onclose}>
 	<!-- A form, so Enter in a field creates the album. -->
 	<form id="new-album" onsubmit={create}>
-		<label class="field">Title <input bind:value={title} maxlength={ALBUM_TITLE_MAX} /></label>
+		<input
+			class="name"
+			bind:value={title}
+			maxlength={ALBUM_TITLE_MAX}
+			placeholder="Album name"
+			aria-label="Title"
+			autocomplete="off"
+			autofocus
+		/>
 		{#if title.length >= ALBUM_TITLE_MAX}
 			<p class="quiet small">A title can be up to {ALBUM_TITLE_MAX} characters long.</p>
 		{/if}
-		<label class="field">Description <input bind:value={description} /></label>
+		<input
+			class="about"
+			bind:value={description}
+			placeholder="What it is about (optional)"
+			aria-label="Description"
+			autocomplete="off"
+		/>
 	</form>
 	{#snippet actions()}
 		<button class="primary" type="submit" form="new-album" disabled={busy || !title.trim()}
@@ -46,3 +60,27 @@
 		>
 	{/snippet}
 </Dialog>
+
+<style>
+	form {
+		display: grid;
+		gap: var(--s-2);
+	}
+	p {
+		margin: 0;
+	}
+	/* The name is the point of the sheet: written large, on no box of its own. */
+	.name {
+		min-height: 3.5rem;
+		padding: 0 var(--s-2);
+		background: none;
+		font-size: var(--fs-28);
+		font-weight: 650;
+		letter-spacing: var(--track-22);
+	}
+	.about {
+		background: none;
+		padding: 0 var(--s-2);
+		color: var(--ink-2);
+	}
+</style>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AlbumSummary, Person } from './api/types';
+import type { AlbumSummary, Person, PlaceSummary } from './api/types';
 import { filtersFromParams } from './filters';
 import {
 	UTILITIES,
@@ -7,8 +7,8 @@ import {
 	peopleStrip,
 	personName,
 	photoCount,
-	placeStrip,
-	withoutEchoes
+	placeCards,
+	placeStrip
 } from './collections';
 
 const person = (id: number, name: string | null, asset_count: number): Person => ({
@@ -123,45 +123,76 @@ describe('photo count', () => {
 	});
 });
 
-describe('places that say the same thing twice', () => {
-	const at = (country: string, city: string | null) => ({ country, region: null, city });
-	const seen = (name: string, count: number, of: ReturnType<typeof at> | null) => ({
+describe('place cards', () => {
+	const place = (
+		name: string,
+		kind: 'country' | 'city',
+		country: string,
+		count: number,
+		cover: number | null = 1
+	): PlaceSummary => ({
 		name,
+		kind,
+		country,
 		count,
-		href: `/?place=${name}`,
-		of
+		cover:
+			cover === null
+				? null
+				: { asset_id: cover, url: `/api/assets/${cover}/thumb`, width: 4, height: 3 },
+		lat: null,
+		lon: null
+	});
+	it('the places with the most photos first, each opening the library filtered by it', () => {
+		const cards = placeCards([
+			place('Carnac', 'city', 'France', 36),
+			place('France', 'country', 'France', 180)
+		]);
+		expect(cards.map((p) => [p.name, p.count, p.href])).toEqual([
+			['France', 180, '/?place=France'],
+			['Carnac', 36, '/?place=Carnac']
+		]);
+	});
+	it('carries its cover, or none', () => {
+		const cards = placeCards([
+			place('Paris', 'city', 'France', 3, 5),
+			place('Lyon', 'city', 'France', 2, null)
+		]);
+		expect(cards.map((p) => p.cover)).toEqual(['/api/assets/5/thumb', null]);
 	});
 	it('drops a country that is one city and nothing else, and keeps the city', () => {
-		const places = [
-			seen('France', 107, at('France', 'Paris')),
-			seen('Portugal', 73, at('Portugal', 'Lisbon')),
-			seen('Lisbon', 73, at('Portugal', 'Lisbon')),
-			seen('Paris', 28, at('France', 'Paris'))
-		];
-		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['France', 'Lisbon', 'Paris']);
+		const cards = placeCards([
+			place('France', 'country', 'France', 107),
+			place('Portugal', 'country', 'Portugal', 73),
+			place('Lisbon', 'city', 'Portugal', 73),
+			place('Paris', 'city', 'France', 28)
+		]);
+		expect(cards.map((p) => p.name)).toEqual(['France', 'Lisbon', 'Paris']);
 	});
 	it('keeps a country that holds more than its city', () => {
-		const places = [
-			seen('France', 30, at('France', 'Paris')),
-			seen('Paris', 28, at('France', 'Paris'))
-		];
-		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['France', 'Paris']);
+		const cards = placeCards([
+			place('France', 'country', 'France', 30),
+			place('Paris', 'city', 'France', 28)
+		]);
+		expect(cards.map((p) => p.name)).toEqual(['France', 'Paris']);
 	});
 	it('keeps two cities that happen to hold as many photos', () => {
-		const places = [
-			seen('Carnac', 36, at('France', 'Carnac')),
-			seen('Sarlat', 36, at('France', 'Sarlat'))
-		];
-		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['Carnac', 'Sarlat']);
+		const cards = placeCards([
+			place('Carnac', 'city', 'France', 36),
+			place('Sarlat', 'city', 'France', 36)
+		]);
+		expect(cards.map((p) => p.name)).toEqual(['Carnac', 'Sarlat']);
 	});
-	it('keeps a country whose city is not among the places shown', () => {
-		expect(
-			withoutEchoes([seen('Portugal', 73, at('Portugal', 'Lisbon'))]).map((p) => p.name)
-		).toEqual(['Portugal']);
-	});
-	it('keeps a place whose photo could not be looked up', () => {
-		const places = [seen('Portugal', 73, null), seen('Lisbon', 73, null)];
-		expect(withoutEchoes(places).map((p) => p.name)).toEqual(['Portugal', 'Lisbon']);
+	it('none without a name or a photo, and no more than the limit', () => {
+		const cards = placeCards(
+			[
+				place('', 'city', 'France', 4),
+				place('Montara', 'city', 'USA', 0),
+				place('A', 'city', 'X', 3),
+				place('B', 'city', 'X', 2)
+			],
+			1
+		);
+		expect(cards.map((p) => p.name)).toEqual(['A']);
 	});
 });
 

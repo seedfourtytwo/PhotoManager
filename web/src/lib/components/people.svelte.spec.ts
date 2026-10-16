@@ -103,37 +103,34 @@ describe('ShareDialog: the members', () => {
 		return { sent, onclose };
 	};
 
+	const role = (name: string, value: 'Viewer' | 'Editor') =>
+		page.getByRole('group', { name: `Role for ${name}` }).getByRole('button', { name: value });
+	const offered = () => page.getByRole('list', { name: 'Add people' });
+
 	it('lists each member with their role, and offers the others, but not the owner, yourself or a member', async () => {
 		open();
+		await expect.element(role('Tom', 'Editor')).toHaveAttribute('aria-pressed', 'true');
+		await expect.element(role('Tom', 'Viewer')).toHaveAttribute('aria-pressed', 'false');
+		await expect.element(offered().getByRole('button', { name: 'Add Ana' })).toBeVisible();
+		expect(offered().getByRole('button').elements()).toHaveLength(1);
 		await expect
-			.element(page.getByRole('combobox', { name: 'Role for Tom' }))
-			.toHaveValue('editor');
-		expect(await options('Role for Tom')).toEqual(['Viewer', 'Editor']);
-		expect(await options('Person to add')).toEqual(['Add a person…', 'Ana']);
-		await expect.element(page.getByRole('listitem')).toHaveTextContent('Tom');
-		await expect.element(page.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
+			.element(page.getByRole('list', { name: 'Shared with' }).getByRole('listitem'))
+			.toHaveTextContent('Tom');
 		await expect.element(page.getByText('Only you, for now.')).not.toBeInTheDocument();
 	});
 
 	it('adds a person as a viewer, changes a role, removes a member, and saves the whole list', async () => {
 		const { sent, onclose } = open();
-		const adder = page.getByRole('combobox', { name: 'Person to add' });
-		await expect.element(page.getByRole('combobox', { name: 'Role for Tom' })).toBeVisible();
-		await adder.selectOptions('Ana');
-		await page.getByRole('button', { name: 'Add', exact: true }).click();
-		await expect
-			.element(page.getByRole('combobox', { name: 'Role for Ana' }))
-			.toHaveValue('viewer');
-		await expect.element(adder).toHaveValue('');
-		await page.getByRole('combobox', { name: 'Role for Tom' }).selectOptions('viewer');
-		await page.getByRole('button', { name: 'Remove' }).last().click();
-		await expect
-			.element(page.getByRole('combobox', { name: 'Role for Ana' }))
-			.not.toBeInTheDocument();
-		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.element(role('Tom', 'Editor')).toBeVisible();
+		await offered().getByRole('button', { name: 'Add Ana' }).click();
+		await expect.element(role('Ana', 'Viewer')).toHaveAttribute('aria-pressed', 'true');
+		await expect.element(offered()).not.toBeInTheDocument(); // nobody left to add
+		await role('Tom', 'Viewer').click();
+		await page.getByRole('button', { name: 'Remove Ana' }).click();
+		await expect.element(role('Ana', 'Viewer')).not.toBeInTheDocument();
+		await page.getByRole('button', { name: 'Remove Tom' }).click();
 		await expect.element(page.getByText('Only you, for now.')).toBeInTheDocument();
-		await adder.selectOptions('Tom');
-		await page.getByRole('button', { name: 'Add', exact: true }).click();
+		await offered().getByRole('button', { name: 'Add Tom' }).click();
 		await page.getByRole('button', { name: 'Save' }).click();
 		await vi.waitFor(() => expect(onclose).toHaveBeenCalled());
 		expect(sent.at(-1)).toEqual({
