@@ -202,7 +202,9 @@
 		display: grid;
 		gap: var(--s-6);
 	}
+	/* Big enough to compare, small enough that the decision stays in view. */
 	.pairs li {
+		max-width: 64rem;
 		display: grid;
 		gap: var(--s-3);
 	}
