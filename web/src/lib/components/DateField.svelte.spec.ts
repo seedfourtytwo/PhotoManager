@@ -111,12 +111,22 @@ describe('DateField', () => {
 		render(DateField, { id: 'd', value, time: true });
 		paste('7/25/2019');
 		await expect.element(field()).toHaveValue('25/07/2019 18:30:05');
-		await expect.element(page.getByText('Read as month first: 25 July 2019')).toBeInTheDocument();
+		// It quotes what was written, not the day-first text now in the field.
+		const note = '“7/25/2019” was read month first: 25 July 2019';
+		await expect.element(page.getByText(note)).toBeInTheDocument();
 		// It still says so after the field is left, until something else is written.
 		await userEvent.tab();
-		await expect.element(page.getByText('Read as month first: 25 July 2019')).toBeInTheDocument();
+		await expect.element(page.getByText(note)).toBeInTheDocument();
 		await field().fill('24/07/2019');
-		await expect.element(page.getByText(/Read as month first/)).not.toBeInTheDocument();
+		await expect.element(page.getByText(/month first/)).not.toBeInTheDocument();
+	});
+
+	it('says nothing of month first for a date written day first', async () => {
+		render(DateField, { id: 'd', value, time: true });
+		await field().fill('25/07/2019');
+		await userEvent.tab();
+		await expect.element(field()).toHaveValue('25/07/2019 18:30:05');
+		await expect.element(page.getByText(/month first/)).not.toBeInTheDocument();
 	});
 
 	it('emptied, it gives null and no complaint', async () => {

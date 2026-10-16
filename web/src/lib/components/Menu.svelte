@@ -35,6 +35,12 @@
 	let root: HTMLDivElement;
 	let button: HTMLButtonElement;
 
+	/** The panel opened over its button (a bar at the bottom), not under it: it pops from there. */
+	let up = $state(false);
+	function place(panel: HTMLElement) {
+		up = panel.getBoundingClientRect().top < button.getBoundingClientRect().top;
+	}
+
 	function close(refocus = false) {
 		open = false;
 		if (refocus) button.focus();
@@ -81,7 +87,7 @@
 	{#if badge > 0 && badgeLabel}<span id={`${id}-badge`} class="visually-hidden">{badgeLabel}</span
 		>{/if}
 	{#if open}
-		<ul {id} class="panel">
+		<ul {id} class="panel glass" class:up {@attach place}>
 			{#each items as item (item.label)}
 				<li>
 					{#if item.href}
@@ -154,9 +160,23 @@
 		margin: 0;
 		padding: var(--s-1);
 		list-style: none;
-		background: var(--raised);
 		border-radius: var(--r-2);
-		box-shadow: var(--lift);
+		/* Glass (utilities.css .glass) with its edge, lifted; it pops from its button's corner
+		   on the spring, as an iPhone menu does. */
+		box-shadow: var(--glass-edge), var(--lift);
+		transform-origin: top right;
+		transition:
+			opacity var(--motion) var(--ease),
+			scale var(--motion-sheet) var(--ease-spring);
+	}
+	.panel.up {
+		transform-origin: bottom right;
+	}
+	@starting-style {
+		.panel {
+			opacity: 0;
+			scale: 0.9;
+		}
 	}
 	.panel a,
 	.panel button {

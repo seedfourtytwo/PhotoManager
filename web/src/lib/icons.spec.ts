@@ -28,6 +28,7 @@ describe('icons', () => {
 			'info',
 			'library',
 			'lock',
+			'minus',
 			'moon',
 			'more',
 			'pause',

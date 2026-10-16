@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { formatField, formatLongDay, mergeReading, readDateText } from '$lib/dates';
+	import { formatField, mergeReading, monthFirstNote, readDateText } from '$lib/dates';
 
 	type Props = {
 		/** The input's id: the caller's `<label for>` names the field. */
@@ -21,7 +21,7 @@
 	// The last value the field held: a day written alone keeps its time, a time alone its day.
 	let kept = untrack(() => value);
 	let unreadable = $state(false);
-	/** The day, in words, when the numbers were read month first. */
+	/** What it says when the numbers were read month first (dates.ts monthFirstNote). */
 	let monthFirst = $state<string | null>(null);
 
 	function read(written: string): string | null {
@@ -30,7 +30,7 @@
 		if (!next) return null;
 		kept = next;
 		unreadable = false;
-		monthFirst = reading.monthFirst ? formatLongDay(next) : null;
+		monthFirst = reading.monthFirst ? monthFirstNote(written, next) : null;
 		return next;
 	}
 
@@ -102,7 +102,7 @@
 			Can't read that as a date. Try {time ? '04/07/2019 18:30' : '04/07/2019'}.
 		</p>
 	{:else if monthFirst}
-		<p id="{id}-note" class="quiet small">Read as month first: {monthFirst}</p>
+		<p id="{id}-note" class="quiet small">{monthFirst}</p>
 	{/if}
 </div>
 

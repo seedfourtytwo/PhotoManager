@@ -160,3 +160,31 @@ it('a destructive row is marked as one', async () => {
 	expect(empty.classList.contains('danger')).toBe(true);
 	expect(restore.classList.contains('danger')).toBe(false);
 });
+
+it('is glass, and pops from the corner at its button: under it, or over it in a bar', async () => {
+	render(Menu, { label: 'Account', text: 'C', items: items() });
+	const button = page.getByRole('button', { name: 'Account' });
+	const origin = () => {
+		const panel = document.getElementById(button.element().getAttribute('aria-controls')!)!;
+		const [x, y] = getComputedStyle(panel).transformOrigin.split(' ').map(parseFloat);
+		return { panel, x, y };
+	};
+	await button.click();
+	let at = origin();
+	expect(at.panel.classList.contains('glass')).toBe(true);
+	expect(at.x).toBeCloseTo(at.panel.offsetWidth, 0); // its right edge, where the button is
+	expect(at.y).toBe(0); // its top: it opened downwards
+	await userEvent.keyboard('{Escape}');
+
+	// The photo view's bar opens it upwards (PhotoBar sets these).
+	document.body.style.setProperty('--menu-top', 'auto');
+	document.body.style.setProperty('--menu-bottom', 'calc(100% + 8px)');
+	try {
+		await button.click();
+		at = origin();
+		expect(at.y).toBeCloseTo(at.panel.offsetHeight, 0);
+	} finally {
+		document.body.style.removeProperty('--menu-top');
+		document.body.style.removeProperty('--menu-bottom');
+	}
+});

@@ -245,7 +245,8 @@ legend {
 	}
 }
 
-/* A switch: a checkbox with role="switch", drawn as a sliding knob. On is ink, never the
+/* A switch: a checkbox with role="switch", drawn as an iOS switch whose knob slides on the
+   spring (--ease-spring, lib/spring.ts). On is ink, never the
    accent (the accent is for selection and focus). */
 input[type='checkbox'][role='switch'] {
 	width: 3.25rem;
@@ -266,7 +267,7 @@ input[type='checkbox'][role='switch']::after {
 	height: 1.625rem;
 	border-radius: 50%;
 	background: var(--raised);
-	transition: transform var(--motion-sheet) var(--ease-sheet);
+	transition: transform var(--motion-sheet) var(--ease-spring);
 }
 input[type='checkbox'][role='switch']:checked {
 	background: var(--ink);
@@ -278,4 +279,91 @@ input[type='checkbox'][role='switch']:checked::after {
 }
 input[type='checkbox'][role='switch']:focus-visible {
 	border-radius: var(--r-pill);
+}
+
+/* A tile that switches with its row: the switch sits at the right, the whole tile its target. */
+label.tile-row:has(> input[role='switch']) {
+	cursor: pointer;
+}
+
+/* A plain choice as a tile (`label.tile-row.pick` round a radio): the whole tile is the radio,
+   and the chosen one carries a check at its right, as in an iPhone list. */
+label.tile-row.pick {
+	position: relative;
+	cursor: pointer;
+}
+label.tile-row.pick > input[type='radio'],
+.pills > label > input[type='radio'] {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	border-radius: inherit;
+	opacity: 0;
+}
+label.tile-row.pick::after {
+	content: '';
+	flex: none;
+	width: var(--s-5);
+	height: var(--s-5);
+	background: var(--ink);
+	mask: var(--check) center / contain no-repeat;
+	opacity: 0;
+	scale: 0.6;
+	transition:
+		opacity var(--motion) var(--ease),
+		scale var(--motion-sheet) var(--ease-spring);
+}
+label.tile-row.pick:has(> input:checked)::after {
+	opacity: 1;
+	scale: 1;
+}
+
+/* Choices that are words (a format, a size): a wrapping row of pills on the fill, the
+   chosen one in ink. Each pill is its radio. */
+.pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-2);
+}
+.pills > label {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	min-height: 2rem;
+	padding: 0 var(--s-4);
+	border-radius: var(--r-pill);
+	background: var(--fill);
+	color: var(--ink);
+	font-size: var(--fs-15);
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+	transition:
+		background-color var(--motion) var(--ease),
+		color var(--motion) var(--ease),
+		transform var(--press) var(--ease);
+}
+.pills > label:active {
+	transform: scale(0.95);
+}
+.pills > label:has(> input:checked) {
+	background: var(--ink);
+	color: var(--bg);
+}
+@media (pointer: coarse) {
+	.pills > label {
+		min-height: var(--target);
+	}
+}
+
+/* The radio that takes the focus is see-through: its tile or pill shows the ring. */
+label.tile-row.pick:has(> input:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.pills > label:has(> input:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }

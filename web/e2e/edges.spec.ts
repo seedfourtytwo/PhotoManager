@@ -164,13 +164,14 @@ for (const [name, insets, size] of [
 		const dialog = page.getByRole('dialog', { name: 'Download' });
 		await dialog.getByRole('button', { name: 'More options' }).click();
 		await expect.poll(() => dialog.evaluate((d) => d.getAnimations().length)).toBe(0);
-		// It is taller than the screen leaves it, so it scrolls…
-		expect(await dialog.evaluate((d) => d.scrollHeight > d.clientHeight)).toBe(true);
-		// …and what scrolls stops above the home bar…
+		// What it holds is taller than the screen leaves it, so it scrolls…
+		const body = dialog.locator('.body');
+		expect(await body.evaluate((d) => d.scrollHeight > d.clientHeight)).toBe(true);
+		// …and the sheet, what scrolls in it included, stops above the home bar…
 		expect(await scrollEnd(dialog)).toBeLessThanOrEqual(size.height - insets.bottom);
-		// …and its actions scroll up clear of it.
-		const download = dialog.getByRole('button', { name: 'Download', exact: true });
-		await download.scrollIntoViewIfNeeded();
-		await expectClear(page, download, insets);
+		await expectClear(page, body, insets);
+		// …and its actions are clear of it without scrolling: they never scroll away.
+		await expectClear(page, dialog.getByRole('button', { name: 'Download', exact: true }), insets);
+		await expectClear(page, dialog.getByRole('button', { name: 'Cancel' }), insets);
 	});
 }

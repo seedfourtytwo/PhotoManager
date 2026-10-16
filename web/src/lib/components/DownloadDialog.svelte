@@ -80,6 +80,8 @@
 	let { scope, single, edited = false, onclose }: Props = $props();
 
 	let options = $state<DownloadOptions>({ ...DEFAULT_OPTIONS });
+	// A long edge typed in pixels; it starts here when none was chosen.
+	const CUSTOM_EDGE = 1600;
 	let custom = $state(false);
 	let more = $state(false);
 	let estimate = $state<DownloadEstimate | null>(null);
@@ -90,7 +92,7 @@
 	const request = $derived(buildDownloadRequest(scope, options));
 	const hasEdits = $derived(single ? single.edited : edited);
 	const nothing = $derived(estimate?.count === 0);
-	const simple = $derived(custom ? null : simpleOf(options));
+	const simple = $derived(simpleOf(options, hasEdits));
 
 	$effect(() => {
 		const body = request;
@@ -187,17 +189,18 @@
 		{/if}
 	</p>
 
-	<fieldset class="plain tiles">
+	<fieldset class="tiles">
 		<legend class="visually-hidden">What to download</legend>
 		{#each simpleChoices(hasEdits) as pick (pick.value)}
-			<label class="tile-row">
+			<!-- A click, not a change: picking the chosen one again puts back what More options moved. -->
+			<label class="tile-row pick">
 				<input
 					type="radio"
 					name="simple"
 					aria-labelledby={`dl-${pick.value}`}
 					aria-describedby={`dl-${pick.value}-about`}
 					checked={simple === pick.value}
-					onchange={() => {
+					onclick={() => {
 						custom = false;
 						options = applySimple(options, pick.value);
 					}}
@@ -209,14 +212,17 @@
 			</label>
 		{/each}
 	</fieldset>
-	<label class="choice">
-		<input
-			type="checkbox"
-			bind:checked={options.strip_location}
-			disabled={options.strip_all_metadata}
-		/>
-		Remove location
-	</label>
+	<div class="tiles">
+		<label class="tile-row">
+			<span class="tile-main"><span class="tile-title">Remove location</span></span>
+			<input
+				type="checkbox"
+				role="switch"
+				bind:checked={options.strip_location}
+				disabled={options.strip_all_metadata}
+			/>
+		</label>
+	</div>
 
 	<button
 		type="button"
@@ -229,12 +235,14 @@
 		<div id="dl-more">
 			<fieldset>
 				<legend>Format</legend>
-				{#each [['original', 'Original file (without edits)'], ['jpeg', 'JPEG'], ['png', 'PNG'], ['webp', 'WebP']] as [value, label] (value)}
-					<label class="choice">
-						<input type="radio" name="format" {value} bind:group={options.format} />
-						{label}
-					</label>
-				{/each}
+				<div class="pills">
+					{#each [['original', 'Original file (without edits)'], ['jpeg', 'JPEG'], ['png', 'PNG'], ['webp', 'WebP']] as [value, label] (value)}
+						<label>
+							<input type="radio" name="format" {value} bind:group={options.format} />
+							{label}
+						</label>
+					{/each}
+				</div>
 				{#if hasEdits && options.format === 'original'}
 					<p class="quiet small note">
 						{single ? 'This photo has' : 'Some of these photos have'} edits; an original file comes as
@@ -245,31 +253,41 @@
 
 			{#if lossy}
 				<label class="row">
-					Quality <span class="value">{options.quality}</span>
+					Quality <span class="value data">{options.quality}</span>
 					<input type="range" min="1" max="100" bind:value={options.quality} />
 				</label>
 			{/if}
 
 			<fieldset>
 				<legend>Size (long edge)</legend>
-				{#each EDGE_PRESETS as preset (preset.label)}
-					<label class="choice">
+				<div class="pills">
+					{#each EDGE_PRESETS as preset (preset.label)}
+						<label>
+							<input
+								type="radio"
+								name="edge"
+								checked={!custom && options.max_edge === preset.value}
+								onchange={() => {
+									custom = false;
+									options.max_edge = preset.value;
+								}}
+							/>
+							{preset.label}
+						</label>
+					{/each}
+					<label>
 						<input
 							type="radio"
 							name="edge"
-							checked={!custom && options.max_edge === preset.value}
+							checked={custom}
 							onchange={() => {
-								custom = false;
-								options.max_edge = preset.value;
+								custom = true;
+								options.max_edge ??= CUSTOM_EDGE;
 							}}
 						/>
-						{preset.label}
+						Custom
 					</label>
-				{/each}
-				<label class="choice">
-					<input type="radio" name="edge" checked={custom} onchange={() => (custom = true)} />
-					Custom
-				</label>
+				</div>
 				{#if custom}
 					<label class="row">
 						Pixels
@@ -278,7 +296,7 @@
 							min="100"
 							max="20000"
 							step="1"
-							value={options.max_edge ?? 1600}
+							value={options.max_edge ?? CUSTOM_EDGE}
 							oninput={(e) => (options.max_edge = Number(e.currentTarget.value) || null)}
 						/>
 					</label>
@@ -288,10 +306,12 @@
 
 			<fieldset>
 				<legend>Metadata</legend>
-				<label class="choice">
-					<input type="checkbox" bind:checked={options.strip_all_metadata} />
-					Remove all metadata
-				</label>
+				<div class="tiles">
+					<label class="tile-row">
+						<span class="tile-main"><span class="tile-title">Remove all metadata</span></span>
+						<input type="checkbox" role="switch" bind:checked={options.strip_all_metadata} />
+					</label>
+				</div>
 			</fieldset>
 
 			{#if !single}
@@ -337,29 +357,31 @@
 
 <style>
 	.summary {
-		margin: 0 0 var(--s-2);
+		margin: 0 0 var(--s-4);
+	}
+	.tiles {
+		border-radius: var(--r-1);
+	}
+	.tiles + .tiles {
+		margin-top: var(--s-2);
+	}
+	fieldset.tiles {
+		margin: 0;
 	}
 	.note {
-		margin: var(--s-1) 0 0;
-	}
-	.plain {
-		margin: var(--s-2) 0 var(--s-3);
-	}
-	/* A plain choice: the option, and under it what you get. The whole tile is the target. */
-	.plain .tile-row {
-		cursor: pointer;
+		margin: var(--s-2) 0 0;
 	}
 	/* More options opens under itself: its chevron turns to point down. */
 	.more {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--s-1);
-		margin: var(--s-3) 0 0;
+		margin: var(--s-4) 0 0;
 		padding-inline: 0;
 		color: var(--ink-2);
 	}
 	.more :global(svg) {
-		transition: transform var(--motion) var(--ease);
+		transition: transform var(--motion) var(--ease-spring);
 	}
 	.more[aria-expanded='true'] {
 		color: var(--ink);
@@ -372,12 +394,18 @@
 			min-height: var(--target);
 		}
 	}
+	#dl-more fieldset {
+		margin-top: var(--s-5);
+	}
+	legend {
+		margin-bottom: var(--s-2);
+	}
 	.row {
 		display: grid;
 		grid-template-columns: 5rem auto 1fr;
 		align-items: center;
 		gap: var(--s-2);
-		margin-top: var(--s-1);
+		margin-top: var(--s-2);
 	}
 	.row select,
 	.row input[type='number'] {
@@ -388,6 +416,6 @@
 		color: var(--ink);
 	}
 	fieldset .small {
-		margin: var(--s-1) 0 0;
+		margin: var(--s-2) 0 0;
 	}
 </style>

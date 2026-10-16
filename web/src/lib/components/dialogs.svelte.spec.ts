@@ -29,7 +29,7 @@ describe('FixDateDialog', () => {
 		const sent = stubFetch(() => ({ updated: 2 }));
 		const ondone = vi.fn();
 		render(FixDateDialog, { items, onclose: () => {}, ondone });
-		await page.getByRole('combobox', { name: 'Direction' }).selectOptions('earlier');
+		await page.getByRole('radio', { name: 'Earlier' }).click();
 		await page.getByRole('spinbutton', { name: 'hours' }).fill('1');
 		await page.getByRole('spinbutton', { name: 'minutes' }).fill('30');
 		await expect.element(page.getByRole('cell', { name: '4 Jul 2019, 17:00' })).toBeInTheDocument();
@@ -40,6 +40,35 @@ describe('FixDateDialog', () => {
 			url: '/api/assets/dates',
 			body: { ids: [1, 2], shift_minutes: -90 }
 		});
+	});
+
+	it('Earlier and Later are one choice, later first', async () => {
+		stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		const direction = page.getByRole('radiogroup', { name: 'Direction' });
+		await expect.element(direction.getByRole('radio', { name: 'Later' })).toBeChecked();
+		await direction.getByRole('radio', { name: 'Earlier' }).click();
+		await expect.element(direction.getByRole('radio', { name: 'Later' })).not.toBeChecked();
+	});
+
+	it('steppers count up and down, never under nothing nor past a whole day or hour', async () => {
+		const sent = stubFetch(() => ({ updated: 2 }));
+		const ondone = vi.fn();
+		render(FixDateDialog, { items, onclose: () => {}, ondone });
+		const hours = page.getByRole('spinbutton', { name: 'hours' });
+		await expect.element(page.getByRole('button', { name: 'Fewer hours' })).toBeDisabled();
+		await page.getByRole('button', { name: 'More hours' }).click();
+		await page.getByRole('button', { name: 'More hours' }).click();
+		await page.getByRole('button', { name: 'More hours' }).click();
+		await page.getByRole('button', { name: 'Fewer hours' }).click();
+		await expect.element(hours).toHaveValue(2);
+		await page.getByRole('spinbutton', { name: 'minutes' }).fill('59');
+		await expect.element(page.getByRole('button', { name: 'More minutes' })).toBeDisabled();
+		await page.getByRole('button', { name: 'More days' }).click();
+		await expect.element(page.getByRole('cell', { name: '5 Jul 2019, 21:29' })).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Change date' }).click();
+		await vi.waitFor(() => expect(ondone).toHaveBeenCalled());
+		expect(sent.at(-1)?.body).toEqual({ ids: [1, 2], shift_minutes: 24 * 60 + 2 * 60 + 59 });
 	});
 
 	it('a shift out of the calendar says so in a sentence, and nothing breaks', async () => {
@@ -188,7 +217,7 @@ describe('DownloadDialog', () => {
 		await expect.element(choice('Full size')).toBeChecked();
 		await expect.element(choice('Smaller')).not.toBeChecked();
 		await expect.element(choice('With edits')).not.toBeInTheDocument();
-		await expect.element(page.getByRole('checkbox', { name: 'Remove location' })).toBeVisible();
+		await expect.element(page.getByRole('switch', { name: 'Remove location' })).toBeVisible();
 		expect(document.querySelectorAll('input[type=radio]').length).toBe(2);
 		await expect.element(page.getByRole('combobox', { name: 'Folders' })).not.toBeInTheDocument();
 
@@ -221,18 +250,37 @@ describe('DownloadDialog', () => {
 		);
 	});
 
-	it('a format picked by hand is none of the plain choices, and picking one again wins', async () => {
+	// The plan's bug: More options left both plain choices unchecked, so the dialog looked broken.
+	it('More options never leaves both plain choices unchecked: they follow the size', async () => {
+		stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
+		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
+		await page.getByRole('button', { name: 'More options' }).click();
+		await expect.element(choice('Full size')).toBeChecked();
+		await choice('JPEG').click();
+		await expect.element(choice('Full size')).toBeChecked();
+		await choice('PNG').click();
+		await expect.element(choice('Full size')).toBeChecked();
+		await choice('1080').click();
+		await expect.element(choice('Smaller')).toBeChecked();
+		await expect.element(choice('Full size')).not.toBeChecked();
+		await choice('Custom').click();
+		await expect.element(choice('Smaller')).toBeChecked();
+	});
+
+	it('picking a plain choice again wins over what was set by hand', async () => {
 		const sent = stubFetch(() => ({ count: 3, bytes: 12_400_000 }));
 		render(DownloadDialog, { scope: { ids: [1, 2, 3] }, onclose: () => {} });
 		await page.getByRole('button', { name: 'More options' }).click();
 		await choice('PNG').click();
-		await expect.element(choice('Full size')).not.toBeChecked();
-		await expect.element(choice('Smaller')).not.toBeChecked();
 		await choice('Full size').click();
 		await expect.element(choice('Original file (without edits)')).toBeChecked();
 		await vi.waitFor(() =>
 			expect(sent.at(-1)?.body).toMatchObject({ format: 'original', max_edge: null })
 		);
+		await choice('1080').click();
+		await choice('Smaller').click();
+		await expect.element(choice('2048')).toBeChecked();
+		await expect.element(choice('JPEG')).toBeChecked();
 	});
 });
 
