@@ -348,8 +348,11 @@
 		grid-template-rows: auto minmax(0, 1fr) auto;
 	}
 	/* One column: the bar, the photo (with Reset over its top), the tools. */
+	/* Over the photo's row, so its menu (Revert) opens over Reset and the photo. */
 	.top {
 		grid-area: 1 / 1;
+		position: relative;
+		z-index: 2;
 	}
 	.reset,
 	.area {
