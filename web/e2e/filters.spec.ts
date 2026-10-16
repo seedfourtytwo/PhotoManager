@@ -277,8 +277,8 @@ test('map: choose a cluster, then open its place in the library with an honest c
 		.last()
 		.click();
 	await expect(page.locator('.chosen .tile').first()).toBeVisible();
-	const open = page.getByRole('button', { name: /Open all \d+ from .+ in the library/ });
-	const [, n] = (await open.textContent())!.match(/Open all (\d+) from/)!;
+	const open = page.getByRole('button', { name: /^Show all \d+ in Library$/ });
+	const [, n] = (await open.textContent())!.match(/Show all (\d+) in/)!;
 	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
 	// The count, then the years these photos span.
@@ -299,9 +299,52 @@ test('map: the heading counts the dot that is chosen now, after the map has zoom
 	await dots.nth(counts.indexOf(biggest)).click();
 	const heading = page.locator('section.chosen h2 .quiet');
 	await expect(heading).toBeVisible();
-	const chosen = page.locator('a:has(circle.chosen)');
+	const chosen = page.locator('a.bubble[aria-current="true"]');
 	await expect(chosen).toHaveCount(1);
 	const shown = parseInt((await chosen.getAttribute('aria-label'))!, 10);
 	await expect(heading).toHaveText(String(shown));
 	await expect(page.locator('section.chosen .tile')).toHaveCount(shown);
+});
+
+test('map: it opens on the photos, not on the world, under glass controls', async ({ page }) => {
+	await page.goto('/map');
+	const bubbles = page.getByRole('link', { name: /photos? here/ });
+	await expect(bubbles.first()).toBeVisible();
+	// every bubble is in the window, and the view is narrower than the world
+	for (const bubble of await bubbles.all()) await expect(bubble).toBeInViewport();
+	const [, , w] = (await page.locator('.map svg').getAttribute('viewBox'))!.split(' ').map(Number);
+	expect(w).toBeLessThan(360);
+	// a phone pinches; a laptop also has + and −
+	const controls = page.getByRole('group', { name: 'Map', exact: true });
+	await expect(controls.getByRole('button', { name: 'Zoom in' })).toHaveCount(
+		isPhone(page) ? 0 : 1
+	);
+	await controls.getByRole('button', { name: 'Show all photos' }).click();
+	for (const bubble of await bubbles.all()) await expect(bubble).toBeInViewport();
+	await expectAccessible(page);
+});
+
+test('map: two fingers spreading zoom the map in, not the page', async ({ page }) => {
+	test.skip(!isPhone(page), 'touch');
+	await page.goto('/map');
+	await expect(page.getByRole('link', { name: /photos? here/ }).first()).toBeVisible();
+	const viewBox = async () => (await page.locator('.map svg').getAttribute('viewBox'))!.split(' ');
+	const before = Number((await viewBox())[2]);
+	// in the open sea above the bubbles, so no finger lands on one
+	const x = 195;
+	const y = 330;
+	const cdp = await page.context().newCDPSession(page);
+	const fingers = (apart: number) => [
+		{ x: x - apart / 2, y, id: 1 },
+		{ x: x + apart / 2, y, id: 2 }
+	];
+	await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: fingers(60) });
+	for (let apart = 70; apart <= 160; apart += 10) {
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: fingers(apart) });
+		await page.waitForTimeout(16);
+	}
+	await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+	await cdp.detach();
+	await expect.poll(async () => Number((await viewBox())[2])).toBeLessThan(before / 1.5);
+	expect(await page.evaluate(() => visualViewport?.scale ?? 1)).toBe(1);
 });
