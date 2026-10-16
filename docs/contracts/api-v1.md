@@ -731,11 +731,19 @@ Additions only.
 ---
 
 # v1.15 changes (plain-language backup errors, Flight UI)
-# v1.17 changes (a Larger text face, Flight UI)
 
 Additions only.
 
 | Area | Change | Web impact |
 |---|---|---|
 | Backups | `Run.error_kind` and `problems[].error_kind` in `/api/backups/health` (see "Backups" above). | `BackupErrorKind`; a headline in plain words per kind, the raw `error`/`message` behind "Details". |
+
+---
+
+# v1.17 changes (a Larger text face, Flight UI)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
 | Look | New field `face`: `"inter"` (default) or `"atkinson"` (see "Look" above). An admin sets it, like the other fields; `PUT /api/me/look` still takes only `mode` and `homeSections`. | `Look.face`, `FACES`; `applyLook` (and the first-paint script in `app.html`) set `data-face="atkinson"` on the root, removed for Inter. The CSS for it comes with the Flight type slice. |
