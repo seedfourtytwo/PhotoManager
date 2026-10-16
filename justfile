@@ -57,7 +57,7 @@ exposure-backfill:
 # Everything CI runs, in the same order. Must pass before every push.
 check: lint types test
 
-# Free, where CI minutes are not (see ci.yml). Commit and push first.
+# A pull request's check: free, where CI minutes are not (see ci.yml). Commit and push first.
 # Run `just check` here and show the result on GitHub as the commit's check "local / just check".
 check-report:
     #!/usr/bin/env bash

@@ -262,16 +262,20 @@ def test_the_ci_workflow_is_valid_yaml_with_all_three_jobs() -> None:
     """GitHub rejects a workflow file it cannot parse without running anything."""
     workflow = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
     jobs = workflow["jobs"]
-    assert set(jobs) == {"changes", "backend", "web"}
+    assert set(jobs) == {"secrets", "backend", "web"}
     assert all(job["steps"] for job in jobs.values())
-    scan = [s for s in jobs["changes"]["steps"] if "gitleaks" in s.get("uses", "")]
-    assert scan, "the secret scan runs on every change"
-    assert jobs["backend"]["needs"] == jobs["web"]["needs"] == "changes"
+    assert any("gitleaks" in s.get("uses", "") for s in jobs["secrets"]["steps"])
 
 
-def test_ci_spends_minutes_on_pull_requests_and_a_weekly_run_only() -> None:
-    """The free plan's 2,000 minutes a month: not again on main after a merge, not on drafts."""
+def test_ci_spends_minutes_on_main_once_a_day_and_scans_pull_requests_for_secrets() -> None:
+    """The free plan's 2,000 minutes a month: pull requests are checked on the laptop
+    (`just check-report`); here they only get the secret scan, never as a draft."""
     workflow = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
     triggers = workflow[True]  # YAML 1.1 reads the key `on` as true
     assert set(triggers) == {"pull_request", "schedule", "workflow_dispatch"}
-    assert "draft" in workflow["jobs"]["changes"]["if"]
+    assert triggers["schedule"] == [{"cron": "17 3 * * *"}]
+    jobs = workflow["jobs"]
+    assert "draft" in jobs["secrets"]["if"]
+    for name in ("backend", "web"):
+        assert jobs[name]["needs"] == "secrets"
+        assert jobs[name]["if"] == "needs.secrets.outputs.full == 'true'"

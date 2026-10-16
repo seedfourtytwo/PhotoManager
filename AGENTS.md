@@ -10,8 +10,9 @@ the issue you are working on, and the relevant section of `docs/ARCHITECTURE.md`
 3. Write the minimum code to pass. Run `just check`.
 4. Refactor on green. Commit with Conventional Commits.
 5. Open a PR using the template; include test evidence and, for UI, desktop + phone screenshots.
-6. After pushing, `just check-report`: GitHub's CI minutes are scarce (free plan), so the
-   laptop's `just check` result is what shows on the PR when CI skips a job or has none left.
+6. After the last push, `just check-report`: it runs `just check` here and puts the result on
+   the PR as "local / just check". That is the PR's check (GitHub's free minutes go to a daily
+   run on main); merge only when it is green for the PR's latest commit.
 
 ## Hard stops — ask the human instead of guessing
 
