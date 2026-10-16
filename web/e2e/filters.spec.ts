@@ -271,7 +271,8 @@ test('map: choose a cluster, then open its place in the library with an honest c
 	const [, n] = (await open.textContent())!.match(/Open all (\d+) from/)!;
 	await open.click();
 	await expect(page).toHaveURL(/\/\?place=/);
-	await expect(page.locator('.page-head .line')).toHaveText(`${n} photos`);
+	// The count, then the years these photos span.
+	await expect(page.locator('.page-head .line')).toHaveText(new RegExp(`^${n} photos · \\d{4}`));
 });
 
 test('map: the heading counts the dot that is chosen now, after the map has zoomed in', async ({

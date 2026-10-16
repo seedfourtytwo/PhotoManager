@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthAt, monthTag, position, span, yearMarks, type RulerMonth } from './ruler';
+import { monthAt, position, span, yearMarks, type RulerMonth } from './ruler';
 
 const month = (key: string, count = 1): RulerMonth => ({ key, count });
 /** May 2020 down to January 2018: 28 months apart, with photos in three of them. */
@@ -77,13 +77,5 @@ describe('yearMarks', () => {
 
 	it('no months, no marks', () => {
 		expect(yearMarks([], 10)).toEqual([]);
-	});
-});
-
-describe('monthTag', () => {
-	it('writes a month short enough for the needle', () => {
-		expect(monthTag('2019-12')).toBe('Dec 2019');
-		expect(monthTag('2020-05')).toBe('May 2020');
-		expect(monthTag('2026-09')).toBe('Sep 2026');
 	});
 });

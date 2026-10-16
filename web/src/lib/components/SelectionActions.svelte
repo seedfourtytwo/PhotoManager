@@ -184,7 +184,7 @@
 		},
 		{ label: 'Share', icon: 'share', run: share, hidden: !shareable },
 		{ label: 'Download', icon: 'download', run: () => (dialog = 'download'), more: shareable },
-		{ label: 'Move to trash', icon: 'trash', run: trash, hidden: !session.canEdit },
+		{ label: 'Move to trash', icon: 'trash', run: trash, hidden: !session.canEdit, danger: true },
 		...(selectAll ? [{ ...selectAll, more: true, anytime: true }] : []),
 		{ label: 'Fix date', run: () => (dialog = 'date'), hidden: !session.canEdit, more: true },
 		{ label: allFavourite ? 'Unfavourite' : 'Favourite', run: setFavourite, more: true },

@@ -47,8 +47,9 @@ describe('Timeline', () => {
 		await Promise.all([far, near]);
 		await new Promise((r) => setTimeout(r, 100));
 		expect(loader.items.some((a) => a.taken_at.startsWith('2020-11'))).toBe(true);
-		// The scroll position may ask for a page or two more; never the whole year.
-		expect(cursors.length).toBeLessThan(6);
+		// The scroll position may ask for the pages of two screens more (a month is about a
+		// screen here); never the whole year.
+		expect(cursors.length).toBeLessThan(9);
 		expect(loader.done).toBe(false);
 	});
 

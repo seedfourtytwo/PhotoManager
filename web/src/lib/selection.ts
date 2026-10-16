@@ -79,6 +79,11 @@ export function selectAllLabel(loaded: number, complete: boolean): string {
 	return complete ? 'Select all' : `Select loaded (${formatCount(loaded)})`;
 }
 
+/** The Library's title while photos are being chosen: "3 Selected", as an iPhone says it. */
+export function selectionTitle(count: number): string {
+	return count ? `${formatCount(count)} Selected` : 'Select photos';
+}
+
 export type Rect = { x1: number; y1: number; x2: number; y2: number };
 export type Placed = { id: Id; x: number; y: number; w: number; h: number };
 

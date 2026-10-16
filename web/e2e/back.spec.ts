@@ -84,7 +84,7 @@ test('Back closes Fix date and keeps the selection', async ({ page }) => {
 	await page.goBack();
 	await expect(dialog).toBeHidden();
 	await expect(page).toHaveURL(/\/$/);
-	await expect(page.getByText('2 selected')).toBeVisible();
+	await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(/\/collections$/);
 });
@@ -95,7 +95,7 @@ test('a dialog closed with Cancel leaves no step behind', async ({ page }) => {
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
 	await expect(dialog).toBeHidden();
-	await expect(page.getByText('1 selected')).toBeVisible();
+	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(/\/collections$/);
 });

@@ -46,10 +46,25 @@
 		display: inline-flex;
 		flex: none;
 		border-radius: var(--r-pill);
+		scroll-snap-align: start;
+	}
+	/* Set: one ink pill holding the answer and its ×, 6 px apart; the two buttons inside it
+	   are see-through, so it reads as one shape. */
+	.chip-wrap.set {
+		gap: 6px;
+		padding-right: var(--s-2);
+		background: var(--ink);
+		color: var(--bg);
 	}
 	.chip-wrap.set .chip {
-		border-radius: var(--r-pill) 0 0 var(--r-pill);
-		padding-right: var(--s-1);
+		padding-right: 0;
+		background: none;
+		color: inherit;
+	}
+	@media (hover: hover) {
+		.chip-wrap.set:hover {
+			background: var(--ink-2);
+		}
 	}
 	/* As slim as the chip, and as reachable: its hit area too reaches 44 px. */
 	.clear {
@@ -57,15 +72,15 @@
 		display: inline-grid;
 		place-items: center;
 		min-height: 2rem;
-		padding: 0 var(--s-3) 0 var(--s-1);
-		border-radius: 0 var(--r-pill) var(--r-pill) 0;
-		background: var(--ink);
-		color: var(--bg);
+		padding: 0;
+		border-radius: var(--r-pill);
+		background: none;
+		color: inherit;
 	}
 	.clear::after {
 		content: '';
 		position: absolute;
-		inset: min(0px, calc((100% - var(--target)) / 2)) 0;
+		inset: min(0px, calc((100% - var(--target)) / 2)) calc(-1 * var(--s-2));
 	}
 	.clear :global(svg) {
 		width: var(--s-4);

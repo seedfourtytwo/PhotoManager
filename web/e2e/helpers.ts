@@ -228,7 +228,23 @@ export async function selectTiles(page: Page, indexes: number[]) {
 		else if (n === 0) await longPress(tile);
 		else await tile.tap();
 	}
-	await expect(page.getByText(`${indexes.length} selected`)).toBeVisible();
+	await expect(selectedCount(page)).toHaveText(`${indexes.length} selected`);
+}
+
+/** The pill's count ("3 selected"); the Library's title says "3 Selected" as well. */
+export const selectedCount = (page: Page) =>
+	page.getByRole('toolbar', { name: 'Selected photos' }).getByRole('status');
+
+/** The time scrubber hides at rest: a mouse at the right edge brings it out, or a fast scroll. */
+export async function scrubberOut(page: Page) {
+	if (isPhone(page))
+		await page.evaluate(async () => {
+			window.scrollBy(0, 10);
+			await new Promise((r) => setTimeout(r, 120));
+			window.scrollBy(0, 3 * innerHeight);
+		});
+	else await page.mouse.move(page.viewportSize()!.width - 8, 400);
+	await expect(page.getByRole('slider', { name: 'Jump to date' })).toHaveClass(/out/);
 }
 
 /**

@@ -282,7 +282,7 @@ test('download: a guest with view-only photos is told why nothing can be downloa
 	const tile = await scrollToTile(page, id);
 	if (isPhone(page)) await longPress(tile);
 	else await tile.locator('.check').click({ force: true });
-	await expect(page.getByText('1 selected')).toBeVisible();
+	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
 	await selectionAction(page, 'Download');
 	const dialog = page.getByRole('dialog', { name: 'Download' });
 	await expect(dialog.getByText(/may view these photos but not download them/)).toBeVisible();
@@ -488,11 +488,11 @@ test.describe('selection pill', () => {
 		const from = await centre(tiles.nth(0));
 		const to = await centre(tiles.nth(3));
 		const lift = await touchDown(page, from, to, { hold: 600 });
-		await expect(page.getByText('4 selected')).toBeVisible();
+		await expect(page.getByText('4 selected', { exact: true })).toBeVisible();
 		await lift();
 		// The page stayed put under the finger, and lifting it changes nothing.
 		expect(await page.evaluate(() => window.scrollY)).toBe(0);
-		await expect(page.getByText('4 selected')).toBeVisible();
+		await expect(page.getByText('4 selected', { exact: true })).toBeVisible();
 		await expect(page.locator('.tile.selected')).toHaveCount(4);
 	});
 });
