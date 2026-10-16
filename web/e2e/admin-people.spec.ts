@@ -1,8 +1,8 @@
 /** Admin → People: adding a person, roles, disabling, and a new PIN. */
 import type { Page } from '@playwright/test';
-import { expect, openAdmin, REAL_BACKEND, test, toast } from './helpers.ts';
+import { expect, fillPins, openAdmin, REAL_BACKEND, test, toast } from './helpers.ts';
 
-test.beforeEach(({ page }) => openAdmin(page));
+test.beforeEach(({ page }) => openAdmin(page, 'people'));
 
 /** A person is a tile under People; it opens their sheet: role, user name and actions. */
 async function openPerson(page: Page, name: string) {
@@ -57,7 +57,7 @@ test('“Add person” needs a 4-digit PIN', async ({ page }) => {
 	await expect(dialog.getByRole('button', { name: 'Add' })).toBeEnabled();
 });
 
-test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialog stays for another try', async ({
+test('Reset PIN: a refused PIN is said, nothing claims it was set, and the sheet stays for another try', async ({
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'the refusal is staged on the mock');
@@ -69,23 +69,23 @@ test('Reset PIN: a refused PIN is said, nothing claims it was set, and the dialo
 	);
 	await (await openPerson(page, 'Partner')).getByRole('button', { name: 'Reset PIN' }).click();
 	const dialog = page.getByRole('dialog', { name: 'New PIN for partner' });
-	await dialog.getByLabel('PIN').fill('8642');
-	await dialog.getByRole('button', { name: 'Set PIN' }).click();
-	await expect(
-		page.getByRole('status').filter({ hasText: 'The library is busy; try again.' })
-	).toBeVisible();
+	// Two different PINs: nothing is sent, the new one is asked again.
+	await fillPins(dialog, { 'New PIN': '8642', 'New PIN again': '8643' });
+	await expect(dialog.getByRole('alert')).toContainText("Those didn't match");
+	await fillPins(dialog, { 'New PIN': '8642', 'New PIN again': '8642' });
+	await expect(dialog.getByRole('alert')).toContainText('The library is busy; try again.');
 	await expect(page.getByText(/New PIN set/)).toHaveCount(0);
 	await expect(dialog).toBeVisible();
 
 	refuse = false;
-	await dialog.getByRole('button', { name: 'Set PIN' }).click();
+	await fillPins(dialog, { 'New PIN': '8642', 'New PIN again': '8642' });
 	await expect(
 		page.getByRole('status').filter({ hasText: 'New PIN set for partner.' })
 	).toBeVisible();
 	await expect(dialog).toBeHidden();
-	// The next person's dialog starts empty.
+	// The next person's sheet starts empty.
 	await (await openPerson(page, 'Guest')).getByRole('button', { name: 'Reset PIN' }).click();
 	await expect(
-		page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabel('PIN')
+		page.getByRole('dialog', { name: 'New PIN for guest' }).getByLabel('New PIN', { exact: true })
 	).toHaveValue('');
 });

@@ -13,7 +13,7 @@ import {
 /** A folder on the server: the mock pretends; a real backend needs one (scripts/e2e_seed.py). */
 const SCANS = process.env.E2E_SCANS_DIR ?? '/home/c/Scans';
 
-test.beforeEach(({ page }) => openAdmin(page));
+test.beforeEach(({ page }) => openAdmin(page, 'folders'));
 
 /** A folder is a tile under Folders; it opens a sheet with what it says and its actions. */
 const folderTile = (page: Page, name: string) =>
@@ -34,7 +34,7 @@ async function addFrom(page: Page, kind: 'Add folder' | 'Add from Proton' | 'Add
 test('admin adds a folder, sees the import progress and every skip/failure reason', async ({
 	page
 }) => {
-	await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Folders', level: 1 })).toBeVisible();
 	await expectAccessible(page);
 	await addFrom(page, 'Add folder');
 	const dialog = page.getByRole('dialog', { name: 'Add a folder' });
@@ -85,12 +85,13 @@ test('admin edits folder access and retries a failed job', async ({ page }) => {
 		users: [{ user_id: 2, level: 'download' }]
 	});
 
-	// Problems is a status tile; its list opens as a sheet.
+	// Problems is a status row of the Overview; its list opens as a sheet.
+	await page.goto('/settings/overview');
 	await page.getByRole('button', { name: /^Problems/ }).click();
 	const problems = page.getByRole('dialog', { name: 'Problems' });
 	await expect(problems.getByText(/libvips could not decode/)).toBeVisible();
 	await problems.getByRole('button', { name: 'Retry' }).click();
-	await expect(problems.getByText('No failed jobs.')).toBeVisible();
+	await expect(problems.getByText("Nothing's wrong.")).toBeVisible();
 });
 
 test('a scan of a folder that has gone says “folder not found” on the folder and in the report', async ({
@@ -272,7 +273,7 @@ test('a finished import that left files behind says so in the folder’s row', a
 		runs[0] = { ...runs[0], status: 'done', message: note };
 		await route.fulfill({ response, json: runs });
 	});
-	await signIn(page, '/admin');
+	await signIn(page, '/settings/folders');
 	await expect(page.getByText(note)).toBeVisible();
 });
 
@@ -300,7 +301,7 @@ test('a long import report shows its first files and loads the rest on request',
 			}
 		});
 	});
-	await signIn(page, '/admin');
+	await signIn(page, '/settings/folders');
 	await (await openFolder(page, 'Phone')).getByRole('button', { name: 'Report' }).click();
 	const report = page.getByRole('dialog', { name: /^Last import/ });
 	await expect(report.getByText('first.jpg')).toBeVisible();

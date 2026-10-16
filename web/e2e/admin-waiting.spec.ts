@@ -26,7 +26,7 @@ test('admin sees the jobs that wait for another try, and when', async ({ page })
 			]
 		})
 	);
-	await signIn(page, '/admin');
+	await signIn(page, '/settings/overview');
 
 	// Problems is a status tile that says it, and opens the list.
 	const tile = page.getByRole('button', { name: /^Problems/ });

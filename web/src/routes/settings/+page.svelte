@@ -1,39 +1,26 @@
 <script module lang="ts">
-	/** The page You was opened from; kept while the history brings You back (from Admin, say). */
+	/** The page Settings was opened from; kept while the history brings it back (from a section, say). */
 	let openedFrom: URL | null = null;
 </script>
 
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
-	import { isPin, PIN_LENGTH, type Role } from '$lib/api';
-	import {
-		api,
-		backupWatch,
-		chooseHome,
-		chooseMode,
-		isPublicRoute,
-		notice,
-		session
-	} from '$lib/app.svelte';
-	import Devices from '$lib/components/Devices.svelte';
-	import Dialog from '$lib/components/Dialog.svelte';
+	import type { Role } from '$lib/api';
+	import { api, backupWatch, isPublicRoute, notice, session, viewport } from '$lib/app.svelte';
+	import { problemWords } from '$lib/backups';
 	import PageHead from '$lib/components/PageHead.svelte';
-	import Segmented from '$lib/components/ui/Segmented.svelte';
+	import PinSheet from '$lib/components/PinSheet.svelte';
 	import TileGroup from '$lib/components/ui/TileGroup.svelte';
-	import OrderList from '$lib/components/ui/OrderList.svelte';
 	import TileRow from '$lib/components/ui/TileRow.svelte';
-	import { errorMessage } from '$lib/format';
-	import { SECTION_NAMES } from '$lib/home';
-	import { HOME_SECTIONS, look, type Mode } from '$lib/look';
-	import { attentionOf, backLabel, initialOf } from '$lib/nav';
-	import { PIN_FIELD } from '$lib/pin';
+	import { backLabel, initialOf } from '$lib/nav';
+	import { sectionOf, sectionsFor } from '$lib/settings';
 
 	const ROLES: Record<Role, string> = { admin: 'Admin', member: 'Member', guest: 'Guest' };
 
 	let from = $state<URL | null>(openedFrom);
 	afterNavigate(({ from: came, type }) => {
 		const page = came?.url.pathname;
-		if (type === 'popstate' || page === '/settings') return void (from = openedFrom);
+		if (type === 'popstate' || (page && sectionOf(page))) return void (from = openedFrom);
 		// Opened afresh, or right after signing in: Back has nowhere in the history to go.
 		openedFrom = came && page && !isPublicRoute(page) ? came.url : null;
 		from = openedFrom;
@@ -50,13 +37,17 @@
 	});
 
 	const initial = $derived(initialOf(session.user?.display_name));
-	const attention = $derived(attentionOf(session.isAdmin, backupWatch.health));
-
-	const modes: { value: Mode; label: string; icon: 'moon' | 'sun' | 'phone' }[] = [
-		{ value: 'dark', label: 'Dark', icon: 'moon' },
-		{ value: 'light', label: 'Light', icon: 'sun' },
-		{ value: 'system', label: 'Like the device', icon: 'phone' }
-	];
+	/** What needs an admin: the first backup problem, in plain words. */
+	const needs = $derived.by(() => {
+		const problems = session.isAdmin ? (backupWatch.health?.problems ?? []) : [];
+		if (!problems.length) return null;
+		const first = problemWords(problems[0]);
+		return problems.length === 1
+			? first
+			: { ...first, headline: `${problems.length} things need you` };
+	});
+	/** On a phone the root lists the other sections; a laptop has them in the sidebar. */
+	const others = $derived(sectionsFor(session).filter((s) => s.id !== 'you'));
 
 	let version = $state('');
 	$effect(() => {
@@ -66,139 +57,82 @@
 			.catch(() => undefined);
 	});
 
-	// --- Change PIN, in a sheet ----------------------------------------------------------------
 	let changing = $state(false);
-	let current = $state('');
-	let next = $state('');
-	let error = $state('');
-	let busy = $state(false);
 
-	function closePin() {
-		changing = false;
-		current = next = error = '';
-	}
-
-	async function changePin(event: SubmitEvent) {
-		event.preventDefault();
-		// A second submit would fail with "current PIN is wrong" after the first changed it.
-		if (busy) return;
-		error = '';
-		if (!isPin(next)) {
-			error = `Use exactly ${PIN_LENGTH} digits.`;
-			return;
-		}
-		busy = true;
-		try {
-			await api.changePin({ current_pin: current, new_pin: next });
-			closePin();
-			notice.show('PIN changed.');
-		} catch (e) {
-			error = errorMessage(e, 'Could not change the PIN.');
-		} finally {
-			busy = false;
-		}
+	async function changePin({ current, pin }: { current: string; pin: string }) {
+		await api.changePin({ current_pin: current, new_pin: pin });
+		notice.show('PIN changed. Other devices are signed out.');
 	}
 </script>
 
-<svelte:head><title>You · Photos</title></svelte:head>
+<svelte:head><title>Settings · Photos</title></svelte:head>
 
-<PageHead title="You" hideTitle avatar={false} {back} />
+<PageHead title="Settings" hideTitle avatar={false} {back} />
 
 <div class="you">
-	<div class="me">
+	<header class="me">
 		<span class="initial" aria-hidden="true">{initial}</span>
-		<div>
-			<h1>{session.user?.display_name}</h1>
-			{#if session.user}<p class="quiet role">{ROLES[session.user.role]}</p>{/if}
-		</div>
-	</div>
+		<h1>{session.user?.display_name}</h1>
+		{#if session.user}<p class="quiet role">{ROLES[session.user.role]}</p>{/if}
+	</header>
 
-	<TileGroup label="Look">
-		<div class="mode">
-			<Segmented
-				label="Mode"
-				options={modes}
-				value={look.saved.mode}
-				onchange={(mode) => chooseMode(mode)}
-			/>
-		</div>
-	</TileGroup>
-
-	{#if look.saved.showToday}
-		<div id="home">
-			<OrderList
-				label="Home shows, in this order"
-				all={HOME_SECTIONS}
-				chosen={look.saved.homeSections}
-				names={SECTION_NAMES}
-				onchange={(sections) => chooseHome(sections)}
-			/>
-		</div>
-	{/if}
-
-	{#if attention}
+	{#if needs}
 		<TileGroup label="Needs you">
-			<TileRow icon="cloud" title="Backups" line={attention} attention href="/admin#a-backups" />
+			<TileRow
+				icon="alert"
+				title={needs.headline}
+				line={needs.line}
+				attention
+				href="/settings/backups"
+			/>
 		</TileGroup>
 	{/if}
 
-	{#if session.isAdmin}
-		<div class="apart">
+	{#if !viewport.desktop}
+		<nav aria-label="Settings">
 			<TileGroup>
-				<TileRow icon="shield" title="Admin" line="Folders, backups and people" href="/admin" />
+				{#each others as section (section.id)}
+					<TileRow icon={section.icon} title={section.label} href={section.href} />
+				{/each}
 			</TileGroup>
-		</div>
+		</nav>
 	{/if}
-
-	{#if session.canEdit}<Devices />{/if}
 
 	<TileGroup label="Account">
 		<TileRow icon="lock" title="Change PIN" onclick={() => (changing = true)} />
-		<TileRow icon="signout" title="Sign out" onclick={() => session.signOut()}>
-			{#snippet trailing()}{/snippet}
-		</TileRow>
 	</TileGroup>
+	<div class="sign-out">
+		<TileGroup>
+			<TileRow title="Sign out" danger onclick={() => session.signOut()}>
+				{#snippet trailing()}{/snippet}
+			</TileRow>
+		</TileGroup>
+	</div>
 
-	<p class="quiet small version">Library server {version}</p>
+	<p class="quiet small version">Photos · server {version}</p>
 </div>
 
 {#if changing}
-	<Dialog title="Change PIN" onclose={closePin}>
-		<form id="pin-form" onsubmit={changePin}>
-			<label class="field"
-				>Current PIN <input
-					{...PIN_FIELD}
-					bind:value={current}
-					autocomplete="off"
-					required
-				/></label
-			>
-			<label class="field"
-				>New PIN <input {...PIN_FIELD} bind:value={next} autocomplete="off" required /></label
-			>
-			{#if error}<p role="alert">{error}</p>{/if}
-		</form>
-		{#snippet actions()}
-			<button type="submit" form="pin-form" class="primary" disabled={busy}>Change PIN</button>
-		{/snippet}
-	</Dialog>
+	<PinSheet title="Change PIN" askCurrent submit={changePin} onclose={() => (changing = false)} />
 {/if}
 
 <style>
 	.you {
-		max-width: 40rem;
-		padding: 0 var(--page-x) var(--s-7);
+		display: grid;
+		gap: var(--s-2);
+		padding: 0 var(--page-x);
 	}
+	/* The person, centred like the head of an iPhone's settings. */
 	.me {
-		display: flex;
-		align-items: center;
-		gap: var(--s-4);
-		padding: var(--s-2) 0 var(--s-2);
+		display: grid;
+		justify-items: center;
+		gap: var(--s-1);
+		padding: var(--s-4) 0 var(--s-3);
+		text-align: center;
 	}
 	.initial {
 		display: grid;
 		place-items: center;
-		flex: none;
 		width: 4.5rem;
 		height: 4.5rem;
 		border-radius: 50%;
@@ -207,36 +141,25 @@
 		font-weight: 700;
 	}
 	h1 {
+		margin: var(--s-2) 0 0;
 		overflow-wrap: anywhere;
 	}
 	.role {
 		margin: 0;
 	}
-	.apart {
+	.sign-out {
 		margin-top: var(--s-5);
 	}
-	/* The three modes side by side, each its icon over its word, across the page. */
-	.mode :global(.segmented) {
-		display: flex;
-		box-sizing: border-box;
-		width: 100%;
+	/* Sign out: the one red word, centred, in a group of its own. */
+	.sign-out :global(.tile-row) {
+		justify-content: center;
 	}
-	.mode :global(.segmented button) {
-		flex: auto;
-		flex-direction: column;
-		gap: var(--fine);
-		padding: var(--s-2);
-		font-size: var(--fs-14);
-		text-wrap: balance;
-	}
-	form {
-		display: grid;
-		gap: var(--s-4);
-	}
-	form p {
-		margin: 0;
+	.sign-out :global(.tile-main) {
+		flex: none;
+		text-align: center;
 	}
 	.version {
-		margin-top: var(--s-6);
+		margin: var(--s-5) 0 0;
+		text-align: center;
 	}
 </style>

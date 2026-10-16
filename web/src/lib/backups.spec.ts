@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { BackupHealth, BackupTarget } from '$lib/api';
-import { backupSentence, copyPlaceState, placeState, protonCopyState } from './backups';
+import type { BackupHealth, BackupProblem, BackupTarget } from '$lib/api';
+import {
+	backupSentence,
+	copyPlaceState,
+	kindWords,
+	placeState,
+	problemWords,
+	protonCopyState
+} from './backups';
 
 const target = (over: Partial<BackupTarget> = {}): BackupTarget =>
 	({
@@ -94,7 +101,7 @@ describe('backupSentence: the one plain sentence on the Backups tile', () => {
 	it('says nothing until the health is known', () => {
 		expect(backupSentence(null)).toBe('');
 	});
-	it('says the first problem in its own words', () => {
+	it("says the first problem in plain words, never the tool's text", () => {
 		const problems = [
 			{
 				severity: 'alert' as const,
@@ -110,7 +117,7 @@ describe('backupSentence: the one plain sentence on the Backups tile', () => {
 			}
 		];
 		expect(backupSentence(health({ protected: false, places_ok: 0, problems }))).toBe(
-			'Home server: the last backup failed'
+			"Last backup didn't finish"
 		);
 	});
 	it('says where the library is safe', () => {
@@ -125,6 +132,49 @@ describe('backupSentence: the one plain sentence on the Backups tile', () => {
 	it('says there is no backup at all', () => {
 		expect(backupSentence(health({ protected: false, places_ok: 0, places_total: 0 }))).toBe(
 			'No backups yet: the library exists only on this computer'
+		);
+	});
+});
+
+describe('problemWords: a headline, one line of what to do, the raw text behind Details', () => {
+	const problem = (error_kind: BackupProblem['error_kind'], message = 'raw: tool said no') => ({
+		severity: 'alert' as const,
+		message,
+		target_id: 1,
+		error_kind
+	});
+
+	it.each([
+		['unreachable', "Backup place didn't answer", /switched on/],
+		['disk_full', 'Backup place is full', /space/],
+		['auth', "Backup couldn't unlock", /password/],
+		['locked', 'Backup was busy', /tries again by itself/],
+		['unknown', "Last backup didn't finish", /Back up now/]
+	] as const)('%s', (kind, headline, line) => {
+		const words = problemWords(problem(kind));
+		expect(words.headline).toBe(headline);
+		expect(words.line).toMatch(line);
+		expect(words.details).toBe('raw: tool said no');
+	});
+
+	it('keeps every headline short: six words at most', () => {
+		for (const kind of ['unreachable', 'disk_full', 'auth', 'locked', 'unknown'] as const)
+			expect(kindWords(kind).headline.split(' ').length).toBeLessThanOrEqual(6);
+	});
+
+	it('a problem that is no failure (overdue, key not saved) is already plain: it is the line', () => {
+		const words = problemWords({
+			...problem(null, 'USB disk: the backup is overdue.'),
+			severity: 'warning'
+		});
+		expect(words.headline).toBe('Backups need a look');
+		expect(words.line).toBe('USB disk: the backup is overdue.');
+		expect(words.details).toBeNull();
+	});
+
+	it('an alert that is no failure says it needs you', () => {
+		expect(problemWords(problem(null, 'Only 0 of 2 backup places is up to date.')).headline).toBe(
+			'Backups need you'
 		);
 	});
 });

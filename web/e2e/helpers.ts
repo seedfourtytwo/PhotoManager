@@ -45,14 +45,24 @@ export async function signIn(page: Page, path = '/', who = ADMIN) {
 	await expect(page).toHaveURL(new RegExp(`${path.replace(/[?]/g, '\\?')}$`));
 }
 
-/** Where every Admin spec starts: a fresh library, signed in on the Admin page. */
-export async function openAdmin(page: Page) {
+/** An admin section of Settings. */
+export type AdminSection = 'overview' | 'folders' | 'backups' | 'people' | 'search';
+
+/** Where every Admin spec starts: a fresh library, signed in on that section of Settings. */
+export async function openAdmin(page: Page, section: AdminSection = 'overview') {
 	await resetMock();
-	await signIn(page, '/admin');
+	await signIn(page, `/settings/${section}`);
+}
+
+/** Fill a PIN sheet, entry by entry: it asks for the new PIN twice (and the current one first). */
+export async function fillPins(sheet: Locator, pins: Record<string, string>) {
+	for (const [label, pin] of Object.entries(pins))
+		await sheet.getByLabel(label, { exact: true }).fill(pin);
 }
 
 /** The avatar, named "You" (and, for an admin, what needs them): it opens You. */
-export const avatar = (page: Page) => page.getByRole('link', { name: /^You\b/ });
+export const avatar = (page: Page) =>
+	page.getByRole('link', { name: /^You\b/ }).and(page.locator('.avatar'));
 
 /** Follow a link the way a click in the app does (no reload). */
 export async function follow(page: Page, href: string) {

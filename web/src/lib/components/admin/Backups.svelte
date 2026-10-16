@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { BackupHealth, BackupRecovery, BackupRun, BackupTarget } from '$lib/api';
 	import { api, notice } from '$lib/app.svelte';
-	import { copyPlaceState, placeState, protonCopyState } from '$lib/backups';
+	import { copyPlaceState, kindWords, placeState, protonCopyState } from '$lib/backups';
 	import { formatBytes, formatWhen } from '$lib/format';
 	import { protonPlaceName } from '$lib/proton';
 	import Icon from '../Icon.svelte';
@@ -35,7 +35,7 @@
 		if (run.status === 'skipped')
 			return `not connected since ${formatWhen(t.skipped_since ?? run.started_at)}`;
 		const when = formatWhen(run.finished_at ?? run.started_at);
-		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when}, failed: ${run.error ?? 'no reason given'}`;
+		if (run.status === 'failed') return `last ${KIND[run.kind]} ${when} failed: ${kindWords(run.error_kind ?? 'unknown').headline}`;
 		const added = run.bytes_added !== null ? `, ${formatBytes(run.bytes_added)} added` : '';
 		return `last ${KIND[run.kind]} ${when}, succeeded${added}`;
 	} // prettier-ignore
@@ -129,6 +129,12 @@
 					<p class="small status" class:attention={t.needs_attention}>
 						{t.overdue ? 'overdue, ' : ''}{lastLine(t)}{#if proofLine(t)}, {proofLine(t)}{/if}
 					</p>
+					{#if t.last_run?.status === 'failed' && t.last_run.error}
+						<details class="small">
+							<summary>Details</summary>
+							<p class="raw">{t.last_run.error}</p>
+						</details>
+					{/if}
 					<p class="quiet small">
 						{t.schedule}{#if t.quiet_window}, only {t.quiet_window}{/if}{#if !t.enabled}, disabled{:else if t.next_run_at},
 							next {formatWhen(t.next_run_at)}{/if}{#if t.repo_bytes},
@@ -278,6 +284,20 @@
 	.copy .dot {
 		margin-right: var(--s-2);
 		vertical-align: middle;
+	}
+	/* The tool's own words for a failure, folded away under the plain line. */
+	details {
+		margin-top: var(--s-1);
+		color: var(--ink-2);
+	}
+	summary {
+		cursor: pointer;
+		width: max-content;
+		font-weight: 600;
+	}
+	.raw {
+		overflow-wrap: anywhere;
+		font-family: var(--font-code);
 	}
 	.repository code {
 		color: var(--ink-2);

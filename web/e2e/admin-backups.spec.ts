@@ -15,23 +15,34 @@ import {
 
 test.beforeEach(({ page }) => openAdmin(page));
 
-/** Backups is a status tile on Admin; the places and their actions open as its sheet. */
+/** The Overview's Backups row (the laptop's sidebar has a plain "Backups" link too). */
+const backupsRow = (page: Page) => page.getByRole('link', { name: /^Backups .+/ });
+
+/** Backups is a status row of the Overview; it leads to the Backups section of Settings. */
 async function openBackups(page: Page) {
-	await page.getByRole('button', { name: /^Backups/ }).click();
-	return page.getByRole('dialog', { name: 'Backups' });
+	await backupsRow(page).click();
+	await expect(page).toHaveURL(/\/settings\/backups$/);
+	return page.getByRole('main');
 }
 
 test('backups: guided setup refuses a place too small, then backs up and proves the restore', async ({
 	page
 }) => {
 	test.skip(REAL_BACKEND, 'the mock simulates the disks and the runs (real restic: API tests)');
-	// the tile says it in one sentence, with the red dot
-	const tile = page.getByRole('button', { name: /^Backups/ });
-	await expect(tile).toContainText(/Home server: the last backup failed/);
+	// the row says it in plain words, with the red dot
+	const tile = backupsRow(page);
+	await expect(tile).toContainText("Backup place didn't answer");
+	await expect(tile).not.toContainText(/repository not reachable/);
 	await expect(tile.getByRole('img', { name: 'Needs attention' })).toBeVisible();
 	const backups = await openBackups(page);
-	await expect(backups.getByText('Home server')).toBeVisible();
-	await expect(backups.getByText(/repository not reachable/)).toBeVisible();
+	await expect(backups.getByText('Home server', { exact: true })).toBeVisible();
+	// what to do comes first; the tool's own words only behind Details
+	const needs = backups.getByRole('region', { name: 'Needs you' });
+	await expect(needs.getByText("Backup place didn't answer")).toBeVisible();
+	await expect(needs.getByText(/repository not reachable/)).toBeHidden();
+	await needs.getByText('Details').first().click();
+	await expect(needs.getByText(/repository not reachable/).first()).toBeVisible();
+	await expectAccessible(page);
 
 	await backups.getByRole('button', { name: 'Add backup' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Set up a backup' });
@@ -163,22 +174,25 @@ test('backups: an admin’s avatar carries a dot, and You says in one sentence w
 	await expect(page.getByRole('alert')).toHaveCount(0);
 	if (!isPhone(page)) {
 		const me = avatar(page);
-		await expect(me).toHaveAccessibleName(/^You: Home server: the last backup failed/);
+		await expect(me).toHaveAccessibleName("You: Backup place didn't answer");
 		await expect(me.locator('.attention-dot')).toBeVisible();
 	}
 	await follow(page, '/settings');
 	const needs = page.getByRole('region', { name: 'Needs you' });
-	await expect(needs).toContainText('Home server: the last backup failed');
+	// one row in plain words, never the tool's text
+	await expect(needs).toContainText(/need(s)? you|didn't answer/);
+	await expect(needs).not.toContainText(/repository not reachable/);
 	await expect(needs.getByRole('img', { name: 'Needs attention' })).toBeVisible();
 	await expectAccessible(page);
-	await needs.getByRole('link', { name: /^Backups/ }).click();
-	// the link points at #a-backups; opening its sheet takes a history step, which drops it
-	await expect(page).toHaveURL(/\/admin(#a-backups)?$/);
-
-	// the old link to the backups opens their sheet
-	const backups = page.getByRole('dialog', { name: 'Backups' });
+	await needs.getByRole('link').click();
+	await expect(page).toHaveURL(/\/settings\/backups$/);
+	const backups = page.getByRole('main');
 	await expect(backups.getByText('Only 0 of 1 places up to date')).toBeVisible();
 	await expect(backups.getByRole('img', { name: 'needs attention' })).toBeVisible();
+
+	// the old link to the backups still leads there
+	await page.goto('/admin#a-backups');
+	await expect(page).toHaveURL(/\/settings\/backups$/);
 });
 
 test('backups: a member never sees backup state', async ({ page }) => {
