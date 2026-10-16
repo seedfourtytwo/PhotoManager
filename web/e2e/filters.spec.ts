@@ -252,6 +252,7 @@ test('calendar: Years, then a year’s months, then the whole Library at that mo
 	const year = page.getByRole('link', { name: /^2019 [\d,]+ photos?$/ });
 	await expect(year.getByRole('heading', { name: '2019' })).toBeVisible();
 	// Its cover comes once the card is near the screen.
+	await year.scrollIntoViewIfNeeded();
 	await expect(year.locator('img')).toHaveAttribute('data-in', '');
 	await expectAccessible(page);
 	await year.click();
