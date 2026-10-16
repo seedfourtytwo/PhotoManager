@@ -2,20 +2,16 @@
 	import { onMount, tick } from 'svelte';
 	import type { AssetOut, Id } from '$lib/api';
 	import { settings, viewport } from '$lib/app.svelte';
+	import { flip, snapshot } from '$lib/flip';
+	import { Pinch, wheelStep } from '$lib/grid-zoom';
 	import { createLasso } from '$lib/lasso.svelte';
+	import { gridZoom } from '$lib/state/grid-zoom.svelte';
 	import type { TimelineLoader } from '$lib/loader.svelte';
 	import type { Selection } from '$lib/selection';
 	import { monthLayouts } from '$lib/month-layouts';
 	import { photos } from '$lib/format';
 	import { tileOf } from '$lib/tiles';
-	import {
-		groupByMonth,
-		justify,
-		neighbour,
-		rowHeightFor,
-		type MonthGroup,
-		type NavKey
-	} from '$lib/timeline';
+	import { groupByMonth, justify, neighbour, type MonthGroup, type NavKey } from '$lib/timeline';
 	import {
 		bandAround,
 		clearTop,
@@ -43,6 +39,8 @@
 		grouping?: (assets: AssetOut[]) => MonthGroup[];
 		/** Photos per heading (YYYY-MM), all of them, loaded or not: a phone writes it beside. */
 		counts?: ReadonlyMap<string, number>;
+		/** Two fingers (or a trackpad pinch) zoom the grid: the Library while it is on screen. */
+		zooms?: boolean;
 	};
 	let {
 		loader,
@@ -53,7 +51,8 @@
 		onselect,
 		onmonth,
 		grouping = groupByMonth,
-		counts
+		counts,
+		zooms = false
 	}: Props = $props();
 
 	const gap = $derived(settings.gap); // from the account's look
@@ -69,7 +68,7 @@
 	const SKELETON_SHAPES = [1.5, 0.75, 1.33, 1, 1.5, 0.67, 1.78, 1.33, 0.75, 1.5, 1, 1.33];
 	const SKELETON_ROWS = 3;
 	let width = $state(0);
-	const rowHeight = $derived(rowHeightFor(viewport.width, settings.thumbSize));
+	const rowHeight = $derived(gridZoom.rowHeight(viewport.width));
 	const groups = $derived(grouping(loader.items));
 	// Earlier months keep their layout when a page arrives (lib/month-layouts.ts).
 	const layoutsFor = monthLayouts();
@@ -212,6 +211,71 @@
 	});
 	const lasso = $derived(drag.rect);
 
+	// --- zoom: five row heights, stepped by a pinch, ⌘± (the page) or a trackpad pinch --------
+	/** The FLIP of a zoom (spring 300/30 is about this long), on the spring curve. */
+	const ZOOM_MS = 320;
+
+	/**
+	 * One level bigger (+1) or smaller (−1). The photo under `at` (a pinch's centre; else the
+	 * middle of the screen) stays where it is on screen, and every tile moves from its old
+	 * place to its new one; tiles new to the page fade in.
+	 */
+	export async function zoom(by: 1 | -1, at = { x: innerWidth / 2, y: innerHeight / 2 }) {
+		if (!wrapper) return;
+		const under = document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>('.tile[data-id]');
+		const anchor = under
+			? { id: Number(under.dataset.id), top: under.getBoundingClientRect().top }
+			: null;
+		const before = snapshot(wrapper);
+		if (!gridZoom.step(viewport.width, by)) return;
+		await tick();
+		measure();
+		const index = anchor ? loader.items.findIndex((a) => a.id === anchor.id) : -1;
+		const box = index >= 0 ? globalBoxes()[index] : undefined;
+		if (anchor && box)
+			window.scrollTo({
+				top: window.scrollY + wrapper.getBoundingClientRect().top + box.y - anchor.top
+			});
+		update();
+		await tick();
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-spring');
+		flip(wrapper, before, { duration: ZOOM_MS, easing: easing.trim() || 'ease-out' });
+	}
+
+	const pinch = new Pinch();
+	function pointerdown(event: PointerEvent) {
+		if (zooms && event.pointerType === 'touch')
+			pinch.down(event.pointerId, event.clientX, event.clientY);
+		drag.down(event);
+	}
+	function pointermove(event: PointerEvent) {
+		const pinched = pinch.move(event.pointerId, event.clientX, event.clientY);
+		if (pinched?.step) void zoom(pinched.step, pinched);
+		drag.move(event);
+	}
+	function pointerup(event: PointerEvent, done: boolean) {
+		pinch.up(event.pointerId);
+		drag.end(done);
+	}
+
+	// A trackpad pinch is a wheel with Ctrl: the page's own zoom is kept off the grid. Not
+	// passive, so it can be stopped.
+	$effect(() => {
+		if (!zooms || !wrapper) return;
+		let sum = 0;
+		const onwheel = (event: WheelEvent) => {
+			const next = wheelStep(sum, event);
+			sum = next.sum;
+			if (!event.ctrlKey) return;
+			event.preventDefault();
+			if (next.step) void zoom(next.step, { x: event.clientX, y: event.clientY });
+		};
+		const target = wrapper;
+		target.addEventListener('wheel', onwheel, { passive: false });
+		return () => target.removeEventListener('wheel', onwheel);
+	});
+
 	// --- first load: three rows of blocks in photo shapes, until the first page arrives -----
 	const skeleton = $derived(
 		loader.loading && loader.items.length === 0
@@ -235,10 +299,11 @@
 	bind:this={wrapper}
 	bind:clientWidth={width}
 	role="presentation"
-	onpointerdown={drag.down}
-	onpointermove={drag.move}
-	onpointerup={() => drag.end(true)}
-	onpointercancel={() => drag.end(false)}
+	class:zooms
+	onpointerdown={pointerdown}
+	onpointermove={pointermove}
+	onpointerup={(event) => pointerup(event, true)}
+	onpointercancel={(event) => pointerup(event, false)}
 >
 	{#each groups as group, g (group.key)}
 		<section data-key={group.key} aria-labelledby={`m-${group.key}`}>
@@ -298,6 +363,10 @@
 	.timeline {
 		position: relative;
 		min-height: 50vh;
+	}
+	/* Two fingers zoom the grid, not the page; one still scrolls it. */
+	.timeline.zooms {
+		touch-action: pan-y;
 	}
 	/* Month headings: a chapter title, not sticky. The month in view rides in the compact
 	   title instead (PageHead), so nothing cuts across the photos while they scroll. */

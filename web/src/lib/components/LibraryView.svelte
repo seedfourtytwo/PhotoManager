@@ -4,6 +4,7 @@
 	import { api, library, notice, session, viewport } from '$lib/app.svelte';
 	import { filtersFromParams, filtersToQuery } from '$lib/filters';
 	import { libraryLine, monthTotals } from '$lib/calendar';
+	import { keyStep } from '$lib/grid-zoom';
 	import { photos } from '$lib/format';
 	import { TimelineLoader } from '$lib/loader.svelte';
 	import { TimelineLoupe, closePhoto, openPhoto, showPhoto } from '$lib/loupe.svelte';
@@ -98,9 +99,11 @@
 	const counts = $derived(new Map(months.map((m) => [m.key, m.count])));
 	const selecting = $derived(choosing || selection.ids.size > 0);
 	/** A phone's ⋯: Upload is there, not a button of its own beside Select. */
-	const more = $derived<MenuItem[]>(
-		session.canEdit ? [{ label: 'Upload photos', run: () => upload?.pick() }] : []
-	);
+	const more = $derived<MenuItem[]>([
+		{ label: 'Larger photos', run: () => void timeline?.zoom(1) },
+		{ label: 'Smaller photos', run: () => void timeline?.zoom(-1) },
+		...(session.canEdit ? [{ label: 'Upload photos', run: () => upload?.pick() }] : [])
+	]);
 
 	const order = $derived(loader.items.map((a) => a.id));
 	const selected = $derived(loader.items.filter((a) => selection.ids.has(a.id)));
@@ -146,6 +149,12 @@
 		if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
 			event.preventDefault();
 			select(selectAll(order));
+		}
+		// ⌘+ and ⌘− size the photos, not the page.
+		const step = keyStep(event);
+		if (step) {
+			event.preventDefault();
+			void timeline?.zoom(step);
 		}
 	}
 </script>
@@ -218,6 +227,7 @@
 		onselect={select}
 		onmonth={(key) => (currentMonth = key)}
 		{counts}
+		zooms={current}
 	/>
 
 	<SelectionActions

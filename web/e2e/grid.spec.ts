@@ -66,3 +66,27 @@ test('only photos within about a screen and a half are in the page', async ({ pa
 		expect(top).toBeLessThan(2.5 * height + row);
 	}
 });
+
+test('zoom: bigger photos by ⌘+ (a laptop) or the ⋯ menu (a phone), kept after a reload', async ({
+	page
+}) => {
+	const tile = page.locator('.tile').first();
+	await expect(tile).toBeVisible();
+	const height = async () => (await tile.boundingBox())!.height;
+	const before = await height();
+	if (isPhone(page)) {
+		await page.getByRole('button', { name: 'More', exact: true }).click();
+		await page.getByRole('button', { name: 'Larger photos' }).click();
+	} else await page.keyboard.press('ControlOrMeta+Equal');
+	await expect.poll(height).toBeGreaterThan(before * 1.2);
+	const bigger = await height();
+	await page.reload();
+	await expect(tile).toBeVisible();
+	await expect.poll(height).toBeCloseTo(bigger, 0);
+	// And back.
+	if (isPhone(page)) {
+		await page.getByRole('button', { name: 'More', exact: true }).click();
+		await page.getByRole('button', { name: 'Smaller photos' }).click();
+	} else await page.keyboard.press('ControlOrMeta+Minus');
+	await expect.poll(height).toBeCloseTo(before, 0);
+});

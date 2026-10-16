@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { AssetOut, Id } from '$lib/api';
 	import { settings, viewport } from '$lib/app.svelte';
-	import { aspect, justify, rowHeightFor } from '$lib/timeline';
+	import { gridZoom } from '$lib/state/grid-zoom.svelte';
+	import { aspect, justify } from '$lib/timeline';
 	import PhotoGrid from './PhotoGrid.svelte';
 
 	/** A justified grid that sizes itself: for lists that are not a timeline. */
@@ -18,7 +19,7 @@
 		justify(
 			items.map((a) => aspect(a)),
 			width,
-			rowHeightFor(viewport.width, settings.thumbSize),
+			gridZoom.rowHeight(viewport.width),
 			settings.gap
 		)
 	);
