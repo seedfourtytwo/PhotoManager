@@ -172,6 +172,19 @@
 				/>
 				<output class="data">{Math.round(current.textScale * 100)} %</output>
 			</span>
+			<label class="choice larger">
+				<input
+					type="checkbox"
+					role="switch"
+					aria-describedby="larger-text-line"
+					checked={current.face === 'atkinson'}
+					onchange={(e) => set({ face: e.currentTarget.checked ? 'atkinson' : 'inter' })}
+				/>
+				Larger text
+			</label>
+			<p class="quiet small" id="larger-text-line">
+				A clearer typeface, drawn for readers with low vision.
+			</p>
 		</fieldset>
 
 		<label class="field size">
@@ -282,6 +295,13 @@
 		min-width: var(--s-7);
 		text-align: right;
 		font-size: var(--fs-12);
+	}
+	.larger {
+		justify-content: space-between;
+		margin-top: var(--s-3);
+	}
+	.larger + p {
+		margin: 0;
 	}
 	.size,
 	.opens {
