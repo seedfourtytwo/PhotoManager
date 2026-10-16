@@ -92,6 +92,18 @@ describe('TimeRuler: the scrubber', () => {
 		await expect.element(slider()).toHaveClass(/out/);
 	});
 
+	it('a finger put down at the edge leaves it away: that is a tap on a photo', async () => {
+		render(TimeRuler, { months, current: '2020-05', onjump: () => {} });
+		window.dispatchEvent(
+			new PointerEvent('pointerdown', { clientX: innerWidth - 10, pointerType: 'touch' })
+		);
+		window.dispatchEvent(
+			new PointerEvent('pointermove', { clientX: innerWidth - 10, pointerType: 'touch' })
+		);
+		await wait(50);
+		await expect.element(slider()).not.toHaveClass(/out/);
+	});
+
 	it('shows with the keyboard focus on it', async () => {
 		render(TimeRuler, { months, current: '2020-05', onjump: () => {} });
 		await userEvent.keyboard('{Tab}');

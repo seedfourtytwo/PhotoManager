@@ -85,14 +85,18 @@ for (const [name, insets, size] of [
 		const nav = page.getByRole('navigation', { name: 'Main' });
 		for (const link of await nav.getByRole('link').all()) await expectClear(page, link, insets);
 		await expectClear(page, page.getByRole('heading', { level: 1 }), insets);
-		// A month heading sticks under the clock, not behind it, and under the page's compact
-		// title, which is a touch target (44 px) tall.
-		const sticks = await page
+		// A month gone to stops under the page's compact title, which sits under the clock
+		// and is a touch target (44 px) tall.
+		const margin = await page
 			.getByRole('main')
-			.getByRole('heading', { level: 2 })
+			.locator('section[data-key]')
 			.first()
-			.evaluate((h) => parseFloat(getComputedStyle(h).top));
-		expect(sticks).toBe(insets.top + 44);
+			.evaluate((s) => parseFloat(getComputedStyle(s).scrollMarginTop));
+		expect(margin).toBe(44 + 8);
+		const compact = await page
+			.locator('.compact')
+			.evaluate((c) => parseFloat(getComputedStyle(c).top));
+		expect(compact).toBeGreaterThanOrEqual(insets.top);
 	});
 
 	test(`edges, ${name}: the photo view's pills and bar clear the notch and the home bar`, async ({

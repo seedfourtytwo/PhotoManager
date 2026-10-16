@@ -224,8 +224,13 @@ export async function selectTiles(page: Page, indexes: number[]) {
 	await expect(page.locator('html')).not.toHaveAttribute('data-page-move');
 	for (const [n, i] of indexes.entries()) {
 		const tile = tiles.nth(i);
-		if (!isPhone(page)) await tile.locator('.check').click({ force: true });
-		else if (n === 0) await longPress(tile);
+		// The first by its circle, then (choosing) by a click near the photo's top: on a touch
+		// screen the circle sits at the bottom right, where the dock or the pill may be over it.
+		if (!isPhone(page)) {
+			await tile.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+			if (n === 0) await tile.locator('.check').click({ force: true });
+			else await tile.click({ position: { x: 12, y: 12 } });
+		} else if (n === 0) await longPress(tile);
 		else await tile.tap();
 	}
 	await expect(selectedCount(page)).toHaveText(`${indexes.length} selected`);

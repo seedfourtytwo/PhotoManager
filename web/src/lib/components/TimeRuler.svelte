@@ -70,10 +70,12 @@
 		clearTimeout(settleTimer);
 		if (asked) settleTimer = setTimeout(() => (asked = null), SETTLE_MS);
 	}
-	/** A mouse passing along the right edge, or a finger put down on it, brings it out. */
+	/**
+	 * A mouse passing along the right edge brings it out. A finger does not: put down there it
+	 * is tapping a photo, and the scrubber coming out under it would take the tap.
+	 */
 	function onedge(event: PointerEvent) {
-		if (event.type === 'pointermove' && event.pointerType !== 'mouse') return;
-		if (atEdge(event.clientX, innerWidth)) rest.wake();
+		if (event.pointerType === 'mouse' && atEdge(event.clientX, innerWidth)) rest.wake();
 	}
 	onDestroy(() => {
 		rest.stop();
@@ -139,7 +141,7 @@
 	}
 </script>
 
-<svelte:window {onscroll} onpointermove={onedge} onpointerdown={onedge} />
+<svelte:window {onscroll} onpointermove={onedge} />
 
 {#if months.length > 1}
 	<div

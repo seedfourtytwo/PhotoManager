@@ -340,6 +340,9 @@ test.describe('selection pill', () => {
 		await selectTiles(page, [0, 1]);
 		await expect(pill(page)).toHaveCSS('position', 'fixed');
 		await expect(pill(page)).toHaveCSS('border-radius', '999px');
+		// It rises into place: measured once it has arrived.
+		await expect(pill(page)).toHaveCSS('translate', 'none');
+		await expect(pill(page)).toHaveCSS('opacity', '1');
 		const box = (await pill(page).boundingBox())!;
 		const { width, height } = page.viewportSize()!;
 		expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThan(2);

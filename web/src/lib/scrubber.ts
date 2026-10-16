@@ -1,12 +1,12 @@
 /**
  * When the time scrubber shows (spec library-search-viewer §1): hidden at rest, out on a fast
- * scroll or a pointer at the screen's right edge, gone a while after the last use. Pure, so the
+ * scroll or a mouse at the screen's right edge, gone a while after the last use. Pure, so the
  * thresholds are tested without a screen; TimeRuler.svelte reads the page and applies them.
  */
 
 /** Screens per second a scroll must pass for the scrubber to come out. */
 export const SHOW_SPEED = 1.5;
-/** The right edge (px) where a pointer or a finger brings it out. */
+/** The right edge (px) where a mouse brings it out. */
 export const EDGE = 32;
 /** It hides this long (ms) after the last scroll, drag or edge visit. */
 export const HIDE_MS = 1200;
