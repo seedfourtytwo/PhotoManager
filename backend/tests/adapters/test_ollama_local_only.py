@@ -15,7 +15,7 @@ from photo_assistant.adapters.ollama_guard import (
     is_cloud_model,
     is_local_address,
 )
-from photo_assistant.ports.ai import AIUnavailableError, AIUnreachableError, Capability
+from photo_assistant.ports.ai import AIUnreachableError, Capability
 from tests.adapters.test_ollama_ai import CONTEXT, GOOD_PLAN, FakeOllama, ListLog
 
 
@@ -23,6 +23,7 @@ def test_a_refusal_is_about_the_server_not_the_photo() -> None:
     """Background jobs give up on a photo or album only for an unusable answer; a server they
     may not use is the server's fault, so the job is retried and no photo is marked failed."""
     assert issubclass(NotLocalError, AIUnreachableError)
+
 
 PUBLIC_IP = "34.36.133.15"
 
