@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException, status
 
 from photo_assistant.api.deps import LOGGED_IN, ServicesDep, ViewerDep
 from photo_assistant.api.filters import FilterDep
-from photo_assistant.api.schemas import AssetOut, DayCount, MapPoint
+from photo_assistant.api.schemas import AssetOut, DayCount, MapPoint, PlaceCover, PlaceSummary
+from photo_assistant.domain.places import tally_places
 
 router = APIRouter(prefix="/api", tags=["library"], dependencies=LOGGED_IN)
 
@@ -17,6 +18,26 @@ def calendar(services: ServicesDep, viewer: ViewerDep, f: FilterDep) -> list[Day
 @router.get("/map")
 def map_points(services: ServicesDep, viewer: ViewerDep, f: FilterDep) -> list[MapPoint]:
     return [MapPoint(id=i, lat=lat, lon=lon) for i, lat, lon in services.repo.map_points(viewer, f)]
+
+
+@router.get("/places")
+def places(services: ServicesDep, viewer: ViewerDep) -> list[PlaceSummary]:
+    """Every country and city with photos you may see, most photos first."""
+    tallies = tally_places(services.repo.place_groups(viewer))
+    wanted = [t.cover_id for t in tallies if t.cover_id is not None]
+    covers = {v.id: PlaceCover.of(v) for v in services.repo.views_by_ids(viewer, wanted)}
+    return [
+        PlaceSummary(
+            name=t.name,
+            kind=t.kind,
+            country=t.country,
+            count=t.count,
+            cover=covers.get(t.cover_id) if t.cover_id is not None else None,
+            lat=t.lat,
+            lon=t.lon,
+        )
+        for t in tallies
+    ]
 
 
 @router.get("/groups/{group_id}")

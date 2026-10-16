@@ -25,7 +25,7 @@ from photo_assistant.domain.display_name import Dated
 from photo_assistant.domain.edit_recipe import Recipe
 from photo_assistant.domain.library_filter import AssetFilter, like_pattern, search_terms
 from photo_assistant.domain.model import Source
-from photo_assistant.domain.places import Place
+from photo_assistant.domain.places import Place, PlaceGroup
 from photo_assistant.ports.library import AssetView, Count, Facets, ViewPage
 
 Clauses = list[str]
@@ -440,6 +440,41 @@ class LibraryMixin(SqliteBase):
             f"AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL {ORDER}",
         )
         return [(int(r["id"]), float(r["lat"]), float(r["lon"])) for r in rows]
+
+    def place_groups(self, viewer: Viewer) -> list[PlaceGroup]:
+        """The photos per (country, city) as the facets count them (what you may see, hidden
+        ones left out), each with the mean of its GPS positions and its newest photo that has
+        a thumbnail."""
+        visible, _, params = visibility(viewer)
+        where, fparams = filter_sql(AssetFilter())
+        rows = self._all(
+            f"""SELECT country, city, COUNT(*) AS n, COUNT(lat) AS located,
+                    AVG(lat) AS lat, AVG(lon) AS lon,
+                    MAX(CASE WHEN rk = 1 AND has_thumb THEN id END) AS cover,
+                    MAX(CASE WHEN rk = 1 AND has_thumb THEN taken_at END) AS cover_taken
+                FROM (SELECT a.id, p.country, p.city, a.taken_at,
+                        a.thumb_path IS NOT NULL AS has_thumb,
+                        CASE WHEN a.longitude IS NOT NULL THEN a.latitude END AS lat,
+                        CASE WHEN a.latitude IS NOT NULL THEN a.longitude END AS lon,
+                        ROW_NUMBER() OVER (PARTITION BY p.country, p.city
+                            ORDER BY a.thumb_path IS NULL, a.taken_at DESC, a.id DESC) AS rk
+                    {ASSET_FROM} {where} AND {visible} AND p.country != '')
+                GROUP BY country, city""",
+            params | fparams,
+        )
+        return [
+            PlaceGroup(
+                country=r["country"],
+                city=r["city"],
+                count=int(r["n"]),
+                located=int(r["located"]),
+                lat=r["lat"],
+                lon=r["lon"],
+                cover_id=r["cover"],
+                cover_taken=r["cover_taken"],
+            )
+            for r in rows
+        ]
 
     # --- context around one photo ----------------------------------------------------------
 

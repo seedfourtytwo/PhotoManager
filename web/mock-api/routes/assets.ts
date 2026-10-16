@@ -1,5 +1,5 @@
 /** Photos: the library's pages, facets, calendar and map; one photo's files, state and edit. */
-import type { Recipe } from '../../src/lib/api/types.ts';
+import type { PlaceKind, PlaceSummary, Recipe } from '../../src/lib/api/types.ts';
 import { setFor } from '../access.ts';
 import { countBy } from '../filters.ts';
 import { displayName } from '../names.ts';
@@ -16,8 +16,9 @@ import {
 	type Route
 } from '../http.ts';
 import type { Helpers } from '../helpers.ts';
-import { renderAsset } from '../images.ts';
+import { editedSize, renderAsset } from '../images.ts';
 import { rng } from '../library.ts';
+import type { MockAsset } from '../types.ts';
 
 /** An account's own marks on a photo (favourite, pinned, hidden); `undefined` leaves one be. */
 type Marks = Partial<Record<'favourite' | 'pinned' | 'hidden', boolean>>;
@@ -118,6 +119,56 @@ export function assetRoutes(h: Helpers): Route[] {
 							};
 						})
 				)
+		],
+		[
+			'GET',
+			/^\/api\/places$/,
+			(ctx) => {
+				// newest first, so a place's first photo is its cover
+				const list = h.filtered(me(ctx), new URLSearchParams());
+				type Group = { name: string; kind: PlaceKind; country: string; photos: MockAsset[] };
+				const groups = new Map<string, Group>();
+				for (const a of list) {
+					const country = a.place?.place.country;
+					if (!a.place || !country) continue;
+					const city = a.place.place.city;
+					const keys: [string, PlaceKind, string][] = [[`country:${country}`, 'country', country]];
+					if (city) keys.push([`city:${country}:${city}`, 'city', city]);
+					for (const [key, kind, name] of keys) {
+						const found: Group = groups.get(key) ?? { name, kind, country, photos: [] };
+						found.photos.push(a);
+						groups.set(key, found);
+					}
+				}
+				const places: PlaceSummary[] = [...groups.values()].map((g) => {
+					const cover = g.photos[0];
+					const size = editedSize(cover);
+					const mean = (pick: (a: MockAsset) => number) =>
+						g.photos.reduce((sum, a) => sum + pick(a), 0) / g.photos.length;
+					return {
+						name: g.name,
+						kind: g.kind,
+						country: g.country,
+						count: g.photos.length,
+						cover: {
+							asset_id: cover.id,
+							url: `/api/assets/${cover.id}/thumb?v=${cover.edit_version}`,
+							width: size.width,
+							height: size.height
+						},
+						lat: mean((a) => a.place!.lat),
+						lon: mean((a) => a.place!.lon)
+					};
+				});
+				return ok(
+					places.sort(
+						(a, b) =>
+							b.count - a.count ||
+							Number(a.kind !== 'country') - Number(b.kind !== 'country') ||
+							a.name.localeCompare(b.name)
+					)
+				);
+			}
 		],
 		[
 			'POST',
