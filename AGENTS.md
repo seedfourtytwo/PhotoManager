@@ -10,6 +10,8 @@ the issue you are working on, and the relevant section of `docs/ARCHITECTURE.md`
 3. Write the minimum code to pass. Run `just check`.
 4. Refactor on green. Commit with Conventional Commits.
 5. Open a PR using the template; include test evidence and, for UI, desktop + phone screenshots.
+6. After pushing, `just check-report`: GitHub's CI minutes are scarce (free plan), so the
+   laptop's `just check` result is what shows on the PR when CI skips a job or has none left.
 
 ## Hard stops — ask the human instead of guessing
 
@@ -36,6 +38,7 @@ the issue you are working on, and the relevant section of `docs/ARCHITECTURE.md`
 just setup      # install everything
 just dev        # run api + web with reload
 just check      # lint, layer contracts, types, all tests (what CI runs: .github/workflows/ci.yml)
+just check-report  # the same, its result shown on the pushed commit on GitHub (free; CI is not)
 just test-fast  # backend tests without the ones that need external tools
 just fmt        # auto-fix formatting
 just e2e        # Playwright, desktop + phone, against the real backend on a synthetic library

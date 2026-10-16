@@ -1,20 +1,56 @@
 name: CI
 
+# GitHub's free plan gives a private repository 2,000 runner minutes a month and a run of every
+# job bills about 15. So: pull requests only (main gets what its pull request was checked
+# with, and a full run each week), never a draft, and a job only when its files changed.
+# `just check-report` runs the same checks on the laptop and shows the result on the commit.
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "17 3 * * 1"  # Mondays: everything on main, for what pull requests merged together
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: read  # the secret scan lists the pull request's commits
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # The secret scan, and which of the jobs below this change needs: one short job, not two
+  # (each job is billed in whole minutes).
+  changes:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    outputs:
+      backend: ${{ steps.paths.outputs.backend }}
+      web: ${{ steps.paths.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: paths
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then  # weekly or by hand: everything
+            echo "backend=true" >> "$GITHUB_OUTPUT"; echo "web=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # A pull request is checked out as its merge into main: the first parent is main
+          git diff --name-only HEAD^1 HEAD | tee changed.txt
+          # The backend tests also read docs/ and deploy/: only a change inside web/ alone skips them
+          grep -qv '^web/' changed.txt && echo "backend=true" >> "$GITHUB_OUTPUT"
+          # The web tests read docs/contracts/ too
+          grep -qE '^(web/|docs/contracts/|\.github/)' changed.txt && echo "web=true" >> "$GITHUB_OUTPUT"
+          exit 0
+
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -53,6 +89,8 @@ jobs:
           exit 1
 
   web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -77,13 +115,3 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
-
-  secrets:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
