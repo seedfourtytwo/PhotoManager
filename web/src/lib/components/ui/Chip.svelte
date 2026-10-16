@@ -51,14 +51,21 @@
 		border-radius: var(--r-pill) 0 0 var(--r-pill);
 		padding-right: var(--s-1);
 	}
+	/* As slim as the chip, and as reachable: its hit area too reaches 44 px. */
 	.clear {
+		position: relative;
 		display: inline-grid;
 		place-items: center;
-		min-height: 2.5rem;
+		min-height: 2rem;
 		padding: 0 var(--s-3) 0 var(--s-1);
 		border-radius: 0 var(--r-pill) var(--r-pill) 0;
 		background: var(--ink);
 		color: var(--bg);
+	}
+	.clear::after {
+		content: '';
+		position: absolute;
+		inset: min(0px, calc((100% - var(--target)) / 2)) 0;
 	}
 	.clear :global(svg) {
 		width: var(--s-4);

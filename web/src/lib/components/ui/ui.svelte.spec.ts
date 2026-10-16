@@ -5,6 +5,7 @@ import Chip from './Chip.svelte';
 import IconButton from './IconButton.svelte';
 import Segmented from './Segmented.svelte';
 import TileRow from './TileRow.svelte';
+import '$lib/tokens.css';
 
 describe('IconButton', () => {
 	it('is named by its action and shows it as a tooltip', async () => {
@@ -65,6 +66,65 @@ describe('Segmented', () => {
 			.toHaveAttribute('aria-pressed', 'true');
 		await userEvent.click(page.getByRole('button', { name: 'Calendar' }));
 		expect(onchange).toHaveBeenCalledWith('calendar');
+	});
+
+	it('one lens slides to the chosen option, by transform only', async () => {
+		const options = [
+			{ value: 'dark' as const, label: 'Dark' },
+			{ value: 'light' as const, label: 'Light' },
+			{ value: 'device' as const, label: 'Like the device' }
+		];
+		const screen = render(Segmented<'dark' | 'light' | 'device'>, {
+			label: 'Mode',
+			value: 'dark',
+			onchange: () => {},
+			options
+		});
+		const group = page.getByRole('group', { name: 'Mode' }).element() as HTMLElement;
+		const lens = group.querySelector<HTMLElement>('.lens')!;
+		const under = (name: string) => {
+			const chosen = page.getByRole('button', { name }).element().getBoundingClientRect();
+			const shown = lens.getBoundingClientRect();
+			return Math.abs(shown.left - chosen.left) < 1 && Math.abs(shown.width - chosen.width) < 1;
+		};
+		await vi.waitFor(() => expect(group.dataset.lens).toBeDefined());
+		expect(under('Dark')).toBe(true);
+		expect(getComputedStyle(lens).left).toBe('0px');
+		await screen.rerender({ value: 'device' });
+		await vi.waitFor(() => expect(under('Like the device')).toBe(true), { timeout: 2000 });
+		// It moved by its transform; nothing about it is laid out again but its width.
+		expect(getComputedStyle(lens).left).toBe('0px');
+		expect(getComputedStyle(lens).transform).not.toBe('none');
+	});
+
+	it('the lens is a picture only: screen readers hear the pressed option', async () => {
+		render(Segmented<'a' | 'b'>, {
+			label: 'Pick',
+			value: 'a',
+			onchange: () => {},
+			options: [
+				{ value: 'a', label: 'A' },
+				{ value: 'b', label: 'B' }
+			]
+		});
+		const lens = (page.getByRole('group', { name: 'Pick' }).element() as HTMLElement).querySelector(
+			'.lens'
+		);
+		expect(lens?.getAttribute('aria-hidden')).toBe('true');
+		await expect
+			.element(page.getByRole('button', { name: 'A' }))
+			.toHaveAttribute('aria-pressed', 'true');
+	});
+});
+
+describe('Chip', () => {
+	it('is slim to the eye and 44 px to the finger', async () => {
+		render(Chip, { icon: 'calendar', label: 'When', onclick: () => {} });
+		const chip = page.getByRole('button', { name: 'When' }).element();
+		expect(chip.getBoundingClientRect().height).toBeLessThan(40);
+		const hit = getComputedStyle(chip, '::after');
+		const height = chip.getBoundingClientRect().height - 2 * parseFloat(hit.top);
+		expect(height).toBeGreaterThanOrEqual(44);
 	});
 });
 

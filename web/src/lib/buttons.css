@@ -44,7 +44,9 @@ button.primary,
 	background: var(--ink);
 	color: var(--bg);
 	font-weight: 600;
-	padding: var(--s-1) var(--s-4);
+	padding: var(--s-1) var(--s-5);
+	min-height: 2.5rem;
+	border-radius: var(--r-pill);
 }
 @media (hover: hover) {
 	button.primary:not(:disabled):hover,
@@ -94,6 +96,7 @@ button.primary:disabled {
 .icon-button,
 .chip,
 .segmented button,
+.segmented > label,
 button.primary,
 .button.primary,
 .action {
@@ -105,6 +108,7 @@ button.primary,
 .icon-button:active,
 .chip:active,
 .segmented button:active,
+.segmented > label:active,
 button.primary:active,
 .button.primary:active,
 .action:active {
@@ -150,24 +154,31 @@ button.primary:active,
 	border-radius: var(--r-1);
 }
 
-/* A chip: a question you can ask of the photos (a filter), or a suggestion. Set = ink. */
+/* A chip: a question you can ask of the photos (a filter), or a suggestion. Set = ink.
+   Slim to the eye (2 rem), a full 44 px to the finger: its hit area reaches past its edges. */
 .chip {
+	position: relative;
 	display: inline-flex;
 	align-items: center;
 	gap: var(--s-2);
 	flex: none;
-	min-height: 2.5rem;
+	min-height: 2rem;
 	padding: 0 var(--s-4) 0 var(--s-3);
 	border-radius: var(--r-pill);
 	background: var(--fill);
 	color: var(--ink);
-	font-size: var(--fs-16);
+	font-size: var(--fs-15);
 	font-weight: 600;
 	white-space: nowrap;
 }
+.chip::after {
+	content: '';
+	position: absolute;
+	inset: min(0px, calc((100% - var(--target)) / 2)) 0;
+}
 .chip svg {
-	width: var(--s-5);
-	height: var(--s-5);
+	width: var(--s-4);
+	height: var(--s-4);
 }
 .chip[aria-pressed='true'],
 .chip.set {
@@ -184,8 +195,10 @@ button.primary:active,
 	}
 }
 
-/* A few choices side by side; the chosen one sits under the lens. */
+/* A few choices side by side; the chosen one sits under the lens. Buttons (ui/Segmented)
+   or, in a form, labels round radios (each label is its radio, as in .pills). */
 .segmented {
+	position: relative;
 	display: inline-flex;
 	gap: var(--fine);
 	padding: var(--fine);
@@ -193,7 +206,9 @@ button.primary:active,
 	background: var(--fill);
 	flex: none;
 }
-.segmented button {
+.segmented button,
+.segmented > label {
+	position: relative; /* over the lens */
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -201,11 +216,54 @@ button.primary:active,
 	min-width: 2.5rem;
 	min-height: 2.125rem;
 	padding: 0 var(--s-3);
+	box-sizing: border-box;
 	border-radius: var(--r-pill);
 	color: var(--ink-2);
 	font-weight: 600;
+	cursor: pointer;
 }
-.segmented button[aria-pressed='true'] {
+.segmented button[aria-pressed='true'],
+.segmented > label:has(> input:checked) {
 	background: var(--lens);
 	color: var(--ink);
+}
+.segmented > label > input[type='radio'] {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	border-radius: inherit;
+	opacity: 0;
+}
+.segmented > label:has(> input:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+@media (pointer: coarse) {
+	.segmented > label {
+		min-height: var(--target);
+	}
+}
+/* ui/Segmented's lens: one shape that slides (transform only) on the spring to the chosen
+   segment, measured from it. Until it is measured the chosen one carries the lens itself. */
+.segmented > .lens {
+	position: absolute;
+	top: var(--fine);
+	bottom: var(--fine);
+	left: 0;
+	width: var(--lens-w, 0px);
+	border-radius: var(--r-pill);
+	background: var(--lens);
+	transform: translateX(var(--lens-x, 0px));
+	pointer-events: none;
+}
+.segmented[data-lens='live'] > .lens {
+	transition: transform var(--motion-sheet) var(--ease-spring);
+}
+.segmented[data-lens] button[aria-pressed='true'] {
+	background: transparent;
+}
+.segmented:not([data-lens]) > .lens {
+	display: none;
 }
