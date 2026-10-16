@@ -305,7 +305,7 @@
 				{@const cover = coverOf(c)}
 				<a
 					class="bubble"
-					class:chosen={chosen?.ids[0] === c.ids[0]}
+					class:picked={chosen?.ids[0] === c.ids[0]}
 					href={`/${filtersToQuery(filters)}`}
 					aria-label={`${photos(c.ids.length)} here`}
 					aria-current={chosen?.ids[0] === c.ids[0] ? 'true' : undefined}
@@ -446,7 +446,7 @@
 		object-fit: cover;
 		pointer-events: none;
 	}
-	.bubble.chosen,
+	.bubble.picked,
 	.bubble:focus-visible {
 		outline: none;
 		box-shadow:
@@ -479,6 +479,7 @@
 	.top {
 		top: calc(var(--top) + var(--s-2));
 		left: calc(var(--page-x) + env(safe-area-inset-left));
+		max-width: calc(100vw - 2 * var(--page-x));
 		display: flex;
 		align-items: center;
 		gap: var(--s-2);
@@ -504,7 +505,14 @@
 		font-size: var(--fs-17);
 		font-weight: 650;
 	}
+	.title {
+		min-width: 0;
+	}
 	.title p {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		margin: 0;
 		color: var(--ink-2);
 		font-size: var(--fs-13);

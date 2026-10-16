@@ -299,7 +299,7 @@ test('map: the heading counts the dot that is chosen now, after the map has zoom
 	await dots.nth(counts.indexOf(biggest)).click();
 	const heading = page.locator('section.chosen h2 .quiet');
 	await expect(heading).toBeVisible();
-	const chosen = page.locator('a.bubble.chosen');
+	const chosen = page.locator('a.bubble[aria-current="true"]');
 	await expect(chosen).toHaveCount(1);
 	const shown = parseInt((await chosen.getAttribute('aria-label'))!, 10);
 	await expect(heading).toHaveText(String(shown));
