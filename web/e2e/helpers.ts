@@ -216,7 +216,7 @@ export async function centre(target: Locator) {
 	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** Select photos the way each device does it: click the check circle, or long-press then tap. */
+/** Select photos the way each device does it: the keyboard (x), or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');
 	// The presses below skip Playwright's own wait for a target that takes them, and a page
@@ -224,12 +224,11 @@ export async function selectTiles(page: Page, indexes: number[]) {
 	await expect(page.locator('html')).not.toHaveAttribute('data-page-move');
 	for (const [n, i] of indexes.entries()) {
 		const tile = tiles.nth(i);
-		// The first by its circle, then (choosing) by a click near the photo's top: on a touch
-		// screen the circle sits at the bottom right, where the dock or the pill may be over it.
+		// Not by the circle: on a wide touch screen it sits at the photo's bottom right, where
+		// the dock or the pill may be over it.
 		if (!isPhone(page)) {
-			await tile.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-			if (n === 0) await tile.locator('.check').click({ force: true });
-			else await tile.click({ position: { x: 12, y: 12 } });
+			await tile.focus();
+			await page.keyboard.press('x');
 		} else if (n === 0) await longPress(tile);
 		else await tile.tap();
 	}

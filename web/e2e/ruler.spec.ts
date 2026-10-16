@@ -98,11 +98,17 @@ test('a slow scroll leaves the scrubber away; it follows the month in view all t
 		await page.mouse.wheel(0, 120);
 		await page.waitForTimeout(250);
 	}
+	await expect(scrubber(page)).toHaveCSS('opacity', '0');
 	await page.evaluate(() => window.scrollTo({ top: 3000, behavior: 'instant' }));
 	await expect(scrubber(page)).not.toHaveAttribute('aria-valuetext', first!);
-	// The month in view rides in the compact title.
-	const month = await scrubber(page).getAttribute('aria-valuetext');
-	await expect(page.locator('.compact .sub')).toHaveText(month!);
+	// The month in view rides in the compact title, once the page has settled there.
+	const sub = page.locator('.compact .sub');
+	await expect
+		.poll(async () => {
+			const month = await scrubber(page).getAttribute('aria-valuetext');
+			return month === (await sub.textContent()) && /\d{4}$/.test(month ?? '');
+		})
+		.toBe(true);
 });
 
 test('at the very end of the library the thumb is on the last month', async ({ page }) => {
