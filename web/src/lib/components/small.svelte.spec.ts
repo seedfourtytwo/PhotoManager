@@ -1,47 +1,8 @@
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import CalendarHeatmap from './CalendarHeatmap.svelte';
 import SelectionBar from './SelectionBar.svelte';
 import { viewport } from '$lib/app.svelte';
-
-describe('CalendarHeatmap', () => {
-	it('links days with photos to the filtered library, with counts in words', async () => {
-		render(CalendarHeatmap, {
-			days: [
-				{ day: '2020-07-04', count: 3 },
-				{ day: '2018-01-01', count: 1 }
-			],
-			hrefFor: (day: string) => `/?from=${day}&to=${day}`
-		});
-		const link = page.getByRole('link', { name: '4 Jul 2020: 3 photos' });
-		await expect.element(link).toHaveAttribute('href', '/?from=2020-07-04&to=2020-07-04');
-		// Honest time axis: the empty year in between still gets its panel.
-		await expect
-			.element(page.getByRole('group', { name: 'Photos per day in 2019' }))
-			.toBeInTheDocument();
-		expect(page.getByRole('link').elements()).toHaveLength(2);
-	});
-
-	it('a year and a day with one photo say "1 photo"; a big year groups its thousands', async () => {
-		render(CalendarHeatmap, {
-			days: [
-				{ day: '2020-07-04', count: 1204 },
-				{ day: '2018-01-01', count: 1 }
-			],
-			hrefFor: (day: string) => `/?from=${day}&to=${day}`
-		});
-		await expect
-			.element(page.getByRole('link', { name: '1 Jan 2018: 1 photo', exact: true }))
-			.toBeInTheDocument();
-		await expect
-			.element(page.getByRole('region', { name: '2018: 1 photo', exact: true }))
-			.toBeInTheDocument();
-		await expect
-			.element(page.getByRole('link', { name: '4 Jul 2020: 1,204 photos', exact: true }))
-			.toBeInTheDocument();
-	});
-});
 
 describe('SelectionBar', () => {
 	it('shows the count and only the actions allowed', async () => {

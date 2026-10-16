@@ -16,8 +16,9 @@
 	 * with the view switch and whatever else the page puts there. No avatar: it lives in the
 	 * dock's places and in You.
 	 */
+	type View = 'years' | 'months' | 'all';
 	type Props = {
-		view: 'grid' | 'calendar';
+		view: View;
 		/** The filters as the address writes them, kept when the view changes. */
 		query: string;
 		/** The quiet line under the title. */
@@ -33,14 +34,17 @@
 	};
 	let { view, query, line, title = 'Library', sub = null, tools, more = [] }: Props = $props();
 
-	const VIEWS = [
-		{ value: 'grid' as const, label: 'All photos', icon: 'grid' as const, iconOnly: true },
-		{ value: 'calendar' as const, label: 'Days', icon: 'calendar' as const, iconOnly: true }
+	/** By years, by months, or every photo (spec §4: Apple's Years / Months / All). */
+	const VIEWS: { value: View; label: string }[] = [
+		{ value: 'years', label: 'Years' },
+		{ value: 'months', label: 'Months' },
+		{ value: 'all', label: 'All' }
 	];
-	const hrefOf = (to: 'grid' | 'calendar') => (to === 'grid' ? `/${query}` : `/calendar${query}`);
+	const PATHS: Record<View, string> = { years: '/calendar', months: '/calendar/months', all: '/' };
+	const hrefOf = (to: View) => `${PATHS[to]}${query}`;
 	const menu = $derived<MenuItem[]>([
 		...VIEWS.filter((v) => v.value !== view).map((v) => ({
-			label: v.label,
+			label: v.value === 'all' ? 'All photos' : v.label,
 			href: hrefOf(v.value)
 		})),
 		...more
