@@ -154,6 +154,8 @@ test('trash: move, see it with its thumbnail, open it full size, restore', async
 	await expect
 		.poll(() => tile.locator('img').evaluate((i: HTMLImageElement) => i.naturalWidth))
 		.toBeGreaterThan(0);
+	// Nothing was removed, so nothing takes the focus: the first photo must not look selected.
+	expect(await page.evaluate(() => !!document.activeElement?.closest('.tile'))).toBe(false);
 	await expectAccessible(page);
 	await tile.click();
 	const viewer = loupe(page);
