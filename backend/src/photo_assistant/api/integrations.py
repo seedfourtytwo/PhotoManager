@@ -4,7 +4,8 @@
 ``Services.integrations``; routes reach it through ``api/deps.py``.
 """
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from photo_assistant.adapters.ollama_ai import build_ai_provider
@@ -18,8 +19,11 @@ from photo_assistant.adapters.sqlite_integrations import (
     SqliteInboxes,
     SqliteRemoteSources,
 )
+from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.adapters.upload_spool import DiskUploadSpool
 from photo_assistant.api.settings import IntegrationSettings
+from photo_assistant.app.ai_captions import CAPTION_JOB, CaptionPhotos
+from photo_assistant.app.album_plans import PLAN_JOB, AlbumPlanner
 from photo_assistant.app.devices import DeviceTokens
 from photo_assistant.app.sync_source import Importer, ProviderSync, SyncSource
 from photo_assistant.app.upload import UploadInbox, UploadSettings
@@ -54,6 +58,9 @@ class Integrations:
     staging_root: Path
     ai: AIProvider
     ai_log: SqliteAILog
+    planner: AlbumPlanner  # suggested albums with their AI titles (plain ones with the AI off)
+    # the AI's background jobs, each on a worker thread of its own; none with the AI off
+    ai_jobs: dict[str, Callable[[dict[str, object]], object]] = field(default_factory=dict)
 
 
 def build_integrations(
@@ -61,12 +68,14 @@ def build_integrations(
     data_root: Path,
     settings: IntegrationSettings,
     db: Database,
-    repo: Repository,
+    repo: SqliteRepository,  # the AI jobs read and keep captions and plans in it too
     importer: Importer,
     clock: Clock,
+    absolute: Callable[[str], Path],
     min_free_bytes: int = 0,
 ) -> Integrations:
-    """``db``: the process's one Database, which these stores share with ``repo``."""
+    """``db``: the process's one Database, which these stores share with ``repo``.
+    ``absolute``: a library path on disk (the AI reads the photos' previews)."""
     remote_sources = SqliteRemoteSources(db, repo)
     rclone = RcloneSync(settings.rclone_binary, settings.rclone_config)
     proton = ProtonDrive(find_binary(settings.proton_drive_binary))
@@ -89,6 +98,17 @@ def build_integrations(
         staging_root=staging_root(data_root),
         options=settings.sync_options(),
     )
+    ollama = settings.ollama()
+    ai = build_ai_provider(ollama, ai_log)
+    caption_model = ollama.caption_model if ollama else None
+    plan_model = ollama.plan_model if ollama else None
+    captions = CaptionPhotos(repo, ai, caption_model, absolute) if caption_model else None
+    planner = AlbumPlanner(repo, ai, plan_model, captions)
+    ai_jobs: dict[str, Callable[[dict[str, object]], object]] = {}
+    if captions:
+        ai_jobs[CAPTION_JOB] = captions
+    if plan_model:
+        ai_jobs[PLAN_JOB] = planner
     return Integrations(
         repo=repo,
         upload=upload,
@@ -99,6 +119,8 @@ def build_integrations(
         proton=proton,
         sync_source=sync_source,
         staging_root=staging_root(data_root),
-        ai=build_ai_provider(settings.ollama(), ai_log),
+        ai=ai,
         ai_log=ai_log,
+        planner=planner,
+        ai_jobs=ai_jobs,
     )

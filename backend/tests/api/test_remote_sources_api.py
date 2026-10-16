@@ -62,6 +62,7 @@ def world(tmp_path: Path) -> Iterator[World]:
         repo=repo,
         clock=SystemClock(),
         importer=StubImporter(),
+        absolute=lambda rel: tmp_path / "data" / rel,
     )
     app.state.services = SimpleNamespace(integrations=integrations)
     app.dependency_overrides[admin_user] = _admin_from_header
@@ -162,6 +163,7 @@ def test_ai_stays_off_unless_ollama_is_chosen(tmp_path: Path) -> None:
         "db": db,
         "repo": SqliteRepository(db),
         "clock": SystemClock(),
+        "absolute": lambda rel: tmp_path / rel,
     }
     off = build_integrations(settings=IntegrationSettings(), importer=StubImporter(), **common)  # type: ignore[arg-type]
     on = build_integrations(

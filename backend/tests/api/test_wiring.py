@@ -83,6 +83,31 @@ def test_housekeeping_runs_backups_trash_purge_and_nightly_face_clustering(
     ]
 
 
+def test_with_the_ai_on_captions_and_plans_have_their_own_workers_and_a_periodic_check(
+    tmp_path: Path,
+) -> None:
+    on = IntegrationSettings(
+        ai_provider="ollama",
+        ollama_base_url="http://127.0.0.1:9",
+        ollama_caption_model="qwen3.5:4b",
+        ollama_plan_model="qwen3.5:4b",
+    )
+    with TestClient(create_app(make_settings(tmp_path / "data", integrations=on))) as client:
+        services = services_of(client)
+        assert {"ai_captions", "ai_album_plan"} <= services.worker.kinds
+        own_thread = [w.kinds for w in services.worker.pool]
+        assert {"ai_captions"} in own_thread and {"ai_album_plan"} in own_thread
+        assert "queue AI captions" in services.ops.periodic.task_names
+        services.ops.periodic.tick()
+        assert ("ai_captions", {}) in [(j["kind"], j["payload"]) for j in services.repo.list_jobs()]
+
+
+def test_with_the_ai_off_there_are_no_ai_jobs(admin: TestClient) -> None:
+    services = services_of(admin)
+    assert not {"ai_captions", "ai_album_plan"} & services.worker.kinds
+    assert "queue AI captions" not in services.ops.periodic.task_names
+
+
 def test_housekeeping_queues_the_purge_and_a_global_face_clustering(admin: TestClient) -> None:
     services = services_of(admin)
     services.ops.periodic.tick()

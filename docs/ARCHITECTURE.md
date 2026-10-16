@@ -46,7 +46,7 @@ CI (`.github/workflows/ci.yml`) runs the same check on every pull request.
 ## 3. Data model
 
 Built (numbered SQL migrations in `adapters/migrations/`; see TECH_DECISIONS). M1 + M2 core:
-`0001`–`0012`; `0013` ai_log; `0014` remote sources, inboxes, devices; `0015` local ML (embeddings,
+`0001`–`0012`; `0013` ai_log (`0035` adds photo captions and suggested-album plans); `0014` remote sources, inboxes, devices; `0015` local ML (embeddings,
 faces, people, tags); `0016` backups; `0017` (fix/backend) `asset.private_by`, foreign keys on
 `inbox`/`device` (→ user, cascade) and `backup_run` (→ target, cascade), the partial index
 `asset_live_timeline (taken_at DESC, id DESC) WHERE trashed_at IS NULL`, whole-second
@@ -104,6 +104,8 @@ sync_rule(id, device_id → device CASCADE, kind[album|person|filter], album_id 
           -- one rule per (device, thing): UNIQUE (device_id, kind, COALESCE(album, person, filter))
 sync_sent(device_id → device CASCADE, asset_id → asset CASCADE, sent_at)        -- 0031
 ai_log(id, capability, model, attempt, ok, duration_ms, error, request_json, response_json)
+asset_caption(asset_id PK → asset CASCADE, text, model, lang, created_at)              -- 0035
+album_suggestion_plan(key, photos, model, plan_json, created_at; PK (key, photos))   -- 0035
 backup_target(id, label UNIQUE, kind[local|rclone], repository, password_file, schedule,
               quiet_window, retention_json, enabled, created_at)                     -- 0016
 backup_run(id, target_id → backup_target ON DELETE CASCADE, kind, status, started_at, …)
@@ -355,8 +357,13 @@ person ids of its faces) and splits it into events in one time-ordered pass
 away from home (30 km from the grid cell with the most photos), where 16 h and any distance
 stay one trip; the same person keeps an event going for up to 6 h. Events of eight photos,
 not mostly in the viewer's own albums and not answered before, are proposed, newest first.
-Titles come from facts (`event_title`); `Namer` is the seam where an AI rename would plug
-in later. Keep makes the album and records the answer in one transaction
+Titles come from facts (`event_title`). With a plan model configured, `app/album_plans.py`
+queues an `ai_album_plan` job for each suggestion shown without a plan: it captions the
+event's photos that have none yet, gives the model that one event (photos, places, tags,
+captions) and stores a validated plan (`album_suggestion_plan`, 0035) under the event key
+and its sorted photo ids; a newer plan for the key replaces the older. The suggestion (and
+the album Keep makes) takes the plan's title only when the viewer's photos of the event are
+exactly those; otherwise, and with the AI off, the plain title stays. Keep makes the album and records the answer in one transaction
 (`album_suggestion_answer`, 0033), so a double tap makes one album; Discard records it too.
 
 ### Album → print
@@ -373,8 +380,9 @@ class AIProvider(Protocol):
 ```
 `NullAIProvider` returns "not available" and the UI hides AI affordances.
 `OllamaProvider` calls `/api/chat` with JSON-schema constrained output; the response is parsed
-into `AlbumPlan` (a frozen dataclass in `domain/album_plan.py`) and **validated by domain rules** (every asset exists, the user may
-see it, layouts exist) before it is shown as a proposal. Invalid output → one retry → error.
+into `AlbumPlan` (a frozen dataclass in `domain/album_plan.py`) and **validated by domain rules** (every photo it was given is used
+exactly once and no other, layouts exist and each section fills whole pages of its layout)
+before it is shown as a proposal. Invalid output → one retry → error.
 The LLM never writes to the database directly.
 
 ### Jobs and lanes
@@ -382,7 +390,9 @@ The queue is the `job` table; `app.worker.Lanes` runs it on three kinds of threa
 the **quick lane** (one thread: geocode, group, purge, ML, edited renders, the exposure
 backfill), the **long lane**
 (one thread: `scan_source` — rclone pulls and folder imports —, `backup_run`,
-`backup_restore_test`, `backup_due`) and a **preview pool** (max(1, cores − 2) threads). Each
+`backup_restore_test`, `backup_due`), a **preview pool** (max(1, cores − 2) threads) and, with the local AI on, one thread each
+for `ai_captions` (batches of photos without a description, newest first; queued hourly) and
+`ai_album_plan`, which take seconds on a GPU and minutes on a CPU. Each
 claims only its kinds, atomically, so a backup or a big import never starves previews and
 uploads. The periodic thread only enqueues (`backup_due`, trash purge, nightly face clustering,
 and a `scan_source` for each source whose automatic re-check is due: `app/recheck.py`, rule in

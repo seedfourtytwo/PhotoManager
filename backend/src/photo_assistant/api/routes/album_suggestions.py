@@ -26,7 +26,7 @@ class SuggestionOut(BaseModel):
 
 @router.get("")
 def list_suggestions(services: ServicesDep, viewer: ViewerDep) -> list[SuggestionOut]:
-    found = album_suggestions.suggestions(services.repo, viewer)
+    found = services.integrations.planner.suggestions(viewer)
     wanted = [i for s in found for i in (s.cover_id, *s.asset_ids[:PREVIEW])]
     shown = {v.id: AssetOut.of(v) for v in services.repo.views_by_ids(viewer, wanted)}
     return [
@@ -45,7 +45,10 @@ def list_suggestions(services: ServicesDep, viewer: ViewerDep) -> list[Suggestio
 
 @router.post("/{key}/keep", status_code=status.HTTP_201_CREATED)
 def keep(services: ServicesDep, viewer: ViewerDep, key: str, user: MemberUser) -> AlbumSummary:
-    album_id = album_suggestions.keep(services.repo, viewer, key, services.clock.now())
+    planner = services.integrations.planner
+    album_id = album_suggestions.keep(
+        services.repo, viewer, key, services.clock.now(), planner.namer
+    )
     album = services.repo.album_info(viewer, album_id)
     assert album is not None  # just made, by this account
     return AlbumSummary.of(album)
