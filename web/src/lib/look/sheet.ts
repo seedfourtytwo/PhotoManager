@@ -16,6 +16,8 @@
 
 export const THEMES = ['safelight', 'album'] as const;
 export const MODES = ['system', 'dark', 'light'] as const;
+/** The typeface of the whole app: Inter, or Atkinson Hyperlegible as "Larger text". */
+export const FACES = ['inter', 'atkinson'] as const;
 export const THUMB_SIZES = ['small', 'medium', 'large'] as const;
 export const START_PAGES = ['today', 'library'] as const;
 export const COLLECTIONS_ROWS = ['people', 'places', 'albums'] as const;
@@ -36,6 +38,7 @@ export const OWN_FIELDS = ['mode', 'homeSections'] as const;
 export type Theme = (typeof THEMES)[number];
 /** `system` follows the device. */
 export type Mode = (typeof MODES)[number];
+export type Face = (typeof FACES)[number];
 export type ThumbSize = (typeof THUMB_SIZES)[number];
 export type StartPage = (typeof START_PAGES)[number];
 export type CollectionsRow = (typeof COLLECTIONS_ROWS)[number];
@@ -52,6 +55,7 @@ export type Look = {
 	/** px */
 	photoGap: number | null;
 	textScale: number;
+	face: Face;
 	thumbSize: ThumbSize;
 	showToday: boolean;
 	startPage: StartPage;
@@ -76,6 +80,7 @@ const defaults = (): Look => ({
 	corners: null,
 	photoGap: null,
 	textScale: 1,
+	face: 'inter',
 	thumbSize: 'medium',
 	showToday: true,
 	startPage: 'today',
@@ -145,6 +150,7 @@ const FIELDS: { [K in keyof Look]: (value: unknown) => Look[K] } = {
 	corners: dial('corners'),
 	photoGap: dial('photoGap'),
 	textScale: (value) => halfUp(number('textScale', value) * 100) / 100,
+	face: choice('face', FACES),
 	thumbSize: choice('thumbSize', THUMB_SIZES),
 	showToday: toggle('showToday'),
 	startPage: choice('startPage', START_PAGES),

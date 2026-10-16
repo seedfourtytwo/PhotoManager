@@ -33,6 +33,7 @@
 				var mode = isMode(old) ? old : isMode(sheet.mode) ? sheet.mode : 'dark';
 				if (mode !== 'system') root.setAttribute('data-theme', mode);
 				if (sheet.theme === 'album') root.setAttribute('data-look', 'album');
+				if (sheet.face === 'atkinson') root.setAttribute('data-face', 'atkinson');
 				// a number is pulled into its range, then a half rounds up; anything else is unset
 				var within = function (value, low, high) {
 					return typeof value === 'number' ? Math.min(Math.max(value, low), high) : null;

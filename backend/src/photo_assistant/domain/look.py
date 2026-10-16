@@ -38,6 +38,14 @@ class Mode(StrEnum):
     LIGHT = "light"
 
 
+class Face(StrEnum):
+    """The typeface of the whole app (Flight): Inter, or Atkinson Hyperlegible as "Larger
+    text", a face drawn for readers with low vision."""
+
+    INTER = "inter"
+    ATKINSON = "atkinson"
+
+
 class ThumbSize(StrEnum):
     SMALL = "small"
     MEDIUM = "medium"
@@ -84,6 +92,7 @@ class Look:
     corners: int | None = None
     photo_gap: int | None = None
     text_scale: float = 1.0
+    face: Face = Face.INTER
     thumb_size: ThumbSize = ThumbSize.MEDIUM
     show_today: bool = True
     start_page: StartPage = StartPage.TODAY
@@ -174,6 +183,7 @@ _FIELDS: dict[str, tuple[str, Callable[[object], object]]] = {
     "corners": ("corners", _dial("corners", CORNERS)),
     "photoGap": ("photo_gap", _dial("photoGap", PHOTO_GAP)),
     "textScale": ("text_scale", _text_scale),
+    "face": ("face", _choice("face", Face)),
     "thumbSize": ("thumb_size", _choice("thumbSize", ThumbSize)),
     "showToday": ("show_today", _switch("showToday")),
     "startPage": ("start_page", _choice("startPage", StartPage)),

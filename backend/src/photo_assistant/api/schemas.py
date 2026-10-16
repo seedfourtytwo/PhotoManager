@@ -12,6 +12,7 @@ from photo_assistant.domain.export_naming import MAX_EDGE, ExportOptions, Folder
 from photo_assistant.domain.library_filter import AssetFilter
 from photo_assistant.domain.look import (
     CollectionsRow,
+    Face,
     HomeSection,
     Look,
     Mode,
@@ -75,6 +76,7 @@ class LookOut(BaseModel):
     corners: int | None
     photo_gap: int | None
     text_scale: float
+    face: Face
     thumb_size: ThumbSize
     show_today: bool
     start_page: StartPage
