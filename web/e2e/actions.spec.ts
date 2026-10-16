@@ -111,11 +111,15 @@ test('fix date from the loupe: set an exact date', async ({ page }) => {
 
 test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	await page.locator('.tile').first().click();
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	const editor = page.getByRole('dialog', { name: 'Edit photo' });
 	await expect(editor.getByRole('group', { name: /Crop area/ })).toBeVisible();
 	await editor.getByRole('button', { name: 'Rotate right' }).click();
-	await editor.getByRole('button', { name: '1:1' }).click();
+	await editor.getByRole('button', { name: 'Aspect' }).click();
+	await editor
+		.getByRole('group', { name: 'Crop ratio' })
+		.getByRole('button', { name: '1:1' })
+		.click();
 	await expectAccessible(page);
 	const put = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/edit'));
 	await editor.getByRole('button', { name: 'Save' }).click();
@@ -123,15 +127,16 @@ test('edit: rotate and save a recipe, then revert', async ({ page }) => {
 	expect(recipe).toMatchObject({ rotate: 90, flip_horizontal: false, straighten: 0 });
 	expect(recipe.crop.w).toBeGreaterThan(0);
 	await expect(editor).toHaveCount(0);
-	if (!isPhone(page))
-		await expect(
-			loupe(page)
-				.getByRole('complementary', { name: 'Details' })
-				.getByText('edited', { exact: true })
-		).toBeVisible();
+	await loupe(page).getByRole('button', { name: 'Details' }).click();
+	await expect(
+		loupe(page).getByRole('complementary', { name: 'Details' }).getByText('edited', { exact: true })
+	).toBeVisible();
+	await loupe(page).getByRole('button', { name: 'Details' }).click();
 
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/edit'));
+	// Under ⋯ in the editor's top bar.
+	await editor.getByRole('button', { name: 'More' }).click();
 	await page.getByRole('button', { name: 'Revert to original' }).click();
 	// It asks first: the saved edit is deleted.
 	await page
@@ -230,7 +235,7 @@ test('download: original files are labelled as without edits, with a hint for ed
 	page
 }) => {
 	await page.locator('.tile').first().click();
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await loupeAction(page, 'Edit');
 	await page.getByRole('button', { name: 'Rotate right' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('button', { name: 'Download' }).click();

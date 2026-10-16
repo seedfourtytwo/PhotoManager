@@ -2,11 +2,11 @@
 	import type { AssetDetail, AssetOut, Id, Person } from '$lib/api';
 	import { api, notice, session } from '$lib/app.svelte';
 	import { personName } from '$lib/collections';
-	import { dateSourceLabel, formatLongDay } from '$lib/dates';
-	import { exposureParts, exposureSpoken } from '$lib/exposure';
-	import { formatBytes, formatWhen } from '$lib/format';
-	import { cameFrom, peopleIn } from '$lib/readout';
+	import { detailCards } from '$lib/details';
+	import { formatWhen } from '$lib/format';
+	import { peopleIn } from '$lib/readout';
 	import { sheetDrag } from '$lib/sheet-drag';
+	import { LAND_PATH } from '$lib/world';
 	import Portrait from './Portrait.svelte';
 
 	type Props = {
@@ -19,19 +19,24 @@
 	};
 	let { asset, detail, trash, onclose }: Props = $props();
 
-	const MINUTES_PER_HOUR = 60;
-	/** Decimal places of a coordinate as written: about ten metres. */
-	const COORD_PLACES = 4;
-	/** A face beside a name, in pixels like every portrait. */
-	const FACE_PX = 32;
+	/** A face in the people row, in pixels like every portrait. */
+	const FACE_PX = 44;
+	/** The map card shows this many degrees of longitude around the dot (16:9, like the card). */
+	const MAP_SPAN = 64;
+	const MAP_RATIO = 16 / 9;
 	const titleId = $props.id();
 	const viewOnly = $derived(detail?.level === 'view');
-	const exposure = $derived(exposureParts(detail));
-	/** The most local name of the place first, then what it is part of. */
-	const place = $derived(
-		[asset.place?.city, asset.place?.region, asset.place?.country].filter((p) => !!p)
-	);
-	const offset = $derived(asset.tz_offset_minutes);
+	const cards = $derived(detailCards(asset, detail, session.isAdmin));
+	/** The part of the world outline around the dot, kept inside the outline's 360 × 180 frame. */
+	const mapBox = $derived.by(() => {
+		const dot = cards.place?.dot;
+		if (!dot) return null;
+		const w = MAP_SPAN;
+		const h = MAP_SPAN / MAP_RATIO;
+		const x = Math.min(Math.max(dot.x - w / 2, 0), 360 - w);
+		const y = Math.min(Math.max(dot.y - h / 2, 0), 180 - h);
+		return `${x} ${y} ${w} ${h}`;
+	});
 
 	// Who is in the photo: its faces, by the person each was grouped into. People's list is
 	// asked for once while the details are open; a person hidden from it is not named here.
@@ -54,102 +59,104 @@
 	});
 </script>
 
-<aside class="details" aria-labelledby={titleId} use:sheetDrag={onclose}>
+<!-- Grouped cards (spec flight/library-search-viewer.md §6): when and where, who, the map,
+     the camera, the albums, and the file for an admin. A glass panel beside the photo on a
+     laptop; a sheet under the photo on a phone. -->
+<!-- It scrolls when the cards are taller than it, and a keyboard scrolls only what has the
+     focus: it takes the focus itself, as it may hold nothing else that does (axe
+     scrollable-region-focusable). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<aside class="details glass" aria-labelledby={titleId} tabindex="0" use:sheetDrag={onclose}>
 	<div class="grab" data-grab aria-hidden="true"></div>
 	<h2 id={titleId}>Details</h2>
-	<div class="tiles">
-		<div class="tile-row">
-			<span class="k">Taken</span>
-			<span class="v data">
-				<span>{formatLongDay(asset.taken_at)}</span>
-				<span>{asset.taken_at.slice(11, 16)}</span>
-				<span class="quiet">{dateSourceLabel(asset.date_source)}</span>
-				{#if offset !== null}
-					<span class="quiet"
-						>UTC{offset >= 0 ? '+' : '−'}{Math.abs(offset) / MINUTES_PER_HOUR}</span
-					>
-				{/if}
-			</span>
-		</div>
-		{#if place.length}
-			<div class="tile-row">
-				<span class="k">Place</span>
-				<span class="v">
-					<span>{place[0]}</span>
-					{#if place.length > 1}<span class="quiet">{place.slice(1).join(', ')}</span>{/if}
-				</span>
-			</div>
-		{:else if detail && detail.latitude !== null && detail.longitude !== null}
-			<div class="tile-row">
-				<span class="k">Place</span>
-				<span class="v data">
-					{detail.latitude.toFixed(COORD_PLACES)}, {detail.longitude.toFixed(COORD_PLACES)}
-				</span>
-			</div>
+
+	<section class="card when" aria-label="When and where">
+		<p class="day">{cards.when.day}</p>
+		<p class="quiet data">
+			<span>{cards.when.time}</span>
+			{#if cards.when.zone}<span>{cards.when.zone}</span>{/if}
+			<span>{cards.when.source}</span>
+		</p>
+		{#if cards.place}
+			<p class="place">
+				<span>{cards.place.name}</span>
+				{#if cards.place.within}<span class="quiet">{cards.place.within}</span>{/if}
+			</p>
 		{/if}
-		{#if detail?.camera_model}
-			<div class="tile-row">
-				<span class="k">Camera</span>
-				<span class="v">
-					<span>{detail.camera_model}</span>
-					{#if detail.camera_make}<span class="quiet">{detail.camera_make}</span>{/if}
-				</span>
-			</div>
-		{/if}
-		{#if detail && exposure.length}
-			<div class="tile-row">
-				<span class="k">Settings</span>
-				<span class="v data settings">
-					<span class="items" aria-hidden="true">
-						{#each exposure as part (part)}<span>{part}</span>{/each}
-					</span>
-					<span class="visually-hidden">{exposureSpoken(detail).join(', ')}</span>
-				</span>
-			</div>
-		{/if}
-		{#if detail}
-			<div class="tile-row">
-				<span class="k">From</span>
-				<span class="v">
-					{#each cameFrom(detail, session.isAdmin) as origin (origin.key)}
-						<span class="whole">
-							{origin.label}
-							{#if origin.file}<span class="quiet path">{origin.file}</span>{/if}
-						</span>
-					{/each}
-					<span class="name">{detail.name}</span>
-					<span class="quiet data">{detail.width} × {detail.height}</span>
-					<span class="quiet data">{formatBytes(detail.byte_size)}</span>
-					{#if asset.edited}<span class="quiet">edited</span>{/if}
-				</span>
-			</div>
-		{/if}
-		{#if people.length}
-			<div class="tile-row">
-				<span class="k">People</span>
-				<span class="v">
-					{#each people as person (person.id)}
+	</section>
+
+	{#if people.length}
+		<section class="card" aria-labelledby={`${titleId}-people`}>
+			<h3 class="eyebrow quiet" id={`${titleId}-people`}>People</h3>
+			<ul class="people">
+				{#each people as person (person.id)}
+					<li>
 						<a class="person" href={`/people/${person.id}`}>
 							<Portrait portrait={person.portrait} size={FACE_PX} />
 							<span class:quiet={!person.name}>{personName(person)}</span>
 						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	{#if cards.place?.dot && mapBox}
+		<!-- The offline outline of lib/world.ts and a dot: no map tile is ever fetched, so where a
+		     photo was taken never leaves the machine. -->
+		<figure class="card map">
+			<svg viewBox={mapBox} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+				<path d={LAND_PATH} class="land" />
+				<circle cx={cards.place.dot.x} cy={cards.place.dot.y} r="1" class="dot" />
+			</svg>
+			<figcaption>{cards.place.name}</figcaption>
+		</figure>
+	{/if}
+
+	{#if cards.camera || cards.size}
+		<section class="card camera" aria-label="Camera">
+			{#if cards.camera?.model}
+				<p class="model">
+					<span>{cards.camera.model}</span>
+					{#if cards.camera.make}<span class="quiet">{cards.camera.make}</span>{/if}
+				</p>
+			{/if}
+			{#if cards.camera?.specs.length}
+				<dl class="specs">
+					{#each cards.camera.specs as spec (spec.label)}
+						<div>
+							<dt class="eyebrow quiet">{spec.label}</dt>
+							<dd class="data">
+								<span aria-hidden="true">{spec.value}</span>
+								<span class="visually-hidden">{spec.spoken}</span>
+							</dd>
+						</div>
 					{/each}
-				</span>
-			</div>
-		{/if}
-		{#if detail?.albums.length}
-			<div class="tile-row">
-				<span class="k">Albums</span>
-				<span class="v">
-					{#each detail.albums as album (album.id)}
-						<a href={`/albums/${album.id}`}>{album.title}</a>
-					{/each}
-				</span>
-			</div>
-		{/if}
-	</div>
+				</dl>
+			{/if}
+			{#if cards.size}
+				<p class="quiet data size">
+					<span>{cards.size.pixels}</span>
+					<span>{cards.size.bytes}</span>
+					{#if asset.edited}<span>edited</span>{/if}
+				</p>
+			{/if}
+		</section>
+	{/if}
+
+	{#if cards.albums.length}
+		<section class="card" aria-labelledby={`${titleId}-albums`}>
+			<h3 class="eyebrow quiet" id={`${titleId}-albums`}>Albums</h3>
+			<ul class="albums">
+				{#each cards.albums as album (album.id)}
+					<li><a class="chip" href={`/albums/${album.id}`}>{album.title}</a></li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	{#if (trash && 'trashed_at' in asset) || asset.private || viewOnly}
-		<div class="notes quiet">
+		<section class="card notes quiet" aria-label="Notes">
 			{#if trash && 'trashed_at' in asset}
 				<p>In the trash since {formatWhen(String(asset.trashed_at))}</p>
 			{/if}
@@ -160,25 +167,46 @@
 					with you lets you see it, not download it).
 				</p>
 			{/if}
-		</div>
+		</section>
 	{/if}
-	<p class="keys quiet">
-		<span>← → step</span>
-		<span>Z zoom</span>
-		<span>F full screen</span>
-		<span>I details</span>
-		<span>Esc close</span>
-	</p>
+
+	{#if cards.file}
+		<!-- For an admin, who may need to find the original: closed until asked for. -->
+		<details class="card file">
+			<summary>File</summary>
+			<dl>
+				<dt class="quiet">Name</dt>
+				<dd>{cards.file.name}</dd>
+				{#each cards.file.origins as origin (origin.key)}
+					<dt class="quiet">{origin.label}</dt>
+					<dd class="path">{origin.file}</dd>
+				{/each}
+			</dl>
+		</details>
+	{/if}
 </aside>
 
 <style>
-	/* The details: label and value tiles beside the photo on a laptop, a sheet on a phone. */
+	/* Laptop: a glass panel (utilities.css .glass) beside the photo, sliding in from the right
+	   (transform and opacity). */
 	.details {
 		grid-area: 1 / 2;
+		display: flex;
+		flex-direction: column;
+		gap: var(--s-3);
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		padding: var(--s-7) var(--s-4) var(--s-4);
-		font-size: var(--fs-14);
+		padding: var(--s-8) var(--s-4) var(--s-4);
+		font-size: var(--fs-15);
+		transition:
+			opacity var(--motion) var(--ease),
+			translate var(--motion-sheet) var(--ease-sheet);
+	}
+	@starting-style {
+		.details {
+			opacity: 0;
+			translate: var(--s-5) 0;
+		}
 	}
 	.grab {
 		display: none;
@@ -192,69 +220,144 @@
 		clip-path: inset(50%);
 		white-space: nowrap;
 	}
-	.tile-row {
-		align-items: baseline;
-		min-height: 0;
-		padding-block: var(--s-3);
+	h3 {
+		margin: 0 0 var(--s-2);
 	}
-	.k {
+	p,
+	ul,
+	dl,
+	figure {
+		margin: 0;
+	}
+	ul {
+		padding: 0;
+		list-style: none;
+	}
+	/* A card: one group of the details, set apart from the next by space. */
+	.card {
 		flex: none;
-		width: calc(var(--s-8) + var(--s-2));
-		color: var(--ink-2);
+		padding: var(--s-3) var(--s-4);
+		border-radius: var(--r-1);
+		background: var(--tint);
 	}
-	/* A value is a few pieces set apart by space, never by dots; a piece is never split. */
-	.v {
-		flex: 1;
-		min-width: 0;
+	/* Pieces of one line are set apart by space, never by dots; a piece is never split. */
+	.card p {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--s-1) var(--s-3);
-		overflow-wrap: anywhere;
+		gap: 0 var(--s-3);
 	}
-	.v > span,
-	.settings .items > span {
+	.card p > span {
 		white-space: nowrap;
 	}
-	.settings .items {
+	.day {
+		font-size: var(--fs-22);
+		font-weight: 650;
+		letter-spacing: var(--track-22);
+		line-height: var(--lh-tight);
+		margin-bottom: var(--s-1);
+	}
+	.when .place {
+		margin-top: var(--s-2);
+	}
+	.people {
 		display: flex;
-		flex-wrap: wrap;
-		gap: var(--s-1) var(--s-3);
-	}
-	/* Each folder the photo came from on a line of its own; an admin reads its file under it. */
-	.v > .whole {
-		flex-basis: 100%;
-		display: grid;
-		white-space: normal;
-	}
-	.v > .name {
-		white-space: normal;
+		gap: var(--s-3);
+		overflow-x: auto;
 	}
 	.person {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--s-2);
+		display: grid;
+		justify-items: center;
+		gap: var(--s-1);
+		max-width: var(--s-8);
 		color: inherit;
+		font-size: var(--fs-13);
+		text-decoration: none;
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+	/* The map: the offline outline, dark, with the dot in ink (the accent is for selection). */
+	.map {
+		position: relative;
+		padding: 0;
+		overflow: hidden;
+		aspect-ratio: 16 / 9;
+	}
+	.map svg {
+		display: block;
+		width: 100%;
+		height: 100%;
+	}
+	.land {
+		fill: var(--fill);
+	}
+	.dot {
+		fill: var(--ink);
+	}
+	.map figcaption {
+		position: absolute;
+		left: var(--s-3);
+		bottom: var(--s-2);
+		font-size: var(--fs-13);
+		font-weight: 600;
+	}
+	.model {
+		font-weight: 600;
+	}
+	/* The settings as a row of spec cells: a tiny capital label over a tabular value. */
+	.specs {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+		gap: var(--s-2);
+		margin-top: var(--s-3);
+	}
+	.specs dt {
+		margin-bottom: var(--s-1);
+	}
+	.specs dd {
+		margin: 0;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.size {
+		margin-top: var(--s-3);
+		font-size: var(--fs-13);
+	}
+	.albums {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--s-2);
+	}
+	.albums .chip {
 		text-decoration: none;
 	}
 	.notes {
 		display: grid;
 		gap: var(--s-2);
-		margin-top: var(--s-4);
 	}
-	.notes p,
-	.keys {
-		margin: 0;
-	}
-	.keys {
+	.file summary {
+		cursor: pointer;
+		font-weight: 600;
+		min-height: var(--s-6);
 		display: flex;
-		flex-wrap: wrap;
-		gap: var(--s-1) var(--s-3);
-		margin-top: var(--s-6);
-		font-size: var(--fs-12);
+		align-items: center;
+	}
+	.file dl {
+		display: grid;
+		gap: var(--s-1);
+		margin-top: var(--s-2);
+		font-size: var(--fs-13);
+	}
+	.file dd {
+		margin: 0 0 var(--s-2);
+		overflow-wrap: anywhere;
+	}
+	.path {
+		font-family: var(--font-code);
 	}
 	@media (max-width: 1023px) {
-		/* Phone and tablet: a sheet over the lower part of the photo and its bar. It rises on the
-		   sheet curve and, on a phone, follows the finger down from its handle or title. */
+		/* Phone and tablet: a sheet under the photo (the photo moves up into the room above it,
+		   Loupe.svelte). It rises on the sheet curve and, on a phone, follows the finger down from
+		   its handle or title. */
 		.details {
 			grid-area: auto;
 			position: fixed;
@@ -262,21 +365,30 @@
 			right: 0;
 			bottom: 0;
 			z-index: 3;
-			max-height: 50dvh;
+			height: var(--sheet, 55dvh);
+			box-sizing: border-box;
 			background: var(--raised);
+			-webkit-backdrop-filter: none;
+			backdrop-filter: none;
 			border-radius: var(--r-2) var(--r-2) 0 0;
 			box-shadow: var(--lift);
+			/* At its foot the photo's bar floats over it (Loupe.svelte): what scrolls clears it. */
 			padding: 0 calc(var(--s-4) + env(safe-area-inset-right))
-				calc(var(--s-4) + env(safe-area-inset-bottom)) calc(var(--s-4) + env(safe-area-inset-left));
+				calc(var(--s-6) + var(--target) + var(--s-4) + env(safe-area-inset-bottom))
+				calc(var(--s-4) + env(safe-area-inset-left));
 			transition: translate var(--motion-sheet) var(--ease-sheet);
 		}
 		@starting-style {
 			.details {
+				opacity: 1;
 				translate: 0 100%;
 			}
 		}
-		.details .tiles {
-			--tile: var(--fill);
+		.card {
+			background: var(--fill);
+		}
+		.land {
+			fill: var(--raised);
 		}
 		h2 {
 			position: static;
@@ -284,17 +396,15 @@
 			height: auto;
 			overflow: visible;
 			clip-path: none;
-			margin: 0 0 var(--s-3);
+			margin: 0 0 var(--s-1);
 			font-size: var(--fs-20);
 			touch-action: none;
-		}
-		.keys {
-			display: none;
 		}
 	}
 	@media (max-width: 639px) {
 		.grab {
 			display: grid;
+			flex: none;
 			place-items: center;
 			height: var(--s-5);
 			touch-action: none;

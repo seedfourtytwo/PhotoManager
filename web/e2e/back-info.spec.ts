@@ -4,7 +4,7 @@
  * the photo's; a side panel on a laptop, with none.
  */
 import type { Page } from '@playwright/test';
-import { expect, isPhone, loupe, resetMock, signIn, test } from './helpers.ts';
+import { expect, isPhone, loupe, resetMock, signIn, stepNext, test } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
 	await resetMock();
@@ -26,7 +26,7 @@ const inAddress = (page: Page) => new URL(page.url()).searchParams.get('photo');
 /** Step to the next photo and wait until it is the one on screen; returns its description. */
 async function next(page: Page): Promise<string> {
 	const was = await shown(page).getAttribute('alt');
-	await loupe(page).getByRole('button', { name: 'Next photo' }).click();
+	await stepNext(page);
 	await expect(shown(page)).not.toHaveAttribute('alt', was!);
 	return (await shown(page).getAttribute('alt'))!;
 }
@@ -194,10 +194,15 @@ test.describe('phone: the Details sheet has its own step', () => {
 	});
 });
 
-test('laptop: Details is a panel beside the photo and takes no step', async ({ page }) => {
+test('laptop: Details is a panel beside the photo, closed until asked for, and takes no step', async ({
+	page
+}) => {
 	test.skip(isPhone(page), 'a side panel on a laptop only');
 	await page.locator('.tile').first().click();
-	await expect(details(page), 'open from the start').toBeVisible();
+	await expect(loupe(page)).toBeVisible();
+	await expect(details(page), 'closed from the start').toHaveCount(0);
+	await infoButton(page).click();
+	await expect(details(page)).toBeVisible();
 	await infoButton(page).click();
 	await expect(details(page)).toHaveCount(0);
 	await infoButton(page).click();

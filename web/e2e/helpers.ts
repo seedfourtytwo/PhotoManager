@@ -216,6 +216,17 @@ export async function centre(target: Locator) {
 	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+/**
+ * To the next photo in the photo view as each device does it: a swipe on a phone (which draws
+ * no edge arrows), the Next arrow on a laptop.
+ */
+export async function stepNext(page: Page) {
+	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+	if (!isPhone(page)) return viewer.getByRole('button', { name: 'Next photo' }).click();
+	const at = await centre(viewer.locator('.stage'));
+	await touchSwipe(page, at, { x: at.x - 200, y: at.y });
+}
+
 /** Select photos the way each device does it: the keyboard (x), or long-press then tap. */
 export async function selectTiles(page: Page, indexes: number[]) {
 	const tiles = page.locator('.tile');

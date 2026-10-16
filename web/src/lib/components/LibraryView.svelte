@@ -277,6 +277,11 @@
 		onclose={closePhoto}
 		onneedmore={() => void loader.loadMore()}
 		onchanged={(a) => loupe.changed(a)}
+		onremove={(ids) => {
+			loader.remove(ids);
+			library.changed();
+		}}
+		onreload={reloadAll}
 		ondates={() => {
 			// Its new date may put it beyond what is loaded: it stays open all the same.
 			loupe.hold();

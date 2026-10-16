@@ -215,9 +215,13 @@ test.describe('photo view', () => {
 		await touchSwipe(page, photo, { x: photo.x - 200, y: photo.y });
 		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
 		const second = await alt(viewer);
-		await viewer.getByRole('button', { name: 'Previous photo' }).click();
+		// The edge buttons are not drawn on a touch screen and take no touch; a screen reader
+		// (which cannot swipe the photos) still presses them.
+		const previous = viewer.getByRole('button', { name: 'Previous photo' });
+		await expect(previous).toHaveCSS('clip-path', 'inset(50%)');
+		await previous.dispatchEvent('click');
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', first!);
-		await viewer.getByRole('button', { name: 'Next photo' }).click();
+		await viewer.getByRole('button', { name: 'Next photo' }).dispatchEvent('click');
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', second!);
 		await touchSwipe(page, photo, { x: photo.x + 200, y: photo.y });
 		await expect(viewer.locator('img.photo')).toHaveAttribute('alt', first!);
@@ -251,7 +255,10 @@ test.describe('photo view', () => {
 		const viewer = loupe(page);
 		const toolbar = viewer.getByRole('toolbar', { name: 'Photo actions' });
 		const close = viewer.getByRole('button', { name: 'Close' });
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 10_000 });
+		// A tap on the photo hides the chrome (a finger never hides it by a timer).
+		const photo = await centre(viewer.locator('img.photo'));
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect(toolbar).toHaveCSS('opacity', '0');
 		// A finger lands on the hidden Close and slides off: the chrome is back, nothing pressed.
 		const at = await centre(close);
 		await (
@@ -271,7 +278,9 @@ test.describe('photo view', () => {
 		await page.locator('.tile').first().click();
 		const viewer = loupe(page);
 		const toolbar = viewer.getByRole('toolbar', { name: 'Photo actions' });
-		await expect(toolbar).toHaveCSS('opacity', '0', { timeout: 10_000 });
+		const photo = await centre(viewer.locator('img.photo'));
+		await page.touchscreen.tap(photo.x, photo.y);
+		await expect(toolbar).toHaveCSS('opacity', '0');
 		const at = await centre(viewer.getByRole('button', { name: 'Close' }));
 		await page.touchscreen.tap(at.x, at.y);
 		await expect(toolbar).toHaveCSS('opacity', '1');
@@ -376,6 +385,9 @@ test.describe('photo view', () => {
 		await expect(viewer.locator('img.photo')).not.toHaveAttribute('alt', first!);
 		const second = await alt(viewer);
 		await expect(page).not.toHaveURL(url);
+		// One more frame, so the recorder has seen the new address (a slow frame may still be
+		// on its way when the test reads the address).
+		await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
 		const seen = await stop();
 		// Mid-slide, both photos were in sight together; at rest, only the new one.
 		expect(seen.some((f) => f.shown === 2)).toBe(true);
