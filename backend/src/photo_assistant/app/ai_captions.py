@@ -9,7 +9,7 @@ On the home server (no GPU) one caption takes about half a minute, so this runs 
 worker thread, never in a request.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -21,7 +21,9 @@ CAPTION_LANG = "en"  # the app's language
 
 
 class CaptionStore(Protocol):
-    def photos_to_caption(self, model: str, limit: int) -> list[tuple[int, str]]: ...
+    def photos_to_caption(
+        self, model: str, limit: int, among: Sequence[int] | None = None
+    ) -> list[tuple[int, str]]: ...
     def save_caption(self, asset_id: int, text: str, model: str, lang: str) -> None: ...
     def caption_failed(self, asset_id: int, model: str, detail: str) -> None: ...
     def enqueue_once(self, kind: str, payload: dict[str, object] | None = None) -> int | None: ...
@@ -51,6 +53,13 @@ class CaptionPhotos:
             self._store.enqueue_once(CAPTION_JOB)
         return done
 
+    def describe(self, asset_ids: Sequence[int]) -> int:
+        """Caption those of these photos that still need it (one event, before it is planned)."""
+        if not asset_ids or Capability.CAPTION not in self._ai.capabilities():
+            return 0
+        todo = self._store.photos_to_caption(self._model, len(asset_ids), among=asset_ids)
+        return sum(self._describe(asset_id, path) for asset_id, path in todo)
+
     def _describe(self, asset_id: int, path: str) -> bool:
         try:
             image = self._absolute(path).read_bytes()
@@ -66,4 +75,3 @@ class CaptionPhotos:
             return False
         self._store.save_caption(asset_id, text, self._model, CAPTION_LANG)
         return True
-

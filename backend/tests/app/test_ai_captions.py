@@ -36,8 +36,8 @@ def test_photos_without_a_caption_get_one(repo: SqliteRepository, tmp_path: Path
     first, second = _photos(repo, tmp_path, 2)
     ai = FakeAI(captions=["A red kite.", "Two dogs."])
     assert _job(repo, ai, tmp_path)({}) == 2
-    assert repo.captions_of([first, second]) == {first: "A red kite.", second: "Two dogs."}
-    assert ai.images == [b"photo 1", b"photo 2"]
+    assert repo.captions_of([first, second]) == {second: "A red kite.", first: "Two dogs."}
+    assert ai.images == [b"photo 2", b"photo 1"], "newest first, as suggested albums are"
     assert _queued(repo) == [], "a short batch was the last one"
 
 
@@ -57,12 +57,12 @@ def test_a_photo_the_model_cannot_describe_is_skipped_for_good(
     first, second = _photos(repo, tmp_path, 2)
     ai = FakeAI(captions=[AIUnavailableError("not usable twice"), "Two dogs."])
     assert _job(repo, ai, tmp_path)({}) == 1
-    assert repo.captions_of([first, second]) == {second: "Two dogs."}
+    assert repo.captions_of([first, second]) == {first: "Two dogs."}
     assert repo.photos_to_caption(MODEL, 10) == []
 
 
 def test_a_missing_file_is_skipped_for_good(repo: SqliteRepository, tmp_path: Path) -> None:
-    (first,) = _photos(repo, tmp_path, 1)
+    _photos(repo, tmp_path, 1)
     (tmp_path / f"originals/2020/01/{1:064x}.jpg").unlink()
     assert _job(repo, FakeAI(), tmp_path)({}) == 0
     assert repo.photos_to_caption(MODEL, 10) == []
@@ -75,8 +75,8 @@ def test_an_unreachable_server_fails_the_job_so_it_is_tried_again(
     ai = FakeAI(captions=["A red kite.", AIUnreachableError("did not answer in time")])
     with pytest.raises(AIUnreachableError):
         _job(repo, ai, tmp_path)({})
-    assert repo.captions_of([first]) == {first: "A red kite."}, "what was done is kept"
-    assert [i for i, _ in repo.photos_to_caption(MODEL, 10)] == [second]
+    assert repo.captions_of([second]) == {second: "A red kite."}, "what was done is kept"
+    assert [i for i, _ in repo.photos_to_caption(MODEL, 10)] == [first]
 
 
 def test_nothing_is_asked_while_the_server_offers_no_captions(

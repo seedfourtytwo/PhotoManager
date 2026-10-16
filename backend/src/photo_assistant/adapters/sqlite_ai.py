@@ -16,18 +16,22 @@ def _marks(ids: Sequence[int]) -> str:
 
 
 class AIMixin(SqliteBase):
-    def photos_to_caption(self, model: str, limit: int) -> list[tuple[int, str]]:
-        """Photos in the library (not held, not trashed) with no caption that ``model`` has not
-        failed on, oldest first; with the best rendition to read."""
+    def photos_to_caption(
+        self, model: str, limit: int, among: Sequence[int] | None = None
+    ) -> list[tuple[int, str]]:
+        """Photos in the library (not held, not trashed; only ``among``, when given) with no
+        caption that ``model`` has not failed on, newest first, as suggested albums are; with
+        the best rendition to read."""
+        only = "" if among is None else f"AND a.id IN ({_marks(among)})"
         rows = self._all(
-            """SELECT a.id, coalesce(a.preview_path, a.thumb_path, a.library_path) AS path
-               FROM asset a
-               WHERE a.kind = ? AND a.trashed_at IS NULL AND a.held_reason IS NULL
-                 AND NOT EXISTS (SELECT 1 FROM asset_caption c WHERE c.asset_id = a.id)
-                 AND NOT EXISTS (SELECT 1 FROM ml_task t
-                                 WHERE t.asset_id = a.id AND t.task = ? AND t.model = ?)
-               ORDER BY a.id LIMIT ?""",
-            (MediaKind.PHOTO.value, CAPTION_TASK, model, limit),
+            f"""SELECT a.id, coalesce(a.preview_path, a.thumb_path, a.library_path) AS path
+                FROM asset a
+                WHERE a.kind = ? AND a.trashed_at IS NULL AND a.held_reason IS NULL {only}
+                  AND NOT EXISTS (SELECT 1 FROM asset_caption c WHERE c.asset_id = a.id)
+                  AND NOT EXISTS (SELECT 1 FROM ml_task t
+                                  WHERE t.asset_id = a.id AND t.task = ? AND t.model = ?)
+                ORDER BY a.taken_at DESC, a.id DESC LIMIT ?""",
+            (MediaKind.PHOTO.value, *(among or ()), CAPTION_TASK, model, limit),
         )
         return [(int(r["id"]), str(r["path"])) for r in rows]
 

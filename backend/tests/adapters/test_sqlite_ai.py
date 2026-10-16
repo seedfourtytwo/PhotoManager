@@ -1,5 +1,7 @@
 """What the local AI made: photo captions and suggested-album plans (migration 0035)."""
 
+from datetime import datetime
+
 from photo_assistant.adapters.sqlite_repository import SqliteRepository
 from photo_assistant.domain.album_plan import AlbumPlan, PlanSection
 from photo_assistant.domain.media_types import MediaKind
@@ -9,10 +11,12 @@ MODEL = "qwen3.5:4b"
 PLAN = AlbumPlan("Beach day", (PlanSection("Morning", (1, 2), "two-side", {1: "Waves"}),))
 
 
-def test_photos_to_caption_are_live_photos_without_one_oldest_first(
+def test_photos_to_caption_are_live_photos_without_one_newest_first(
     repo: SqliteRepository,
 ) -> None:
-    first, second, third = (repo.add_asset(new_asset(n), NOW) for n in (1, 2, 3))
+    first, second, third = (
+        repo.add_asset(new_asset(n, datetime(2020, 1, 4 - n)), NOW) for n in (1, 2, 3)
+    )
     repo.add_asset(new_asset(4, kind=MediaKind.VIDEO, mime_type="video/mp4"), NOW)
     trashed = repo.add_asset(new_asset(5), NOW)
     assert repo.trash_superseded(trashed, NOW)
@@ -23,6 +27,7 @@ def test_photos_to_caption_are_live_photos_without_one_oldest_first(
         (third, f"originals/2020/01/{3:064x}.jpg"),
     ]
     assert len(repo.photos_to_caption(MODEL, 1)) == 1
+    assert [i for i, _ in repo.photos_to_caption(MODEL, 10, among=[third, second])] == [third]
 
 
 def test_the_preview_is_read_rather_than_the_original(repo: SqliteRepository) -> None:
