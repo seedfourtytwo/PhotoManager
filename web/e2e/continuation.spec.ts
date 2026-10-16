@@ -29,15 +29,19 @@ async function settled(page: Page) {
 	return last;
 }
 
-/** The photo in the middle of the screen. */
+/** A photo of the Library well inside the screen, clear of the bars. */
 async function middleTile(page: Page) {
-	const id = await page.evaluate(
-		() =>
-			document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest<HTMLElement>('.tile')
-				?.dataset.id
-	);
+	const id = await page.evaluate(() => {
+		const tiles = [
+			...document.querySelectorAll<HTMLElement>('section[aria-label="Library"] .tile')
+		];
+		return tiles.find((tile) => {
+			const box = tile.getBoundingClientRect();
+			return box.top >= innerHeight * 0.25 && box.bottom <= innerHeight * 0.75;
+		})?.dataset.id;
+	});
 	expect(id).toBeTruthy();
-	return page.locator(`.tile[data-id="${id}"]`);
+	return library(page).locator(`.tile[data-id="${id}"]`);
 }
 
 /** Scroll the way a person does, a wheel turn at a time, until the Library's title is up. */

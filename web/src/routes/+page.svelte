@@ -4,4 +4,13 @@
 
 <svelte:head><title>Library · Photos</title></svelte:head>
 
-<LibraryView />
+<div class="library"><LibraryView /></div>
+
+<style>
+	/* A phone: the photos run to the screen's edge (LibraryView). */
+	@media (max-width: 639px) {
+		.library {
+			--library-x: var(--gutter);
+		}
+	}
+</style>

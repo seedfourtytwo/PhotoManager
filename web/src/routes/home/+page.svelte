@@ -232,11 +232,12 @@
 	}
 
 	// --- the Library goes on under Home (lib/continuation.svelte.ts) ---------------------------
-	// Only once Home has drawn, so the Library never pushes Home's blocks about; not without Home
-	// in the dock, and not when there is no photo at all (Home says so already).
-	const continues = $derived(
-		look.shown.showToday && (home !== null || error !== '') && libraryEmpty !== true
+	// Only once every block of Home has drawn, so nothing arriving above moves the Library; not
+	// without Home in the dock, and not when there is no photo at all (Home says so already).
+	const drawn = $derived(
+		error !== '' || (home !== null && pinned !== null && people !== null && suggested !== null)
 	);
+	const continues = $derived(look.shown.showToday && drawn && (!nothing || libraryEmpty === false));
 	let seam = $state<HTMLElement>();
 	/** The part whose title is under the top now. */
 	let part = $state<Part>('home');
@@ -491,7 +492,7 @@
 	<section class="library" aria-label="Library" tabindex="-1" bind:this={seam}>
 		<LibraryView
 			current={part === 'library'}
-			photos={photoFrom === 'library'}
+			ownsPhoto={photoFrom === 'library'}
 			onopenphoto={() => (photoFrom = 'library')}
 		/>
 	</section>
@@ -515,8 +516,16 @@
 {/if}
 
 <style>
+	/* At least a screen tall under the top it keeps clear, so a short library can still bring
+	   its title up to the top (the seam) and the lens and the address with it. */
 	.library {
+		min-height: calc(100dvh - var(--top));
 		outline: none;
+	}
+	@media (max-width: 639px) {
+		.library {
+			--library-x: var(--gutter);
+		}
 	}
 	.page {
 		padding: 0 var(--page-x) var(--s-7);

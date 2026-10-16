@@ -35,11 +35,11 @@
 		/** This part is the one on screen: the time ruler shows and ⌘A selects its photos. */
 		current?: boolean;
 		/** The open photo (`?photo=`) is this part's to show: Home shows its own. */
-		photos?: boolean;
+		ownsPhoto?: boolean;
 		/** A photo of the timeline is about to open. */
 		onopenphoto?: () => void;
 	};
-	let { current = true, photos: ownsPhoto = true, onopenphoto }: Props = $props();
+	let { current = true, ownsPhoto = true, onopenphoto }: Props = $props();
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
@@ -296,9 +296,10 @@
 			pointer-events: none;
 		}
 	}
+	/* A phone: as close to the edge as the page says (`--library-x`: the photos' own gap). */
 	@media (max-width: 639px) {
 		.page {
-			padding: 0 var(--gutter);
+			padding: 0 var(--library-x, var(--page-x));
 		}
 	}
 </style>
