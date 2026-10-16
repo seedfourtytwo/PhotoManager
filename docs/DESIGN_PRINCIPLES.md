@@ -383,7 +383,13 @@ not a token):
   room of a cover and a row stays quiet (no spinner). With nothing to show, one sentence says
   so and what to do. Home is where a session opens, unless the look says Library: only the
   first page of a tab after signing in moves there, and a page asked for (a link) is never
-  moved.
+  moved. **Home goes on into the Library**: past Home's last block the Library follows on the
+  same page (its large title on the black, no line, then its filters and its timeline), so it
+  can be reached by scrolling. Once its title passes under the top, the lens moves to Library
+  and the address becomes `/` without a page change or a history step; back up, both return
+  to Home. Library (or any plain link to it) pressed on Home scrolls there, and Home scrolls
+  back to the top. A bare `/` stays the Library on its own, so the Library never waits for
+  Home; without Home in the dock nothing goes on (lib/continuation.svelte.ts).
 - **The story player** plays a memory full screen over everything (a modal dialog in the top
   layer): about forty photos spread over the period, each whole for 3.2 s while it is pushed
   in slowly and the next fades in over it (transform and opacity only; the next two are
