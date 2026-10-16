@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { continued } from '$lib/continuation.svelte';
 	import { look } from '$lib/look';
 	import { placesFor } from '$lib/nav';
 	import { ScrollChrome } from '$lib/scroll-chrome.svelte';
@@ -9,7 +10,8 @@
 	import Avatar from './Avatar.svelte';
 	import Icon from './Icon.svelte';
 
-	const path = $derived(page.url.pathname);
+	// Home going on into the Library: the lens follows the part on screen (continuation.svelte.ts).
+	const path = $derived(continued.path ?? page.url.pathname);
 	const places = $derived(placesFor(look.shown.showToday));
 	const current = $derived(places.findIndex((place) => place.match(path)));
 

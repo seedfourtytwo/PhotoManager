@@ -85,7 +85,8 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 	await expect(main.getByRole('button', { name: /Three years ago today/ })).toContainText(
 		'Lisbon, with Sam'
 	);
-	const titles = main.getByRole('heading', { level: 2 });
+	// Home's own blocks: the Library goes on under them with its months (continuation.spec.ts).
+	const titles = main.locator('.page').first().getByRole('heading', { level: 2 });
 	await expect(titles).toHaveText([
 		'Rediscover',
 		'Memories',
@@ -141,18 +142,20 @@ test('home: with nothing to show it says so in one sentence, and what to do', as
 	);
 	const main = page.getByRole('main');
 	const empty = main.locator('.empty-state');
+	// Home's own part: with photos in the library, the Library goes on under it.
+	const home = main.locator('.page').first();
 
 	await page.goto('/home');
 	await expect(empty).toContainText('No photos here yet.');
 	await expect(empty.getByRole('link', { name: 'Library' })).toBeVisible();
-	await expect(main.getByRole('heading', { level: 2 })).toHaveCount(0);
+	await expect(home.getByRole('heading', { level: 2 })).toHaveCount(0);
 
 	// Photos, but nothing pinned, no trip, nothing on this day or this week.
 	libraryEmpty = false;
 	await page.reload();
 	await expect(empty).toContainText('Your story starts here.');
 	await expect(empty.getByRole('link', { name: 'You' })).toHaveAttribute('href', '/settings');
-	await expect(main.getByRole('heading', { level: 2 })).toHaveCount(0);
+	await expect(home.getByRole('heading', { level: 2 })).toHaveCount(0);
 	await expectAccessible(page);
 });
 

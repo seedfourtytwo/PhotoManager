@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
+	import { tick, untrack } from 'svelte';
+	import { afterNavigate, goto, replaceState } from '$app/navigation';
+	import { navigating, page } from '$app/state';
+	import type { Snapshot } from './$types';
 	import type {
 		AlbumSuggestion,
 		AssetOut,
@@ -35,10 +37,20 @@
 		openPhotoId,
 		showPhoto
 	} from '$lib/loupe.svelte';
+	import {
+		addressFor,
+		continued,
+		edgeOf,
+		partAt,
+		restoreReady,
+		scrollFor,
+		type Part
+	} from '$lib/continuation.svelte';
 	import { look } from '$lib/look';
 	import { collect, spread } from '$lib/story';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
+	import LibraryView from '$lib/components/LibraryView.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
 	import Hero from '$lib/components/home/Hero.svelte';
@@ -167,7 +179,9 @@
 	}
 
 	// --- the photo view: from Rediscover, Pinned or New this week, stepping through that block --
-	const loupeId = $derived(openPhotoId(page));
+	/** Whose photo view is open: Home's blocks', or the Library's under them. */
+	let photoFrom = $state<'home' | 'library'>('home');
+	const loupeId = $derived(photoFrom === 'home' ? openPhotoId(page) : undefined);
 	type Stepped = 'rediscover' | 'pinned' | 'new';
 	let openedFrom = $state<Stepped>('pinned');
 	const stepped = $derived<Record<Stepped, AssetOut[]>>({
@@ -200,6 +214,7 @@
 
 	function open(from: Stepped, id: Id) {
 		openedFrom = from;
+		photoFrom = 'home';
 		openPhoto(id);
 	}
 
@@ -215,10 +230,139 @@
 			};
 		linked.patch(asset);
 	}
+
+	// --- the Library goes on under Home (lib/continuation.svelte.ts) ---------------------------
+	// Only once every block of Home has drawn, so nothing arriving above moves the Library; not
+	// without Home in the dock, and not when there is no photo at all (Home says so already).
+	const drawn = $derived(
+		error !== '' || (home !== null && pinned !== null && people !== null && suggested !== null)
+	);
+	const continues = $derived(look.shown.showToday && drawn && (!nothing || libraryEmpty === false));
+	let seam = $state<HTMLElement>();
+	/** The part whose title is under the top now. */
+	let part = $state<Part>('home');
+	/** The part a pressed link is scrolling to: the lens goes there at once, not at the end. */
+	let heading = $state<Part | null>(null);
+	let headingTimer: ReturnType<typeof setTimeout> | undefined;
+	/** The scroll a page come back to (Back) is put back at once it is that tall; null: none. */
+	let restoring: number | null = null;
+	/** The longest a page come back to waits for its photos before it stays where it is. */
+	const RESTORE_MS = 4000;
+	let frame = 0;
+
+	function read() {
+		frame = 0;
+		const edge = edgeOf(getComputedStyle(document.documentElement).scrollPaddingTop);
+		part = seam ? partAt(seam.getBoundingClientRect().top, edge) : 'home';
+		if (heading === part) heading = null;
+	}
+
+	function onscroll() {
+		frame ||= requestAnimationFrame(read);
+	}
+
+	/** The address says the part on screen; no step of its own, no page change. */
+	function writeAddress() {
+		if (!continues || restoring !== null || navigating.to) return;
+		const want = addressFor(part, location);
+		if (want !== `${location.pathname}${location.search}${location.hash}`)
+			replaceState(want, { ...page.state });
+	}
+
+	$effect(() => {
+		if (seam) read();
+	});
+	$effect(() => {
+		void [part, continues];
+		untrack(writeAddress);
+	});
+	// After the router is done with the history (a filter chosen writes `/home?…`).
+	afterNavigate(() => void tick().then(settle));
+	$effect(() => {
+		continued.path = continues ? ((heading ?? part) === 'library' ? '/' : '/home') : null;
+	});
+	$effect(() => () => {
+		continued.path = null;
+		cancelAnimationFrame(frame);
+		clearTimeout(headingTimer);
+	});
+
+	/**
+	 * Library in the dock (and any plain link to it) scrolls down to the Library, Home back up
+	 * to the top: one page, so no page change. Reduced motion jumps.
+	 */
+	function onclick(event: MouseEvent) {
+		if (!continues || !seam || event.defaultPrevented || event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		const link = event.target instanceof Element ? event.target.closest('a') : null;
+		if (!link || link.target || link.hasAttribute('download')) return;
+		const to = scrollFor(link.getAttribute('href'));
+		if (!to) return;
+		event.preventDefault();
+		heading = to === 'seam' ? 'library' : 'home';
+		clearTimeout(headingTimer);
+		headingTimer = setTimeout(() => (heading = null), 1500);
+		const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+		const go = () => {
+			if (to === 'top') return window.scrollTo({ top: 0, behavior });
+			seam?.scrollIntoView({ behavior, block: 'start' });
+			seam?.focus({ preventScroll: true });
+		};
+		// A plain link to the Library is the Library without filters, as on its own page.
+		if (to === 'seam' && page.url.search)
+			void goto('/home', { noScroll: true, keepFocus: true }).then(go);
+		else go();
+	}
+
+	// Come back to (Back, Forward, a reload): Home and the Library arrive after the page is
+	// drawn, so the browser's own scroll lands short. The page is put back once it is tall
+	// enough; meanwhile it rests at its end, which is where the Library asks for its next
+	// photos. A person scrolling first ends it, and so does a library that has no more.
+	export const snapshot: Snapshot<number> = {
+		capture: () => window.scrollY,
+		restore: (y) => {
+			if (y > 0) restore(y);
+		}
+	};
+
+	function restore(y: number) {
+		restoring = y;
+		const until = performance.now() + RESTORE_MS;
+		const step = () => {
+			if (restoring !== y) return;
+			const root = document.documentElement;
+			const ready = restoreReady(y, root.scrollHeight, window.innerHeight);
+			window.scrollTo(0, ready ? y : root.scrollHeight);
+			if (ready || performance.now() > until) done();
+			else requestAnimationFrame(step);
+		};
+		requestAnimationFrame(step);
+	}
+
+	function settle() {
+		read();
+		writeAddress();
+	}
+
+	function done() {
+		restoring = null;
+		settle();
+	}
+
+	function stopRestoring() {
+		if (restoring !== null) done();
+	}
 </script>
 
 <svelte:document onvisibilitychange={cameBack} />
-<svelte:head><title>Home · Photos</title></svelte:head>
+<svelte:window
+	{onscroll}
+	onclickcapture={onclick}
+	onwheel={stopRestoring}
+	ontouchstart={stopRestoring}
+	onkeydown={stopRestoring}
+/>
+<svelte:head><title>{part === 'library' ? 'Library' : 'Home'} · Photos</title></svelte:head>
 
 <div class="page" aria-busy={home === null && !error}>
 	<header class="head">
@@ -343,6 +487,17 @@
 	{/if}
 </div>
 
+<!-- The Library's own head, timeline, ruler and photo view, on the same page. -->
+{#if continues}
+	<section class="library" aria-label="Library" tabindex="-1" bind:this={seam}>
+		<LibraryView
+			current={part === 'library'}
+			ownsPhoto={photoFrom === 'library'}
+			onopenphoto={() => (photoFrom = 'library')}
+		/>
+	</section>
+{/if}
+
 {#if shown}
 	<Loupe
 		items={shown.items}
@@ -361,6 +516,17 @@
 {/if}
 
 <style>
+	/* At least a screen tall under the top it keeps clear, so a short library can still bring
+	   its title up to the top (the seam) and the lens and the address with it. */
+	.library {
+		min-height: calc(100dvh - var(--top));
+		outline: none;
+	}
+	@media (max-width: 639px) {
+		.library {
+			--library-x: var(--gutter);
+		}
+	}
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}
