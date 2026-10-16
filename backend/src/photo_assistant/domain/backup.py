@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from photo_assistant.domain.backup_errors import ErrorKind, error_kind
 from photo_assistant.domain.errors import InvalidError
 from photo_assistant.domain.library_paths import DATABASE_FILE, LIBRARY_FOLDERS
 from photo_assistant.domain.schedule import (
@@ -349,6 +350,7 @@ class Problem:
     severity: Severity
     message: str
     target_id: int | None = None  # None: about the library as a whole
+    error_kind: ErrorKind | None = None  # what kind of failure it reports; None: not one
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,12 +417,14 @@ def _lateness_problem(status: TargetStatus) -> Problem | None:
             f"{label} has not been connected since {status.skipped_since:%d %b %Y}: "
             "connect it and the backup starts by itself.",
             tid,
+            ErrorKind.UNREACHABLE,
         )
     if _manual_and_away(status):
         return Problem(
             Severity.WARNING,
             f"{label} was not connected at its last backup: connect it and run the backup again.",
             tid,
+            ErrorKind.UNREACHABLE,
         )
     if status.overdue and not status.failing:
         return Problem(Severity.WARNING, f"{label}: the backup is overdue.", tid)
@@ -437,6 +441,7 @@ def _target_problems(status: TargetStatus) -> list[Problem]:
                 Severity.ALERT,
                 f"{label}: the last backup failed: {reason or 'no reason given'}",
                 tid,
+                error_kind(reason) or ErrorKind.UNKNOWN,
             )
         )
     if status.restore_failing:
@@ -453,6 +458,7 @@ def _target_problems(status: TargetStatus) -> list[Problem]:
                 Severity.ALERT,
                 f"{label}: the copy on Proton Drive failed: {status.mirror_error}",
                 tid,
+                error_kind(status.mirror_error),
             )
         )
     late = _lateness_problem(status)

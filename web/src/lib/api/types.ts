@@ -482,6 +482,8 @@ export type PrintedPdf = { blob: Blob; filename: string; warnings: number };
 
 // --- backups (admin, v1.1) ------------------------------------------------------------------
 
+/** What kind of failure a backup error is, for a plain headline (v1.15). */
+export type BackupErrorKind = 'unreachable' | 'disk_full' | 'auth' | 'locked' | 'unknown';
 export type BackupRun = {
 	id: Id;
 	kind: 'backup' | 'check' | 'restore_test' | 'mirror';
@@ -494,6 +496,8 @@ export type BackupRun = {
 	files_new: number | null;
 	repo_bytes: number | null;
 	error: string | null;
+	/** The kind of `error`; null when there is none. */
+	error_kind: BackupErrorKind | null;
 	details: string | null;
 };
 export type BackupTarget = {
@@ -533,6 +537,8 @@ export type BackupProblem = {
 	message: string;
 	/** Null: about the library as a whole. */
 	target_id: Id | null;
+	/** The kind of failure it reports; null when it is not one (overdue, key not saved…). */
+	error_kind: BackupErrorKind | null;
 };
 /** Are two backup places healthy, and what is wrong with the rest; alerts come first. */
 export type BackupHealth = {

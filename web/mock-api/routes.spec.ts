@@ -394,7 +394,9 @@ describe('backups, devices and remote sources', () => {
 			protected: false,
 			places_ok: 0,
 			places_total: 0,
-			problems: [expect.objectContaining({ severity: 'warning', target_id: null })]
+			problems: [
+				expect.objectContaining({ severity: 'warning', target_id: null, error_kind: null })
+			]
 		});
 	});
 
@@ -403,10 +405,12 @@ describe('backups, devices and remote sources', () => {
 		const health = await api.backupHealth();
 		expect(health).toMatchObject({ protected: false, places_ok: 0, places_total: 1 });
 		expect(health.problems.map((p) => p.severity)).toEqual(['alert', 'warning']);
-		expect(health.problems[0]).toMatchObject({ target_id: 1 });
+		expect(health.problems[0]).toMatchObject({ target_id: 1, error_kind: 'unreachable' });
 		expect(health.problems[0].message).toContain('Home server: the last backup failed');
+		expect(health.problems[1].error_kind).toBeNull();
 		const [target] = await api.backups();
 		expect(target).toMatchObject({ skipped_since: null, mirror_overdue: false });
+		expect(target.last_run?.error_kind).toBe('unreachable');
 		const member = await h.signedIn('partner', '2345');
 		await expect(member.backupHealth()).rejects.toMatchObject({ status: 403 });
 	});

@@ -104,6 +104,7 @@ def test_add_run_and_watch_a_backup(env: Env) -> None:
         ("restore_test", "succeeded"),  # the first backup proves itself (issue 3)
         ("backup", "succeeded"),
     ]
+    assert [r["error_kind"] for r in runs] == [None, None, None]
     (listed,) = env.client.get("/api/backups").json()
     assert listed["last_success_at"] and listed["repo_bytes"]
     assert listed["last_proven_at"] and not listed["restore_failing"] and listed["key_saved"]
@@ -123,6 +124,10 @@ def test_failures_show_up_in_status(env: Env) -> None:
     (listed,) = env.client.get("/api/backups").json()
     assert listed["needs_attention"] and listed["last_run"]["status"] == "failed"
     assert "wrong password" in listed["last_run"]["error"]
+    assert listed["last_run"]["error_kind"] == "auth"
+    problems = env.client.get("/api/backups/health").json()["problems"]
+    [failed] = [p for p in problems if "the last backup failed" in p["message"]]
+    assert (failed["target_id"], failed["error_kind"]) == (target["id"], "auth")
     patched = env.client.patch(f"/api/backups/{target['id']}", json={"enabled": False})
     assert patched.json()["enabled"] is False and not patched.json()["needs_attention"]
 
@@ -145,6 +150,7 @@ def test_a_disk_that_is_not_there_shows_as_skipped_not_as_trouble(env: Env) -> N
     (listed,) = env.client.get("/api/backups").json()
     assert listed["last_run"]["status"] == "skipped"
     assert "plug it in" in listed["last_run"]["error"]
+    assert listed["last_run"]["error_kind"] == "unreachable"
     assert not listed["needs_attention"]
 
 
@@ -166,7 +172,8 @@ def test_health_with_no_backup_warns_that_none_is_set_up(env: Env) -> None:
     body = response.json()
     assert body["protected"] is False and body["places_ok"] == 0 and body["places_total"] == 0
     assert body["problems"], "someone must be told"
-    assert set(body["problems"][0]) == {"severity", "message", "target_id"}
+    assert set(body["problems"][0]) == {"severity", "message", "target_id", "error_kind"}
+    assert body["problems"][0]["error_kind"] is None, "not a failure"
     assert body["problems"][0]["severity"] in ("alert", "warning")
     assert body["problems"][0]["target_id"] is None
 
