@@ -13,7 +13,7 @@
 		Person
 	} from '$lib/api';
 	import { api, library, notice, session, viewport } from '$lib/app.svelte';
-	import { peopleStrip, personName } from '$lib/collections';
+	import { peopleStrip } from '$lib/collections';
 	import { errorMessage, formatCount } from '$lib/format';
 	import {
 		arrivalsSentence,
@@ -53,7 +53,7 @@
 	import Avatar from '$lib/components/Avatar.svelte';
 	import LibraryView from '$lib/components/LibraryView.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
-	import Portrait from '$lib/components/Portrait.svelte';
+	import FaceBubble from '$lib/components/FaceBubble.svelte';
 	import Hero from '$lib/components/home/Hero.svelte';
 	import HomeSection from '$lib/components/home/HomeSection.svelte';
 	import MemoryCard from '$lib/components/home/MemoryCard.svelte';
@@ -560,10 +560,7 @@
 				<HomeSection title={SECTION_NAMES.people} href="/people">
 					<Rail items={people} key={(p) => p.id} label="People">
 						{#snippet card(person)}
-							<a class="face" href={`/people/${person.id}`}>
-								<Portrait portrait={person.portrait} size={viewport.phone ? 76 : 112} />
-								<span>{personName(person)}</span>
-							</a>
+							<FaceBubble {person} size={viewport.phone ? 76 : 112} count />
 						{/snippet}
 					</Rail>
 				</HomeSection>
@@ -722,18 +719,6 @@
 	}
 	.see-all:active {
 		scale: 0.96;
-	}
-	.face {
-		display: grid;
-		justify-items: center;
-		gap: var(--s-2);
-		max-width: 7rem;
-		color: inherit;
-		font-weight: 600;
-		font-size: var(--fs-15);
-		text-align: center;
-		text-decoration: none;
-		overflow-wrap: anywhere;
 	}
 	.actions {
 		display: flex;
