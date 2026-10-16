@@ -87,6 +87,29 @@ describe('Timeline', () => {
 		await expect.element(page.getByRole('status')).toHaveTextContent('Loading…');
 	});
 
+	it('zoom: a level up makes the rows taller and is remembered; at the top end it stays', async () => {
+		localStorage.removeItem('grid-zoom');
+		const { fetchPage } = yearOfPages();
+		const loader = new TimelineLoader(fetchPage);
+		await loader.reset({});
+		const { component } = mount(loader);
+		await expect.element(page.getByRole('heading', { name: /December 2020/ })).toBeInTheDocument();
+		const height = () => document.querySelector('.tile')!.getBoundingClientRect().height;
+		const before = height();
+		const saved = () => Object.values(JSON.parse(localStorage.getItem('grid-zoom') ?? '{}'));
+		await component.zoom(1);
+		await expect.poll(height).toBeGreaterThan(before);
+		expect(saved()).toEqual([3]);
+		await component.zoom(1);
+		await component.zoom(1);
+		expect(saved()).toEqual([4]);
+		// Back to where every other test starts.
+		await component.zoom(-1);
+		await component.zoom(-1);
+		expect(saved()).toEqual([2]);
+		localStorage.removeItem('grid-zoom');
+	});
+
 	it('a cancelled drag does not swallow the next click on the page', async () => {
 		const { fetchPage } = yearOfPages();
 		const loader = new TimelineLoader(fetchPage);
