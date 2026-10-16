@@ -9,6 +9,7 @@ from photo_assistant.domain.album_plan import (
     PlanFormatError,
     PlanSection,
     plan_from_json,
+    plan_to_json,
     summary_lines,
     validate,
 )
@@ -110,6 +111,10 @@ WIRE = {
 def test_plan_from_json_reads_the_wire_shape() -> None:
     plan = plan_from_json(WIRE)
     assert plan == AlbumPlan("Summer", (PlanSection("Beach", (1, 2), "grid-4", {1: "Waves"}),))
+
+
+def test_plan_to_json_writes_the_wire_shape_back() -> None:
+    assert plan_to_json(plan_from_json(WIRE)) == WIRE
 
 
 def test_captions_are_optional_on_the_wire() -> None:

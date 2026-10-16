@@ -153,6 +153,21 @@ def plan_from_json(data: object) -> AlbumPlan:
     return AlbumPlan(_text(obj, "title"), tuple(_section(s) for s in sections))
 
 
+def plan_to_json(plan: AlbumPlan) -> dict[str, object]:
+    return {
+        "title": plan.title,
+        "sections": [
+            {
+                "title": s.title,
+                "asset_ids": list(s.asset_ids),
+                "layout_hint": s.layout_hint,
+                "captions": [{"asset_id": i, "text": t} for i, t in s.captions.items()],
+            }
+            for s in plan.sections
+        ],
+    }
+
+
 def _section(data: object) -> PlanSection:
     obj = _mapping(data, "section")
     return PlanSection(
