@@ -83,15 +83,15 @@ add `ml: MlSettings = Field(default_factory=MlSettings)` to `Settings`. Fields:
 | `PA_ML_ENABLED` | `true` | queue ML jobs after import |
 | `PA_ML_MODELS_DIR` | `<data_root>/models` | |
 | `PA_ML_PROVIDER` | `auto` | `auto` (CUDA if this onnxruntime has it), `cpu`, `cuda` (error if missing) |
-| `PA_ML_CLIP_MODEL` | `ViT-B-32__openai` | Immich HF repo name; also the storage key of the vectors |
+| `PA_ML_CLIP_MODEL` | `ViT-B-16-SigLIP2__webli` | Immich HF repo name; also the storage key of the vectors |
 | `PA_ML_CLIP_BATCH_SIZE` | `16` | |
 | `PA_ML_FACE_MODEL` | `buffalo_l` | or `yunet_sface` |
 | `PA_ML_FACE_DET_SIZE` | `640` | SCRFD input (dynamic export) / YuNet max edge |
 | `PA_ML_FACE_MIN_SCORE` | 0.7 buffalo_l, 0.8 yunet | detection score threshold |
 | `PA_ML_FACE_MAX_DISTANCE` | 0.5 buffalo_l, 0.6 yunet | cosine distance for "same person" |
 | `PA_ML_FACE_MIN_FACES` | `3` | faces needed to start a person |
-| `PA_ML_TAG_MARGIN` / `PA_ML_TAG_MAX_TAGS` | `0.03` / `3` | tune on real photos |
-| `PA_ML_SEARCH_MIN_SCORE` | none | drop weak search hits |
+| `PA_ML_TAG_MARGIN` / `PA_ML_TAG_MAX_TAGS` | per model (`0` SigLIP2, `0.03` others) / `3` | tune on real photos |
+| `PA_ML_SEARCH_MIN_SCORE` | per model (`0.08` SigLIP2, none others) | drop weak search hits; `-1` keeps all |
 
 ## 3. Proposed endpoints
 
@@ -140,7 +140,7 @@ keeps old vectors until a backfill re-embeds (search uses the configured model o
 ## 5. Laptop runbook
 
 ```
-just models                                   # ViT-B-32__openai + buffalo_l (roughly 1 GB)
+just models                                   # ViT-B-16-SigLIP2__webli + buffalo_l
 just models --clip XLM-Roberta-Large-Vit-B-32 # French + English queries; then set
                                               # PA_ML_CLIP_MODEL=XLM-Roberta-Large-Vit-B-32
 PA_MODELS_DIR=~/PhotoAssistant/data/models uv run pytest -m models   # format checks
@@ -150,6 +150,25 @@ PA_MODELS_DIR=~/PhotoAssistant/data/models uv run pytest -m models   # format ch
 `onnxruntime` and `onnxruntime-gpu` are separate wheels that cannot be installed together, so
 the lockfile keeps the CPU one; installing the GPU wheel on the laptop is a manual step
 (a `gpu` dependency group would be the tidy follow-up).
+
+### Changing the search model on an existing library
+
+Vectors and auto-tags are stored per model name, so a library embedded with one model keeps
+working only until the setting changes; then search uses the new model and sees only the
+photos it has embedded so far. To switch (the move to SigLIP2 included):
+
+1. `just models --clip ViT-B-16-SigLIP2__webli` (downloads into `<data_root>/models/clip/`).
+2. Set `PA_ML_CLIP_MODEL=ViT-B-16-SigLIP2__webli` in `.env`, or remove the line to use the
+   default. Remove any `PA_ML_SEARCH_MIN_SCORE` / `PA_ML_TAG_MARGIN` tuned for the old model:
+   they override the per-model defaults (cutoff 0.08, margin 0).
+3. Restart the service (`systemctl --user restart photo-assistant`), then `just ml-backfill`.
+   It queues search vectors and tags for every photo the new model has not analysed; the
+   server's worker does the work, and it continues after a restart. The new tags replace the
+   old model's tags photo by photo; faces are untouched.
+4. Until the backfill finishes, search finds only re-analysed photos. On the laptop's CPU
+   SigLIP2 takes about 0.17 s per photo (about 30 minutes per 10,000 photos).
+
+Old vectors stay in `clip_embedding` (about 2 KB per photo for ViT-B-32) and do no harm.
 
 Multilingual choice (Immich repo names, check the list on huggingface.co/immich-app):
 `XLM-Roberta-Large-Vit-B-32` (M-CLIP, 512-d, large text tower, image tower = ViT-B-32),

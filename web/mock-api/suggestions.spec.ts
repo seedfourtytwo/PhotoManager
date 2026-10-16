@@ -1,4 +1,4 @@
-/** Suggested albums in the mock (v1.12): the server's rules, on the mock library. */
+/** Suggested albums in the mock (v1.13): the server's rules, on the mock library. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startMock, type Harness } from './harness.ts';
 

@@ -4,6 +4,7 @@ Counts, covers and items are read through the visibility rule, so an album never
 photo its viewer may not see (e.g. someone else's private photo inside a shared album).
 """
 
+import json
 import sqlite3
 from collections.abc import Sequence
 from datetime import datetime
@@ -19,6 +20,7 @@ from photo_assistant.adapters.sqlite_library import (
     visibility,
 )
 from photo_assistant.domain.access import AlbumRole, Viewer
+from photo_assistant.domain.edit_recipe import Recipe, edited_size
 from photo_assistant.ports import InvalidAlbumOrderError
 from photo_assistant.ports.library import AlbumInfo, AssetView
 
@@ -29,7 +31,8 @@ def _info_sql(visible: str) -> str:
         "FROM album_item ai JOIN asset a ON a.id = ai.asset_id"
         f" WHERE ai.album_id = al.id AND {visible}"
     )
-    return f"""SELECT q.*, (SELECT edit_version FROM asset WHERE id = q.cover) AS cover_version
+    return f"""SELECT q.*, c.edit_version AS cover_version, c.width AS cover_w, c.height AS cover_h,
+    (SELECT recipe_json FROM edit_recipe WHERE asset_id = q.cover) AS cover_recipe
 FROM (
     SELECT al.*, am.role AS member_role,
         (SELECT COUNT(*) {shown}) AS n,
@@ -40,7 +43,8 @@ FROM (
     FROM album al
     LEFT JOIN album_member am ON am.album_id = al.id AND am.user_id = :vis_uid
     WHERE {ALBUM_VISIBLE} AND (:album IS NULL OR al.id = :album)
-) q ORDER BY q.updated_at DESC, q.id DESC"""
+) q LEFT JOIN asset c ON c.id = q.cover
+ORDER BY q.updated_at DESC, q.id DESC"""
 
 
 def _role(row: sqlite3.Row, viewer: Viewer) -> AlbumRole:
@@ -51,6 +55,15 @@ def _role(row: sqlite3.Row, viewer: Viewer) -> AlbumRole:
     return AlbumRole.EDITOR  # an admin who is not a member: admins may change everything
 
 
+def _cover_size(row: sqlite3.Row) -> tuple[int, int] | None:
+    width, height, recipe = row["cover_w"], row["cover_h"], row["cover_recipe"]
+    if width is None or height is None:
+        return None
+    if recipe is None:
+        return int(width), int(height)
+    return edited_size(int(width), int(height), Recipe.from_dict(json.loads(recipe)))
+
+
 def _info(row: sqlite3.Row, viewer: Viewer) -> AlbumInfo:
     return AlbumInfo(
         id=row["id"],
@@ -59,6 +72,7 @@ def _info(row: sqlite3.Row, viewer: Viewer) -> AlbumInfo:
         description=row["description"],
         cover_asset_id=row["cover"],
         cover_version=int(row["cover_version"] or 0),
+        cover_size=_cover_size(row),
         count=int(row["n"]),
         role=_role(row, viewer),
         updated_at=datetime.fromisoformat(row["updated_at"]),

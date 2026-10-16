@@ -387,11 +387,18 @@ class AlbumPatch(BaseModel):
     cover_asset_id: int | None = None
 
 
+class AlbumCover(ImageRef):
+    """The cover photo: ``url`` its thumbnail, ``preview_url`` the large picture for a hero."""
+
+    asset_id: int
+    preview_url: str
+
+
 class AlbumSummary(BaseModel):
     id: int
     title: str
     description: str
-    cover: ImageRef | None
+    cover: AlbumCover | None
     count: int
     owner_id: int
     role: Literal["owner", "editor", "viewer"]
@@ -399,12 +406,21 @@ class AlbumSummary(BaseModel):
 
     @classmethod
     def of(cls, a: AlbumInfo) -> "AlbumSummary":
-        cover = a.cover_asset_id
+        cover = None
+        if a.cover_asset_id is not None:
+            width, height = a.cover_size or (None, None)
+            cover = AlbumCover(
+                asset_id=a.cover_asset_id,
+                url=image_url(a.cover_asset_id, "thumb", a.cover_version),
+                preview_url=image_url(a.cover_asset_id, "preview", a.cover_version),
+                width=width,
+                height=height,
+            )
         return cls(
             id=a.id,
             title=a.title,
             description=a.description,
-            cover=ImageRef(url=image_url(cover, "thumb", a.cover_version)) if cover else None,
+            cover=cover,
             count=a.count,
             owner_id=a.owner_id,
             role=a.role.value,

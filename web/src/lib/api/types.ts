@@ -340,18 +340,27 @@ export type PhotoFile = { blob: Blob; filename: string };
 // --- albums --------------------------------------------------------------------------------
 
 export type AlbumRole = 'owner' | 'editor' | 'viewer';
+/** An album's cover photo: `url` its thumbnail, `preview_url` the large picture (v1.12). */
+export type AlbumCover = {
+	asset_id: Id;
+	url: string;
+	preview_url: string;
+	/** The photo as shown, after its edits; null when unknown. */
+	width: number | null;
+	height: number | null;
+};
 export type AlbumSummary = {
 	id: Id;
 	title: string;
 	description: string | null;
-	cover: { url: string } | null;
+	cover: AlbumCover | null;
 	count: number;
 	owner_id: Id;
 	role: AlbumRole;
 	updated_at: string;
 };
 export type AlbumDetail = AlbumSummary & { items: AssetOut[] };
-/** An event proposed as an album (v1.12): made only when kept. `items`: its first four photos. */
+/** An event proposed as an album (v1.13): made only when kept. `items`: its first four photos. */
 export type AlbumSuggestion = {
 	key: string;
 	title: string;

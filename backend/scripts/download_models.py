@@ -217,7 +217,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--models-dir", type=Path, default=None, help="default: <data-root>/models")
-    parser.add_argument("--clip", default="ViT-B-32__openai", help="immich-app repo name or none")
+    parser.add_argument(
+        "--clip", default="ViT-B-16-SigLIP2__webli", help="immich-app repo name or none"
+    )
     parser.add_argument(
         "--faces", choices=["buffalo_l", "yunet_sface", "none"], default="buffalo_l"
     )

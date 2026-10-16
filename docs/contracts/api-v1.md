@@ -107,7 +107,7 @@ whole sheet of any account.
 | `startPage` | `"today"`, `"library"` | `"today"` |
 | `collectionsRows` | one to three of `"people"`, `"places"`, `"albums"`, each once, in the order shown | all three, in that order |
 | `dockLabels` | `true` / `false` | `true` |
-| `homeSections` (v1.11) | one to eight of `"on_this_day"`, `"rediscover"`, `"memories"`, `"suggested"` (v1.12), `"years"`, `"pinned"`, `"people"`, `"new"`, each once, in the order Home shows them; the ones left out are off | all eight, in that order |
+| `homeSections` (v1.11) | one to eight of `"on_this_day"`, `"rediscover"`, `"memories"`, `"suggested"` (v1.13), `"years"`, `"pinned"`, `"people"`, `"new"`, each once, in the order Home shows them; the ones left out are off | all eight, in that order |
 
 Rules (`backend/src/photo_assistant/domain/look.py` is the source; `web/src/lib/look/sheet.ts`
 mirrors it by hand; both test suites run the cases in `docs/contracts/look-cases.json`):
@@ -349,7 +349,7 @@ the day it was taken; each `filter` carries `guessed_date: false` for that reaso
 
 ## Albums
 
-| GET | `/api/albums` | – | `AlbumSummary[]` = `{id, title, description, cover:{url}|null, count, owner_id, role:"owner"|"editor"|"viewer", updated_at}` |
+| GET | `/api/albums` | – | `AlbumSummary[]` = `{id, title, description, cover:AlbumCover|null, count, owner_id, role:"owner"|"editor"|"viewer", updated_at}`. `AlbumCover` (v1.12) = `{asset_id, url, preview_url, width, height}`: `url` the thumbnail, `preview_url` the large picture (the thumbnail stands in until it is made), `width`/`height` the photo as shown, after its edits (null when unknown) |
 |---|---|---|---|
 | POST | `/api/albums` | `{title, description?, asset_ids?}` | `201 AlbumSummary` |
 | GET | `/api/albums/{id}` | – | `AlbumSummary + {items: AssetOut[]}` in album order |
@@ -360,7 +360,7 @@ the day it was taken; each `filter` carries `guessed_date: false` for that reaso
 | PUT | `/api/albums/{id}/order` | `{asset_ids}` (full order) | `204` |
 | GET/PUT | `/api/albums/{id}/members` | `[{user_id, role:"viewer"|"editor"}]` | same |
 
-## Suggested albums (v1.12, FEATURES 5.6)
+## Suggested albums (v1.13, FEATURES 5.6)
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -694,7 +694,17 @@ Additions only.
 
 ---
 
-# v1.12 changes (suggested albums, FEATURES 5.6)
+# v1.12 changes (album cover at preview size, Flight UI)
+
+Additions only.
+
+| Area | Change | Web impact |
+|---|---|---|
+| Albums | `AlbumSummary.cover` gains `asset_id`, `preview_url`, `width`, `height` (see "Albums" above); `url` stays the thumbnail. | `AlbumCover`; a hero uses `cover.preview_url` and the size for its frame instead of rewriting the thumbnail URL. |
+
+---
+
+# v1.13 changes (suggested albums, FEATURES 5.6)
 
 Additions only.
 

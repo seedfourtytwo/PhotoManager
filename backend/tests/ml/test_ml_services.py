@@ -22,7 +22,7 @@ from tests.ml.test_onnx_clip import make_clip_folder, save_png
 def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     default = MlSettings()
     root = Path("/data")
-    assert default.clip_dir(root) == Path("/data/models/clip/ViT-B-32__openai")
+    assert default.clip_dir(root) == Path("/data/models/clip/ViT-B-16-SigLIP2__webli")
     assert default.face_dir(root) == Path("/data/models/insightface/buffalo_l")
     assert default.cluster_params().max_distance == 0.5 and default.face_score() == 0.7
     monkeypatch.setenv("PA_ML_FACE_MODEL", "yunet_sface")
@@ -34,6 +34,27 @@ def test_settings_defaults_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
     assert custom.cluster_params().min_faces == 5
     assert custom.face_score() == 0.8
     assert custom.tag_params().max_tags == 3
+
+
+def test_search_cutoff_and_tag_margin_follow_the_clip_model() -> None:
+    siglip2 = MlSettings(_env_file=None)  # type: ignore[call-arg]
+    assert siglip2.search_cutoff() == 0.08
+    assert siglip2.tag_params().margin == 0.0
+    for model in ("ViT-B-32__openai", "some-other-model"):
+        clip = MlSettings(_env_file=None, clip_model=model)  # type: ignore[call-arg]
+        assert clip.search_cutoff() is None, "CLIP scores do not separate present from absent"
+        assert clip.tag_params().margin == 0.03
+
+
+def test_explicit_cutoff_and_margin_win_over_the_model_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PA_ML_SEARCH_MIN_SCORE", "0.1")
+    monkeypatch.setenv("PA_ML_TAG_MARGIN", "0")
+    monkeypatch.setenv("PA_ML_CLIP_MODEL", "ViT-B-32__openai")
+    ml = Settings(_env_file=None).ml  # type: ignore[call-arg]
+    assert ml.search_cutoff() == 0.1
+    assert ml.tag_params().margin == 0.0, "0 is a real margin, not 'not set'"
 
 
 def setup(root: Path, ml: MlSettings) -> tuple[Any, ...]:
@@ -55,8 +76,8 @@ def test_without_models_jobs_record_model_missing(tmp_path: Path) -> None:
     for task in (EMBED_CLIP, DETECT_FACES, AUTO_TAG):  # e.g. queued before the files went away
         repo.enqueue(task, {"asset_id": asset})
     Worker(repo, services.handlers, FakeClock()).run_until_idle()
-    for task, model in [(EMBED_CLIP, "ViT-B-32__openai"), (DETECT_FACES, "buffalo_l"),
-                        (AUTO_TAG, "ViT-B-32__openai")]:  # fmt: skip
+    for task, model in [(EMBED_CLIP, "ViT-B-16-SigLIP2__webli"), (DETECT_FACES, "buffalo_l"),
+                        (AUTO_TAG, "ViT-B-16-SigLIP2__webli")]:  # fmt: skip
         assert services.store.task_status(asset, task, model) == TaskStatus.MODEL_MISSING
     assert not repo.list_jobs("failed")
     assert not any(s.ready for s in services.status().values())

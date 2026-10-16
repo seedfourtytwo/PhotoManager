@@ -353,7 +353,7 @@ export function createApi(options: ApiOptions = {}) {
 		albumMembers: (id: Id) => get<AlbumMember[]>(`/api/albums/${id}/members`),
 		setAlbumMembers: (id: Id, members: AlbumMember[]) =>
 			request<AlbumMember[]>('PUT', `/api/albums/${id}/members`, members),
-		// suggested albums (v1.12)
+		// suggested albums (v1.13)
 		albumSuggestions: () => get<AlbumSuggestion[]>('/api/album-suggestions'),
 		keepSuggestion: (key: string) =>
 			request<AlbumSummary>('POST', `/api/album-suggestions/${encodeURIComponent(key)}/keep`),

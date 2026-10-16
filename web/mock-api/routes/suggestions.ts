@@ -1,5 +1,5 @@
 /**
- * Suggested albums (v1.12, FEATURES 5.6): events proposed as albums, as the server works them
+ * Suggested albums (v1.13, FEATURES 5.6): events proposed as albums, as the server works them
  * out (backend domain/events.py, app/album_suggestions.py), on the mock library. Nothing is
  * made until Keep; each account's answers are remembered.
  */
