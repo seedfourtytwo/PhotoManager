@@ -43,8 +43,10 @@
 		ownsPhoto?: boolean;
 		/** A photo of the timeline is about to open. */
 		onopenphoto?: () => void;
+		/** Go to this month (YYYY-MM) once the photos are in: a month's card opened the Library. */
+		startAt?: string | null;
 	};
-	let { current = true, ownsPhoto = true, onopenphoto }: Props = $props();
+	let { current = true, ownsPhoto = true, onopenphoto, startAt = null }: Props = $props();
 
 	const loader = new TimelineLoader((filters, cursor) => api.assets(filters, cursor, 200));
 	const filters = $derived(filtersFromParams(page.url.searchParams));
@@ -90,6 +92,13 @@
 			})
 			.catch(() => undefined);
 	}
+
+	let started = false;
+	$effect(() => {
+		if (started || !startAt || !timeline || !loader.items.length) return;
+		started = true;
+		void timeline.jumpTo(startAt);
+	});
 
 	function reloadAll() {
 		void loader.reload();
@@ -162,7 +171,7 @@
 <svelte:window {onkeydown} />
 
 <LibraryHead
-	view="grid"
+	view="all"
 	{query}
 	title={selecting ? selectionTitle(selection.ids.size) : 'Library'}
 	line={libraryLine(total, months)}

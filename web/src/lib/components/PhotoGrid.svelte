@@ -11,6 +11,7 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { fadeIn } from '$lib/fade-in';
 	import { dropIndex, shownTiles } from '$lib/grid';
 	import { longPress } from '$lib/press';
 	import { photoAt, tileOf } from '$lib/tiles';
@@ -78,17 +79,6 @@
 	 * the very item that failed, so the same photo loaded anew (a reload) is tried again.
 	 */
 	const failed = new SvelteMap<Id, AssetOut>();
-
-	/** The photo shows once it is decoded, so it fades in whole instead of painting in. */
-	function fadeIn(img: HTMLImageElement) {
-		const show = () =>
-			void img
-				.decode()
-				.catch(() => undefined)
-				.then(() => (img.dataset.in = ''));
-		if (img.complete && img.naturalWidth) show();
-		else img.addEventListener('load', show, { once: true });
-	}
 
 	async function focusTile(id: Id) {
 		own = id;
