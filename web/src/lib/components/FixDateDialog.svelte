@@ -14,6 +14,7 @@
 	} from '$lib/dates';
 	import DateField from './DateField.svelte';
 	import Dialog from './Dialog.svelte';
+	import Icon from './Icon.svelte';
 
 	type Props = { items: AssetOut[]; onclose: () => void; ondone: () => void };
 	let { items, onclose, ondone }: Props = $props();
@@ -40,6 +41,8 @@
 	const problem = $derived(change ? dateProblem(items, change) : null);
 	const preview = $derived(change && !problem ? previewDateChange(items, change) : []);
 	const SHOWN = 5;
+	/** Where the days stepper stops: a century. More can still be typed. */
+	const MAX_DAYS = 36_500;
 
 	/** Undo: the previous dates, re-set (the server marks them as set by hand). */
 	async function putBack(requests: ReturnType<typeof undoDateChange>) {
@@ -75,24 +78,54 @@
 	}
 </script>
 
+{#snippet stepper(name: string, value: number, max: number, set: (next: number) => void)}
+	<div class="step">
+		<span id="{uid}-{name}" class="name">{name}</span>
+		<button
+			type="button"
+			class="icon-button filled"
+			aria-label="Fewer {name}"
+			title="Fewer {name}"
+			disabled={!(value > 0)}
+			onclick={() => set(Math.max(0, (value || 0) - 1))}><Icon name="minus" /></button
+		>
+		<input
+			type="number"
+			min="0"
+			{max}
+			aria-labelledby="{uid}-{name}"
+			{value}
+			oninput={(e) => set(e.currentTarget.valueAsNumber)}
+		/>
+		<button
+			type="button"
+			class="icon-button filled"
+			aria-label="More {name}"
+			title="More {name}"
+			disabled={(value || 0) >= max}
+			onclick={() => set(Math.min(max, (value || 0) + 1))}><Icon name="plus" /></button
+		>
+	</div>
+{/snippet}
+
 <Dialog title="Fix date" {onclose}>
 	<p class="quiet">
 		{photos(items.length)}. You can undo the change right after.
 	</p>
-	<div class="modes" role="radiogroup" aria-label="How to change the date">
+	<div class="segmented wide" role="radiogroup" aria-label="How to change the date">
 		<label><input type="radio" bind:group={mode} value="shift" /> Shift by</label>
 		<label><input type="radio" bind:group={mode} value="set" /> Set exactly</label>
 	</div>
 
 	{#if mode === 'shift'}
-		<div class="shift">
-			<select bind:value={sign} aria-label="Direction">
-				<option value={1}>later</option>
-				<option value={-1}>earlier</option>
-			</select>
-			<label><input type="number" min="0" bind:value={days} /> days</label>
-			<label><input type="number" min="0" max="23" bind:value={hours} /> hours</label>
-			<label><input type="number" min="0" max="59" bind:value={minutes} /> minutes</label>
+		<div class="segmented wide" role="radiogroup" aria-label="Direction">
+			<label><input type="radio" bind:group={sign} value={-1} /> Earlier</label>
+			<label><input type="radio" bind:group={sign} value={1} /> Later</label>
+		</div>
+		<div class="tiles">
+			{@render stepper('days', days, MAX_DAYS, (next) => (days = next))}
+			{@render stepper('hours', hours, 23, (next) => (hours = next))}
+			{@render stepper('minutes', minutes, 59, (next) => (minutes = next))}
 		</div>
 	{:else}
 		<div class="exact">
@@ -107,8 +140,8 @@
 				{#each preview.slice(0, SHOWN) as row (row.id)}
 					<tr>
 						<td class="quiet">{formatShort(row.before)}</td>
-						<td aria-hidden="true">→</td>
-						<td>{formatShort(row.after)}</td>
+						<td class="quiet" aria-hidden="true">→</td>
+						<td class="after">{formatShort(row.after)}</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -128,51 +161,69 @@
 	p {
 		margin: 0;
 	}
-	.modes {
+	/* The two questions as segmented controls across the sheet. */
+	.segmented.wide {
 		display: flex;
-		gap: 0 var(--s-5);
-		margin: var(--s-4) 0 var(--s-3);
+		margin-top: var(--s-4);
 	}
-	.modes label {
-		color: var(--ink);
+	.segmented.wide label {
+		flex: 1 1 0;
+	}
+	/* Days, hours and minutes: a row each, the number between − and +. */
+	.tiles {
+		margin-top: var(--s-3);
+		border-radius: var(--r-1);
+	}
+	.step {
 		display: flex;
-		gap: var(--s-2);
 		align-items: center;
-		min-height: 1.75rem;
+		gap: var(--s-2);
+		padding: var(--s-1) var(--s-2) var(--s-1) var(--s-4);
+		background: var(--tile);
 	}
-	.shift {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--s-2) var(--s-4);
-		align-items: baseline;
-	}
-	.shift label {
-		white-space: nowrap;
-	}
-	.shift input {
-		width: 3rem;
-		text-align: right;
+	.name {
+		flex: 1;
 		color: var(--ink);
+		text-transform: capitalize;
+	}
+	.step .icon-button.filled {
+		background: var(--tint);
+	}
+	.step .icon-button:disabled {
+		color: var(--ink-3);
+	}
+	.step input {
+		width: 3.5rem;
+		text-align: center;
+		color: var(--ink);
+		background: transparent;
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+	.step input::-webkit-inner-spin-button,
+	.step input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
 	}
 	.exact {
 		display: grid;
 		gap: var(--s-1);
+		margin-top: var(--s-4);
 	}
+	/* Before → after, the new date in ink and a little heavier. */
 	table {
 		margin-top: var(--s-4);
 		border-collapse: collapse;
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 	}
 	td {
 		padding: var(--s-1) var(--s-2) var(--s-1) 0;
 		white-space: nowrap;
 	}
+	.after {
+		font-weight: 600;
+	}
 	.problem {
 		margin-top: var(--s-4);
-	}
-	@media (pointer: coarse) {
-		.modes label {
-			min-height: var(--target);
-		}
 	}
 </style>

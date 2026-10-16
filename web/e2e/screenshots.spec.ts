@@ -136,7 +136,7 @@ test('every screen', async ({ page }, info) => {
 	await shot(page, '04c-loupe-more', p);
 	await page.keyboard.press('Escape');
 	await loupeAction(page, 'Fix date');
-	await page.getByLabel('Direction').selectOption({ label: 'earlier' });
+	await page.getByRole('radio', { name: 'Earlier' }).check();
 	await page.getByRole('spinbutton').nth(1).fill('1');
 	await shot(page, '17-fix-date', p);
 	// A date copied from an American page: tidied, and the dialog says how it read it.

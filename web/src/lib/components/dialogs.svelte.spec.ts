@@ -29,7 +29,7 @@ describe('FixDateDialog', () => {
 		const sent = stubFetch(() => ({ updated: 2 }));
 		const ondone = vi.fn();
 		render(FixDateDialog, { items, onclose: () => {}, ondone });
-		await page.getByRole('combobox', { name: 'Direction' }).selectOptions('earlier');
+		await page.getByRole('radio', { name: 'Earlier' }).click();
 		await page.getByRole('spinbutton', { name: 'hours' }).fill('1');
 		await page.getByRole('spinbutton', { name: 'minutes' }).fill('30');
 		await expect.element(page.getByRole('cell', { name: '4 Jul 2019, 17:00' })).toBeInTheDocument();
@@ -40,6 +40,35 @@ describe('FixDateDialog', () => {
 			url: '/api/assets/dates',
 			body: { ids: [1, 2], shift_minutes: -90 }
 		});
+	});
+
+	it('Earlier and Later are one choice, later first', async () => {
+		stubFetch(() => ({}));
+		render(FixDateDialog, { items, onclose: () => {}, ondone: () => {} });
+		const direction = page.getByRole('radiogroup', { name: 'Direction' });
+		await expect.element(direction.getByRole('radio', { name: 'Later' })).toBeChecked();
+		await direction.getByRole('radio', { name: 'Earlier' }).click();
+		await expect.element(direction.getByRole('radio', { name: 'Later' })).not.toBeChecked();
+	});
+
+	it('steppers count up and down, never under nothing nor past a whole day or hour', async () => {
+		const sent = stubFetch(() => ({ updated: 2 }));
+		const ondone = vi.fn();
+		render(FixDateDialog, { items, onclose: () => {}, ondone });
+		const hours = page.getByRole('spinbutton', { name: 'hours' });
+		await expect.element(page.getByRole('button', { name: 'Fewer hours' })).toBeDisabled();
+		await page.getByRole('button', { name: 'More hours' }).click();
+		await page.getByRole('button', { name: 'More hours' }).click();
+		await page.getByRole('button', { name: 'More hours' }).click();
+		await page.getByRole('button', { name: 'Fewer hours' }).click();
+		await expect.element(hours).toHaveValue(2);
+		await page.getByRole('spinbutton', { name: 'minutes' }).fill('59');
+		await expect.element(page.getByRole('button', { name: 'More minutes' })).toBeDisabled();
+		await page.getByRole('button', { name: 'More days' }).click();
+		await expect.element(page.getByRole('cell', { name: '5 Jul 2019, 21:29' })).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Change date' }).click();
+		await vi.waitFor(() => expect(ondone).toHaveBeenCalled());
+		expect(sent.at(-1)?.body).toEqual({ ids: [1, 2], shift_minutes: 24 * 60 + 2 * 60 + 59 });
 	});
 
 	it('a shift out of the calendar says so in a sentence, and nothing breaks', async () => {

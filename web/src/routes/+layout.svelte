@@ -170,7 +170,7 @@
 {/if}
 
 <p
-	class="notice"
+	class="notice glass"
 	class:shown={notice.text}
 	role="status"
 	aria-live="polite"
@@ -227,7 +227,8 @@
 		padding: var(--s-2) var(--s-3);
 		border-radius: var(--r-1);
 	}
-	/* Toast: one quiet line on a raised slip; actions sit inline as words. */
+	/* Toast: one line on a glass slip (utilities.css .glass, with its edge), actions inline as
+	   bold words. It pops up from the bottom on the spring. */
 	.notice {
 		position: fixed;
 		/* it is a popover (see the script): nothing of the browser's own placing is kept */
@@ -238,11 +239,16 @@
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);
-		background: var(--raised);
 		color: var(--ink);
 		border: 0; /* a popover's own border would show */
-		border-radius: var(--r-2);
-		box-shadow: var(--lift);
+		border-radius: var(--r-2); /* a capsule on one line; a long message wraps inside it */
+		box-shadow: var(--glass-edge), var(--lift);
+		min-height: var(--target);
+		transform-origin: bottom center;
+		transition:
+			opacity var(--motion) var(--ease),
+			scale var(--motion-sheet) var(--ease-spring),
+			translate var(--motion-sheet) var(--ease-spring);
 		padding: var(--s-2) var(--s-4);
 		font-size: var(--fs-14);
 		max-width: min(40rem, calc(100vw - 2 * var(--s-4)));
@@ -257,6 +263,13 @@
 	}
 	.notice:not(.shown) {
 		display: none;
+	}
+	@starting-style {
+		.notice.shown {
+			opacity: 0;
+			scale: 0.9;
+			translate: 0 var(--s-3);
+		}
 	}
 	/* In the photo view the bottom belongs to its bar: the toast sits under Close and Info. */
 	:global(dialog[data-photo-view]) > .notice {

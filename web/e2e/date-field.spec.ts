@@ -61,7 +61,7 @@ test('fix date: a month-first date is converted, and the dialog says it read it 
 	const { dialog, field } = await openSetExactly(page);
 	await paste(page, field, '7/25/2019 6:30 PM');
 	await expect(field).toHaveValue('25/07/2019 18:30:00');
-	await expect(dialog.getByText('Read as month first: 25 July 2019')).toBeVisible();
+	await expect(dialog.getByText('“7/25/2019” was read month first: 25 July 2019')).toBeVisible();
 	await expect(dialog.getByRole('cell').last()).toHaveText('25 Jul 2019, 18:30');
 });
 

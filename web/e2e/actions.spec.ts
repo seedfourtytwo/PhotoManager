@@ -84,7 +84,7 @@ test('fix date: shift a selection with a before → after preview', async ({ pag
 	await selectTiles(page, [0]);
 	await selectionAction(page, 'Fix date');
 	const dialog = page.getByRole('dialog', { name: 'Fix date' });
-	await dialog.getByLabel('Direction').selectOption({ label: 'earlier' });
+	await dialog.getByRole('radio', { name: 'Earlier' }).check();
 	await dialog.getByRole('spinbutton').nth(1).fill('2');
 	const preview = dialog.getByRole('table', { name: 'Before and after' });
 	await expect(preview.getByRole('row')).toHaveCount(1);
