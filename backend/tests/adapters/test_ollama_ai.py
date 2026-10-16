@@ -17,7 +17,7 @@ Handler = Callable[[httpx.Request], httpx.Response]
 SETTINGS = OllamaSettings(caption_model="vision:4b", plan_model="planner:8b")
 CONTEXT = LibrarySummary(
     assets=(AssetSummary(1, "2019-07-04", "Lyon", ("beach",)), AssetSummary(2, "2019-07-05")),
-    layouts=("full", "grid-4"),
+    layouts={"full": 1, "grid-2": 2},
 )
 GOOD_PLAN = {
     "title": "Summer",
@@ -25,7 +25,7 @@ GOOD_PLAN = {
         {
             "title": "Beach",
             "asset_ids": [1, 2],
-            "layout_hint": "grid-4",
+            "layout_hint": "grid-2",
             "captions": [{"asset_id": 1, "text": "Waves"}],
         }
     ],
@@ -224,15 +224,17 @@ def test_plan_album_returns_a_validated_plan() -> None:
     fake = FakeOllama([json.dumps(GOOD_PLAN)])
     provider, log = _provider(fake)
     plan = provider.plan_album("our summer", CONTEXT)
-    assert plan == AlbumPlan("Summer", (PlanSection("Beach", (1, 2), "grid-4", {1: "Waves"}),))
+    assert plan == AlbumPlan("Summer", (PlanSection("Beach", (1, 2), "grid-2", {1: "Waves"}),))
     (body,) = fake.chat_bodies()
     assert body["model"] == "planner:8b"
     schema = body["format"]
     assert schema["properties"]["sections"]["items"]["properties"]["layout_hint"]["enum"] == [  # type: ignore[index]
         "full",
-        "grid-4",
+        "grid-2",
     ]
-    assert "1|2019-07-04|Lyon|beach" in body["messages"][-1]["content"]  # type: ignore[index]
+    asked = body["messages"][-1]["content"]  # type: ignore[index]
+    assert "1|2019-07-04|Lyon|beach" in asked
+    assert "full (1 photo a page), grid-2 (2 photos a page)" in asked
     assert log.calls[0].capability == "plan_album"
     assert log.calls[0].request["photos"] == 2
 
