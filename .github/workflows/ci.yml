@@ -1,20 +1,53 @@
 name: CI
 
+# GitHub's free plan gives a private repository 2,000 runner minutes a month, and running every
+# job bills about 15. So each change is checked on the laptop before it merges
+# (`just check-report`, which shows the result on the pull request); here, a pull request only
+# gets the secret scan, and main gets everything once a day, after a day with commits (what
+# two pull requests do together). Run it by hand on any branch: `gh workflow run ci.yml --ref <branch>`.
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: read  # the secret scan lists the pull request's commits
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # The secret scan, and whether the full checks run: one short job, not two (each job is
+  # billed in whole minutes).
+  secrets:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.full.outputs.full }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: full
+        run: |
+          case "${{ github.event_name }}" in
+            workflow_dispatch) echo "full=true" >> "$GITHUB_OUTPUT" ;;
+            schedule)  # a quiet day on main was checked the day before
+              if [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then
+                echo "full=true" >> "$GITHUB_OUTPUT"
+              fi ;;
+          esac
+
   backend:
+    needs: secrets
+    if: needs.secrets.outputs.full == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -53,6 +86,8 @@ jobs:
           exit 1
 
   web:
+    needs: secrets
+    if: needs.secrets.outputs.full == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -77,13 +112,3 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
-
-  secrets:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

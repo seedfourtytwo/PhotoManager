@@ -11,8 +11,10 @@ blocks you, raise it in the PR; don't quietly break it.
 2. **Test first.** Red → green → refactor. The PR shows the failing test commit before the fix
    commit (or the test is clearly written against the spec, not the implementation).
 3. **Main is always releasable.** `just check` green, app starts, migrations apply. CI
-   (`.github/workflows/ci.yml`) runs the same checks on every pull request; the browser
-   tests (`just e2e`, `just e2e-mock`) run locally.
+   (`.github/workflows/ci.yml`) runs the same checks on main once a day after a day with
+   commits; a pull request gets the secret scan there and `just check` on the laptop
+   (`just check-report` shows it on the pull request), which keeps within the free plan's
+   2,000 minutes a month. The browser tests (`just e2e`, `just e2e-mock`) run locally.
 4. **No secrets in the repo.** gitleaks runs in pre-commit and in CI.
 5. **Real photos stay home.** They never go to a cloud workspace, GitHub or any other service;
    development and CI use synthetic fixtures only. Real-data dry runs (QA step 2) run on the

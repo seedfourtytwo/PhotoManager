@@ -57,6 +57,21 @@ exposure-backfill:
 # Everything CI runs, in the same order. Must pass before every push.
 check: lint types test
 
+# A pull request's check: free, where CI minutes are not (see ci.yml). Commit and push first.
+# Run `just check` here and show the result on GitHub as the commit's check "local / just check".
+check-report:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    sha=$(git rev-parse HEAD)
+    if [ -n "$(git status --porcelain)" ]; then echo "commit first: the result belongs to a commit"; exit 1; fi
+    git fetch -q origin
+    if [ -z "$(git branch -r --contains "$sha")" ]; then echo "push first: GitHub must know ${sha:0:7}"; exit 1; fi
+    if just check; then state=success; else state=failure; fi
+    gh api "repos/{owner}/{repo}/statuses/$sha" -f state="$state" -f context="local / just check" \
+        -f description="just check on $(hostname)" > /dev/null
+    echo "reported $state for ${sha:0:7}"
+    [ "$state" = success ]
+
 lint:
     cd backend && uv run ruff check . && uv run ruff format --check .
     cd backend && uv run lint-imports
