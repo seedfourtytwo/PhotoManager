@@ -2,29 +2,35 @@
 	import type { Snippet } from 'svelte';
 	import Icon from '../Icon.svelte';
 
-	/** A block of Home: its title (a link when it has a page), an action on the same line. */
+	/**
+	 * A block of Home under a section title (spec flight/home §0.2, SectionHeader): the title,
+	 * a link when the block has a page, "See all" at the right, and one quiet line under it.
+	 */
 	type Props = {
 		title: string;
 		/** The title opens this page. */
 		href?: string;
-		/** A word at the right of the title's line ("Choose", "All photos"); `hint` completes it for a screen reader. */
+		/** "See all" at the right of the title; `hint` completes it for a screen reader. */
 		more?: { href: string; label: string; hint?: string };
+		/** One quiet line under the title ("30 photos arrived from Old hard disk"). */
+		line?: string;
 		children: Snippet;
 	};
-	let { title, href, more, children }: Props = $props();
+	let { title, href, more, line, children }: Props = $props();
 	const id = $props.id();
 </script>
 
 <section class="block" aria-labelledby={id}>
 	<div class="label-line">
-		<h2 {id}>
-			{#if href}<a {href}>{title}<Icon name="chevron" /></a>{:else}{title}{/if}
-		</h2>
+		<div class="heads">
+			<h2 {id}>
+				{#if href}<a {href}>{title}<Icon name="chevron" /></a>{:else}{title}{/if}
+			</h2>
+			{#if line}<p class="line">{line}</p>{/if}
+		</div>
 		{#if more}
 			<a class="more" href={more.href}
-				>{more.label}{#if more.hint}<span class="visually-hidden"> {more.hint}</span>{/if}<Icon
-					name="chevron"
-				/></a
+				>{more.label}{#if more.hint}<span class="visually-hidden"> {more.hint}</span>{/if}</a
 			>
 		{/if}
 	</div>
@@ -33,39 +39,45 @@
 
 <style>
 	.block {
-		margin-top: var(--s-6);
+		margin-top: var(--s-7);
 	}
 	.label-line {
 		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		justify-content: space-between;
-		gap: var(--s-2);
-		min-height: var(--target);
-		margin-bottom: var(--s-2);
+		gap: var(--s-3);
+		margin-bottom: var(--s-3);
 	}
-	h2 a,
-	.more {
+	.heads {
+		min-width: 0;
+	}
+	h2 {
+		margin: 0;
+	}
+	h2 a {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--fine);
 		color: inherit;
 		text-decoration: none;
 	}
-	h2 :global(svg),
-	.more :global(svg) {
-		width: var(--s-4);
-		height: var(--s-4);
+	h2 :global(svg) {
+		width: var(--s-5);
+		height: var(--s-5);
 		color: var(--ink-3);
 	}
-	@media (max-width: 639px) {
-		.label-line {
-			padding-inline: var(--s-2);
-		}
+	.line {
+		margin: var(--s-1) 0 0;
+		color: var(--ink-2);
+		font-size: var(--fs-13);
 	}
 	.more {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
 		min-height: var(--target);
 		color: var(--ink-2);
-		font-weight: 600;
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
+		text-decoration: none;
 	}
 </style>

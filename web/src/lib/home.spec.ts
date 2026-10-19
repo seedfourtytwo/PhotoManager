@@ -5,9 +5,11 @@ import {
 	dateRange,
 	dayLine,
 	dayNote,
+	heroEyebrow,
 	homeBlocks,
 	inWords,
 	memoryLine,
+	nothingToday,
 	previewOf,
 	rediscoverNote,
 	rediscoverTitle,
@@ -128,14 +130,14 @@ const fresh = (count: number, sources: [string, number][]): NewArrivals => ({
 
 describe('arrivalsSentence: what came this week', () => {
 	it.each([
-		[fresh(42, [['Léa’s iPhone', 42]]), '42 photos arrived from Léa’s iPhone.'],
-		[fresh(1, [['Léa’s iPhone', 1]]), '1 photo arrived from Léa’s iPhone.'],
+		[fresh(42, [['Léa’s iPhone', 42]]), '42 photos arrived from Léa’s iPhone'],
+		[fresh(1, [['Léa’s iPhone', 1]]), '1 photo arrived from Léa’s iPhone'],
 		[
 			fresh(50, [
 				['Léa’s iPhone', 42],
 				['Dad’s camera', 8]
 			]),
-			'50 photos arrived from Léa’s iPhone and Dad’s camera.'
+			'50 photos arrived from Léa’s iPhone and Dad’s camera'
 		],
 		[
 			fresh(1300, [
@@ -144,9 +146,9 @@ describe('arrivalsSentence: what came this week', () => {
 				['C', 50],
 				['D', 50]
 			]),
-			'1,300 photos arrived from A, B, C and 1 other.'
+			'1,300 photos arrived from A, B, C and 1 other'
 		],
-		[fresh(5, []), '5 photos arrived this week.']
+		[fresh(5, []), '5 photos arrived this week']
 	])('%#: %j', (arrivals, sentence) => {
 		expect(arrivalsSentence(arrivals)).toBe(sentence);
 	});
@@ -185,6 +187,18 @@ describe('rediscoverNote: the day and the place under it', () => {
 		['a guessed date and no place: nothing', at({ date_source: 'file_mtime', place: null }), '']
 	])('%s', (_, asset, note) => {
 		expect(rediscoverNote(asset)).toBe(note);
+	});
+});
+
+describe('heroEyebrow: the small label over a hero’s title', () => {
+	it('the block and the photo’s year', () => {
+		expect(heroEyebrow('Rediscover', makeAsset(1, '2016-03-12T10:00:00'))).toBe(
+			'Rediscover · 2016'
+		);
+	});
+	it('a guessed year is not told', () => {
+		const guessed = makeAsset(1, '2016-03-12T10:00:00', 4, 3, { date_source: 'file_mtime' });
+		expect(heroEyebrow('Rediscover', guessed)).toBe('Rediscover');
 	});
 });
 
@@ -263,6 +277,31 @@ describe('homeBlocks: the blocks Home draws, in the account’s order', () => {
 		expect(
 			homeBlocks(all, { pinned: [], people: [], suggested: [] }, ['pinned', 'people', 'suggested'])
 		).toEqual([]);
+	});
+});
+
+describe('nothingToday: the blocks Home answers empty, for a hint in Settings', () => {
+	const empty: HomeData = {
+		on_this_day: null,
+		rediscover: [],
+		memories: [],
+		years: [],
+		new: fresh(0, [])
+	};
+
+	it('names each block of Home’s own answer that has nothing', () => {
+		expect(nothingToday(empty)).toEqual(['on_this_day', 'rediscover', 'memories', 'years', 'new']);
+		expect(nothingToday({ ...empty, on_this_day: day(), new: fresh(3, []) })).toEqual([
+			'rediscover',
+			'memories',
+			'years'
+		]);
+	});
+
+	it('never names the blocks Home asks for elsewhere (pinned, people, suggested)', () => {
+		const named = nothingToday(empty);
+		for (const other of ['pinned', 'people', 'suggested'] as const)
+			expect(named).not.toContain(other);
 	});
 });
 

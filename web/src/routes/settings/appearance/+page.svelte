@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { chooseHome, chooseMode } from '$lib/app.svelte';
+	import type { HomeSection } from '$lib/api';
+	import { api, chooseHome, chooseMode } from '$lib/app.svelte';
 	import SectionHead from '$lib/components/admin/SectionHead.svelte';
 	import Segmented from '$lib/components/ui/Segmented.svelte';
 	import TileGroup from '$lib/components/ui/TileGroup.svelte';
-	import OrderList from '$lib/components/ui/OrderList.svelte';
-	import { SECTION_NAMES } from '$lib/home';
+	import SortableList from '$lib/components/ui/SortableList.svelte';
+	import { SECTION_ICONS, SECTION_NAMES, nothingToday } from '$lib/home';
 	import { HOME_SECTIONS, look, type Mode } from '$lib/look';
 
 	const modes: { value: Mode; label: string; icon: 'moon' | 'sun' | 'phone' }[] = [
@@ -12,6 +13,21 @@
 		{ value: 'light', label: 'Light', icon: 'sun' },
 		{ value: 'system', label: 'Auto', icon: 'phone' }
 	];
+
+	// "Nothing today" beside a block Home has nothing for, so an empty one is not taken for a
+	// broken one. Without an answer there is no hint.
+	let quiet = $state<Partial<Record<HomeSection, string>>>({});
+	$effect(() => {
+		if (!look.saved.showToday) return;
+		let left = false;
+		api
+			.home()
+			.then((home) => {
+				if (!left) quiet = Object.fromEntries(nothingToday(home).map((s) => [s, 'Nothing today']));
+			})
+			.catch(() => {});
+		return () => (left = true);
+	});
 </script>
 
 <SectionHead title="Appearance" />
@@ -31,11 +47,13 @@
 
 	{#if look.saved.showToday}
 		<div id="home">
-			<OrderList
+			<SortableList
 				label="Home shows, in this order"
 				all={HOME_SECTIONS}
 				chosen={look.saved.homeSections}
 				names={SECTION_NAMES}
+				icons={SECTION_ICONS}
+				hints={quiet}
 				onchange={(sections) => chooseHome(sections)}
 			/>
 		</div>

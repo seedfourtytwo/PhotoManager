@@ -2,6 +2,7 @@
 import type { AssetOut, HomeData, HomeSection, Memory, NewArrivals, OnThisDay } from './api/types';
 import { MONTHS, formatLongDay } from './dates';
 import { formatCount, photos } from './format';
+import type { IconName } from './icons';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const NUMBERS = [
@@ -62,6 +63,11 @@ export function rediscoverNote(asset: AssetOut): string {
 	return [day, place].filter(Boolean).join(', ');
 }
 
+/** The small label over a hero's title: "Rediscover · 2016"; a guessed year is not told. */
+export function heroEyebrow(name: string, asset: AssetOut): string {
+	return guessed(asset) ? name : `${name} · ${asset.taken_at.slice(0, 4)}`;
+}
+
 /** The years a story of single photos spans: "2016", "2012 to 2019"; guessed dates left out. */
 export function storyYears(items: readonly AssetOut[]): string {
 	const years = items.filter((a) => !guessed(a)).map((a) => Number(a.taken_at.slice(0, 4)));
@@ -117,11 +123,14 @@ export function memoryLine(memory: Memory): string {
 		: dateRange(memory.from, memory.to);
 }
 
-/** "42 photos arrived from Léa’s iPhone." Several folders are joined as one says them. */
+/**
+ * "42 photos arrived from Léa’s iPhone": the line under New this week's title, so no full stop.
+ * Several folders are joined as one says them.
+ */
 export function arrivalsSentence(arrivals: NewArrivals): string {
 	const what = `${photos(arrivals.count)} arrived`;
 	const from = inWords(arrivals.sources.map((source) => source.label));
-	return from ? `${what} from ${from}.` : `${what} this week.`;
+	return from ? `${what} from ${from}` : `${what} this week`;
 }
 
 /** Each block of Home by its name, as its heading says it. */
@@ -135,6 +144,30 @@ export const SECTION_NAMES: Record<HomeSection, string> = {
 	people: 'People',
 	new: 'New this week'
 };
+
+/** The small picture of each block, in Settings' list of them. */
+export const SECTION_ICONS: Record<HomeSection, IconName> = {
+	on_this_day: 'calendar',
+	rediscover: 'sun',
+	memories: 'album',
+	suggested: 'plus',
+	years: 'grid',
+	pinned: 'pin',
+	people: 'person',
+	new: 'sparkle'
+};
+
+/** The blocks of Home's own answer that have nothing today (the others are asked for apart). */
+export function nothingToday(home: HomeData): HomeSection[] {
+	const empty: [HomeSection, boolean][] = [
+		['on_this_day', home.on_this_day === null],
+		['rediscover', home.rediscover.length === 0],
+		['memories', home.memories.length === 0],
+		['years', home.years.length === 0],
+		['new', home.new.count === 0]
+	];
+	return empty.filter(([, none]) => none).map(([section]) => section);
+}
 
 /** What Home asks for besides `HomeData`; null until it is answered. */
 export type HomeExtras = {

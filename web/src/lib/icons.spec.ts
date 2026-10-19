@@ -24,6 +24,7 @@ describe('icons', () => {
 			'folder',
 			'fullscreen',
 			'grid',
+			'grip',
 			'hidden',
 			'home',
 			'inbox',

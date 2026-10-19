@@ -1,4 +1,4 @@
-import { page } from 'vitest/browser';
+import { page, userEvent, type Locator } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { ManagedUser } from '$lib/api';
@@ -19,6 +19,14 @@ const donna: ManagedUser = { ...admin, id: 2, username: 'donna', display_name: '
 const hers = parseLook({ theme: 'album', mode: 'light', textScale: 1.15, startPage: 'library' });
 const mine = parseLook({ accentHue: 120 });
 const root = document.documentElement;
+
+/** A row moved one place up with the keyboard, on its grip (SortableList). */
+async function moveUp(grip: Locator) {
+	(grip.element() as HTMLElement).focus();
+	await userEvent.keyboard(' ');
+	await userEvent.keyboard('{ArrowUp}');
+	await userEvent.keyboard(' ');
+}
 
 type Call = { method: string; url: string; body: unknown };
 
@@ -196,7 +204,7 @@ describe('LookForm', () => {
 		render(LookForm, { user: donna, onclose: () => {} });
 		const rows = form().getByRole('group', { name: 'Collections shows, in this order' });
 		await rows.getByRole('switch', { name: 'Places' }).click();
-		await rows.getByRole('button', { name: 'Move Albums up' }).click();
+		await moveUp(rows.getByRole('button', { name: 'Reorder Albums' }));
 		await rows.getByRole('switch', { name: 'People' }).click();
 		await expect.element(rows.getByRole('switch', { name: 'Albums' })).toBeDisabled();
 		await button('Save for Donna').click();
@@ -210,7 +218,7 @@ describe('LookForm', () => {
 		render(LookForm, { user: donna, onclose: () => {} });
 		const sections = form().getByRole('group', { name: 'Home shows, in this order' });
 		await sections.getByRole('switch', { name: 'Rediscover' }).click();
-		await sections.getByRole('button', { name: 'Move Pinned up' }).click();
+		await moveUp(sections.getByRole('button', { name: 'Reorder Pinned' }));
 		await button('Save for Donna').click();
 		await vi.waitFor(() =>
 			expect(calls.at(-1)?.body).toMatchObject({

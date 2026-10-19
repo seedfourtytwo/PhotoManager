@@ -96,14 +96,33 @@ test('home: each block shows when it has photos, top to bottom, and not when it 
 		'People',
 		'New this week'
 	]);
-	await expect(main.getByText(/^\d+ photos arrived from /)).toBeVisible();
-	await expect(main.getByRole('link', { name: /^Choose/ })).toHaveAttribute('href', '/');
-	await expect(main.getByRole('link', { name: 'All photos' })).toHaveAttribute('href', '/');
+	await expect(main.getByText(/^\d+ photos arrived from [^.]+$/)).toBeVisible();
+	await expect(main.getByRole('link', { name: 'See all pinned photos' })).toHaveAttribute(
+		'href',
+		'/?pinned=true'
+	);
+	await expect(main.getByRole('link', { name: 'See all photos, in the Library' })).toHaveAttribute(
+		'href',
+		'/'
+	);
 	await expect(main.getByRole('link', { name: 'People' })).toHaveAttribute('href', '/people');
-	// a cover keeps its shape: never cropped
-	const cover = main.getByRole('region', { name: 'On this day' }).locator('img');
-	const shape = await cover.evaluate((img: HTMLImageElement) => getComputedStyle(img).objectFit);
-	expect(shape).toBe('contain');
+	// The first block leads: its photo fills the screen's width under the bars, cropped to fill,
+	// with the date on it; no large title over an empty gap.
+	const lead = main.getByRole('region', { name: 'On this day' }).locator('.hero');
+	const width = page.viewportSize()!.width;
+	const box = (await lead.boundingBox())!;
+	expect(box.x).toBe(0);
+	expect(box.y).toBeLessThanOrEqual(0);
+	expect(Math.abs(box.width - width)).toBeLessThan(20);
+	const shape = await lead
+		.locator('img')
+		.evaluate((img: HTMLImageElement) => getComputedStyle(img).objectFit);
+	expect(shape).toBe('cover');
+	await expect(lead.locator('.dateline')).toBeVisible();
+	await expect(lead.locator('.eyebrow')).toHaveText(`On this day · ${day!.day.slice(0, 4)}`);
+	await expect(main.getByRole('heading', { level: 1, name: 'Home' })).toHaveClass(
+		/visually-hidden/
+	);
 	await expectAccessible(page);
 
 	// Nothing on this day, to rediscover, no memories or years, nothing new: not there at all.
@@ -146,15 +165,25 @@ test('home: with nothing to show it says so in one sentence, and what to do', as
 	const home = main.locator('.page').first();
 
 	await page.goto('/home');
-	await expect(empty).toContainText('No photos here yet.');
-	await expect(empty.getByRole('link', { name: 'Library' })).toBeVisible();
+	await expect(empty).toContainText('No photos yet');
+	await expect(empty.getByRole('link', { name: 'Upload photos' })).toHaveAttribute('href', '/');
+	await expect(empty.getByRole('link', { name: 'Add a folder' })).toHaveAttribute(
+		'href',
+		'/settings/folders'
+	);
 	await expect(home.getByRole('heading', { level: 2 })).toHaveCount(0);
 
 	// Photos, but nothing pinned, no trip, nothing on this day or this week.
 	libraryEmpty = false;
 	await page.reload();
-	await expect(empty).toContainText('Your story starts here.');
-	await expect(empty.getByRole('link', { name: 'You' })).toHaveAttribute('href', '/settings');
+	await expect(empty).toContainText('Nothing on Home today');
+	await expect(empty).toContainText('Settings → Appearance');
+	await expect(empty.getByRole('link', { name: 'Choose what Home shows' })).toHaveAttribute(
+		'href',
+		'/settings/appearance#home'
+	);
+	// without a hero, the date sits over a large title
+	await expect(home.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 	await expect(home.getByRole('heading', { level: 2 })).toHaveCount(0);
 	await expectAccessible(page);
 });
@@ -166,8 +195,12 @@ test('You → Home: the account turns blocks off and moves them; its Home follow
 	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
 	await expect(editor.getByRole('switch')).toHaveCount(8);
 	await editor.getByRole('switch', { name: 'Rediscover' }).click();
-	for (let step = 0; step < 3; step++)
-		await editor.getByRole('button', { name: 'Move Years up' }).click();
+	// moved with the keyboard on its grip: picked up, three places up, dropped
+	await editor.getByRole('button', { name: 'Reorder Years' }).focus();
+	await page.keyboard.press('Space');
+	for (let step = 0; step < 3; step++) await page.keyboard.press('ArrowUp');
+	await page.keyboard.press('Space');
+	await expect(editor.locator('.said')).toHaveText('Years dropped, 1 of 7');
 	const order = ['years', 'on_this_day', 'memories', 'suggested', 'pinned', 'people', 'new'];
 	await expect
 		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections)
@@ -192,6 +225,33 @@ test('You → Home: the account turns blocks off and moves them; its Home follow
 			expect(otd).toBeGreaterThan(years);
 		}
 	}
+});
+
+test('You → Home: a block dragged by its grip to the top is saved there', async ({ page }) => {
+	await signIn(page, '/settings/appearance');
+	const editor = page.getByRole('group', { name: 'Home shows, in this order' });
+	const shown = editor.getByRole('list', { name: 'Shown', exact: true });
+	const grip = editor.getByRole('button', { name: 'Reorder New this week' });
+	const first = shown.getByRole('listitem').first();
+	await grip.scrollIntoViewIfNeeded();
+	const [from, to] = [(await grip.boundingBox())!, (await first.boundingBox())!];
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+	// in steps, as a hand moves: the rows step aside on the way
+	await page.mouse.move(from.x + from.width / 2, to.y + 4, { steps: 12 });
+	await page.mouse.up();
+	await expect
+		.poll(async () => (await (await page.request.get('/api/me/look')).json()).homeSections[0])
+		.toBe('new');
+	await expect(shown.getByRole('switch').first()).toHaveAccessibleName('New this week');
+	// it comes to rest: no row is left moved
+	await expect
+		.poll(() =>
+			shown
+				.getByRole('listitem')
+				.evaluateAll((rows) => rows.map((r) => (r as HTMLElement).style.transform).join(''))
+		)
+		.toBe('');
 });
 
 test('home: a memory plays full screen, steps on a tap, and closes with ×, Escape or Back', async ({
@@ -259,23 +319,33 @@ test('home: without On this day, Rediscover opens Home on a large photo that pla
 	expect(picks.length).toBeGreaterThan(1);
 	expect(picks.length).toBeLessThanOrEqual(12);
 
-	// The first photo, large and whole, titled in plain words; it plays all of them.
-	const hero = rediscover.getByRole('button', { name: /^Play: / });
+	// The first photo fills the hero, titled in plain words; it plays all of them, and the
+	// story is titled as the hero is.
+	const hero = rediscover.getByRole('button', { name: /^Play: / }).first();
 	await expect(hero).toContainText(/ years? ago|From your library|\d{4}/);
 	const shape = await hero
 		.locator('img')
 		.evaluate((img: HTMLImageElement) => getComputedStyle(img).objectFit);
-	expect(shape).toBe('contain');
+	expect(shape).toBe('cover');
+	const heroTitle = (await hero.locator('.title').textContent())!;
 	await hero.click();
-	const player = page.getByRole('dialog', { name: 'Rediscover' });
+	const player = page.getByRole('dialog', { name: heroTitle });
 	await expect(player).toBeVisible();
 	await expect(player.locator('.segment')).toHaveCount(picks.length);
 	await expectAccessible(page);
 	await page.keyboard.press('Escape');
 	await expect(player).toBeHidden();
 
-	// The others open the photo view, which steps through all of them.
+	// The others are a rail to the screen's edge, the next card peeking; each opens the
+	// photo view, which steps through all of them.
 	const grid = rediscover.getByRole('group', { name: 'Photos to rediscover' });
+	const rail = grid.getByRole('list');
+	const edge = (await rail.boundingBox())!;
+	expect(edge.x).toBe(0);
+	const onScreen = isPhone(page) ? 2.3 : 4.3;
+	expect(await rail.evaluate((ul) => ul.scrollWidth > ul.clientWidth)).toBe(
+		picks.length - 1 > onScreen
+	);
 	await grid.locator(`[data-id="${picks[1].id}"]`).click();
 	await expect(loupe(page)).toBeVisible();
 	await page.keyboard.press('Escape');
@@ -325,14 +395,22 @@ test('home: a suggested album is made only on Keep, and an answered one does not
 	await expect(card(second.title)).toHaveCount(0);
 });
 
-test('home: a year plays its story, and its heading opens the Library', async ({ page }) => {
+test('home: a year is a tile with its number on it, and plays its story', async ({ page }) => {
 	await signIn(page, '/home');
 	const year = await yearOfPhoto(page);
 	await homeWith(page, () => ({ years: [year] }));
 	await page.reload();
 	const years = page.getByRole('main').getByRole('region', { name: 'Years' });
-	await expect(years.getByRole('link', { name: 'Years' })).toHaveAttribute('href', '/');
+	// no page of years to open: the title is no link
+	await expect(years.getByRole('link', { name: 'Years' })).toHaveCount(0);
 	const cover = years.getByRole('button', { name: `Play: ${year.title} 12 photos` });
+	const numeral = cover.locator('.title');
+	expect(
+		await numeral.evaluate((el) => [
+			getComputedStyle(el).fontVariantNumeric,
+			parseFloat(getComputedStyle(el).fontSize)
+		])
+	).toEqual(['tabular-nums', isPhone(page) ? 40 : 64]);
 	await cover.click();
 	const player = page.getByRole('dialog', { name: year.title });
 	await expect(player).toBeVisible();
@@ -387,6 +465,86 @@ test('home: photos selected in the Library are pinned from the pill’s More', a
 		.click();
 	const grid = page.getByRole('group', { name: 'Pinned photos' });
 	for (const id of ids) await expect(grid.locator(`[data-id="${id}"]`)).toHaveCount(1);
+});
+
+test('home: Pinned shows two dozen at most, then See all opens the rest in the Library', async ({
+	page
+}) => {
+	await signIn(page, '/home');
+	const asked: string[] = [];
+	await page.route(/\/api\/assets\?.*pinned=true/, async (route) => {
+		asked.push(route.request().url());
+		const response = await route.fetch();
+		const answer = (await response.json()) as AssetPage;
+		// as if many more were pinned than Home shows
+		await route.fulfill({ response, json: { ...answer, next_cursor: 'more' } });
+	});
+	// one pinned photo at least (the real backend's library starts with none)
+	const id = await freshUnpinned(page);
+	expect(
+		(await page.request.patch(`/api/assets/${id}/state`, { data: { pinned: true } })).ok()
+	).toBe(true);
+	await page.reload();
+	const pinned = page.getByRole('main').getByRole('region', { name: 'Pinned' });
+	await expect(pinned).toBeVisible();
+	expect(asked.length).toBeGreaterThan(0);
+	for (const url of asked) expect(new URL(url).searchParams.get('limit')).toBe('24');
+	const strip = pinned.getByRole('group', { name: 'Pinned photos' });
+	await expect(strip.getByRole('link', { name: 'See all pinned photos' })).toHaveAttribute(
+		'href',
+		'/?pinned=true'
+	);
+	// a strip: every photo the same height, at its own shape; nothing left ragged under it
+	const heights = await strip
+		.locator('[data-id]')
+		.evaluateAll((tiles) => tiles.map((t) => Math.round(t.getBoundingClientRect().height)));
+	expect(new Set(heights)).toEqual(new Set([isPhone(page) ? 160 : 220]));
+});
+
+test('home: a photo opened from Home can go to the trash, and leaves Home at once', async ({
+	page
+}) => {
+	await signIn(page, '/home');
+	const id = await freshUnpinned(page);
+	const tile = page.getByRole('group', { name: 'New photos' }).locator(`[data-id="${id}"]`);
+	await tile.click();
+	await expect(loupe(page)).toBeVisible();
+	await loupeAction(page, 'Move to trash');
+	await expect(toast(page)).toContainText('Moved to the trash.');
+	await page.keyboard.press('Escape');
+	await expect(loupe(page)).toBeHidden();
+	await expect(tile).toHaveCount(0);
+});
+
+test.describe('as an app on an iPhone, in the light look', () => {
+	test.use({ colorScheme: 'light' });
+
+	test('the status-bar plate keeps the clock readable, except over Home’s photo', async ({
+		page
+	}) => {
+		test.skip(!isPhone(page), 'the status bar is a phone’s');
+		await signIn(page, '/home');
+		await page.request.put('/api/me/look', { data: { mode: 'light' } });
+		const cdp = await page.context().newCDPSession(page);
+		await cdp.send('Emulation.setSafeAreaInsetsOverride', {
+			insets: { top: 59, right: 0, bottom: 34, left: 0 }
+		});
+		await page.addInitScript(() =>
+			Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true })
+		);
+		const plate = page.locator('[data-status-plate]');
+
+		await page.goto('/collections');
+		await expect(plate).toBeVisible();
+		expect((await plate.boundingBox())!.height).toBe(59);
+
+		await page.goto('/home');
+		await expect(page.getByRole('main').locator('.hero').first()).toBeVisible();
+		await expect(plate).toBeHidden();
+		// scrolled past the photo, the page is light again under the clock: the plate is back
+		await page.mouse.wheel(0, 2000);
+		await expect(plate).toBeVisible();
+	});
 });
 
 /** Another tab of the same browser: signed in already, with a first page of its own. */

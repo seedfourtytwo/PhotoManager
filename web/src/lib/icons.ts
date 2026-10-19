@@ -45,6 +45,7 @@ export const ICONS = {
 	disk: ['M4 6h16v12H4z', 'M4 12h16', 'M16.5 15h.01'],
 	folder: ['M3.5 6.5h6l2 2h9V19h-17z'],
 	fullscreen: ['M4 9V4h5', 'M15 4h5v5', 'M20 15v5h-5', 'M9 20H4v-5'],
+	grip: ['M5 9h14', 'M5 15h14'],
 	grid: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
 	hidden: [
 		'M3 3l18 18',

@@ -12,14 +12,15 @@
 		Memory,
 		Person
 	} from '$lib/api';
-	import { api, library, notice, session } from '$lib/app.svelte';
-	import { peopleStrip, personName } from '$lib/collections';
-	import { errorMessage } from '$lib/format';
+	import { api, library, notice, session, viewport } from '$lib/app.svelte';
+	import { peopleStrip } from '$lib/collections';
+	import { errorMessage, formatCount } from '$lib/format';
 	import {
 		arrivalsSentence,
 		dateRange,
 		dayLine,
 		dayNote,
+		heroEyebrow,
 		homeBlocks,
 		memoryLine,
 		rediscoverNote,
@@ -28,6 +29,7 @@
 		storyYears,
 		yearsAgo
 	} from '$lib/home';
+	import { PINNED_SHOWN, RAILS, leadOf, seeAll, stripHeight } from '$lib/home-rails';
 	import {
 		LinkedPhoto,
 		LoupeTracker,
@@ -49,24 +51,25 @@
 	import { look } from '$lib/look';
 	import { collect, spread } from '$lib/story';
 	import Avatar from '$lib/components/Avatar.svelte';
-	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
 	import LibraryView from '$lib/components/LibraryView.svelte';
 	import Loupe from '$lib/components/Loupe.svelte';
-	import Portrait from '$lib/components/Portrait.svelte';
+	import FaceBubble from '$lib/components/FaceBubble.svelte';
 	import Hero from '$lib/components/home/Hero.svelte';
 	import HomeSection from '$lib/components/home/HomeSection.svelte';
-	import MemoryRow from '$lib/components/home/MemoryRow.svelte';
+	import MemoryCard from '$lib/components/home/MemoryCard.svelte';
+	import PhotoCard from '$lib/components/home/PhotoCard.svelte';
+	import Rail from '$lib/components/home/Rail.svelte';
 	import StoryPlayer from '$lib/components/home/StoryPlayer.svelte';
 	import SuggestedAlbums from '$lib/components/home/SuggestedAlbums.svelte';
 
-	/** The pinned photos shown: one page of the timeline; a family pins a few. */
-	const PINNED_SHOWN = 200;
 	/** A story's photos are asked for this many at a time (the most the server gives). */
 	const STORY_PAGE = 500;
 
 	// Each block shows only once it has photos; null: not answered yet.
 	let home = $state.raw<HomeData | null>(null);
 	let pinned = $state.raw<AssetOut[] | null>(null);
+	/** More are pinned than Home shows: See all opens them in the Library. */
+	let pinnedMore = $state(false);
 	let people = $state.raw<Person[] | null>(null);
 	let suggested = $state.raw<AlbumSuggestion[] | null>(null);
 	/** The suggestion being kept or discarded. */
@@ -101,7 +104,11 @@
 	function loadPinned(gone: () => boolean = () => false) {
 		api
 			.assets({ pinned: true }, null, PINNED_SHOWN)
-			.then((answer) => !gone() && (pinned = answer.items))
+			.then((answer) => {
+				if (gone()) return;
+				pinned = answer.items;
+				pinnedMore = answer.next_cursor !== null;
+			})
 			.catch((e: unknown) => {
 				if (gone()) return;
 				pinned = [];
@@ -113,6 +120,8 @@
 	const blocks = $derived(
 		home ? homeBlocks(home, { pinned, people, suggested }, look.shown.homeSections) : []
 	);
+	/** The block whose hero leads, full-bleed under the bars; none: a large title instead. */
+	const lead = $derived(home === null && !error ? 'rediscover' : leadOf(blocks));
 	const nothing = $derived(
 		home !== null && pinned !== null && people !== null && suggested !== null && blocks.length === 0
 	);
@@ -151,12 +160,20 @@
 	}
 
 	// --- the story player ----------------------------------------------------------------------
-	type Story = { title: string; dates: string; poster: AssetOut; photos: AssetOut[] | null };
+	type Story = {
+		title: string;
+		/** The small label over its title. */
+		dates: string;
+		poster: AssetOut;
+		photos: AssetOut[] | null;
+		/** What its end card's Show in Library shows; none for Rediscover's single photos. */
+		filter?: HomeFilter;
+	};
 	let story = $state.raw<Story | null>(null);
 
 	/** Opens at once on the cover; the period's photos follow, about forty spread over it. */
 	function play(title: string, dates: string, poster: AssetOut, filter: HomeFilter) {
-		const opened: Story = { title, dates, poster, photos: null };
+		const opened: Story = { title, dates, poster, photos: null, filter };
 		story = opened;
 		collect((cursor) => api.assets(filter, cursor, STORY_PAGE))
 			.then((all) => {
@@ -173,9 +190,15 @@
 		play(memory.title, memoryLine(memory), memory.cover, memory.filter);
 	}
 
-	/** Rediscover's story is its dozen, as they are. */
+	/** Rediscover's story is its dozen, as they are, titled as its hero is. */
 	function playRediscover(photos: AssetOut[]) {
-		story = { title: 'Rediscover', dates: storyYears(photos), poster: photos[0], photos };
+		const years = storyYears(photos);
+		story = {
+			title: rediscoverTitle(photos[0], new Date()),
+			dates: years ? `${SECTION_NAMES.rediscover} · ${years}` : SECTION_NAMES.rediscover,
+			poster: photos[0],
+			photos
+		};
 	}
 
 	// --- the photo view: from Rediscover, Pinned or New this week, stepping through that block --
@@ -229,6 +252,18 @@
 				new: { ...home.new, items: patch(home.new.items) }
 			};
 		linked.patch(asset);
+	}
+
+	/** Moved to the trash from the photo view: gone from every block at once. */
+	function removed(ids: Set<Id>) {
+		const keep = (items: AssetOut[]) => items.filter((a) => !ids.has(a.id));
+		if (pinned) pinned = keep(pinned);
+		if (home)
+			home = {
+				...home,
+				rediscover: keep(home.rediscover),
+				new: { ...home.new, items: keep(home.new.items) }
+			};
 	}
 
 	// --- the Library goes on under Home (lib/continuation.svelte.ts) ---------------------------
@@ -364,39 +399,70 @@
 />
 <svelte:head><title>{part === 'library' ? 'Library' : 'Home'} · Photos</title></svelte:head>
 
+{#snippet dateline()}
+	<p class="dateline">{today}</p>
+{/snippet}
+
+{#snippet onPhoto()}
+	<div class="over">
+		{@render dateline()}
+		<span class="me"><Avatar glass /></span>
+	</div>
+{/snippet}
+
 <div class="page" aria-busy={home === null && !error}>
-	<header class="head">
+	{#if lead}
 		<h1 class="visually-hidden">Home</h1>
-		<p class="dateline">{today}</p>
-		<span class="me"><Avatar /></span>
-	</header>
+	{:else}
+		<!-- No hero first: the date over a large title, the avatar on its line on a phone. -->
+		<header class="head">
+			<div>
+				{@render dateline()}
+				<h1>Home</h1>
+			</div>
+			<span class="me"><Avatar /></span>
+		</header>
+	{/if}
 
 	{#if error}
-		<div class="empty-state words" role="alert">
-			<p>Home could not be opened.</p>
+		<div class="empty-state" role="alert">
+			<p>Home could not be opened</p>
 			<p>{error}</p>
-			<button type="button" class="primary" onclick={() => attempt++}>Try again</button>
+			<div class="actions">
+				<button type="button" class="primary" onclick={() => attempt++}>Try again</button>
+			</div>
 		</div>
 	{:else if home === null}
-		<!-- Quiet while Home is asked for: the room of a cover and a row of memories. -->
+		<!-- The shapes of what is coming: a hero with its words, then a rail of cards. -->
 		<div class="waiting" aria-hidden="true">
-			<span class="cover-wait"></span>
-			<span class="rail-wait"><span></span><span></span><span></span></span>
+			<div class="hero-wait shimmer">
+				<div class="over">{@render dateline()}</div>
+				<span class="bar eyebrow-bar"></span>
+				<span class="bar title-bar"></span>
+			</div>
+			<div class="rail-wait">
+				{#each [0, 1, 2, 3, 4] as i (i)}<span class="shimmer"></span>{/each}
+			</div>
 		</div>
 	{:else}
-		<!-- The blocks the account chose (You → Home), in its order, each when it has photos. -->
-		{#each blocks as block (block)}
+		<!-- The blocks the account chose (Settings → Appearance), in its order, each when it has photos. -->
+		{#each blocks as block, at (block)}
 			{#if block === 'on_this_day' && home.on_this_day}
 				{@const day = home.on_this_day}
+				{@const title = yearsAgo(day.years_ago, day.exact)}
 				<section aria-label={SECTION_NAMES.on_this_day}>
 					<Hero
 						cover={day.cover}
-						title={yearsAgo(day.years_ago, day.exact)}
+						eyebrow={`${SECTION_NAMES.on_this_day} · ${day.day.slice(0, 4)}`}
+						{title}
 						note={dayNote(day)}
+						count={day.count}
+						lead={at === 0}
+						top={at === 0 ? onPhoto : undefined}
 						onplay={() =>
 							play(
-								yearsAgo(day.years_ago, day.exact),
-								dateRange(day.filter.from, day.filter.to),
+								title,
+								`${SECTION_NAMES.on_this_day} · ${dateRange(day.filter.from, day.filter.to)}`,
 								day.cover,
 								day.filter
 							)}
@@ -404,27 +470,51 @@
 				</section>
 			{:else if block === 'rediscover'}
 				{@const picks = home.rediscover}
-				{@const [lead, ...others] = picks}
-				<HomeSection title={SECTION_NAMES.rediscover}>
+				{@const [first, ...others] = picks}
+				<section aria-labelledby="rediscover-title">
+					<!-- The hero is its header: the name is said, not shown twice. -->
+					<h2 id="rediscover-title" class="visually-hidden">{SECTION_NAMES.rediscover}</h2>
 					<Hero
-						cover={lead}
-						title={rediscoverTitle(lead, new Date())}
-						note={rediscoverNote(lead)}
+						cover={first}
+						eyebrow={heroEyebrow(SECTION_NAMES.rediscover, first)}
+						title={rediscoverTitle(first, new Date())}
+						note={rediscoverNote(first)}
+						count={picks.length}
+						lead={at === 0}
+						top={at === 0 ? onPhoto : undefined}
 						onplay={() => playRediscover(picks)}
 					/>
 					{#if others.length}
 						<div class="others">
-							<JustifiedGrid
+							<Rail
 								items={others}
-								onopen={(id) => open('rediscover', id)}
+								key={(a) => a.id}
 								label="Photos to rediscover"
-							/>
+								visible={RAILS.dozen}
+							>
+								{#snippet card(asset)}
+									<PhotoCard
+										{asset}
+										eyebrow={asset.date_source === 'file_mtime'
+											? undefined
+											: asset.taken_at.slice(0, 4)}
+										onopen={(id) => open('rediscover', id)}
+									/>
+								{/snippet}
+							</Rail>
 						</div>
 					{/if}
-				</HomeSection>
+				</section>
 			{:else if block === 'memories'}
 				<HomeSection title={SECTION_NAMES.memories}>
-					<MemoryRow memories={home.memories} onplay={playMemory} />
+					<Rail
+						items={home.memories}
+						key={(m) => m.key}
+						label="Memories to play"
+						visible={RAILS.memories}
+					>
+						{#snippet card(memory)}<MemoryCard {memory} onplay={playMemory} />{/snippet}
+					</Rail>
 				</HomeSection>
 			{:else if block === 'suggested' && suggested}
 				<HomeSection title={SECTION_NAMES.suggested}>
@@ -436,51 +526,92 @@
 					/>
 				</HomeSection>
 			{:else if block === 'years'}
-				<HomeSection title={SECTION_NAMES.years} href="/">
-					<MemoryRow memories={home.years} onplay={playMemory} small />
+				<HomeSection title={SECTION_NAMES.years}>
+					<Rail items={home.years} key={(m) => m.key} label="Years to play" visible={RAILS.years}>
+						{#snippet card(memory)}<MemoryCard {memory} onplay={playMemory} year />{/snippet}
+					</Rail>
 				</HomeSection>
 			{:else if block === 'pinned' && pinned}
 				<HomeSection
 					title={SECTION_NAMES.pinned}
-					more={{ href: '/', label: 'Choose', hint: 'what to pin, in the Library' }}
+					more={{ href: '/?pinned=true', label: 'See all', hint: 'pinned photos' }}
 				>
-					<JustifiedGrid items={pinned} onopen={(id) => open('pinned', id)} label="Pinned photos" />
+					<Rail items={pinned} key={(a) => a.id} label="Pinned photos" strip>
+						{#snippet card(asset)}
+							<PhotoCard
+								{asset}
+								height={stripHeight(viewport.phone)}
+								onopen={(id) => open('pinned', id)}
+							/>
+						{/snippet}
+						{#snippet end()}
+							{#if seeAll(pinned?.length ?? 0, pinnedMore)}
+								<a
+									class="see-all"
+									href="/?pinned=true"
+									style:height={`${stripHeight(viewport.phone)}px`}
+									>See all<span class="visually-hidden"> pinned photos</span></a
+								>
+							{/if}
+						{/snippet}
+					</Rail>
 				</HomeSection>
 			{:else if block === 'people' && people}
 				<HomeSection title={SECTION_NAMES.people} href="/people">
-					<ul class="faces">
-						{#each people as person (person.id)}
-							<li>
-								<a href={`/people/${person.id}`}>
-									<Portrait portrait={person.portrait} size={76} />
-									<span>{personName(person)}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
+					<Rail items={people} key={(p) => p.id} label="People">
+						{#snippet card(person)}
+							<FaceBubble {person} size={viewport.phone ? 76 : 112} count />
+						{/snippet}
+					</Rail>
 				</HomeSection>
 			{:else if block === 'new'}
-				<HomeSection title={SECTION_NAMES.new} more={{ href: '/', label: 'All photos' }}>
-					<p class="arrived">{arrivalsSentence(home.new)}</p>
-					<JustifiedGrid items={fresh} onopen={(id) => open('new', id)} label="New photos" />
+				{@const more = home.new.count > fresh.length}
+				<HomeSection
+					title={SECTION_NAMES.new}
+					line={arrivalsSentence(home.new)}
+					more={{ href: '/', label: 'See all', hint: 'photos, in the Library' }}
+				>
+					<Rail items={fresh} key={(a) => a.id} label="New photos" strip>
+						{#snippet card(asset)}
+							<PhotoCard
+								{asset}
+								height={stripHeight(viewport.phone)}
+								onopen={(id) => open('new', id)}
+							/>
+						{/snippet}
+						{#snippet end()}
+							{#if seeAll(fresh.length, more)}
+								<a class="see-all" href="/" style:height={`${stripHeight(viewport.phone)}px`}
+									>All {formatCount(home?.new.count ?? 0)}<span class="visually-hidden">
+										photos, in the Library</span
+									></a
+								>
+							{/if}
+						{/snippet}
+					</Rail>
 				</HomeSection>
 			{/if}
 		{/each}
 
 		{#if nothing && libraryEmpty !== null}
-			<div class="empty-state words">
+			<div class="empty-state">
 				{#if libraryEmpty}
-					<p>No photos here yet.</p>
+					<p>No photos yet</p>
 					<p>
-						Upload some from this device in the <a href="/">Library</a>{#if session.isAdmin}, or add
-							a folder of photos under <a href="/admin">Admin</a>{/if}.
+						Upload some from this device{#if session.isAdmin}, or add a folder of photos in Settings
+							→ Folders{/if}.
 					</p>
+					<div class="actions">
+						<a class="button primary" href="/">Upload photos</a>
+						{#if session.isAdmin}<a class="button" href="/settings/folders">Add a folder</a>{/if}
+					</div>
 				{:else}
-					<p>Your story starts here.</p>
-					<p>
-						Pin photos in the <a href="/">Library</a> to keep them on Home, or choose what Home
-						shows under <a href="/settings">You</a>.
-					</p>
+					<p>Nothing on Home today</p>
+					<p>Home shows what you choose in Settings → Appearance, and the photos you pin.</p>
+					<div class="actions">
+						<a class="button primary" href="/settings/appearance#home">Choose what Home shows</a>
+						<a class="button" href="/">Pin photos in the Library</a>
+					</div>
 				{/if}
 			</div>
 		{/if}
@@ -505,6 +636,8 @@
 		onindex={(i) => showPhoto(shown.items[i].id)}
 		onclose={closePhoto}
 		onchanged={changed}
+		onremove={removed}
+		onreload={() => library.changed()}
 	/>
 {/if}
 
@@ -530,91 +663,151 @@
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}
+	/* No hero first: an iPhone's large title, the date over it. */
 	.head {
 		display: flex;
-		align-items: center;
-		gap: var(--s-2);
-		min-height: 3.5rem;
-		padding: var(--s-2) 0;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: var(--s-3);
+		padding: var(--s-4) 0 var(--s-2);
+	}
+	.head h1 {
+		margin: 0;
+	}
+	.head .dateline {
+		color: var(--ink-2);
+		font-size: var(--fs-13);
+		font-weight: 600;
 	}
 	.dateline {
-		flex: 1;
 		margin: 0;
-		color: var(--ink-2);
-		font-weight: 600;
 	}
-	.arrived {
-		margin: 0 0 var(--s-3);
-		color: var(--ink-2);
-	}
-	.others {
-		margin-top: var(--s-4);
-	}
-	.faces {
+	/* On a leading hero: the date at the top left, a phone's avatar at the right. */
+	.over {
 		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		gap: var(--s-3);
-		margin: 0;
-		padding: 0 0 var(--s-2);
-		list-style: none;
-		overflow-x: auto;
+		color: var(--on-photo);
 	}
-	.faces a {
-		display: grid;
-		justify-items: center;
-		gap: var(--s-2);
-		width: 5.25rem;
-		color: inherit;
+	.over .dateline {
+		font-size: var(--fs-15);
 		font-weight: 600;
-		font-size: var(--fs-14);
-		text-align: center;
-		text-decoration: none;
-		overflow-wrap: anywhere;
-	}
-	.waiting {
-		display: grid;
-		gap: var(--s-6);
-	}
-	.cover-wait,
-	.rail-wait span {
-		display: block;
-		background: var(--hairline);
-	}
-	.cover-wait {
-		aspect-ratio: 3 / 2;
-		max-height: 70vh;
-	}
-	.rail-wait {
-		display: flex;
-		gap: var(--s-3);
-		overflow: hidden;
-	}
-	.rail-wait span {
-		flex: none;
-		width: 13.75rem;
-		aspect-ratio: 3 / 4;
 	}
 	@media (min-width: 1024px) {
 		.me {
 			display: none;
 		}
-		.cover-wait {
-			width: 58%;
-		}
-		.rail-wait span {
-			width: 15rem;
+	}
+	.others {
+		margin-top: var(--s-4);
+	}
+	/* A strip's last card: the rest, in the Library. */
+	.see-all {
+		display: grid;
+		place-items: center;
+		min-width: 8rem;
+		padding: 0 var(--s-5);
+		border-radius: var(--r-1);
+		background: var(--fill);
+		color: var(--ink);
+		font-size: var(--fs-15);
+		font-weight: 600;
+		text-decoration: none;
+		white-space: nowrap;
+		transition: scale var(--press) var(--ease);
+	}
+	.see-all:active {
+		scale: 0.96;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--s-2);
+		margin-top: var(--s-4);
+	}
+	/* Waiting: the hero's room under the bars, its words as bars, then a rail. One soft light
+	   moves across them (transform only). */
+	.hero-wait {
+		position: relative;
+		margin: calc(-1 * var(--top)) calc(-1 * var(--page-x)) 0;
+		height: clamp(calc(100vw * 9 / 21), min(78vh, 720px), calc(100vw * 9 / 16));
+	}
+	.hero-wait .over {
+		position: absolute;
+		top: var(--top);
+		left: var(--page-x);
+		color: var(--ink-2);
+	}
+	.bar {
+		position: absolute;
+		left: var(--page-x);
+		display: block;
+		border-radius: var(--r-pill);
+		background: var(--tint);
+	}
+	.eyebrow-bar {
+		bottom: calc(var(--s-6) + 4.5rem);
+		width: 8rem;
+		height: 0.75rem;
+	}
+	.title-bar {
+		bottom: var(--s-6);
+		width: min(28rem, 60%);
+		height: 3rem;
+	}
+	.rail-wait {
+		display: flex;
+		gap: var(--s-4);
+		margin: var(--s-4) calc(-1 * var(--page-x)) 0;
+		padding: 0 var(--page-x);
+		overflow: hidden;
+	}
+	.rail-wait span {
+		flex: none;
+		width: calc((100% - 4 * var(--s-4)) / 4.3);
+		aspect-ratio: 3 / 2;
+		border-radius: var(--r-card);
+	}
+	.shimmer {
+		position: relative;
+		overflow: hidden;
+		background: var(--fill);
+	}
+	.shimmer::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(100deg, transparent 30%, var(--tint) 50%, transparent 70%);
+		transform: translateX(-100%);
+		animation: shimmer 1.2s var(--ease) infinite;
+	}
+	@keyframes shimmer {
+		to {
+			transform: translateX(100%);
 		}
 	}
-	/* A phone: photos run to the screen's edge, the words keep their margin. */
-	@media (max-width: 639px) {
-		.page {
-			padding: 0 var(--gutter) var(--s-7);
+	@media (max-width: 1023px) {
+		.hero-wait .over {
+			top: calc(var(--top) + var(--s-3));
 		}
-		.head,
-		.words,
-		.arrived,
-		.faces,
-		.waiting .rail-wait {
-			padding-inline: var(--s-2);
+	}
+	@media (max-width: 639px) {
+		.hero-wait {
+			height: auto;
+			aspect-ratio: 4 / 5;
+		}
+		.rail-wait {
+			gap: var(--s-3);
+		}
+		.rail-wait span {
+			width: calc((100% - 2 * var(--s-3)) / 2.3);
+			aspect-ratio: 4 / 5;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.shimmer::after {
+			animation: none;
 		}
 	}
 </style>
