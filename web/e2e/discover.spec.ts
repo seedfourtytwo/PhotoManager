@@ -13,7 +13,7 @@ import {
 	toast
 } from './helpers.ts';
 
-test('search without models: word matches, and a calm note that leads an admin to the setup', async ({
+test('search without models: one field, word matches, and a quiet line for the admin at the end', async ({
 	page
 }) => {
 	await resetMock();
@@ -26,33 +26,58 @@ test('search without models: word matches, and a calm note that leads an admin t
 		await page.keyboard.press('Enter');
 	}
 	await expect(page).toHaveURL(/\/search$/);
-	const box = page.getByRole('searchbox', { name: 'Search' });
-	await expect(box).toBeFocused();
-	const note = page.getByRole('note');
-	await expect(note).toContainText('Search by what is in a photo is not set up yet');
-	await expect(note).not.toContainText('just models');
-	await expect(note).toContainText('Set it up in Admin, under Search and faces.');
-	await expect(note.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
+	// One field: the top bar's on a laptop, the page's on a phone.
+	const box = page.getByRole('searchbox', { name: /^Search/ });
+	await expect(box).toHaveCount(1);
+	if (!isPhone(page)) await expect(box).toBeFocused();
+	// No disclaimer on top for anyone.
+	await expect(page.getByRole('note')).toHaveCount(0);
 	await box.fill('sarlat');
 	await box.press('Enter');
 	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
 	await expect(page.locator('.meta')).toContainText(/\d+ photos?, matching words/);
 	await expect(page.locator('.tile').first()).toBeVisible();
+	const setup = page.getByText(/^Search by what is in a photo/);
+	await expect(setup.getByRole('link', { name: 'set up in Settings' })).toHaveAttribute(
+		'href',
+		'/settings/search'
+	);
 	await expectAccessible(page);
 	await page.locator('.tile').first().click();
 	await expect(loupe(page)).toBeVisible();
+});
+
+test('search as it is typed: the results follow the words, in place; Enter keeps it as recent', async ({
+	page
+}) => {
+	await resetMock();
+	await signIn(page, '/search');
+	const box = page.getByRole('searchbox', { name: /^Search/ });
+	const steps = await page.evaluate(() => history.length);
+	await box.fill('sarl');
+	await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('sarl');
+	await expect(page.locator('.tile').first()).toBeVisible();
+	expect(await page.evaluate(() => history.length)).toBe(steps); // no step per letter
+	await box.fill('sarlat');
+	await box.press('Enter');
+	await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('sarlat');
+	await page.goto('/search');
+	const recent = page.getByRole('region', { name: 'Recent' });
+	await expect(recent.getByRole('link', { name: 'sarlat' })).toBeVisible();
+	await recent.getByRole('button', { name: 'Clear' }).click();
+	await expect(recent).toHaveCount(0);
 });
 
 test('without models, a member reads plain words on Search and People: no command, no way in to Admin', async ({
 	page
 }) => {
 	await resetMock();
-	await signIn(page, '/search', MEMBER);
+	await signIn(page, '/search?q=sarlat', MEMBER);
+	await expect(page.locator('.tile').first()).toBeVisible();
+	// nothing about setting it up: a member could not
 	const note = page.getByRole('note');
-	await expect(note).toContainText('Search by what is in a photo is not set up yet');
-	await expect(note).toContainText('words match file names, places, cameras and album titles');
-	await expect(note.locator('code')).toHaveCount(0);
-	await expect(note.getByRole('link')).toHaveCount(0);
+	await expect(note).toHaveCount(0);
+	await expect(page.getByText(/^Search by what is in a photo/)).toHaveCount(0);
 
 	// People says nothing to a member about it: there is nothing a member could do.
 	await page.goto('/people');
@@ -87,10 +112,10 @@ test('search before typing: faces, places and, once search by meaning is set up,
 	await expect(page.getByRole('region', { name: 'Things' }).getByRole('link')).not.toHaveCount(0);
 	await expectAccessible(page);
 	const place = page.getByRole('region', { name: 'Places' }).getByRole('link').first();
-	const name = (await place.textContent())!.trim();
+	const name = (await place.locator('.title').textContent())!.trim();
 	await place.click();
 	await expect.poll(() => new URL(page.url()).searchParams.get('q')).toMatch(`place:`);
-	await expect(page.getByRole('searchbox', { name: 'Search' })).toHaveValue(
+	await expect(page.getByRole('searchbox', { name: /^Search/ })).toHaveValue(
 		new RegExp(`^place:"?${name}"?$`)
 	);
 	await expect(page.locator('.tile').first()).toBeVisible();

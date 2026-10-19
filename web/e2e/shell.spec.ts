@@ -268,12 +268,15 @@ test('laptop: Search opens into a field over the capsule; Enter searches, Escape
 	await field.fill('sarlat');
 	await field.press('Enter');
 	await expect(page).toHaveURL(/\/search\?q=sarlat$/);
-	await expect(field).toHaveCount(0);
-	// On Search itself the button leads to the page's own field.
-	await searchIn(page).click();
-	await expect(page.getByRole('main').getByRole('searchbox', { name: 'Search' })).toBeFocused();
-	await expect(field).toHaveCount(0);
+	// On Search the bar's field is the page's one field: it stays, with the words.
+	await expect(field).toHaveValue('sarlat');
+	await expect(page.getByRole('main').getByRole('searchbox')).toHaveCount(0);
 	await expectAccessible(page);
+	await page.keyboard.press('Escape');
+	await expect(field).toHaveCount(0);
+	await searchIn(page).click();
+	await expect(field).toBeFocused();
+	await expect(field).toHaveValue('sarlat');
 });
 
 test('the compact title shows once the large title has scrolled away, not before', async ({
@@ -395,4 +398,19 @@ test('You: Back returns to the page it was opened from, as it was left', async (
 	// It went back in the history, not forward to a copy: Forward leads to You again.
 	await page.goForward();
 	await expect(page).toHaveURL(/\/settings$/);
+});
+
+test('laptop: Search opened from its address has its words in the bar’s field, and no second field', async ({
+	page
+}) => {
+	test.skip(isPhone(page), 'a phone searches in the page’s own field');
+	await signIn(page, '/search?q=sarlat');
+	const field = nav(page).getByRole('searchbox', { name: 'Search photos' });
+	await expect(field).toHaveValue('sarlat');
+	await expect(page.getByRole('searchbox')).toHaveCount(1);
+	// Escape gives the capsule back; leaving Search keeps it
+	await page.keyboard.press('Escape');
+	await nav(page).getByRole('link', { name: 'Library', exact: true }).click();
+	await expect(page).toHaveURL(/\/$/);
+	await expect(field).toHaveCount(0);
 });

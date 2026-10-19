@@ -1,5 +1,5 @@
 /** What each row of the Collections page shows: who, what and where, in which order. */
-import type { AlbumSummary, Facets, Person, PlaceSummary } from './api/types';
+import type { AlbumSummary, Person, PlaceSummary } from './api/types';
 import { filtersToQuery } from './filters';
 import type { IconName } from './icons';
 
@@ -39,15 +39,6 @@ export function albumStrip(albums: readonly AlbumSummary[], limit = STRIP_LIMIT)
 }
 
 export type PlaceItem = { name: string; count: number; href: string };
-
-/** The places with the most photos; each opens the library filtered by it. */
-export function placeStrip(places: Facets['places'], limit = STRIP_LIMIT): PlaceItem[] {
-	return places
-		.filter((place) => place.name && place.count > 0)
-		.sort((a, b) => b.count - a.count)
-		.slice(0, limit)
-		.map((place) => ({ ...place, href: `/${filtersToQuery({ place: place.name })}` }));
-}
 
 /** A place's card: its name, its count, its newest photo, and the library filtered by it. */
 export type PlaceCard = PlaceItem & { cover: string | null };

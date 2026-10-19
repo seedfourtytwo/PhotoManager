@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AssetOut, MlStatus, SearchResult } from '$lib/api';
 	import { api, library, session } from '$lib/app.svelte';
 	import { errorMessage, photos } from '$lib/format';
 	import { LoupeTracker, closePhoto, openPhoto, openPhotoId, showPhoto } from '$lib/loupe.svelte';
-	import { searchHref } from '$lib/search';
+	import { rememberSearch } from '$lib/recent-searches';
+	import { SEARCH_LIMIT, resultsLine } from '$lib/search';
+	import { typedSearch } from '$lib/typed-search';
 	import { describePhoto } from '$lib/components/PhotoGrid.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import JustifiedGrid from '$lib/components/JustifiedGrid.svelte';
@@ -23,14 +24,15 @@
 	let source = $state<AssetOut | null>(null);
 	let error = $state('');
 	let busy = $state(false);
+	let focused = $state(false);
 	let input: HTMLInputElement | undefined = $state();
+	const typed = typedSearch();
 
 	$effect(() => {
 		library
 			.ml()
 			.then((s) => (status = s))
 			.catch(() => undefined);
-		if (!page.url.searchParams.has('like')) input?.focus();
 	});
 
 	// The URL is the search: ?q=… (words and facets) or ?like=<photo id>.
@@ -61,7 +63,7 @@
 				.finally(done);
 		} else {
 			api
-				.search(words, {}, 200)
+				.search(words, {}, SEARCH_LIMIT)
 				.then((r) => !stale && (result = r))
 				.catch(fail)
 				.finally(done);
@@ -71,21 +73,19 @@
 
 	const items = $derived<AssetOut[]>(similar ?? result?.items ?? []);
 	const semantic = $derived(!!status?.clip.ready);
-	const summary = $derived(
-		[
-			photos(items.length),
-			result?.mode === 'semantic' ? 'ranked by meaning' : null,
-			result?.mode === 'text' ? 'matching words' : null,
-			...(result?.facets ?? []).map((f) => `${f.name}: ${f.value}`)
-		]
-			.filter(Boolean)
-			.join(', ')
-	);
+	const summary = $derived(result ? resultsLine(result, SEARCH_LIMIT) : photos(items.length));
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
-		const words = text.trim();
-		void goto(words ? searchHref(words) : '/search', { keepFocus: true });
+		rememberSearch(text);
+		typed(text, { now: true });
+	}
+
+	function cancel() {
+		text = '';
+		typed('', { now: true });
+		input?.blur();
+		focused = false;
 	}
 
 	const loupeId = $derived(openPhotoId(page));
@@ -101,9 +101,20 @@
 <PageHead title={like ? 'Like this photo' : 'Search'} />
 
 <div class="page">
-	<!-- The field comes first; Enter (the keyboard's search key on a phone) searches. -->
-	<form role="search" onsubmit={submit}>
-		<label class="find">
+	<!-- A phone's field (a laptop uses the one in the top bar): live as it is typed, Enter
+	     (the keyboard's search key) at once. -->
+	<form
+		role="search"
+		class="phone-field"
+		class:focused
+		onsubmit={submit}
+		onfocusin={() => (focused = true)}
+		onfocusout={(event) => {
+			const next = event.relatedTarget;
+			if (!(next instanceof Node) || !event.currentTarget.contains(next)) focused = false;
+		}}
+	>
+		<label class="find glass">
 			<Icon name="search" />
 			<input
 				bind:this={input}
@@ -112,17 +123,22 @@
 				aria-label="Search"
 				placeholder="People, places, things"
 				enterkeyhint="search"
+				oninput={() => typed(text)}
 			/>
 		</label>
+		{#if focused}
+			<!-- Taken on the press, before the field loses its focus (iOS). -->
+			<button
+				type="button"
+				class="cancel"
+				onpointerdown={(event) => {
+					event.preventDefault();
+					cancel();
+				}}
+				onclick={cancel}>Cancel</button
+			>
+		{/if}
 	</form>
-
-	{#if status && !semantic}
-		<p class="quiet small hint" role="note">
-			Search by what is in a photo is not set up yet. For now, words match file names, places,
-			cameras and album titles.
-			{#if session.isAdmin}Set it up in <a href="/admin">Admin</a>, under Search and faces.{/if}
-		</p>
-	{/if}
 
 	{#if like && source}
 		<p class="quiet small source">
@@ -135,21 +151,35 @@
 	{#if error}
 		<p role="alert">{error}</p>
 	{:else if busy}
-		<p class="quiet">Searching…</p>
+		<!-- Waiting: blocks in photo shapes, after a moment (a quick answer never flashes them). -->
+		<div class="waiting" aria-hidden="true">
+			{#each [1.5, 0.75, 1.33, 1, 1.5, 0.67, 1.78, 1.33] as ratio, i (i)}
+				<span style:flex-grow={ratio} style:aspect-ratio={ratio}></span>
+			{/each}
+		</div>
+		<p class="visually-hidden" role="status">Searching…</p>
 	{:else if result || similar}
-		<p class="quiet small meta" aria-live="polite">
-			{summary}
+		<div class="meta">
+			<p class="quiet small" aria-live="polite">{summary}</p>
 			{#if result && q && session.canEdit}
 				<KeepOnPhone target={{ kind: 'filter', filters: { q } }} what="this search" />
 			{/if}
-		</p>
+		</div>
 		{#if items.length === 0}
 			<div class="empty-state">
 				<p>Nothing found.</p>
 				<p>Try fewer words, or a place or a year.</p>
 			</div>
 		{/if}
-		<JustifiedGrid {items} onopen={openPhoto} label="Search results" />
+		<div class="results">
+			<JustifiedGrid {items} onopen={openPhoto} label="Search results" />
+		</div>
+		<!-- Only an admin can set it up, so only an admin is told; at the end, not on top. -->
+		{#if status && !semantic && session.isAdmin}
+			<p class="quiet small setup">
+				Search by what is in a photo: <a href="/settings/search">set up in Settings</a>.
+			</p>
+		{/if}
 	{:else if !like}
 		<SearchSuggestions things={semantic} />
 	{/if}
@@ -176,55 +206,119 @@
 	.page {
 		padding: 0 var(--page-x) var(--s-7);
 	}
-	/* The search field: a pill to write in, its magnifier inside. */
-	.find {
+	/* The phone's field: a 44 px glass capsule; Cancel slides in beside it while it has focus. */
+	.phone-field {
 		display: flex;
 		align-items: center;
 		gap: var(--s-2);
-		max-width: 40rem;
-		min-height: 3rem;
+	}
+	.find {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: var(--s-2);
+		min-height: var(--target);
 		padding: 0 var(--s-4);
 		border-radius: var(--r-pill);
-		background: var(--fill);
+		box-shadow: var(--glass-edge);
 		color: var(--ink-2);
 	}
+	/* Focus is a quiet ink ring: the accent would read as an error here. */
 	.find:focus-within {
-		box-shadow: inset 0 0 0 2px var(--accent);
+		box-shadow:
+			var(--glass-edge),
+			inset 0 0 0 2px color-mix(in oklab, var(--ink) 30%, transparent);
 	}
 	.find input {
 		flex: 1;
+		min-width: 0;
 		align-self: stretch;
 		padding: 0;
 		background: none;
 		border-radius: 0;
 		color: var(--ink);
-		font-size: var(--fs-16);
+		font-size: var(--fs-17);
 	}
 	.find input:focus-visible {
 		box-shadow: none;
 	}
-	.hint,
+	.cancel {
+		flex: none;
+		min-height: var(--target);
+		font-weight: 600;
+		white-space: nowrap;
+		animation: slide-in var(--motion-sheet) var(--ease-spring);
+	}
+	@keyframes slide-in {
+		from {
+			opacity: 0;
+			translate: var(--s-4) 0;
+		}
+	}
+	/* A laptop searches in the top bar: the page has no second field. */
+	@media (min-width: 1024px) {
+		.phone-field {
+			display: none;
+		}
+	}
 	.source {
 		max-width: 40rem;
 		margin: var(--s-3) 0;
 	}
 	.meta {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s-2);
 		margin: var(--s-4) 0 var(--s-2);
+		min-height: var(--target);
+	}
+	.meta p {
+		margin: 0;
+	}
+	.setup {
+		margin: var(--s-5) 0 0;
+	}
+	.setup a {
+		text-decoration: underline;
+	}
+	.waiting {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2px;
+		margin-top: var(--s-4);
+		animation: appear var(--motion) var(--ease) 150ms both;
+	}
+	.waiting span {
+		flex-basis: 8rem;
+		background: var(--fill);
+		animation: pulse 1.2s var(--ease) infinite alternate;
+	}
+	@keyframes appear {
+		from {
+			opacity: 0;
+		}
+	}
+	@keyframes pulse {
+		to {
+			opacity: 0.5;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.waiting span {
+			animation: none;
+		}
+		.cancel {
+			animation: none;
+		}
 	}
 	@media (max-width: 639px) {
 		.page {
-			padding: 0 var(--gutter) var(--s-7);
+			padding: 0 var(--page-x) var(--s-7);
 		}
-		form,
-		p,
-		.empty-state,
-		.page > :global(section) {
-			padding-inline: var(--s-2);
-		}
-		/* How far a section's words are from the screen's edge: a row of faces bleeds that far
-		   (SearchSuggestions) and no further, or the page is wider than the screen. */
-		.page > :global(section) {
-			--page-x: calc(var(--gutter) + var(--s-2));
+		/* The results run to the screen's edges. */
+		.results {
+			margin: 0 calc(-1 * var(--page-x));
 		}
 	}
 </style>

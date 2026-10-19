@@ -1,4 +1,6 @@
-/** What the Search page offers before anything is typed. */
+/** What the Search page offers before anything is typed, and what it says over the results. */
+import type { SearchResult } from './api/types';
+import { photos } from './format';
 
 /**
  * Things a photo can show, offered as chips once search by meaning is set up (until then
@@ -24,4 +26,26 @@ export function placeQuery(name: string): string {
 /** The search page for these words. */
 export function searchHref(words: string): string {
 	return `/search?q=${encodeURIComponent(words)}`;
+}
+
+/** How many results are asked for: past it the answer is the most alike, not all. */
+export const SEARCH_LIMIT = 200;
+
+/**
+ * "12 photos, matching words", or "Top 200, ranked by meaning" when the answer is as long as
+ * was asked for (the server stops there: 200 is the cap, not the count), then the facets read.
+ */
+export function resultsLine(
+	result: Pick<SearchResult, 'mode' | 'facets'> & { items: readonly unknown[] },
+	limit = SEARCH_LIMIT
+): string {
+	const n = result.items.length;
+	return [
+		n >= limit ? `Top ${limit}` : photos(n),
+		result.mode === 'semantic' ? 'ranked by meaning' : null,
+		result.mode === 'text' ? 'matching words' : null,
+		...result.facets.map((f) => `${f.name}: ${f.value}`)
+	]
+		.filter(Boolean)
+		.join(', ');
 }
