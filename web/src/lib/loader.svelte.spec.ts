@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createApi } from './api';
 import type { AssetFilters, AssetPage } from './api/types';
 import { TimelineLoader } from './loader.svelte';
 import { makeAsset } from './testing/fixtures';
@@ -106,6 +107,33 @@ describe('TimelineLoader', () => {
 		expect(loader.error).toBeNull();
 		expect(loader.items).toHaveLength(20);
 		expect(calls.map((c) => c.cursor)).toEqual([null, '10', '10']);
+	});
+
+	it('a page that never answers times out, and the loader can ask again', async () => {
+		const { fetchPage } = pages(25, 10);
+		let silent = false;
+		// The real client against a server that, once silent, never answers until it gives up.
+		const api = createApi({
+			timeout: 20,
+			fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+				if (silent)
+					return new Promise((_, reject) =>
+						init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+					);
+				const cursor = new URL(String(input), 'http://x').searchParams.get('cursor');
+				return new Response(JSON.stringify(await fetchPage({}, cursor)));
+			}) as typeof fetch
+		});
+		const loader = new TimelineLoader((f, c) => api.assets(f, c));
+		await loader.reset({});
+		silent = true;
+		await loader.loadMore();
+		expect(loader.loading).toBe(false);
+		expect(loader.error).toMatch(/could not be reached/);
+		silent = false;
+		await loader.retry();
+		expect(loader.error).toBeNull();
+		expect(loader.items).toHaveLength(20);
 	});
 
 	it('reload keeps what is shown until the fresh list has come, and comes back as long', async () => {

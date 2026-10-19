@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UploadResult } from './api';
 import { summarizeUpload, uploadFiles, type UploadRequest } from './upload';
 
@@ -38,6 +38,7 @@ describe('summarizeUpload', () => {
 class FakeXhr implements UploadRequest {
 	upload = { onprogress: null as ((e: ProgressEvent) => void) | null };
 	onload: (() => void) | null = null;
+	onloadend: (() => void) | null = null;
 	onerror: (() => void) | null = null;
 	onabort: (() => void) | null = null;
 	ontimeout: (() => void) | null = null;
@@ -52,11 +53,20 @@ class FakeXhr implements UploadRequest {
 	send(body: FormData) {
 		this.sent = body;
 	}
+	aborted = false;
+	abort() {
+		this.aborted = true;
+		this.onabort?.();
+	}
+	progress(loaded: number) {
+		this.upload.onprogress?.({ lengthComputable: true, loaded, total: 100 } as ProgressEvent);
+	}
 	respond(status: number, body: unknown) {
 		this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 } as ProgressEvent);
 		this.status = status;
 		this.responseText = JSON.stringify(body);
 		this.onload?.();
+		this.onloadend?.();
 	}
 }
 
@@ -85,6 +95,13 @@ describe('uploadFiles', () => {
 		await expect(done).rejects.toThrow('Guests can view and download, not upload');
 	});
 
+	it("reads FastAPI's list-form validation errors like every other request", async () => {
+		const xhr = new FakeXhr();
+		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
+		xhr.respond(422, { detail: [{ loc: ['body', 'file'], msg: 'field required' }] });
+		await expect(done).rejects.toThrow('Field required');
+	});
+
 	it('reports a dropped connection', async () => {
 		const xhr = new FakeXhr();
 		const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
@@ -110,6 +127,37 @@ describe('uploadFiles', () => {
 			xhr[end]?.();
 			await expect(done).rejects.toThrow('The upload was interrupted');
 		}
+	});
+
+	describe('a connection that drops without a word', () => {
+		afterEach(() => vi.useRealTimers());
+
+		it('gives up once nothing has moved for a minute', async () => {
+			vi.useFakeTimers();
+			const xhr = new FakeXhr();
+			const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
+			const settled = expect(done).rejects.toThrow('The upload was interrupted');
+			vi.advanceTimersByTime(59_999);
+			expect(xhr.aborted).toBe(false);
+			vi.advanceTimersByTime(1);
+			expect(xhr.aborted).toBe(true);
+			await settled;
+		});
+
+		it('a long upload that keeps moving is never cut short', async () => {
+			vi.useFakeTimers();
+			const xhr = new FakeXhr();
+			const done = uploadFiles([new File(['x'], 'a.jpg')], { url: '/u', request: () => xhr });
+			for (let sent = 1; sent <= 100; sent++) {
+				vi.advanceTimersByTime(30_000);
+				xhr.progress(sent);
+			}
+			expect(xhr.aborted).toBe(false);
+			xhr.respond(200, result([['a.jpg', 'stored']]));
+			await expect(done).resolves.toEqual(result([['a.jpg', 'stored']]));
+			vi.advanceTimersByTime(120_000);
+			expect(xhr.aborted).toBe(false);
+		});
 	});
 
 	it('reports a lost session like every other request', async () => {

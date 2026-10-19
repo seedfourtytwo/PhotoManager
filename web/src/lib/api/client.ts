@@ -117,6 +117,11 @@ export type ApiOptions = {
 	fetch?: typeof fetch;
 	/** Called when any request other than the login attempt answers 401. */
 	onUnauthorized?: () => void;
+	/**
+	 * Milliseconds a JSON call may wait for its whole answer before it counts as unreachable
+	 * (default 15 s); the few the server itself may take a while over get four times as long.
+	 */
+	timeout?: number;
 };
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -143,18 +148,24 @@ export function fileNameFrom(header: string | null, fallback: string): string {
 	return /filename="([^"]+)"/i.exec(header)?.[1] ?? fallback;
 }
 
+/** The server's `detail` in an error answer's JSON body, as a sentence; null when it has none. */
+export function errorDetail(body: unknown): string | null {
+	const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
+	if (typeof detail === 'string') return sentence(detail);
+	// FastAPI validation errors: detail is a list of {loc, msg}.
+	if (Array.isArray(detail)) {
+		const messages = detail
+			.map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
+			.filter(Boolean);
+		if (messages.length) return sentence(messages.join(' '));
+	}
+	return null;
+}
+
 async function readDetail(response: Response): Promise<string> {
 	try {
-		const body: unknown = await response.json();
-		const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
-		if (typeof detail === 'string') return sentence(detail);
-		// FastAPI validation errors: detail is a list of {loc, msg}.
-		if (Array.isArray(detail)) {
-			const messages = detail
-				.map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
-				.filter(Boolean);
-			if (messages.length) return sentence(messages.join(' '));
-		}
+		const detail = errorDetail(await response.json());
+		if (detail) return detail;
 	} catch {
 		// Not JSON (a proxy error page, say): fall through to a generic sentence.
 	}
@@ -166,13 +177,28 @@ export function createApi(options: ApiOptions = {}) {
 	// Late-bound so tests that stub globalThis.fetch after creation still work.
 	const fetcher: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
 
+	// A connection that drops without a word (a VPN, a phone leaving Wi-Fi) leaves fetch waiting
+	// for minutes. JSON answers are small, so a missing one means the server is out of reach.
+	// Downloads and PDFs (`binary`) get none: they take as long as the file does.
+	const quick = options.timeout ?? 15_000;
+	const slow = quick * 4;
+
 	const send = (path: string, init: RequestInit) =>
 		fetcher(`${base}${path}`, init).catch(() => {
 			throw unreachable();
 		});
 
-	async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
-		const init: RequestInit = { method, credentials: 'same-origin' };
+	async function request<T>(
+		method: Method,
+		path: string,
+		body?: unknown,
+		timeout = quick
+	): Promise<T> {
+		const init: RequestInit = {
+			method,
+			credentials: 'same-origin',
+			signal: AbortSignal.timeout(timeout)
+		};
 		if (body !== undefined) {
 			init.body = JSON.stringify(body);
 			init.headers = { 'content-type': 'application/json' };
@@ -211,6 +237,8 @@ export function createApi(options: ApiOptions = {}) {
 	}
 
 	const get = <T>(path: string) => request<T>('GET', path);
+	/** For what waits on a tool or many files on the server (Proton, restic, the model). */
+	const slowGet = <T>(path: string) => request<T>('GET', path, undefined, slow);
 	function singlePath(id: Id, options: SingleDownloadOptions): string {
 		const params = new URLSearchParams({
 			format: options.format,
@@ -374,13 +402,13 @@ export function createApi(options: ApiOptions = {}) {
 		trash: () => get<TrashItem[]>('/api/trash'),
 		restore: (ids: Id[]) => request<{ restored: number }>('POST', '/api/trash/restore', { ids }),
 		emptyTrash: (ids?: Id[]) =>
-			request<{ purged: number }>('POST', '/api/trash/empty', ids ? { ids } : {}),
+			request<{ purged: number }>('POST', '/api/trash/empty', ids ? { ids } : {}, slow),
 
 		// local ML (v1.1): search, similar photos, faces, people
 		search: (q: string, filters: AssetFilters = {}, limit = 100) => {
 			const params = filtersToParams({ ...filters, q });
 			params.set('limit', String(limit));
-			return get<SearchResult>(withQuery('/api/search', params));
+			return slowGet<SearchResult>(withQuery('/api/search', params));
 		},
 		similar: (id: Id, limit = 50) =>
 			get<ScoredAsset[]>(query(`/api/assets/${id}/similar`, { limit })),
@@ -433,9 +461,11 @@ export function createApi(options: ApiOptions = {}) {
 		backupHealth: () => get<BackupHealth>('/api/backups/health'),
 		addBackup: (body: BackupIn) => request<BackupTarget>('POST', '/api/backups', body),
 		/** Guided setup: where a backup could go, whether a place will do, then create it. */
-		backupPlaces: () => get<BackupPlaces>('/api/backups/places'),
-		planBackup: (place: string) => request<BackupPlan>('POST', '/api/backups/plan', { place }),
-		setUpBackup: (body: BackupSetupIn) => request<BackupSetup>('POST', '/api/backups/setup', body),
+		backupPlaces: () => slowGet<BackupPlaces>('/api/backups/places'),
+		planBackup: (place: string) =>
+			request<BackupPlan>('POST', '/api/backups/plan', { place }, slow),
+		setUpBackup: (body: BackupSetupIn) =>
+			request<BackupSetup>('POST', '/api/backups/setup', body, slow),
 		backupRecovery: (id: Id) => get<BackupRecovery>(`/api/backups/${id}/recovery`),
 		confirmBackupKey: (id: Id) => request<BackupTarget>('POST', `/api/backups/${id}/key-saved`),
 		/** Change schedule, quiet window, retention and/or enabled. */
@@ -470,13 +500,18 @@ export function createApi(options: ApiOptions = {}) {
 		pullRemoteSource: (id: Id) => request<Queued>('POST', `/api/remote-sources/${id}/pull`),
 
 		// Proton Drive sources (admin); the sign-in lives in Proton's tool on the server
-		proton: () => get<ProtonStatus>('/api/proton'),
+		proton: () => slowGet<ProtonStatus>('/api/proton'),
 		protonFolders: (path: string) =>
-			get<{ path: string; folders: string[] }>(query('/api/proton/folders', { path })),
+			slowGet<{ path: string; folders: string[] }>(query('/api/proton/folders', { path })),
 		createProtonFolder: (parent: string, name: string) =>
-			request<{ path: string; folders: string[] }>('POST', '/api/proton/folders', { parent, name }),
+			request<{ path: string; folders: string[] }>(
+				'POST',
+				'/api/proton/folders',
+				{ parent, name },
+				slow
+			),
 		addProtonSource: (body: ProtonSourceIn) =>
-			request<ProtonSource>('POST', '/api/proton/sources', body)
+			request<ProtonSource>('POST', '/api/proton/sources', body, slow)
 	};
 }
 

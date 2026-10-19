@@ -46,6 +46,8 @@ class Session {
 	/** Why we could not find out who is signed in (server down or unreachable), else null. */
 	error = $state<string | null>(null);
 	#loading: Promise<void> | null = null;
+	/** Lost and sent to sign-in: the other requests still in flight answer 401 too. */
+	#gone = false;
 
 	get isAdmin() {
 		return this.user?.role === 'admin';
@@ -57,8 +59,11 @@ class Session {
 	/**
 	 * Any 401: forget the user and go to the sign-in page, coming back here afterwards. Their
 	 * look goes with them: the next person at this device gets the defaults, not theirs.
+	 * Once: until someone signs in again, every later 401 is the same loss.
 	 */
 	lost() {
+		if (this.#gone) return;
+		this.#gone = true;
 		this.user = null;
 		library.forget();
 		look.belongsTo(null);
@@ -88,6 +93,7 @@ class Session {
 				if (needs_admin) await goto('/setup', { replaceState: true });
 				return null;
 			});
+			if (this.user) this.#gone = false;
 			this.error = null;
 		} catch (error) {
 			this.error = error instanceof Error ? error.message : 'Something went wrong.';
@@ -98,6 +104,7 @@ class Session {
 
 	/** A page that was asked for (`next`) is where the session arrives; else its start page. */
 	signedIn(user: User, next: string | null) {
+		this.#gone = false;
 		this.user = user;
 		library.forget();
 		if (next) arrival.mark();

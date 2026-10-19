@@ -197,8 +197,3 @@ export function dominantPlace(places: readonly (Place | null)[]): string | null 
 	}
 	return null;
 }
-
-export function placeLabel(place: Place | null): string | null {
-	if (!place) return null;
-	return [place.city, place.region, place.country].filter(Boolean).join(', ') || null;
-}

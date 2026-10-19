@@ -19,6 +19,19 @@ export function refocus() {
 	target?.focus({ preventScroll: true });
 }
 
+const MODAL_CHANGE = 'modalchange';
+
+/**
+ * Call `run` each time a modal dialog opens or closes (the toast moves into the topmost one);
+ * returns the way to stop. Every modal on the page is opened by `modal` below.
+ */
+export function onModalChange(run: () => void): () => void {
+	document.addEventListener(MODAL_CHANGE, run);
+	return () => document.removeEventListener(MODAL_CHANGE, run);
+}
+
+const changed = () => document.dispatchEvent(new Event(MODAL_CHANGE));
+
 export const modal: Action<HTMLDialogElement, () => void> = (dialog, onclose) => {
 	let ask = onclose;
 	const cancel = (event: Event) => {
@@ -28,6 +41,7 @@ export const modal: Action<HTMLDialogElement, () => void> = (dialog, onclose) =>
 	const opener = document.activeElement;
 	dialog.addEventListener('cancel', cancel);
 	dialog.showModal();
+	changed();
 	return {
 		update: (next) => {
 			ask = next;
@@ -35,6 +49,7 @@ export const modal: Action<HTMLDialogElement, () => void> = (dialog, onclose) =>
 		destroy() {
 			dialog.removeEventListener('cancel', cancel);
 			dialog.close();
+			changed();
 			// Only when the focus is nowhere: a page that has put it somewhere itself keeps it,
 			// and it is done now, not later, so the page can still move it afterwards.
 			const focused = document.activeElement;

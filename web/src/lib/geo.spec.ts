@@ -9,7 +9,6 @@ import {
 	fitView,
 	moved,
 	nearestCluster,
-	placeLabel,
 	project
 } from './geo';
 
@@ -117,11 +116,6 @@ describe('dominantPlace', () => {
 	it('falls back to a shared country', () => {
 		expect(dominantPlace([paris, sarlat, sarlat, paris, null])).toBe('France');
 		expect(dominantPlace([null])).toBeNull();
-	});
-
-	it('labels places compactly', () => {
-		expect(placeLabel(paris)).toBe('Paris, Île-de-France, France');
-		expect(placeLabel(null)).toBeNull();
 	});
 });
 
