@@ -20,7 +20,7 @@
 		padding: var(--s-3) var(--s-1);
 		border-radius: var(--r-2);
 		background: var(--fill);
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 		font-weight: 600;
 		line-height: var(--lh-tight);
 		text-align: center;

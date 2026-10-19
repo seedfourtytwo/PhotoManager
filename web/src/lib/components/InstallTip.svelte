@@ -99,7 +99,7 @@
 	}
 	.how {
 		color: var(--ink-2);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		line-height: var(--lh-ui);
 	}
 	.how :global(svg) {

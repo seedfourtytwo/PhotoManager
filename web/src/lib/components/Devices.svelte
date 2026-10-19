@@ -222,7 +222,7 @@
 	.token {
 		font-family: var(--font-data);
 		font-stretch: 80%;
-		font-size: var(--fs-12) !important;
+		font-size: var(--fs-13) !important;
 		color: var(--ink);
 	}
 	.copy {
@@ -246,7 +246,7 @@
 		list-style: none;
 	}
 	code {
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		overflow-wrap: anywhere;
 	}
 </style>

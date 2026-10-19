@@ -202,13 +202,13 @@ label:has(> input[type='radio']) {
 	display: grid;
 	gap: var(--s-1);
 	margin-bottom: var(--s-4);
-	font-size: var(--fs-12);
+	font-size: var(--fs-13);
 	font-weight: 500;
 }
 .field input,
 .field select,
 .field textarea {
-	font-size: var(--fs-14);
+	font-size: var(--fs-15);
 	font-weight: 400;
 	color: var(--ink);
 	width: 100%;
@@ -223,7 +223,7 @@ fieldset {
 	min-width: 0;
 }
 legend {
-	font-size: var(--fs-14);
+	font-size: var(--fs-15);
 	font-weight: 650;
 	color: var(--ink-2);
 	padding: 0;

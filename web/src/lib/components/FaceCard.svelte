@@ -92,7 +92,7 @@
 		opacity: 0.85;
 	}
 	.name {
-		font-size: var(--fs-28);
+		font-size: var(--fs-34);
 		font-weight: 700;
 		letter-spacing: var(--track-22);
 		line-height: var(--lh-tight);
@@ -107,7 +107,7 @@
 	}
 	@media (max-width: 639px) {
 		.name {
-			font-size: var(--fs-20);
+			font-size: var(--fs-22);
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

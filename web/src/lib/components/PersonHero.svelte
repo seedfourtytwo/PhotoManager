@@ -71,7 +71,7 @@
 		margin-bottom: var(--s-2);
 	}
 	h1 {
-		font-size: var(--fs-40);
+		font-size: var(--fs-display);
 		font-weight: var(--title-weight);
 		line-height: var(--lh-tight);
 		overflow-wrap: anywhere;
@@ -84,7 +84,7 @@
 	.line {
 		margin: 0;
 		color: var(--ink-2);
-		font-size: var(--fs-16);
+		font-size: var(--fs-17);
 	}
 	.actions {
 		display: flex;

@@ -81,7 +81,7 @@
 		padding: 0;
 		border: 0;
 		min-height: 0;
-		font-size: var(--fs-16); /* a focused field under 16 px zooms an iPhone */
+		font-size: var(--fs-17); /* a focused field under 16 px zooms an iPhone */
 	}
 	.dots {
 		display: flex;

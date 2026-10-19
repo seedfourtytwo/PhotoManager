@@ -397,7 +397,7 @@
 			overflow: visible;
 			clip-path: none;
 			margin: 0 0 var(--s-1);
-			font-size: var(--fs-20);
+			font-size: var(--fs-22);
 			touch-action: none;
 		}
 	}

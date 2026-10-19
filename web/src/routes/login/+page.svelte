@@ -156,7 +156,7 @@
 	.badge.chosen {
 		width: 4.5rem;
 		height: 4.5rem;
-		font-size: var(--fs-28);
+		font-size: var(--fs-34);
 	}
 	li button:active .badge {
 		scale: 0.96;

@@ -194,7 +194,7 @@
 		white-space: nowrap;
 	}
 	.count {
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		opacity: 0.85;
 	}
 	@media (min-width: 640px) {

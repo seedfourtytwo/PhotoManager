@@ -18,7 +18,7 @@
 		border-left: 2px solid var(--ink);
 		background: var(--tint);
 		color: var(--ink);
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 	}
 	button {
 		font-weight: 600;

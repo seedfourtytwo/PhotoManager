@@ -224,7 +224,7 @@
 		width: 1.75rem;
 		height: 1.25rem;
 		font-family: var(--font-serif);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		/* a paper as white as the sheet still shows: a seam of fill around it, not a line */
 		box-shadow: 0 0 0 var(--fine) var(--fill);
 	}
@@ -241,7 +241,7 @@
 		list-style: none;
 		margin: 0 0 var(--s-2);
 		padding: 0;
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 	}
 	.issues li {
 		display: flex;

@@ -42,7 +42,7 @@
 		justify-items: center;
 		gap: var(--s-1);
 		padding: var(--s-1) 0;
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 		font-weight: 600;
 		text-align: center;
 	}

@@ -95,7 +95,7 @@
 	}
 	.months .n {
 		min-height: 1lh;
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		font-weight: 500;
 		color: var(--ink-2);
 	}

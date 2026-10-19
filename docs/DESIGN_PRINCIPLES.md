@@ -134,9 +134,6 @@ capitals only by `.eyebrow`; small capitals never (`style-guard.spec.ts` checks)
 | `--fs-34`       | 34 px / 700 / −0.022em                 | page titles (`h1`, the iOS large title)                                                    |
 | `--fs-display`  | 56 px, phone 40 px / 700 / −0.03em     | display: hero titles on photos, album and person titles, Welcome / sign-in                 |
 
-The old names (`--fs-12` … `--fs-40`) stay as aliases of the nearest new size while the screens
-move over, then go.
-
 The sizes are in rem and the root is the browser's own text size (16 px unless the reader set
 another) times the look's text dial, so at the dial's 100 % a token renders at the pixels in
 these tables: interface text 15, small text 13, a page title 34, `--s-4` 16

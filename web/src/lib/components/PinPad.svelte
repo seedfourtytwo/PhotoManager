@@ -42,7 +42,7 @@
 		border-radius: 50%;
 		background: var(--tint);
 		font-family: var(--font-title);
-		font-size: var(--fs-28);
+		font-size: var(--fs-34);
 		font-weight: 500;
 		transition:
 			background-color var(--motion) var(--ease),
