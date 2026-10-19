@@ -37,6 +37,13 @@ describe('style guard', () => {
 		expect(offenders).toEqual([]);
 	});
 
+	it('no source file uses an old text size (--fs-12, 14, 16, 20, 28 or 40)', () => {
+		const offenders = Object.entries(sources)
+			.filter(([, text]) => /--fs-(12|14|16|20|28|40)\b/.test(text))
+			.map(([path]) => path);
+		expect(offenders).toEqual([]);
+	});
+
 	it('no stylesheet makes glass wait for "not (prefers-reduced-transparency …)"', () => {
 		// Unknown to Safari, so false there even when negated: the bars would be solid on every iPhone.
 		const offenders = Object.entries(sources)

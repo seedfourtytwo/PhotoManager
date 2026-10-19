@@ -137,7 +137,7 @@
 		height: 4.5rem;
 		border-radius: 50%;
 		background: var(--fill);
-		font-size: var(--fs-28);
+		font-size: var(--fs-34);
 		font-weight: 700;
 	}
 	h1 {

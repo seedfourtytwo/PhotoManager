@@ -313,7 +313,7 @@
 	}
 	table {
 		border-collapse: collapse;
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 	}
 	th {
 		text-align: left;

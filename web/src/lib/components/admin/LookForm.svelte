@@ -295,7 +295,7 @@
 	output {
 		min-width: var(--s-7);
 		text-align: right;
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 	}
 	.larger {
 		justify-content: space-between;

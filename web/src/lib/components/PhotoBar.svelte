@@ -195,7 +195,7 @@
 		white-space: nowrap;
 	}
 	.why {
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		color: var(--ink-2);
 		white-space: nowrap;
 	}

@@ -233,7 +233,7 @@
 		text-align: left;
 		padding: var(--s-2) var(--s-4);
 		min-height: var(--target);
-		font-size: var(--fs-16);
+		font-size: var(--fs-17);
 	}
 	@media (max-width: 1023px) {
 		.bar {

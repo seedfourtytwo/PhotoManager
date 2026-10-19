@@ -73,7 +73,7 @@
 		min-height: 3.5rem;
 		padding: 0 var(--s-2);
 		background: none;
-		font-size: var(--fs-28);
+		font-size: var(--fs-34);
 		font-weight: 650;
 		letter-spacing: var(--track-22);
 	}

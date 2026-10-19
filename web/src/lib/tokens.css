@@ -38,13 +38,6 @@
 	--fs-22: 1.375rem; /* section titles and month headings */
 	--fs-34: 2.125rem; /* page titles */
 	--fs-display: 3.5rem; /* hero titles on photos, album titles, welcome */
-	/* The old names, until every screen has moved to the scale above (then they go). */
-	--fs-12: var(--fs-13);
-	--fs-14: var(--fs-15);
-	--fs-16: var(--fs-17);
-	--fs-20: var(--fs-22);
-	--fs-28: var(--fs-34);
-	--fs-40: var(--fs-display);
 	/* Tracking: the only letter-spacing there is. Large titles close up; the eyebrow opens. */
 	--track-22: -0.015em;
 	--track-34: -0.022em;

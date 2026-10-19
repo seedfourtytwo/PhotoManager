@@ -462,7 +462,7 @@
 		box-sizing: border-box;
 		border-radius: var(--r-pill);
 		color: var(--ink);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		font-weight: 650;
 		line-height: 1.375rem;
 		text-align: center;
@@ -571,7 +571,7 @@
 	}
 	h2 {
 		margin: 0;
-		font-size: var(--fs-28);
+		font-size: var(--fs-34);
 		font-weight: 700;
 		letter-spacing: var(--track-22);
 		overflow-wrap: anywhere;

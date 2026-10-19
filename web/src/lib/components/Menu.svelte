@@ -145,7 +145,7 @@
 		border-radius: var(--r-pill);
 		background: var(--ink);
 		color: var(--bg);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		font-weight: 500;
 		line-height: var(--s-4);
 		text-align: center;
@@ -207,7 +207,7 @@
 		mask: var(--check) center / contain no-repeat;
 	}
 	.count {
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		color: var(--ink-2);
 	}
 	@media (hover: hover) {

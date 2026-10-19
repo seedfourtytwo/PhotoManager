@@ -318,7 +318,7 @@
 	/* The folder on the server: for an admin, in the system's monospace. */
 	.path code {
 		font-family: var(--font-code);
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 		overflow-wrap: anywhere;
 	}
 	.problem {

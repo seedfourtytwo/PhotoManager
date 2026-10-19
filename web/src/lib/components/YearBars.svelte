@@ -73,7 +73,7 @@
 	}
 	.n {
 		text-align: right;
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 		color: var(--ink-2);
 	}
 	.bars button[aria-pressed='true'] :is(.year, .n) {

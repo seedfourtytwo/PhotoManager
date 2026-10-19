@@ -120,12 +120,12 @@
 	}
 	.eyebrow {
 		font-weight: 600;
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		font-variant-numeric: tabular-nums;
 	}
 	.title {
 		font-weight: 650;
-		font-size: var(--fs-20);
+		font-size: var(--fs-22);
 		line-height: var(--lh-tight);
 	}
 	.answer {

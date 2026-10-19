@@ -45,19 +45,13 @@ describe('type', () => {
 	it('keeps Atkinson Hyperlegible Next as the Larger text face', () => {
 		expect(root['--font-large']).toMatch(/^'Atkinson Hyperlegible Next'/);
 	});
-	// The screens move to the new scale one slice at a time: until then each old name is the
-	// nearest new size, so nothing is left without a value.
-	it.each([
-		['--fs-12', '--fs-13'],
-		['--fs-14', '--fs-15'],
-		['--fs-16', '--fs-17'],
-		['--fs-20', '--fs-22'],
-		['--fs-28', '--fs-34'],
-		['--fs-40', '--fs-display']
-	])('keeps the old size %s as an alias of %s', (old, now) => {
-		expect(root[old]).toBe(`var(${now})`);
-		expect(root[now]).toMatch(/^[\d.]+rem$/);
-	});
+	// Every screen is on the Flight scale now: the old names (12 · 14 · 16 · 20 · 28 · 40) are gone.
+	it.each(['--fs-12', '--fs-14', '--fs-16', '--fs-20', '--fs-28', '--fs-40'])(
+		'no longer declares the old size %s',
+		(old) => {
+			expect(root[old]).toBeUndefined();
+		}
+	);
 	it('tracks large titles tighter, and not at all in the Album serif', () => {
 		expect(root).toMatchObject({
 			'--track-22': '-0.015em',

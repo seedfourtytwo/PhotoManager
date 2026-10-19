@@ -107,11 +107,11 @@
 	}
 	dt {
 		color: var(--ink-2);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 	}
 	dd {
 		margin: 0;
-		font-size: var(--fs-20);
+		font-size: var(--fs-22);
 		line-height: var(--lh-tight);
 	}
 	h3 {
@@ -120,7 +120,7 @@
 	table {
 		border-collapse: collapse;
 		width: 100%;
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 	}
 	/* Rows apart by space, not by lines. */
 	td {

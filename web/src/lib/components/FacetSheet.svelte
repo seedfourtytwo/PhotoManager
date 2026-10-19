@@ -128,7 +128,7 @@
 	h2 {
 		flex: 1;
 		min-width: 0;
-		font-size: var(--fs-20);
+		font-size: var(--fs-22);
 	}
 	.quiet-word {
 		color: var(--ink-2);
@@ -161,7 +161,7 @@
 	/* A label over a part of the sheet ("Taken with", "Between two dates"). */
 	.body :global(h3) {
 		margin: var(--s-2) 0 calc(-1 * var(--s-2));
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 		font-weight: 650;
 		color: var(--ink-2);
 	}

@@ -69,7 +69,7 @@ button.primary:disabled {
 	min-width: var(--target);
 	min-height: var(--target);
 	padding: var(--s-1) var(--s-2);
-	font-size: var(--fs-12);
+	font-size: var(--fs-13);
 	font-weight: 500;
 	color: var(--ink-2);
 	white-space: nowrap;
@@ -140,7 +140,7 @@ button.primary:active,
 }
 .icon-button .word {
 	display: none;
-	font-size: var(--fs-12);
+	font-size: var(--fs-13);
 	font-weight: 600;
 	white-space: nowrap;
 }

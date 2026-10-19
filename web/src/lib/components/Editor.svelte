@@ -620,7 +620,7 @@
 		padding: var(--s-1);
 		border-radius: var(--r-pill);
 		color: var(--ink);
-		font-size: var(--fs-12);
+		font-size: var(--fs-13);
 		font-weight: 600;
 	}
 	.tool span {

@@ -245,7 +245,7 @@
 		font-family: var(--font-title);
 		font-weight: 400;
 		font-style: var(--voice-style);
-		font-size: var(--fs-16);
+		font-size: var(--fs-17);
 	}
 	.skip:focus {
 		position: fixed;
@@ -282,7 +282,7 @@
 			scale var(--motion-sheet) var(--ease-spring),
 			translate var(--motion-sheet) var(--ease-spring);
 		padding: var(--s-2) var(--s-4);
-		font-size: var(--fs-14);
+		font-size: var(--fs-15);
 		max-width: min(40rem, calc(100vw - 2 * var(--s-4)));
 		box-sizing: border-box;
 		width: max-content;

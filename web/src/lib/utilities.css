@@ -234,7 +234,7 @@
 	font-weight: 600;
 }
 .tile-row .tile-line {
-	font-size: var(--fs-14);
+	font-size: var(--fs-15);
 	color: var(--ink-2);
 }
 .tile-row .tile-value {
