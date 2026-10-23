@@ -2,6 +2,7 @@
 import { goto } from '$app/navigation';
 import { ApiError, type User } from '$lib/api';
 import { look } from '$lib/look';
+import { forgetRecent } from '$lib/recent-searches';
 import { arrival } from '$lib/start-page.svelte';
 import { api, onUnauthorized } from './api';
 import { library } from './library.svelte';
@@ -58,7 +59,8 @@ class Session {
 
 	/**
 	 * Any 401: forget the user and go to the sign-in page, coming back here afterwards. Their
-	 * look goes with them: the next person at this device gets the defaults, not theirs.
+	 * look and recent searches go with them: the next person at this device gets the
+	 * defaults, not theirs.
 	 * Once: until someone signs in again, every later 401 is the same loss.
 	 */
 	lost() {
@@ -67,6 +69,7 @@ class Session {
 		this.user = null;
 		library.forget();
 		look.belongsTo(null);
+		forgetRecent();
 		if (isPublicRoute(location.pathname)) return;
 		void goto(signInPath(currentPath(), arrival.done), { replaceState: true });
 	}
@@ -116,6 +119,7 @@ class Session {
 		this.user = null;
 		library.forget();
 		look.belongsTo(null);
+		forgetRecent();
 		arrival.forget();
 		await goto('/login', { replaceState: true });
 	}

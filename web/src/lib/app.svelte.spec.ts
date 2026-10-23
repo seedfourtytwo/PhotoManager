@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
 import { ApiError, type BackupHealth, type User } from '$lib/api';
 import { api, backupWatch, library, session } from './app.svelte';
+import { loadRecent, rememberSearch } from './recent-searches';
 import { arrival } from './start-page.svelte';
 import { signInPath } from './state/session.svelte';
 
@@ -133,6 +134,21 @@ describe('session.lost', () => {
 		vi.mocked(goto).mockClear();
 		session.lost();
 		expect(vi.mocked(goto)).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('recent searches are per signed-in user', () => {
+	// they can hold people's names: the next account at this browser must not see them
+	it('are forgotten on sign-out and when the session is lost', async () => {
+		serve({ '/api/auth/logout': { status: 204 } });
+		rememberSearch('Lea at the beach');
+		await session.signOut();
+		expect(loadRecent()).toEqual([]);
+
+		session.signedIn(user(2, 'partner'), null);
+		rememberSearch('Lea at the beach');
+		session.lost();
+		expect(loadRecent()).toEqual([]);
 	});
 });
 

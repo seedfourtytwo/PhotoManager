@@ -1,7 +1,8 @@
 /**
  * The searches made on this device, newest first, for the Search page's empty state. Kept in
  * the browser's own storage: a help, never state that must survive, so a device that refuses
- * storage (a private window) simply has none.
+ * storage (a private window) simply has none. Forgotten when the account signs out or its
+ * session is lost (state/session.svelte.ts): they can name people.
  */
 
 /** How many are kept. */
