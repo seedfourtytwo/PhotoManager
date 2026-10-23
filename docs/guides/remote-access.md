@@ -106,6 +106,19 @@ one) ·
 (status bar style) ·
 [WebKit bug 210597](https://bugs.webkit.org/show_bug.cgi?id=210597) (the white clock).
 
+## What the PIN does and does not protect
+
+The sign-in is a 4-digit PIN, sized for a family behind Tailscale, not for the internet. Ten
+wrong PINs make the account wait 15 minutes; thirty since its last good sign-in lock it until
+an admin unlocks it or gives it a new PIN (`just set-pin <name>` on the server). Guessing a
+PIN therefore fails, but anyone who can reach the sign-in page can lock any account on
+purpose, since the page lists every account name. That is accepted while only your own
+devices reach the app; it is one more reason never to forward a port to it.
+
+The app speaks plain http and relies on Tailscale for HTTPS. Opening it by the machine's
+LAN address over http (`PA_HOST` set to that address) sends the PIN and the session cookie
+unencrypted across the home network: fine on a network you trust, not on a shared one.
+
 ## Checklist
 
 - [ ] `tailscale serve status` shows `https://…ts.net → http://127.0.0.1:8420`

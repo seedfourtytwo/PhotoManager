@@ -59,6 +59,8 @@ check: lint types test
 
 # A pull request's check: free, where CI minutes are not (see ci.yml). Commit and push first.
 # Run `just check` here and show the result on GitHub as the commit's check "local / just check".
+# It runs the branch's own code (tests, conftest, vite config) as you, next to your gh login:
+# read a pull request from someone else before you run it on their branch.
 check-report:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -68,7 +70,7 @@ check-report:
     if [ -z "$(git branch -r --contains "$sha")" ]; then echo "push first: GitHub must know ${sha:0:7}"; exit 1; fi
     if just check; then state=success; else state=failure; fi
     gh api "repos/{owner}/{repo}/statuses/$sha" -f state="$state" -f context="local / just check" \
-        -f description="just check on $(hostname)" > /dev/null
+        -f description="just check, run locally" > /dev/null
     echo "reported $state for ${sha:0:7}"
     [ "$state" = success ]
 
