@@ -81,7 +81,7 @@ def test_anything_else_is_not_a_pin(pin: str) -> None:
     assert pin_problem(pin) == "PINs are exactly 4 digits"
 
 
-@pytest.mark.parametrize("name", ["", "a b", "x" * 65, "üser", "semi;colon"])
+@pytest.mark.parametrize("name", ["", "a b", "x" * 65, "üser", "semi;colon", "admin\n"])
 def test_bad_usernames_are_refused(name: str) -> None:
     assert username_problem(name) is not None
 

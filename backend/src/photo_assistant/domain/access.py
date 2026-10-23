@@ -18,7 +18,7 @@ SESSION_IDLE_LIMIT = timedelta(days=30)
 # session in use gets the cookie again once this much of that time is over.
 SESSION_COOKIE_RENEW_AFTER = timedelta(days=15)
 
-_USERNAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_USERNAME = re.compile(r"[A-Za-z0-9._-]{1,64}")  # fullmatch: "$" would allow a final newline
 _PIN = re.compile(rf"[0-9]{{{PIN_LENGTH}}}")  # ASCII digits only: what a phone keypad types
 
 
@@ -120,7 +120,7 @@ def pin_problem(pin: str) -> str | None:
 
 
 def username_problem(username: str) -> str | None:
-    if not _USERNAME.match(username):
+    if not _USERNAME.fullmatch(username):
         return "user names use 1 to 64 letters, digits, dots, dashes or underscores"
     return None
 
