@@ -17,6 +17,10 @@ _ROTATIONS = {90: "d90", 180: "d180", 270: "d270"}
 # Never ask libvips to decode at more than this edge (it only shrinks, never upscales):
 # a tiny crop divides the wanted edge by a tiny fraction (QA A6).
 _MAX_DECODE_EDGE = 100_000
+# Never decode an image with more pixels than this. A PNG of one colour packs 200,000 MP
+# into a 200 MB upload and costs minutes of CPU per file; the largest camera photo, a
+# 240 MP pixel-shift shot, stays under it.
+MAX_DECODE_PIXELS = 300_000_000
 # A dominant colour is read from at most this many pixels a side (domain/colour.py).
 _SAMPLE_EDGE = 32
 
@@ -45,6 +49,15 @@ _SAVERS: dict[str, Callable[[pyvips.Image, str, RenderSpec], None]] = {
     "jpeg": _save_jpeg,
     "png": _save_png,
 }
+
+
+def _refuse_too_many_pixels(source: Path) -> None:
+    header = pyvips.Image.new_from_file(str(source))  # reads the header only
+    if header.width * header.height > MAX_DECODE_PIXELS:
+        raise ValueError(
+            f"{header.width} x {header.height} px is more than the "
+            f"{MAX_DECODE_PIXELS // 1_000_000} megapixels the app decodes"
+        )
 
 
 def _straighten(image: pyvips.Image, degrees: float) -> pyvips.Image:
@@ -180,6 +193,7 @@ class VipsRenderer:
 
     @staticmethod
     def _load(source: Path, spec: RenderSpec) -> pyvips.Image:
+        _refuse_too_many_pixels(source)
         edge = _load_edge(spec)
         if edge is None:
             return pyvips.Image.new_from_file(str(source)).autorot()

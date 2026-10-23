@@ -1,12 +1,14 @@
 """libvips renders edits, sizes and formats; ExifTool strips metadata from temp copies."""
 
+import struct
+import zlib
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from photo_assistant.adapters.exiftool_reader import ExifToolReader, ExifToolStripper
-from photo_assistant.adapters.vips_renderer import VipsRenderer
+from photo_assistant.adapters.vips_renderer import MAX_DECODE_PIXELS, VipsRenderer
 from photo_assistant.domain.edit_recipe import Crop, Recipe, edited_size
 from photo_assistant.ports import RenderSpec
 from tests.synthetic import write_photo
@@ -186,3 +188,39 @@ def test_webp_derivatives_use_the_fast_encoder_effort(
     monkeypatch.setattr(pyvips.Image, "webpsave", spy)
     renderer.render(halves(tmp_path / "in.jpg", "red", "blue"), tmp_path / "o.webp", 50)
     assert seen and all(k["effort"] == 2 for k in seen)
+
+
+def _png_header(path: Path, width: int, height: int) -> Path:
+    """A PNG that says it is width x height but holds one row: a hundred bytes that would
+    take libvips minutes to decode, the shape of a decompression bomb."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(kind + data)
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", crc)
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)  # 8-bit grey
+    row = zlib.compress(b"\0" * (width + 1))
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", row) + chunk(b"IEND", b"")
+    )
+    return path
+
+
+def test_the_largest_camera_photos_stay_under_the_pixel_ceiling() -> None:
+    assert MAX_DECODE_PIXELS > 19_008 * 12_672, "a 240 MP pixel-shift shot still imports"
+
+
+def test_an_image_over_the_pixel_ceiling_is_refused_before_it_is_decoded(
+    renderer: VipsRenderer, tmp_path: Path
+) -> None:
+    bomb = _png_header(tmp_path / "bomb.png", 40_000, 40_000)
+    out = tmp_path / "out.webp"
+    calls = (
+        lambda: renderer.render(bomb, out, 640),
+        lambda: renderer.render_variant(bomb, out, RenderSpec(max_edge=None)),
+        lambda: renderer.render_pair(bomb, out, 2048, tmp_path / "t.webp", 640),
+    )
+    for call in calls:
+        with pytest.raises(ValueError, match="megapixels"):
+            call()
+    assert not out.exists()
