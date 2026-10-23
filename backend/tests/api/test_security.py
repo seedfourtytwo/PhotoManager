@@ -130,3 +130,20 @@ def test_every_response_tells_the_browser_not_to_guess_content_types(client: Tes
     assert [r.status_code for r in responses] == [200, 404, 403, 400, 413]
     for response in responses:
         assert response.headers["x-content-type-options"] == "nosniff", response.status_code
+
+
+def test_no_other_site_may_frame_the_app_or_learn_its_addresses(client: TestClient) -> None:
+    """Clickjacking and Referer leaks: the CrossSiteGuard already answers a framed request
+    403, these headers are the browser's own refusal. Same-origin frames stay allowed: the
+    download dialog saves files through a hidden frame of our own."""
+    responses = [
+        client.get("/api/health"),
+        client.get("/api/assets/999/thumb"),  # 404
+        client.get("/api/health", headers={"Host": "attacker.example"}),  # 400
+    ]
+    for response in responses:
+        headers = response.headers
+        assert headers["x-frame-options"] == "SAMEORIGIN", response.status_code
+        assert "frame-ancestors 'self'" in headers["content-security-policy"]
+        assert "object-src 'none'" in headers["content-security-policy"]
+        assert headers["referrer-policy"] == "same-origin"

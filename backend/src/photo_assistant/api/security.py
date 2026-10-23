@@ -29,12 +29,19 @@ MAX_BODY_BYTES = 1_000_000
 # Photos are streamed to disk under their own per-file limit (PA_UPLOAD_MAX_MB).
 UPLOAD_PATHS = frozenset({"/api/upload"})
 _TOO_LARGE = "request body too large"
+# On every response. Frames of our own stay allowed: the download dialog saves through one.
+_BROWSER_RULES = {
+    "X-Content-Type-Options": "nosniff",  # the browser takes our content types as given
+    "X-Frame-Options": "SAMEORIGIN",  # no other site frames the app (clickjacking)
+    "Content-Security-Policy": "frame-ancestors 'self'; object-src 'none'; base-uri 'self'",
+    "Referrer-Policy": "same-origin",  # a photo's address never goes to another site
+}
 
 
 class RequestLimits:
     """Refuses (413) a request body over ``MAX_BODY_BYTES`` before anything parses it: by its
     declared length, or while it streams in when it declares none. Uploads are exempt.
-    Also marks every response ``nosniff``: the browser takes our content types as given."""
+    Also puts ``_BROWSER_RULES`` on every response, its own refusals included."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -44,20 +51,22 @@ class RequestLimits:
             await self.app(scope, receive, send)
             return
 
-        async def send_nosniff(message: Message) -> None:
+        async def send_with_rules(message: Message) -> None:
             if message["type"] == "http.response.start":
-                MutableHeaders(scope=message)["X-Content-Type-Options"] = "nosniff"
+                headers = MutableHeaders(scope=message)
+                for name, value in _BROWSER_RULES.items():
+                    headers[name] = value
             await send(message)
 
         if scope["path"] in UPLOAD_PATHS:
-            await self.app(scope, receive, send_nosniff)
+            await self.app(scope, receive, send_with_rules)
             return
         declared = Headers(scope=scope).get("content-length", "")
         if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
             response = JSONResponse({"detail": _TOO_LARGE}, status_code=413)
-            await response(scope, receive, send_nosniff)
+            await response(scope, receive, send_with_rules)
             return
-        await self.app(scope, _limited(receive), send_nosniff)
+        await self.app(scope, _limited(receive), send_with_rules)
 
 
 def _limited(receive: Receive) -> Receive:
