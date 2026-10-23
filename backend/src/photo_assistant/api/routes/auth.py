@@ -10,10 +10,15 @@ from photo_assistant.app.accounts import (
 )
 
 router = APIRouter(prefix="/api", tags=["auth"])
+# Images are cached "private, immutable" for a year: on a shared browser the next account
+# must not open the last one's from the cache. Sent on sign-out, and on sign-in too, since a
+# session that runs out never signs out.
+_DROP_CACHED_PHOTOS = {"Clear-Site-Data": '"cache"'}
 
 
 def _set_session(request: Request, response: Response, token: str) -> None:
     set_session_cookies(response, token, secure=request.url.scheme == "https")
+    response.headers.update(_DROP_CACHED_PHOTOS)
 
 
 def _address(request: Request) -> str:
@@ -55,11 +60,7 @@ def login(
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(services: ServicesDep, user: CurrentUser, request: Request) -> Response:
     services.accounts.logout(request.cookies.get(SESSION_COOKIE, ""))
-    # images are cached "private, immutable" for a year: on a shared browser the next account
-    # must not open them from the cache
-    response = Response(
-        status_code=status.HTTP_204_NO_CONTENT, headers={"Clear-Site-Data": '"cache"'}
-    )
+    response = Response(status_code=status.HTTP_204_NO_CONTENT, headers=_DROP_CACHED_PHOTOS)
     clear_session_cookies(response)
     return response
 

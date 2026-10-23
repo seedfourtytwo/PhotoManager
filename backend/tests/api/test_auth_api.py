@@ -83,6 +83,18 @@ def test_logging_out_tells_the_browser_to_drop_its_cached_photos(admin: TestClie
     assert "pa_session=" in out.headers["set-cookie"], "and the cookie still goes"
 
 
+def test_signing_in_tells_the_browser_to_drop_the_last_accounts_cached_photos(
+    tmp_path: Path,
+) -> None:
+    """A session that just ran out never logged out: the next account to sign in on that
+    browser must not open the cached thumbnails of the one before (they are kept a year)."""
+    with TestClient(create_app(make_settings(tmp_path / "data")), base_url=BASE) as c:
+        first = c.post("/api/setup", json={"username": "admin", "display_name": "A", "pin": PIN})
+        again = c.post("/api/auth/login", json={"username": "admin", "pin": PIN})
+    for response in (first, again):
+        assert response.headers["clear-site-data"] == '"cache"', response.request.url
+
+
 def test_the_login_screen_lists_the_active_accounts_without_a_session(admin: TestClient) -> None:
     add_user(admin, "lea")
     gone = add_user(admin, "old")
